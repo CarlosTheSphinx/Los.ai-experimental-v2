@@ -181,8 +181,8 @@ export function LoanForm({ onSubmit, isLoading }: LoanFormProps) {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {[760, 740, 720, 700, 680, 660, 640, 620].map(score => (
-                            <SelectItem key={score} value={score.toString()}>{score}+</SelectItem>
+                          {["780+", "760 - 779", "740 - 759", "720 - 739", "700 - 719", "680 - 699", "660 - 679"].map(score => (
+                            <SelectItem key={score} value={score}>{score}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
