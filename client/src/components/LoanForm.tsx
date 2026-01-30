@@ -19,9 +19,9 @@ export function LoanForm({ onSubmit, isLoading }: LoanFormProps) {
   const form = useForm<LoanPricingFormData>({
     resolver: zodResolver(loanPricingFormSchema),
     defaultValues: {
-      loanAmount: 400000,
-      propertyValue: 500000,
-      ltv: "80",
+      loanAmount: "" as any,
+      propertyValue: "" as any,
+      ltv: "",
       loanType: "30 YR Fixed Rate",
       loanPurpose: "Purchase",
       propertyType: "Single Family",
@@ -79,7 +79,7 @@ export function LoanForm({ onSubmit, isLoading }: LoanFormProps) {
                       <FormControl>
                         <div className="relative">
                           <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                          <Input type="number" className="pl-9 h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all" placeholder="400000" {...field} />
+                          <Input type="number" className="pl-9 h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all" placeholder="Enter amount" {...field} />
                         </div>
                       </FormControl>
                       <FormMessage />
@@ -96,7 +96,7 @@ export function LoanForm({ onSubmit, isLoading }: LoanFormProps) {
                       <FormControl>
                         <div className="relative">
                           <Building className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                          <Input type="number" className="pl-9 h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all" placeholder="500000" {...field} />
+                          <Input type="number" className="pl-9 h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all" placeholder="Enter value" {...field} />
                         </div>
                       </FormControl>
                       <FormMessage />
