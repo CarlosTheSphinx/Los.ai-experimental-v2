@@ -231,10 +231,10 @@ export function LoanForm({ onSubmit, isLoading }: LoanFormProps) {
                         </FormControl>
                         <SelectContent>
                           <SelectItem value="Single Family">Single Family</SelectItem>
-                          <SelectItem value="Condo">Condo</SelectItem>
-                          <SelectItem value="Townhouse">Townhouse</SelectItem>
                           <SelectItem value="2-4 Unit">2-4 Unit</SelectItem>
-                          <SelectItem value="Multi-Family">Multi-Family (5+ Units)</SelectItem>
+                          <SelectItem value="Portfolio (1-4 Unit)">Portfolio (1-4 Unit)</SelectItem>
+                          <SelectItem value="Warrantable Condo">Warrantable Condo</SelectItem>
+                          <SelectItem value="Non-Warrantable Condo">Non-Warrantable Condo</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
