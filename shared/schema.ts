@@ -25,7 +25,7 @@ export const loanPricingFormSchema = z.object({
   interestOnly: z.string().default("No"),
   loanPurpose: z.string().min(1, "Loan Purpose is required"),
   propertyType: z.string().min(1, "Property Type is required"),
-  dscr: z.string().optional(),
+  dscr: z.string().min(1, "DSCR is required"),
   ficoScore: z.string().min(1, "FICO Score is required"),
   prepaymentPenalty: z.string().optional(),
   tpoPremium: z.string().optional(),

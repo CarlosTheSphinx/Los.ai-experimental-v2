@@ -27,6 +27,7 @@ export function LoanForm({ onSubmit, isLoading }: LoanFormProps) {
       propertyType: "Single Family",
       interestOnly: "No",
       ficoScore: "740",
+      dscr: "1.20x+",
       testMode: false,
     },
   });
@@ -149,10 +150,18 @@ export function LoanForm({ onSubmit, isLoading }: LoanFormProps) {
                   name="dscr"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-slate-700">DSCR (Optional)</FormLabel>
-                      <FormControl>
-                        <Input type="number" step="0.01" className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all" placeholder="1.25" {...field} />
-                      </FormControl>
+                      <FormLabel className="text-slate-700">Est. DSCR</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="h-11 bg-slate-50 border-slate-200">
+                            <SelectValue placeholder="Select DSCR" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="1.0x - 1.19x">1.0x - 1.19x</SelectItem>
+                          <SelectItem value="1.20x+">1.20x+</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
