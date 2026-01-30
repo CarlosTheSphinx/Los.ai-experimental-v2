@@ -150,7 +150,7 @@ export function LoanForm({ onSubmit, isLoading }: LoanFormProps) {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
                   name="ltv"
@@ -184,42 +184,6 @@ export function LoanForm({ onSubmit, isLoading }: LoanFormProps) {
                           {[760, 740, 720, 700, 680, 660, 640, 620].map(score => (
                             <SelectItem key={score} value={score.toString()}>{score}+</SelectItem>
                           ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="calculatedDscr"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-slate-700">Exact DSCR</FormLabel>
-                      <FormControl>
-                        <Input readOnly className="h-11 bg-slate-100/50 text-slate-500 font-medium" placeholder="Calculated" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="dscr"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-slate-700">Est. DSCR</FormLabel>
-                      <Select disabled onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger className="h-11 bg-slate-100/50 text-slate-500 font-medium">
-                            <SelectValue placeholder="Calculated from financials" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="1.0x - 1.19x">1.0x - 1.19x</SelectItem>
-                          <SelectItem value="1.20x+">1.20x+</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -266,6 +230,44 @@ export function LoanForm({ onSubmit, isLoading }: LoanFormProps) {
                       <FormControl>
                         <Input type="number" className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all" placeholder="Enter insurance" {...field} />
                       </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="calculatedDscr"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-slate-700">Exact DSCR</FormLabel>
+                      <FormControl>
+                        <Input readOnly className="h-11 bg-slate-100/50 text-slate-500 font-medium" placeholder="Calculated" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="dscr"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-slate-700">Est. DSCR</FormLabel>
+                      <Select disabled onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="h-11 bg-slate-100/50 text-slate-500 font-medium">
+                            <SelectValue placeholder="Calculated from financials" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="1.0x - 1.19x">1.0x - 1.19x</SelectItem>
+                          <SelectItem value="1.20x+">1.20x+</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}

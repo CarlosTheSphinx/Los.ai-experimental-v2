@@ -46,7 +46,7 @@ export default function Home() {
             <img 
               src={sphinxLogo} 
               alt="Sphinx Capital" 
-              className="h-12 w-auto object-contain"
+              className="h-16 w-auto object-contain"
             />
           </div>
         </div>
