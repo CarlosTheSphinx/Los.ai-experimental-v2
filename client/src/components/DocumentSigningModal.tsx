@@ -267,16 +267,26 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
               </div>
 
               {pdfData && (
-                <div className="flex justify-end">
-                  <Button 
-                    onClick={handleUploadSubmit}
-                    disabled={createDocumentMutation.isPending}
-                    data-testid="button-continue-signers"
-                  >
-                    Continue to Signers
-                    <ChevronRight className="w-4 h-4 ml-2" />
-                  </Button>
-                </div>
+                <>
+                  <div className="border rounded-lg overflow-hidden">
+                    <iframe 
+                      src={pdfData}
+                      title="PDF Preview"
+                      className="w-full h-[300px] border-0"
+                      data-testid="pdf-preview-upload"
+                    />
+                  </div>
+                  <div className="flex justify-end">
+                    <Button 
+                      onClick={handleUploadSubmit}
+                      disabled={createDocumentMutation.isPending}
+                      data-testid="button-continue-signers"
+                    >
+                      Continue to Signers
+                      <ChevronRight className="w-4 h-4 ml-2" />
+                    </Button>
+                  </div>
+                </>
               )}
             </div>
           </TabsContent>
@@ -425,10 +435,10 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                   onClick={handlePdfClick}
                 >
                   {pdfData ? (
-                    <embed 
+                    <iframe 
                       src={pdfData}
-                      type="application/pdf"
-                      className="w-full h-[600px] pointer-events-none"
+                      title="PDF Preview"
+                      className="w-full h-[600px] pointer-events-none border-0"
                     />
                   ) : (
                     <div className="absolute inset-4 flex items-center justify-center text-slate-400 pointer-events-none">
