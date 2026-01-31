@@ -6,6 +6,9 @@ import { type LoanPricingFormData, type PricingResponse } from "@shared/schema";
 import { motion, AnimatePresence } from "framer-motion";
 import sphinxLogo from "@assets/Sphinx_Capital_Logo_-_Blue_-_No_Background_(1)_1769811166428.jpeg";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
+import { Link } from "wouter";
+import { FileText } from "lucide-react";
 
 const progressSteps = [
   { percent: 10, message: "Initializing pricing engine..." },
@@ -80,7 +83,13 @@ export default function Home() {
               Rate<span className="text-primary">Master</span>
             </h1>
           </div>
-          <div>
+          <div className="flex items-center gap-4">
+            <Link href="/quotes">
+              <Button variant="outline" size="sm" data-testid="button-view-quotes">
+                <FileText className="mr-2 h-4 w-4" />
+                Saved Quotes
+              </Button>
+            </Link>
             <img 
               src={sphinxLogo} 
               alt="Sphinx Capital" 
