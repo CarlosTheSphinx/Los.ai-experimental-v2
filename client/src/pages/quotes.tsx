@@ -142,16 +142,16 @@ export default function Quotes() {
                         <div>
                           <div className="text-slate-500">Points Amount</div>
                           <div className="font-medium">
-                            ${((loanData?.loanAmount || 0) * (quote.pointsCharged || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            ${(quote.pointsAmount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </div>
                         </div>
                         <div>
                           <div className="text-slate-500">TPO Premium</div>
-                          <div className="font-medium">${quote.tpoPremiumAmount?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}</div>
+                          <div className="font-medium">${(quote.tpoPremiumAmount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                         </div>
                         <div>
                           <div className="text-slate-500">Total Revenue</div>
-                          <div className="font-semibold text-primary">${quote.totalRevenue?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}</div>
+                          <div className="font-semibold text-primary">${(quote.totalRevenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                         </div>
                       </div>
                     </div>

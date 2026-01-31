@@ -44,10 +44,7 @@ export function PricingResult({ result, formData, onReset }: PricingResultProps)
           propertyAddress,
           loanData: formData,
           interestRate: formattedRate,
-          pointsCharged,
-          tpoPremiumAmount,
-          totalRevenue,
-          commission
+          pointsCharged
         })
       });
     },

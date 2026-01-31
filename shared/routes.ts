@@ -9,9 +9,6 @@ export const savedQuoteInputSchema = z.object({
   loanData: z.record(z.any()),
   interestRate: z.string(),
   pointsCharged: z.number().min(0).max(3),
-  tpoPremiumAmount: z.number().min(0),
-  totalRevenue: z.number().min(0),
-  commission: z.number().min(0),
 });
 
 export const api = {

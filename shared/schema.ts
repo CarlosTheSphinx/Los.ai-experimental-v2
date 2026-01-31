@@ -21,6 +21,7 @@ export const savedQuotes = pgTable("saved_quotes", {
   loanData: jsonb("loan_data").notNull(),
   interestRate: text("interest_rate").notNull(),
   pointsCharged: real("points_charged").notNull().default(0),
+  pointsAmount: real("points_amount").notNull().default(0),
   tpoPremiumAmount: real("tpo_premium_amount").notNull().default(0),
   totalRevenue: real("total_revenue").notNull().default(0),
   commission: real("commission").notNull().default(0),

@@ -591,7 +591,23 @@ export async function registerRoutes(
   app.post(api.quotes.save.path, async (req, res) => {
     try {
       const quoteData = api.quotes.save.input.parse(req.body);
-      const saved = await storage.saveQuote(quoteData);
+      
+      // Server-side calculation of commission values
+      const loanAmount = quoteData.loanData?.loanAmount || 0;
+      const tpoPremiumPercent = quoteData.loanData?.tpoPremium ? parseFloat(String(quoteData.loanData.tpoPremium).replace('%', '')) : 0;
+      
+      const tpoPremiumAmount = (loanAmount * tpoPremiumPercent) / 100;
+      const pointsAmount = (loanAmount * quoteData.pointsCharged) / 100;
+      const totalRevenue = pointsAmount + tpoPremiumAmount;
+      const commission = totalRevenue * 0.30;
+      
+      const saved = await storage.saveQuote({
+        ...quoteData,
+        pointsAmount,
+        tpoPremiumAmount,
+        totalRevenue,
+        commission
+      });
       res.json({ success: true, quote: saved });
     } catch (error) {
       console.error('Error saving quote:', error);
