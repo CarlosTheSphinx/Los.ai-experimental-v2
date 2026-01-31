@@ -20,12 +20,63 @@ interface DocumentSigningModalProps {
 
 const SIGNER_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"];
 
-const FIELD_TYPES = [
+const SIGNATURE_FIELD_TYPES = [
   { type: "signature", label: "Signature", width: 200, height: 50 },
   { type: "initial", label: "Initials", width: 80, height: 40 },
   { type: "text", label: "Text", width: 150, height: 30 },
   { type: "date", label: "Date", width: 120, height: 30 }
 ];
+
+const PREPOPULATED_FIELD_TYPES = [
+  { type: "loanAmount", label: "Loan Amount", width: 120, height: 25 },
+  { type: "interestRate", label: "Interest Rate", width: 80, height: 25 },
+  { type: "propertyType", label: "Property Type", width: 120, height: 25 },
+  { type: "loanPurpose", label: "Loan Purpose", width: 120, height: 25 },
+  { type: "fullName", label: "Full Name", width: 180, height: 25 },
+  { type: "firstName", label: "First Name", width: 120, height: 25 },
+  { type: "propertyValue", label: "Property Value", width: 120, height: 25 },
+  { type: "fico", label: "FICO", width: 60, height: 25 },
+  { type: "ltv", label: "LTV", width: 80, height: 25 },
+  { type: "prepaymentPenalty", label: "Prepay Penalty", width: 100, height: 25 },
+  { type: "estimatedDscr", label: "Est. DSCR", width: 80, height: 25 },
+  { type: "fullAddress", label: "Full Address", width: 250, height: 25 },
+  { type: "originationFee", label: "Origination Fee", width: 120, height: 25 }
+];
+
+function getFieldValue(type: string, quote: SavedQuote): string {
+  const loanData = quote.loanData as Record<string, unknown> || {};
+  
+  const formatCurrency = (val: number | string | null | undefined) => {
+    if (val === null || val === undefined || val === '') return '';
+    const num = typeof val === 'string' ? parseFloat(val) : val;
+    if (isNaN(num)) return '';
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(num);
+  };
+  
+  const formatPercent = (val: number | string | null | undefined) => {
+    if (val === null || val === undefined || val === '') return '';
+    const num = typeof val === 'string' ? parseFloat(val) : val;
+    if (isNaN(num)) return '';
+    return `${num.toFixed(3)}%`;
+  };
+
+  switch (type) {
+    case 'loanAmount': return formatCurrency(loanData.loanAmount as number);
+    case 'interestRate': return formatPercent(quote.interestRate);
+    case 'propertyType': return String(loanData.propertyType || '');
+    case 'loanPurpose': return String(loanData.loanPurpose || '');
+    case 'fullName': return `${quote.customerFirstName || ''} ${quote.customerLastName || ''}`.trim();
+    case 'firstName': return quote.customerFirstName || '';
+    case 'propertyValue': return formatCurrency(loanData.propertyValue as number);
+    case 'fico': return String(loanData.ficoScore || '');
+    case 'ltv': return loanData.ltv ? `${loanData.ltv}%` : '';
+    case 'prepaymentPenalty': return String(loanData.prepaymentPenalty || '');
+    case 'estimatedDscr': return String(loanData.calculatedDscr || loanData.dscr || '');
+    case 'fullAddress': return quote.propertyAddress || '';
+    case 'originationFee': return formatCurrency(quote.pointsAmount);
+    default: return '';
+  }
+}
 
 export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningModalProps) {
   const { toast } = useToast();
@@ -46,6 +97,7 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
     y: number;
     width: number;
     height: number;
+    value?: string;
   }>>([]);
   const [selectedFieldType, setSelectedFieldType] = useState<string | null>(null);
   const [selectedSignerIndex, setSelectedSignerIndex] = useState(0);
@@ -177,8 +229,12 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
-    const fieldConfig = FIELD_TYPES.find(f => f.type === selectedFieldType);
+    const allFieldTypes = [...SIGNATURE_FIELD_TYPES, ...PREPOPULATED_FIELD_TYPES];
+    const fieldConfig = allFieldTypes.find(f => f.type === selectedFieldType);
     if (!fieldConfig) return;
+    
+    const isPrepopulated = PREPOPULATED_FIELD_TYPES.some(f => f.type === selectedFieldType);
+    const value = isPrepopulated ? getFieldValue(selectedFieldType, quote) : undefined;
     
     const newField = {
       signerId: signers[selectedSignerIndex].id!,
@@ -187,7 +243,8 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
       x,
       y,
       width: fieldConfig.width,
-      height: fieldConfig.height
+      height: fieldConfig.height,
+      value
     };
     
     setFields(prev => [...prev, newField]);
@@ -405,19 +462,42 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                 </div>
 
                 <div>
-                  <h4 className="font-medium mb-2 text-sm">Add Field</h4>
+                  <h4 className="font-medium mb-2 text-sm">Signature Fields</h4>
                   <div className="space-y-1">
-                    {FIELD_TYPES.map(ft => (
+                    {SIGNATURE_FIELD_TYPES.map(ft => (
                       <Button
                         key={ft.type}
                         variant={selectedFieldType === ft.type ? "default" : "outline"}
-                        className="w-full justify-start"
+                        className="w-full justify-start text-xs"
+                        size="sm"
                         onClick={() => setSelectedFieldType(ft.type)}
                         data-testid={`button-field-${ft.type}`}
                       >
                         {ft.label}
                       </Button>
                     ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="font-medium mb-2 text-sm">Data Fields</h4>
+                  <div className="space-y-1 max-h-[300px] overflow-y-auto">
+                    {PREPOPULATED_FIELD_TYPES.map(ft => {
+                      const value = getFieldValue(ft.type, quote);
+                      return (
+                        <Button
+                          key={ft.type}
+                          variant={selectedFieldType === ft.type ? "default" : "outline"}
+                          className="w-full justify-start text-xs"
+                          size="sm"
+                          onClick={() => setSelectedFieldType(ft.type)}
+                          data-testid={`button-field-${ft.type}`}
+                          title={value || 'No value'}
+                        >
+                          <span className="truncate">{ft.label}</span>
+                        </Button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -452,21 +532,23 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
 
                   {currentPageFields.map((field, i) => {
                     const signer = signers.find(s => s.id === field.signerId);
+                    const isPrepopulated = PREPOPULATED_FIELD_TYPES.some(f => f.type === field.fieldType);
+                    const fieldLabel = [...SIGNATURE_FIELD_TYPES, ...PREPOPULATED_FIELD_TYPES].find(f => f.type === field.fieldType)?.label || field.fieldType;
                     return (
                       <div
                         key={i}
-                        className="absolute border-2 rounded flex items-center justify-center cursor-move group"
+                        className="absolute border-2 rounded flex items-center justify-center cursor-move group overflow-hidden"
                         style={{
                           left: field.x,
                           top: field.y,
                           width: field.width,
                           height: field.height,
                           borderColor: signer?.color || '#3B82F6',
-                          backgroundColor: `${signer?.color || '#3B82F6'}20`
+                          backgroundColor: isPrepopulated ? '#FEF3C7' : `${signer?.color || '#3B82F6'}20`
                         }}
                       >
-                        <span className="text-xs font-medium" style={{ color: signer?.color }}>
-                          {field.fieldType}
+                        <span className="text-xs font-medium truncate px-1" style={{ color: isPrepopulated ? '#92400E' : signer?.color }}>
+                          {isPrepopulated && field.value ? field.value : fieldLabel}
                         </span>
                         <button
                           className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
