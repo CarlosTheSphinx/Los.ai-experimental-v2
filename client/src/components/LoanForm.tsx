@@ -13,12 +13,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 interface LoanFormProps {
   onSubmit: (data: LoanPricingFormData) => void;
   isLoading: boolean;
+  defaultData?: LoanPricingFormData | null;
 }
 
-export function LoanForm({ onSubmit, isLoading }: LoanFormProps) {
+export function LoanForm({ onSubmit, isLoading, defaultData }: LoanFormProps) {
   const form = useForm<LoanPricingFormData>({
     resolver: zodResolver(loanPricingFormSchema),
-    defaultValues: {
+    defaultValues: defaultData || {
       loanAmount: "" as any,
       propertyValue: "" as any,
       ltv: "",
