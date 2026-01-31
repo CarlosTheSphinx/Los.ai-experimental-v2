@@ -1,0 +1,278 @@
+Field Placement & Positioning Requirements
+Critical Implementation Details for PDF Field Positioning
+1. Field Positioning System
+Use absolute positioning relative to the PDF page, NOT the viewport:
+javascript// Each field must store coordinates relative to the PDF page dimensions
+const fieldData = {
+  page_number: 1,
+  x_position: 450,        // pixels from left edge of PDF page
+  y_position: 650,        // pixels from top edge of PDF page  
+  width: 200,             // field width in pixels
+  height: 40,             // field height in pixels
+  x_percent: 0.45,        // Store as percentage too for scaling
+  y_percent: 0.65         // Store as percentage too for scaling
+}
+2. Field Container Structure
+Create a field overlay system that stays locked to the PDF:
+jsx<div className="pdf-page-container" style={{ position: 'relative' }}>
+  {/* PDF render from react-pdf */}
+  <Page pageNumber={1} />
+  
+  {/* Field overlay - same dimensions as PDF */}
+  <div className="field-overlay" style={{
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    pointerEvents: 'none'  // Allow clicks through to PDF
+  }}>
+    {fields.map(field => (
+      <DraggableResizableField 
+        key={field.id}
+        field={field}
+        onUpdate={handleFieldUpdate}
+        style={{ pointerEvents: 'auto' }}  // Enable interaction with fields
+      />
+    ))}
+  </div>
+</div>
+3. Draggable Field Implementation
+Use react-draggable or similar library with constrained bounds:
+bashnpm install react-draggable react-resizable
+jsximport Draggable from 'react-draggable';
+import { Resizable } from 'react-resizable';
+
+const DraggableResizableField = ({ field, onUpdate }) => {
+  const [position, setPosition] = useState({ x: field.x_position, y: field.y_position });
+  const [size, setSize] = useState({ width: field.width, height: field.height });
+
+  const handleDrag = (e, data) => {
+    const newPosition = { x: data.x, y: data.y };
+    setPosition(newPosition);
+  };
+
+  const handleDragStop = (e, data) => {
+    // Save to database when drag ends
+    onUpdate(field.id, {
+      x_position: data.x,
+      y_position: data.y,
+      x_percent: data.x / parentWidth,
+      y_percent: data.y / parentHeight
+    });
+  };
+
+  const handleResize = (e, { size }) => {
+    setSize({ width: size.width, height: size.height });
+  };
+
+  const handleResizeStop = (e, { size }) => {
+    // Save to database when resize ends
+    onUpdate(field.id, {
+      width: size.width,
+      height: size.height
+    });
+  };
+
+  return (
+    <Draggable
+      position={position}
+      onDrag={handleDrag}
+      onStop={handleDragStop}
+      bounds="parent"  // CRITICAL: Keeps field within PDF bounds
+      grid={[1, 1]}    // Optional: snap to pixel grid for precision
+    >
+      <Resizable
+        width={size.width}
+        height={size.height}
+        onResize={handleResize}
+        onResizeStop={handleResizeStop}
+        minConstraints={[50, 20]}  // Minimum field size
+        maxConstraints={[400, 100]} // Maximum field size
+      >
+        <div className={`field-box field-${field.field_type}`} style={{
+          width: size.width,
+          height: size.height,
+          border: `2px solid ${field.signer_color}`,
+          backgroundColor: `${field.signer_color}20`,
+          cursor: 'move',
+          position: 'absolute',
+          userSelect: 'none'
+        }}>
+          <div className="field-label">{field.field_type}</div>
+          {/* Resize handles in corners */}
+          <div className="resize-handle" />
+        </div>
+      </Resizable>
+    </Draggable>
+  );
+};
+4. Handling PDF Zoom/Scale
+Maintain field position accuracy across zoom levels:
+javascript// Calculate scaled positions when PDF zoom changes
+const getScaledPosition = (field, scale) => ({
+  x: field.x_percent * pdfWidth * scale,
+  y: field.y_percent * pdfHeight * scale,
+  width: field.width * scale,
+  height: field.height * scale
+});
+
+// When rendering fields
+{fields.map(field => {
+  const scaledPos = getScaledPosition(field, currentZoom);
+  return <DraggableResizableField position={scaledPos} />;
+})}
+5. Field Snapping & Alignment (Optional but Recommended)
+Add snap-to-grid or snap-to-other-fields:
+javascriptconst SNAP_THRESHOLD = 5; // pixels
+
+const handleDrag = (e, data) => {
+  let x = data.x;
+  let y = data.y;
+  
+  // Snap to other fields
+  fields.forEach(otherField => {
+    if (Math.abs(x - otherField.x_position) < SNAP_THRESHOLD) {
+      x = otherField.x_position;
+    }
+    if (Math.abs(y - otherField.y_position) < SNAP_THRESHOLD) {
+      y = otherField.y_position;
+    }
+  });
+  
+  setPosition({ x, y });
+};
+6. Database Storage
+Store both pixel and percentage values for reliability:
+sql-- Ensure your fields table has these columns
+ALTER TABLE signature_fields 
+ADD COLUMN x_percent FLOAT,
+ADD COLUMN y_percent FLOAT,
+ADD COLUMN width_percent FLOAT,
+ADD COLUMN height_percent FLOAT;
+javascript// When saving field position
+const saveFieldPosition = async (fieldId, position) => {
+  const pdfPageDimensions = getPDFPageSize(pageNumber);
+  
+  await db.query(`
+    UPDATE signature_fields 
+    SET 
+      x_position = $1,
+      y_position = $2,
+      width = $3,
+      height = $4,
+      x_percent = $5,
+      y_percent = $6,
+      width_percent = $7,
+      height_percent = $8
+    WHERE id = $9
+  `, [
+    position.x,
+    position.y,
+    position.width,
+    position.height,
+    position.x / pdfPageDimensions.width,
+    position.y / pdfPageDimensions.height,
+    position.width / pdfPageDimensions.width,
+    position.height / pdfPageDimensions.height,
+    fieldId
+  ]);
+};
+7. Visual Feedback
+Add visual indicators when fields are being manipulated:
+css.field-box {
+  transition: box-shadow 0.2s;
+}
+
+.field-box:hover {
+  box-shadow: 0 0 8px rgba(0, 0, 255, 0.5);
+  cursor: move;
+}
+
+.field-box.dragging {
+  opacity: 0.8;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+}
+
+.field-box .resize-handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: white;
+  border: 2px solid #0066cc;
+  border-radius: 50%;
+}
+
+.resize-handle.top-left { top: -4px; left: -4px; cursor: nw-resize; }
+.resize-handle.top-right { top: -4px; right: -4px; cursor: ne-resize; }
+.resize-handle.bottom-left { bottom: -4px; left: -4px; cursor: sw-resize; }
+.resize-handle.bottom-right { bottom: -4px; right: -4px; cursor: se-resize; }
+8. Prevent Field Drift Issues
+Key points to prevent fields from moving unexpectedly:
+
+Use bounds="parent" on Draggable to constrain movement
+Set position="absolute" on field container
+Store field state in component state AND database
+Use controlled components (value props, not defaultValue)
+Debounce database saves (save on dragStop, not during drag)
+Use transform CSS for positioning during drag (more performant than top/left)
+Ensure PDF container has position: relative
+Lock fields when document is sent for signing (add disabled prop)
+
+9. Multi-Page Support
+Handle fields across multiple PDF pages:
+jsx{Array.from(new Array(numPages), (el, index) => (
+  <div key={`page_${index + 1}`} className="pdf-page-wrapper">
+    <Page pageNumber={index + 1} />
+    <div className="field-overlay">
+      {fields
+        .filter(f => f.page_number === index + 1)
+        .map(field => (
+          <DraggableResizableField field={field} />
+        ))
+      }
+    </div>
+  </div>
+))}
+10. Testing Checklist
+Ensure fields:
+
+✓ Stay in exact position after drag
+✓ Maintain position when page is scrolled
+✓ Maintain position when zoom level changes
+✓ Can be resized from all corners
+✓ Don't overlap PDF text inadvertently
+✓ Save position to database correctly
+✓ Load position from database correctly
+✓ Render in exact same position when document is reopened
+✓ Render correctly for signer on public signing page
+✓ Cannot be dragged outside PDF boundaries
+
+
+Implementation Command for Replit
+Implement the PDF field placement system with these requirements:
+
+Use react-draggable and react-resizable libraries for field manipulation
+Position fields absolutely within a PDF overlay container that matches PDF dimensions exactly
+Store field coordinates as both pixel values and percentages relative to PDF page size
+Constrain draggable bounds to parent (PDF page) to prevent fields from drifting off page
+Implement resize handles on all four corners of each field
+Save field position/size to database only when drag/resize stops (not during drag for performance)
+Add visual feedback: hover effects, active state, resize handles
+Support zoom/scale by recalculating positions based on percentage values
+Lock fields (disable drag/resize) when document status changes from "draft" to "sent"
+Ensure fields maintain exact position when:
+
+Page is scrolled
+Zoom level changes
+Document is closed and reopened
+Document is viewed by signer on public signing page
+
+
+Add snap-to-grid or snap-to-other-fields with 5px threshold for easier alignment
+Implement multi-page support where fields are filtered by page_number
+Use CSS transforms for smooth dragging performance
+Add minimum and maximum size constraints for fields
+
+Test thoroughly that fields stay anchored to their exact position on the PDF regardless of viewport changes.

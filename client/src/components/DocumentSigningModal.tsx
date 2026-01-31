@@ -7,10 +7,18 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Users, FileText, Send, Plus, Trash2, X, ChevronRight, ChevronLeft, Check, Mail } from "lucide-react";
+import { Upload, Users, FileText, Send, Plus, Trash2, X, ChevronRight, ChevronLeft, Check, Mail, ZoomIn, ZoomOut } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { SavedQuote, Document, Signer, DocumentField } from "@shared/schema";
+import { Document as PDFDocument, Page as PDFPage, pdfjs } from 'react-pdf';
+import Draggable from 'react-draggable';
+import { Resizable } from 'react-resizable';
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
+import 'react-resizable/css/styles.css';
+
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface DocumentSigningModalProps {
   open: boolean;
@@ -78,6 +86,126 @@ function getFieldValue(type: string, quote: SavedQuote): string {
   }
 }
 
+interface FieldData {
+  id?: number;
+  signerId: number;
+  pageNumber: number;
+  fieldType: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  value?: string;
+}
+
+interface DraggableFieldProps {
+  field: FieldData;
+  index: number;
+  signer: { id?: number; name: string; email: string; color: string } | undefined;
+  onUpdate: (index: number, updates: Partial<FieldData>) => void;
+  onRemove: (index: number) => void;
+  containerWidth: number;
+  containerHeight: number;
+}
+
+function DraggableField({ field, index, signer, onUpdate, onRemove, containerWidth, containerHeight }: DraggableFieldProps) {
+  const [position, setPosition] = useState({ x: field.x, y: field.y });
+  const [size, setSize] = useState({ width: field.width, height: field.height });
+  const [isDragging, setIsDragging] = useState(false);
+  const nodeRef = useRef<HTMLDivElement>(null);
+  
+  const isPrepopulated = PREPOPULATED_FIELD_TYPES.some(f => f.type === field.fieldType);
+  const fieldLabel = [...SIGNATURE_FIELD_TYPES, ...PREPOPULATED_FIELD_TYPES].find(f => f.type === field.fieldType)?.label || field.fieldType;
+
+  useEffect(() => {
+    setPosition({ x: field.x, y: field.y });
+    setSize({ width: field.width, height: field.height });
+  }, [field.x, field.y, field.width, field.height]);
+
+  const handleDrag = (_e: any, data: { x: number; y: number }) => {
+    setPosition({ x: data.x, y: data.y });
+  };
+
+  const handleDragStart = () => {
+    setIsDragging(true);
+  };
+
+  const handleDragStop = (_e: any, data: { x: number; y: number }) => {
+    setIsDragging(false);
+    onUpdate(index, { x: data.x, y: data.y });
+  };
+
+  const handleResize = (_e: any, { size: newSize }: { size: { width: number; height: number } }) => {
+    setSize({ width: newSize.width, height: newSize.height });
+  };
+
+  const handleResizeStop = (_e: any, { size: newSize }: { size: { width: number; height: number } }) => {
+    onUpdate(index, { width: newSize.width, height: newSize.height });
+  };
+
+  const bounds = {
+    left: 0,
+    top: 0,
+    right: Math.max(0, containerWidth - size.width),
+    bottom: Math.max(0, containerHeight - size.height)
+  };
+
+  return (
+    <Draggable
+      nodeRef={nodeRef}
+      position={position}
+      onDrag={handleDrag}
+      onStart={handleDragStart}
+      onStop={handleDragStop}
+      bounds={bounds}
+      grid={[1, 1]}
+    >
+      <div ref={nodeRef} style={{ position: 'absolute', zIndex: isDragging ? 1000 : 1 }}>
+        <Resizable
+          width={size.width}
+          height={size.height}
+          onResize={handleResize}
+          onResizeStop={handleResizeStop}
+          minConstraints={[40, 20]}
+          maxConstraints={[400, 100]}
+          resizeHandles={['se']}
+        >
+          <div
+            className={`group cursor-move select-none ${isDragging ? 'opacity-80 shadow-lg' : 'hover:shadow-md'}`}
+            style={{
+              width: size.width,
+              height: size.height,
+              border: `2px solid ${signer?.color || '#3B82F6'}`,
+              backgroundColor: isPrepopulated ? '#FEF3C7' : `${signer?.color || '#3B82F6'}20`,
+              borderRadius: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: isDragging ? 'none' : 'box-shadow 0.2s'
+            }}
+            data-testid={`field-${field.fieldType}-${index}`}
+          >
+            <span 
+              className="text-xs font-medium truncate px-1" 
+              style={{ color: isPrepopulated ? '#92400E' : signer?.color }}
+            >
+              {isPrepopulated && field.value ? field.value : fieldLabel}
+            </span>
+            <button
+              className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10"
+              onClick={(e) => { e.stopPropagation(); onRemove(index); }}
+              onMouseDown={(e) => e.stopPropagation()}
+              data-testid={`remove-field-${index}`}
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        </Resizable>
+      </div>
+    </Draggable>
+  );
+}
+
 export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningModalProps) {
   const { toast } = useToast();
   const [step, setStep] = useState<"upload" | "signers" | "fields" | "send">("upload");
@@ -88,34 +216,25 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
   const [signers, setSigners] = useState<Array<{ id?: number; name: string; email: string; color: string }>>([]);
   const [newSignerName, setNewSignerName] = useState("");
   const [newSignerEmail, setNewSignerEmail] = useState("");
-  const [fields, setFields] = useState<Array<{
-    id?: number;
-    signerId: number;
-    pageNumber: number;
-    fieldType: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    value?: string;
-  }>>([]);
+  const [fields, setFields] = useState<FieldData[]>([]);
   const [selectedFieldType, setSelectedFieldType] = useState<string | null>(null);
   const [selectedSignerIndex, setSelectedSignerIndex] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [senderName, setSenderName] = useState("Sphinx Capital");
-  const [dragState, setDragState] = useState<{
-    fieldIndex: number;
-    mode: 'move' | 'resize';
-    startX: number;
-    startY: number;
-    startFieldX: number;
-    startFieldY: number;
-    startWidth: number;
-    startHeight: number;
-  } | null>(null);
+  const [pdfScale, setPdfScale] = useState(1.0);
+  const [pdfDimensions, setPdfDimensions] = useState({ width: 612, height: 792 });
   
   const pdfContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
+    setPageCount(numPages);
+  };
+
+  const onPageLoadSuccess = (page: any) => {
+    const viewport = page.getViewport({ scale: 1.0 });
+    setPdfDimensions({ width: viewport.width, height: viewport.height });
+  };
 
   const createDocumentMutation = useMutation({
     mutationFn: async (data: { name: string; fileName: string; fileData: string; pageCount: number }) => {
@@ -204,7 +323,6 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
       const base64 = event.target?.result as string;
       setPdfData(base64);
       setFileName(file.name);
-      setPageCount(1);
     };
     reader.readAsDataURL(file);
   }, [toast]);
@@ -236,8 +354,8 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
     if (!container) return;
     
     const rect = container.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const x = (e.clientX - rect.left) / pdfScale;
+    const y = (e.clientY - rect.top) / pdfScale;
     
     const allFieldTypes = [...SIGNATURE_FIELD_TYPES, ...PREPOPULATED_FIELD_TYPES];
     const fieldConfig = allFieldTypes.find(f => f.type === selectedFieldType);
@@ -246,12 +364,15 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
     const isPrepopulated = PREPOPULATED_FIELD_TYPES.some(f => f.type === selectedFieldType);
     const value = isPrepopulated ? getFieldValue(selectedFieldType, quote) : undefined;
     
-    const newField = {
+    const clampedX = Math.max(0, Math.min(x, pdfDimensions.width - fieldConfig.width));
+    const clampedY = Math.max(0, Math.min(y, pdfDimensions.height - fieldConfig.height));
+    
+    const newField: FieldData = {
       signerId: signers[selectedSignerIndex].id!,
       pageNumber: currentPage,
       fieldType: selectedFieldType,
-      x,
-      y,
+      x: clampedX,
+      y: clampedY,
       width: fieldConfig.width,
       height: fieldConfig.height,
       value
@@ -261,74 +382,21 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
     setSelectedFieldType(null);
   };
 
+  const updateField = (index: number, updates: Partial<FieldData>) => {
+    setFields(prev => prev.map((f, i) => i === index ? { ...f, ...updates } : f));
+  };
+
   const removeField = (index: number) => {
     setFields(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleFieldMouseDown = (e: React.MouseEvent, fieldIndex: number, mode: 'move' | 'resize') => {
-    e.stopPropagation();
-    e.preventDefault();
-    const field = fields[fieldIndex];
-    if (!field) return;
-    
-    setDragState({
-      fieldIndex,
-      mode,
-      startX: e.clientX,
-      startY: e.clientY,
-      startFieldX: field.x,
-      startFieldY: field.y,
-      startWidth: field.width,
-      startHeight: field.height
-    });
-  };
-
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!dragState) return;
-    
-    const deltaX = e.clientX - dragState.startX;
-    const deltaY = e.clientY - dragState.startY;
-    
-    setFields(prev => prev.map((field, i) => {
-      if (i !== dragState.fieldIndex) return field;
-      
-      if (dragState.mode === 'move') {
-        return {
-          ...field,
-          x: Math.max(0, dragState.startFieldX + deltaX),
-          y: Math.max(0, dragState.startFieldY + deltaY)
-        };
-      } else {
-        return {
-          ...field,
-          width: Math.max(40, dragState.startWidth + deltaX),
-          height: Math.max(20, dragState.startHeight + deltaY)
-        };
-      }
-    }));
-  }, [dragState]);
-
-  const handleMouseUp = useCallback(() => {
-    setDragState(null);
-  }, []);
-
-  // Add global mouse event listeners for drag/resize
-  useEffect(() => {
-    if (dragState) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [dragState, handleMouseMove, handleMouseUp]);
-
   const currentPageFields = fields.filter(f => f.pageNumber === currentPage);
+  const scaledWidth = pdfDimensions.width * pdfScale;
+  const scaledHeight = pdfDimensions.height * pdfScale;
 
   return (
     <Dialog open={open} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="w-5 h-5 text-primary" />
@@ -357,373 +425,354 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
           </TabsList>
 
           <TabsContent value="upload" className="flex-1 overflow-auto p-4">
-            <div className="space-y-6">
-              <div className="text-center py-8 border-2 border-dashed border-slate-200 rounded-lg">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  data-testid="input-pdf-upload"
-                />
-                
-                {pdfData ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-center gap-2 text-green-600">
-                      <Check className="w-6 h-6" />
-                      <span className="font-medium">{fileName}</span>
-                    </div>
-                    <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-                      Choose Different File
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <Upload className="w-12 h-12 mx-auto text-slate-400" />
-                    <div>
-                      <p className="text-lg font-medium text-slate-700">Upload Agreement PDF</p>
-                      <p className="text-sm text-slate-500">Drag and drop or click to select</p>
-                    </div>
-                    <Button onClick={() => fileInputRef.current?.click()} data-testid="button-select-pdf">
-                      Select PDF File
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              {pdfData && (
-                <>
-                  <div className="border rounded-lg overflow-hidden">
-                    <iframe 
-                      src={pdfData}
-                      title="PDF Preview"
-                      className="w-full h-[300px] border-0"
-                      data-testid="pdf-preview-upload"
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center space-y-4">
+                  <div 
+                    className="border-2 border-dashed rounded-lg p-8 hover:bg-muted/50 cursor-pointer transition-colors"
+                    onClick={() => fileInputRef.current?.click()}
+                    data-testid="upload-area"
+                  >
+                    <Upload className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-lg font-medium">Click to upload PDF</p>
+                    <p className="text-sm text-muted-foreground">or drag and drop</p>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      data-testid="file-input"
                     />
                   </div>
-                  <div className="flex justify-end">
-                    <Button 
-                      onClick={handleUploadSubmit}
-                      disabled={createDocumentMutation.isPending}
-                      data-testid="button-continue-signers"
-                    >
-                      Continue to Signers
-                      <ChevronRight className="w-4 h-4 ml-2" />
-                    </Button>
-                  </div>
-                </>
-              )}
-            </div>
+                  
+                  {pdfData && (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-center gap-2 text-green-600">
+                        <Check className="w-5 h-5" />
+                        <span>{fileName}</span>
+                      </div>
+                      <div className="border rounded-lg overflow-hidden max-h-[300px]">
+                        <PDFDocument file={pdfData} onLoadSuccess={onDocumentLoadSuccess}>
+                          <PDFPage pageNumber={1} width={400} />
+                        </PDFDocument>
+                      </div>
+                      <Button 
+                        onClick={handleUploadSubmit} 
+                        disabled={createDocumentMutation.isPending}
+                        data-testid="button-upload-continue"
+                      >
+                        {createDocumentMutation.isPending ? "Uploading..." : "Continue"}
+                        <ChevronRight className="w-4 h-4 ml-2" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="signers" className="flex-1 overflow-auto p-4">
-            <div className="space-y-6">
-              <Card>
-                <CardContent className="p-4">
-                  <h3 className="font-medium mb-4">Add Signers</h3>
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div className="space-y-2">
-                      <Label>Name</Label>
-                      <Input
-                        value={newSignerName}
-                        onChange={(e) => setNewSignerName(e.target.value)}
-                        placeholder="John Doe"
-                        data-testid="input-signer-name"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Email</Label>
-                      <Input
-                        type="email"
-                        value={newSignerEmail}
-                        onChange={(e) => setNewSignerEmail(e.target.value)}
-                        placeholder="john@example.com"
-                        data-testid="input-signer-email"
-                      />
-                    </div>
-                  </div>
-                  <Button 
-                    onClick={handleAddSigner}
-                    disabled={addSignerMutation.isPending}
-                    data-testid="button-add-signer"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Signer
+            <Card>
+              <CardContent className="pt-6 space-y-4">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Signer Name"
+                    value={newSignerName}
+                    onChange={(e) => setNewSignerName(e.target.value)}
+                    data-testid="input-signer-name"
+                  />
+                  <Input
+                    placeholder="Email Address"
+                    type="email"
+                    value={newSignerEmail}
+                    onChange={(e) => setNewSignerEmail(e.target.value)}
+                    data-testid="input-signer-email"
+                  />
+                  <Button onClick={handleAddSigner} disabled={addSignerMutation.isPending} data-testid="button-add-signer">
+                    <Plus className="w-4 h-4" />
                   </Button>
-                </CardContent>
-              </Card>
-
-              {signers.length > 0 && (
-                <Card>
-                  <CardContent className="p-4">
-                    <h3 className="font-medium mb-4">Signers ({signers.length})</h3>
-                    <div className="space-y-2">
-                      {signers.map((signer, i) => (
-                        <div 
-                          key={signer.id || i}
-                          className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div 
-                              className="w-4 h-4 rounded-full" 
-                              style={{ backgroundColor: signer.color }}
-                            />
-                            <div>
-                              <div className="font-medium">{signer.name}</div>
-                              <div className="text-sm text-slate-500">{signer.email}</div>
-                            </div>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => signer.id && deleteSignerMutation.mutate(signer.id)}
-                            data-testid={`button-delete-signer-${i}`}
-                          >
-                            <Trash2 className="w-4 h-4 text-red-500" />
-                          </Button>
+                </div>
+                
+                <div className="space-y-2">
+                  {signers.map((signer, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 border rounded-lg" data-testid={`signer-${i}`}>
+                      <div className="flex items-center gap-3">
+                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: signer.color }} />
+                        <div>
+                          <p className="font-medium">{signer.name}</p>
+                          <p className="text-sm text-muted-foreground">{signer.email}</p>
                         </div>
-                      ))}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => signer.id && deleteSignerMutation.mutate(signer.id)}
+                        data-testid={`delete-signer-${i}`}
+                      >
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setStep("upload")}>
-                  <ChevronLeft className="w-4 h-4 mr-2" />
-                  Back
-                </Button>
-                <Button 
-                  onClick={() => setStep("fields")}
-                  disabled={signers.length === 0}
-                  data-testid="button-continue-fields"
-                >
-                  Continue to Fields
-                  <ChevronRight className="w-4 h-4 ml-2" />
-                </Button>
-              </div>
-            </div>
+                  ))}
+                </div>
+                
+                {signers.length > 0 && (
+                  <Button onClick={() => setStep("fields")} data-testid="button-signers-continue">
+                    Continue to Place Fields
+                    <ChevronRight className="w-4 h-4 ml-2" />
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
-          <TabsContent value="fields" className="flex-1 overflow-hidden flex flex-col p-4">
+          <TabsContent value="fields" className="flex-1 overflow-hidden p-4">
             <div className="flex gap-4 h-full">
-              <div className="w-48 space-y-4 flex-shrink-0">
+              <div className="w-64 space-y-4 overflow-auto">
                 <div>
-                  <h4 className="font-medium mb-2 text-sm">Select Signer</h4>
-                  <div className="space-y-1">
+                  <Label className="text-sm font-medium">Select Signer</Label>
+                  <div className="flex flex-wrap gap-2 mt-2">
                     {signers.map((signer, i) => (
-                      <Button
-                        key={signer.id || i}
+                      <Badge
+                        key={i}
                         variant={selectedSignerIndex === i ? "default" : "outline"}
-                        className="w-full justify-start"
+                        className="cursor-pointer"
                         onClick={() => setSelectedSignerIndex(i)}
-                        style={selectedSignerIndex === i ? { backgroundColor: signer.color } : {}}
+                        style={selectedSignerIndex === i ? { backgroundColor: signer.color } : { borderColor: signer.color, color: signer.color }}
+                        data-testid={`select-signer-${i}`}
                       >
-                        <div 
-                          className="w-3 h-3 rounded-full mr-2 border border-white" 
-                          style={{ backgroundColor: signer.color }}
-                        />
-                        <span className="truncate">{signer.name}</span>
-                      </Button>
+                        {signer.name}
+                      </Badge>
                     ))}
                   </div>
                 </div>
-
+                
                 <div>
-                  <h4 className="font-medium mb-2 text-sm">Signature Fields</h4>
-                  <div className="space-y-1">
+                  <Label className="text-sm font-medium">Signature Fields</Label>
+                  <div className="grid grid-cols-2 gap-2 mt-2">
                     {SIGNATURE_FIELD_TYPES.map(ft => (
                       <Button
                         key={ft.type}
                         variant={selectedFieldType === ft.type ? "default" : "outline"}
-                        className="w-full justify-start text-xs"
                         size="sm"
-                        onClick={() => setSelectedFieldType(ft.type)}
-                        data-testid={`button-field-${ft.type}`}
+                        onClick={() => setSelectedFieldType(selectedFieldType === ft.type ? null : ft.type)}
+                        className="text-xs"
+                        data-testid={`field-type-${ft.type}`}
                       >
                         {ft.label}
                       </Button>
                     ))}
                   </div>
                 </div>
-
+                
                 <div>
-                  <h4 className="font-medium mb-2 text-sm">Data Fields</h4>
-                  <div className="space-y-1 max-h-[300px] overflow-y-auto">
+                  <Label className="text-sm font-medium">Data Fields</Label>
+                  <div className="grid grid-cols-1 gap-1 mt-2 max-h-[200px] overflow-auto">
                     {PREPOPULATED_FIELD_TYPES.map(ft => {
                       const value = getFieldValue(ft.type, quote);
                       return (
                         <Button
                           key={ft.type}
                           variant={selectedFieldType === ft.type ? "default" : "outline"}
-                          className="w-full justify-start text-xs"
                           size="sm"
-                          onClick={() => setSelectedFieldType(ft.type)}
-                          data-testid={`button-field-${ft.type}`}
-                          title={value || 'No value'}
+                          onClick={() => setSelectedFieldType(selectedFieldType === ft.type ? null : ft.type)}
+                          className="text-xs justify-start h-auto py-1"
+                          data-testid={`field-type-${ft.type}`}
                         >
-                          <span className="truncate">{ft.label}</span>
+                          <span className="truncate">{ft.label}: {value || '—'}</span>
                         </Button>
                       );
                     })}
                   </div>
                 </div>
-
-                {selectedFieldType && (
-                  <Badge variant="secondary" className="text-xs">
-                    Click on PDF to place {selectedFieldType}
-                  </Badge>
-                )}
-              </div>
-
-              <div className="flex-1 overflow-auto border rounded-lg bg-slate-100">
-                <div
-                  ref={pdfContainerRef}
-                  className="relative min-h-[600px] bg-white cursor-crosshair"
-                  onClick={handlePdfClick}
+                
+                <div className="pt-2 border-t">
+                  <p className="text-xs text-muted-foreground mb-2">
+                    {selectedFieldType 
+                      ? `Click on the PDF to place a ${selectedFieldType} field`
+                      : "Select a field type, then click on the PDF to place it"
+                    }
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Drag fields to reposition. Resize using bottom-right corner.
+                  </p>
+                </div>
+                
+                <div className="flex items-center gap-2 pt-2 border-t">
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={() => setPdfScale(s => Math.max(0.5, s - 0.1))}
+                    data-testid="zoom-out"
+                  >
+                    <ZoomOut className="w-4 h-4" />
+                  </Button>
+                  <span className="text-sm">{Math.round(pdfScale * 100)}%</span>
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={() => setPdfScale(s => Math.min(2, s + 0.1))}
+                    data-testid="zoom-in"
+                  >
+                    <ZoomIn className="w-4 h-4" />
+                  </Button>
+                </div>
+                
+                <div className="pt-2">
+                  <Badge variant="secondary">{fields.length} field(s) placed</Badge>
+                </div>
+                
+                <Button 
+                  onClick={() => saveFieldsMutation.mutate()} 
+                  disabled={fields.length === 0 || saveFieldsMutation.isPending}
+                  className="w-full"
+                  data-testid="button-save-fields"
                 >
-                  {pdfData ? (
-                    <iframe 
-                      src={pdfData}
-                      title="PDF Preview"
-                      className="w-full h-[600px] pointer-events-none border-0"
-                    />
-                  ) : (
-                    <div className="absolute inset-4 flex items-center justify-center text-slate-400 pointer-events-none">
-                      <div className="text-center">
-                        <FileText className="w-16 h-16 mx-auto mb-2 opacity-50" />
-                        <p>PDF Preview Area</p>
-                        <p className="text-sm">Click to place signature fields</p>
-                      </div>
+                  {saveFieldsMutation.isPending ? "Saving..." : "Save & Continue"}
+                  <ChevronRight className="w-4 h-4 ml-2" />
+                </Button>
+              </div>
+              
+              <div className="flex-1 overflow-auto border rounded-lg bg-slate-100">
+                <div className="p-4">
+                  {pageCount > 1 && (
+                    <div className="flex items-center justify-center gap-2 mb-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage <= 1}
+                        onClick={() => setCurrentPage(p => p - 1)}
+                        data-testid="prev-page"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </Button>
+                      <span className="text-sm">Page {currentPage} of {pageCount}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage >= pageCount}
+                        onClick={() => setCurrentPage(p => p + 1)}
+                        data-testid="next-page"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
                     </div>
                   )}
-
-                  {currentPageFields.map((field, i) => {
-                    const globalIndex = fields.findIndex(f => f === field);
-                    const signer = signers.find(s => s.id === field.signerId);
-                    const isPrepopulated = PREPOPULATED_FIELD_TYPES.some(f => f.type === field.fieldType);
-                    const fieldLabel = [...SIGNATURE_FIELD_TYPES, ...PREPOPULATED_FIELD_TYPES].find(f => f.type === field.fieldType)?.label || field.fieldType;
-                    const isDragging = dragState?.fieldIndex === globalIndex;
-                    return (
-                      <div
-                        key={i}
-                        className={`absolute border-2 rounded flex items-center justify-center cursor-move group ${isDragging ? 'opacity-80 z-50' : ''}`}
-                        style={{
-                          left: field.x,
-                          top: field.y,
-                          width: field.width,
-                          height: field.height,
-                          borderColor: signer?.color || '#3B82F6',
-                          backgroundColor: isPrepopulated ? '#FEF3C7' : `${signer?.color || '#3B82F6'}20`
-                        }}
-                        onMouseDown={(e) => handleFieldMouseDown(e, globalIndex, 'move')}
-                      >
-                        <span className="text-xs font-medium truncate px-1 select-none" style={{ color: isPrepopulated ? '#92400E' : signer?.color }}>
-                          {isPrepopulated && field.value ? field.value : fieldLabel}
-                        </span>
-                        {/* Delete button */}
-                        <button
-                          className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10"
-                          onClick={(e) => { e.stopPropagation(); removeField(globalIndex); }}
-                          onMouseDown={(e) => e.stopPropagation()}
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                        {/* Resize handle */}
-                        <div
-                          className="absolute bottom-0 right-0 w-3 h-3 bg-slate-600 cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity"
-                          onMouseDown={(e) => handleFieldMouseDown(e, globalIndex, 'resize')}
-                          style={{ borderTopLeftRadius: '2px' }}
+                  
+                  <div 
+                    ref={pdfContainerRef}
+                    className="relative inline-block"
+                    onClick={handlePdfClick}
+                    style={{ 
+                      cursor: selectedFieldType ? 'crosshair' : 'default',
+                      width: scaledWidth,
+                      height: scaledHeight
+                    }}
+                    data-testid="pdf-container"
+                  >
+                    {pdfData ? (
+                      <PDFDocument file={pdfData}>
+                        <PDFPage 
+                          pageNumber={currentPage} 
+                          scale={pdfScale}
+                          onLoadSuccess={onPageLoadSuccess}
                         />
+                      </PDFDocument>
+                    ) : (
+                      <div className="flex items-center justify-center text-slate-400 w-full h-full">
+                        <div className="text-center">
+                          <FileText className="w-16 h-16 mx-auto mb-2 opacity-50" />
+                          <p>PDF Preview Area</p>
+                        </div>
                       </div>
-                    );
-                  })}
+                    )}
+                    
+                    <div 
+                      className="absolute top-0 left-0"
+                      style={{ 
+                        width: scaledWidth, 
+                        height: scaledHeight,
+                        pointerEvents: 'none',
+                        transform: `scale(${pdfScale})`,
+                        transformOrigin: 'top left'
+                      }}
+                    >
+                      <div style={{ pointerEvents: 'auto' }}>
+                        {currentPageFields.map((field, i) => {
+                          const globalIndex = fields.findIndex(f => f === field);
+                          const signer = signers.find(s => s.id === field.signerId);
+                          return (
+                            <DraggableField
+                              key={globalIndex}
+                              field={field}
+                              index={globalIndex}
+                              signer={signer}
+                              onUpdate={updateField}
+                              onRemove={removeField}
+                              containerWidth={pdfDimensions.width}
+                              containerHeight={pdfDimensions.height}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-
-            <div className="flex justify-between mt-4">
-              <Button variant="outline" onClick={() => setStep("signers")}>
-                <ChevronLeft className="w-4 h-4 mr-2" />
-                Back
-              </Button>
-              <Button 
-                onClick={() => saveFieldsMutation.mutate()}
-                disabled={fields.length === 0 || saveFieldsMutation.isPending}
-                data-testid="button-continue-send"
-              >
-                {saveFieldsMutation.isPending ? "Saving..." : "Continue to Send"}
-                <ChevronRight className="w-4 h-4 ml-2" />
-              </Button>
             </div>
           </TabsContent>
 
           <TabsContent value="send" className="flex-1 overflow-auto p-4">
-            <div className="space-y-6">
-              <Card>
-                <CardContent className="p-6">
-                  <h3 className="font-medium mb-4 flex items-center gap-2">
-                    <Mail className="w-5 h-5 text-primary" />
-                    Ready to Send
-                  </h3>
-                  
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Sender Name</Label>
-                      <Input
-                        value={senderName}
-                        onChange={(e) => setSenderName(e.target.value)}
-                        placeholder="Your name or company"
-                        data-testid="input-sender-name"
-                      />
+            <Card>
+              <CardContent className="pt-6 space-y-6">
+                <div className="text-center space-y-2">
+                  <Mail className="w-12 h-12 mx-auto text-primary" />
+                  <h3 className="text-xl font-semibold">Ready to Send</h3>
+                  <p className="text-muted-foreground">
+                    Your document will be sent to {signers.length} signer(s) for signature
+                  </p>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label>From (Sender Name)</Label>
+                  <Input
+                    value={senderName}
+                    onChange={(e) => setSenderName(e.target.value)}
+                    placeholder="Your name or company"
+                    data-testid="input-sender-name"
+                  />
+                </div>
+                
+                <div className="border rounded-lg p-4 space-y-2">
+                  <h4 className="font-medium">Recipients:</h4>
+                  {signers.map((signer, i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: signer.color }} />
+                      <span>{signer.name}</span>
+                      <span className="text-muted-foreground">({signer.email})</span>
                     </div>
-
-                    <div className="bg-slate-50 p-4 rounded-lg space-y-3">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">Document</span>
-                        <span className="font-medium">Agreement for {quote.customerFirstName} {quote.customerLastName}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">Signers</span>
-                        <span className="font-medium">{signers.length} person(s)</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">Signature Fields</span>
-                        <span className="font-medium">{fields.length} field(s)</span>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <h4 className="text-sm font-medium">Signers will receive:</h4>
-                      {signers.map((signer, i) => (
-                        <div key={i} className="flex items-center gap-2 text-sm">
-                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: signer.color }} />
-                          <span>{signer.name}</span>
-                          <span className="text-slate-400">({signer.email})</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setStep("fields")}>
-                  <ChevronLeft className="w-4 h-4 mr-2" />
-                  Back
-                </Button>
+                  ))}
+                </div>
+                
+                <div className="border rounded-lg p-4 space-y-2">
+                  <h4 className="font-medium">Fields to Complete:</h4>
+                  <p className="text-sm text-muted-foreground">
+                    {fields.length} field(s) across {pageCount} page(s)
+                  </p>
+                </div>
+                
                 <Button 
-                  onClick={() => sendDocumentMutation.mutate()}
+                  onClick={() => sendDocumentMutation.mutate()} 
                   disabled={sendDocumentMutation.isPending}
-                  className="bg-green-600 hover:bg-green-700"
+                  className="w-full"
+                  size="lg"
                   data-testid="button-send-document"
                 >
                   {sendDocumentMutation.isPending ? "Sending..." : "Send for Signature"}
                   <Send className="w-4 h-4 ml-2" />
                 </Button>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </DialogContent>
