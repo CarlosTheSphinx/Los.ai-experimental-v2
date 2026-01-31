@@ -587,5 +587,57 @@ export async function registerRoutes(
     }
   });
 
+  // Quotes API endpoints
+  app.post(api.quotes.save.path, async (req, res) => {
+    try {
+      const quoteData = api.quotes.save.input.parse(req.body);
+      const saved = await storage.saveQuote(quoteData);
+      res.json({ success: true, quote: saved });
+    } catch (error) {
+      console.error('Error saving quote:', error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ success: false, error: 'Validation error', message: error.errors[0].message });
+      } else {
+        res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+      }
+    }
+  });
+
+  app.get(api.quotes.list.path, async (req, res) => {
+    try {
+      const quotes = await storage.getQuotes();
+      res.json({ success: true, quotes });
+    } catch (error) {
+      console.error('Error fetching quotes:', error);
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+  app.get('/api/quotes/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const quote = await storage.getQuoteById(id);
+      if (!quote) {
+        res.status(404).json({ success: false, error: 'Quote not found' });
+        return;
+      }
+      res.json({ success: true, quote });
+    } catch (error) {
+      console.error('Error fetching quote:', error);
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+  app.delete('/api/quotes/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteQuote(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error deleting quote:', error);
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
   return httpServer;
 }
