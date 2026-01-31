@@ -423,15 +423,22 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                   ref={pdfContainerRef}
                   className="relative min-h-[600px] bg-white cursor-crosshair"
                   onClick={handlePdfClick}
-                  style={{ backgroundImage: 'linear-gradient(#eee 1px, transparent 1px), linear-gradient(90deg, #eee 1px, transparent 1px)', backgroundSize: '20px 20px' }}
                 >
-                  <div className="absolute inset-4 flex items-center justify-center text-slate-400 pointer-events-none">
-                    <div className="text-center">
-                      <FileText className="w-16 h-16 mx-auto mb-2 opacity-50" />
-                      <p>PDF Preview Area</p>
-                      <p className="text-sm">Click to place signature fields</p>
+                  {pdfData ? (
+                    <embed 
+                      src={pdfData}
+                      type="application/pdf"
+                      className="w-full h-[600px] pointer-events-none"
+                    />
+                  ) : (
+                    <div className="absolute inset-4 flex items-center justify-center text-slate-400 pointer-events-none">
+                      <div className="text-center">
+                        <FileText className="w-16 h-16 mx-auto mb-2 opacity-50" />
+                        <p>PDF Preview Area</p>
+                        <p className="text-sm">Click to place signature fields</p>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {currentPageFields.map((field, i) => {
                     const signer = signers.find(s => s.id === field.signerId);
