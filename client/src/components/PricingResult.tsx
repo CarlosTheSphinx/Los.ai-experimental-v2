@@ -215,21 +215,42 @@ export function PricingResult({ result, formData, onReset }: PricingResultProps)
                 <div className="flex items-center justify-between">
                   <Label className="flex items-center gap-1">
                     <Percent className="w-3 h-3" />
-                    Points Charged
+                    Origination Points
                   </Label>
-                  <span className="text-2xl font-bold text-primary">{pointsCharged.toFixed(2)}</span>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={3}
+                      step={0.125}
+                      value={pointsCharged}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        if (!isNaN(val) && val >= 0 && val <= 3) {
+                          setPointsCharged(val);
+                        }
+                      }}
+                      className="w-20 text-center text-lg font-bold"
+                      data-testid="input-points"
+                    />
+                    <span className="text-sm text-slate-500">points</span>
+                  </div>
                 </div>
-                <Slider
-                  value={[pointsCharged]}
-                  onValueChange={([val]) => setPointsCharged(val)}
-                  max={3}
-                  step={0.125}
-                  className="w-full"
-                  data-testid="slider-points"
-                />
-                <div className="flex justify-between text-xs text-slate-500">
-                  <span>0 points</span>
-                  <span>3 points</span>
+                <p className="text-xs text-slate-500">Drag the slider or type a value above (0 - 3 points)</p>
+                <div className="bg-white rounded-lg p-4 border-2 border-slate-300 shadow-sm">
+                  <Slider
+                    value={[pointsCharged]}
+                    onValueChange={([val]) => setPointsCharged(val)}
+                    max={3}
+                    step={0.125}
+                    className="w-full"
+                    data-testid="slider-points"
+                  />
+                  <div className="flex justify-between text-xs text-slate-500 mt-2">
+                    <span>0 points</span>
+                    <span>1.5 points</span>
+                    <span>3 points</span>
+                  </div>
                 </div>
               </div>
 
