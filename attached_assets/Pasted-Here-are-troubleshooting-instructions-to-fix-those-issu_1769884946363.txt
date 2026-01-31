@@ -1,0 +1,328 @@
+Here are troubleshooting instructions to fix those issues:
+
+---
+
+# Fix Scrolling, Dragging, and Resizing Issues
+
+## Immediate Fixes to Apply
+
+### Issue 1: Can't Scroll the Page
+
+**Problem:** The field overlay is blocking scroll events.
+
+**Solution:** Adjust pointer events on the overlay layer:
+
+```jsx
+// In your PDF editor component
+<div className="pdf-container" style={{
+  overflowY: 'auto',        // CRITICAL: Enable scrolling
+  overflowX: 'auto',
+  height: '100vh',          // Or your desired height
+  position: 'relative'
+}}>
+  
+  <div className="pdf-pages-wrapper">
+    {/* PDF pages */}
+    <Page pageNumber={currentPage} />
+    
+    {/* Field overlay */}
+    <div className="field-overlay" style={{
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      pointerEvents: 'none',  // This allows scrolling THROUGH the overlay
+      zIndex: 10
+    }}>
+      {fields.map(field => (
+        <div key={field.id} style={{
+          pointerEvents: 'auto',  // Re-enable on INDIVIDUAL fields only
+          position: 'absolute',
+          left: field.x_position,
+          top: field.y_position
+        }}>
+          <DraggableField field={field} />
+        </div>
+      ))}
+    </div>
+  </div>
+</div>
+```
+
+### Issue 2 & 3: Can't Drag or Resize Fields
+
+**Problem:** Libraries might not be imported correctly or event handlers not working.
+
+**Try this simpler approach first:**
+
+```jsx
+// Simplified draggable field without external libraries
+import { useState, useRef } from 'react';
+
+const DraggableResizableField = ({ field, onUpdate }) => {
+  const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const [position, setPosition] = useState({ 
+    x: field.x_position, 
+    y: field.y_position 
+  });
+  const [size, setSize] = useState({ 
+    width: field.width, 
+    height: field.height 
+  });
+  
+  const dragStartPos = useRef({ x: 0, y: 0 });
+  const resizeStartSize = useRef({ width: 0, height: 0 });
+
+  // DRAGGING
+  const handleMouseDownDrag = (e) => {
+    e.stopPropagation();
+    setIsDragging(true);
+    dragStartPos.current = {
+      x: e.clientX - position.x,
+      y: e.clientY - position.y
+    };
+  };
+
+  const handleMouseMoveDrag = (e) => {
+    if (!isDragging) return;
+    
+    const newX = e.clientX - dragStartPos.current.x;
+    const newY = e.clientY - dragStartPos.current.y;
+    
+    setPosition({ x: newX, y: newY });
+  };
+
+  const handleMouseUpDrag = () => {
+    if (isDragging) {
+      setIsDragging(false);
+      // Save to database
+      onUpdate(field.id, {
+        x_position: position.x,
+        y_position: position.y
+      });
+    }
+  };
+
+  // RESIZING
+  const handleMouseDownResize = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsResizing(true);
+    resizeStartSize.current = {
+      x: e.clientX,
+      y: e.clientY,
+      width: size.width,
+      height: size.height
+    };
+  };
+
+  const handleMouseMoveResize = (e) => {
+    if (!isResizing) return;
+    
+    const newWidth = resizeStartSize.current.width + (e.clientX - resizeStartSize.current.x);
+    const newHeight = resizeStartSize.current.height + (e.clientY - resizeStartSize.current.y);
+    
+    setSize({ 
+      width: Math.max(50, newWidth),   // Minimum 50px
+      height: Math.max(20, newHeight)  // Minimum 20px
+    });
+  };
+
+  const handleMouseUpResize = () => {
+    if (isResizing) {
+      setIsResizing(false);
+      // Save to database
+      onUpdate(field.id, {
+        width: size.width,
+        height: size.height
+      });
+    }
+  };
+
+  // Attach global mouse listeners
+  React.useEffect(() => {
+    if (isDragging) {
+      window.addEventListener('mousemove', handleMouseMoveDrag);
+      window.addEventListener('mouseup', handleMouseUpDrag);
+      return () => {
+        window.removeEventListener('mousemove', handleMouseMoveDrag);
+        window.removeEventListener('mouseup', handleMouseUpDrag);
+      };
+    }
+  }, [isDragging, position]);
+
+  React.useEffect(() => {
+    if (isResizing) {
+      window.addEventListener('mousemove', handleMouseMoveResize);
+      window.addEventListener('mouseup', handleMouseUpResize);
+      return () => {
+        window.removeEventListener('mousemove', handleMouseMoveResize);
+        window.removeEventListener('mouseup', handleMouseUpResize);
+      };
+    }
+  }, [isResizing, size]);
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: `${position.x}px`,
+        top: `${position.y}px`,
+        width: `${size.width}px`,
+        height: `${size.height}px`,
+        border: `2px solid ${field.signer_color || '#0066cc'}`,
+        backgroundColor: `${field.signer_color || '#0066cc'}20`,
+        cursor: isDragging ? 'grabbing' : 'grab',
+        userSelect: 'none',
+        zIndex: isDragging || isResizing ? 1000 : 10,
+        boxShadow: isDragging || isResizing ? '0 4px 12px rgba(0,0,0,0.3)' : 'none'
+      }}
+      onMouseDown={handleMouseDownDrag}
+    >
+      {/* Field Label */}
+      <div style={{
+        padding: '4px 8px',
+        fontSize: '12px',
+        fontWeight: 'bold',
+        color: field.signer_color || '#0066cc',
+        pointerEvents: 'none'
+      }}>
+        {field.field_type}
+      </div>
+
+      {/* Resize Handle (bottom-right corner) */}
+      <div
+        onMouseDown={handleMouseDownResize}
+        style={{
+          position: 'absolute',
+          right: -4,
+          bottom: -4,
+          width: '12px',
+          height: '12px',
+          backgroundColor: 'white',
+          border: `2px solid ${field.signer_color || '#0066cc'}`,
+          borderRadius: '50%',
+          cursor: 'nwse-resize',
+          zIndex: 100
+        }}
+      />
+    </div>
+  );
+};
+
+export default DraggableResizableField;
+```
+
+### CSS to Add
+
+```css
+/* Ensure smooth dragging */
+.pdf-container {
+  position: relative;
+  overflow: auto !important;
+}
+
+.field-overlay {
+  pointer-events: none !important;
+}
+
+.field-box {
+  pointer-events: auto !important;
+  box-sizing: border-box;
+}
+
+/* Prevent text selection during drag */
+.field-box.dragging,
+.field-box.resizing {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+}
+```
+
+### Alternative: Check react-draggable Installation
+
+If you want to keep using the library, verify it's properly installed:
+
+```bash
+# Check if installed
+npm list react-draggable react-resizable
+
+# If not found, install
+npm install react-draggable react-resizable
+
+# Also install required CSS
+npm install react-resizable/css/styles.css
+```
+
+Then import the CSS in your component:
+
+```jsx
+import 'react-resizable/css/styles.css';
+```
+
+### Debug Checklist
+
+Check these common issues:
+
+1. **Console Errors?** Open browser DevTools (F12) and check Console tab for errors
+
+2. **Event Propagation:** Make sure `e.stopPropagation()` is called on mouseDown events
+
+3. **Z-Index Issues:**
+```jsx
+// Ensure fields are above PDF
+<div className="field-box" style={{ zIndex: 100 }}>
+```
+
+4. **Bounds Too Restrictive:**
+```jsx
+// Remove bounds temporarily for testing
+<Draggable
+  // bounds="parent"  // Comment this out temporarily
+  position={position}
+>
+```
+
+5. **Controlled vs Uncontrolled:**
+```jsx
+// Make sure you're using controlled position
+<Draggable
+  position={position}  // Must be state variable
+  onDrag={(e, data) => setPosition({ x: data.x, y: data.y })}
+>
+```
+
+---
+
+## Complete Instructions for Replit
+
+There are three issues to fix:
+
+1. **Scrolling Issue:** The field overlay has `pointer-events: none` on the wrong element. Apply it to the overlay container but set `pointer-events: auto` on individual field boxes.
+
+2. **Dragging Not Working:** Implement custom drag functionality using mouseDown, mouseMove, and mouseUp events. Attach mousemove and mouseup listeners to `window` object, not the field element, so dragging works even when cursor moves outside the field.
+
+3. **Resizing Not Working:** Add a resize handle div in the bottom-right corner of each field. On mouseDown of the handle, track cursor movement and adjust field width/height. Use Math.max to enforce minimum sizes (50px width, 20px height).
+
+Key implementation points:
+- Use `position: absolute` on fields with `left` and `top` in pixels
+- Store drag start position in a ref to calculate deltas
+- Use state for current position and size
+- Call e.stopPropagation() on all mouseDown events to prevent conflicts
+- Attach global listeners: `window.addEventListener('mousemove', handler)` during drag/resize
+- Clean up listeners in useEffect return function
+- Save to database only on mouseUp (drag end)
+- Set z-index to 1000 when actively dragging/resizing
+- Change cursor to 'grabbing' during drag, 'nwse-resize' for resize handle
+- Ensure PDF container has `overflow: auto` and is scrollable
+
+Remove any `bounds="parent"` constraints temporarily for testing. Use the vanilla JavaScript implementation provided above rather than react-draggable if the library continues to have issues.
+
+Test that you can: scroll the page, click and drag fields, resize fields from bottom-right corner, and that fields save their position.
+
+---
+
+Try the vanilla JS implementation I provided above - it should work immediately. Let me know if you're still having issues!

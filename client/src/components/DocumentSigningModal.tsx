@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,13 +10,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Upload, Users, FileText, Send, Plus, Trash2, X, ChevronRight, ChevronLeft, Check, Mail, ZoomIn, ZoomOut } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { SavedQuote, Document, Signer, DocumentField } from "@shared/schema";
+import type { SavedQuote } from "@shared/schema";
 import { Document as PDFDocument, Page as PDFPage, pdfjs } from 'react-pdf';
-import Draggable from 'react-draggable';
-import { Resizable } from 'react-resizable';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
-import 'react-resizable/css/styles.css';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
@@ -106,14 +103,18 @@ interface DraggableFieldProps {
   onRemove: (index: number) => void;
   containerWidth: number;
   containerHeight: number;
+  scale: number;
 }
 
-function DraggableField({ field, index, signer, onUpdate, onRemove, containerWidth, containerHeight }: DraggableFieldProps) {
+function DraggableResizableField({ field, index, signer, onUpdate, onRemove, containerWidth, containerHeight, scale }: DraggableFieldProps) {
+  const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
   const [position, setPosition] = useState({ x: field.x, y: field.y });
   const [size, setSize] = useState({ width: field.width, height: field.height });
-  const [isDragging, setIsDragging] = useState(false);
-  const nodeRef = useRef<HTMLDivElement>(null);
   
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+
   const isPrepopulated = PREPOPULATED_FIELD_TYPES.some(f => f.type === field.fieldType);
   const fieldLabel = [...SIGNATURE_FIELD_TYPES, ...PREPOPULATED_FIELD_TYPES].find(f => f.type === field.fieldType)?.label || field.fieldType;
 
@@ -122,87 +123,147 @@ function DraggableField({ field, index, signer, onUpdate, onRemove, containerWid
     setSize({ width: field.width, height: field.height });
   }, [field.x, field.y, field.width, field.height]);
 
-  const handleDrag = (_e: any, data: { x: number; y: number }) => {
-    setPosition({ x: data.x, y: data.y });
-  };
-
-  const handleDragStart = () => {
+  const handleMouseDownDrag = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
     setIsDragging(true);
+    dragStartRef.current = {
+      x: e.clientX - position.x * scale,
+      y: e.clientY - position.y * scale
+    };
   };
 
-  const handleDragStop = (_e: any, data: { x: number; y: number }) => {
-    setIsDragging(false);
-    onUpdate(index, { x: data.x, y: data.y });
+  const handleMouseDownResize = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsResizing(true);
+    resizeStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      width: size.width,
+      height: size.height
+    };
   };
 
-  const handleResize = (_e: any, { size: newSize }: { size: { width: number; height: number } }) => {
-    setSize({ width: newSize.width, height: newSize.height });
-  };
+  useEffect(() => {
+    if (!isDragging) return;
 
-  const handleResizeStop = (_e: any, { size: newSize }: { size: { width: number; height: number } }) => {
-    onUpdate(index, { width: newSize.width, height: newSize.height });
-  };
+    const handleMouseMove = (e: MouseEvent) => {
+      const newX = (e.clientX - dragStartRef.current.x) / scale;
+      const newY = (e.clientY - dragStartRef.current.y) / scale;
+      
+      const clampedX = Math.max(0, Math.min(newX, containerWidth - size.width));
+      const clampedY = Math.max(0, Math.min(newY, containerHeight - size.height));
+      
+      setPosition({ x: clampedX, y: clampedY });
+    };
 
-  const bounds = {
-    left: 0,
-    top: 0,
-    right: Math.max(0, containerWidth - size.width),
-    bottom: Math.max(0, containerHeight - size.height)
-  };
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      onUpdate(index, { x: position.x, y: position.y });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, position, size, scale, containerWidth, containerHeight, index, onUpdate]);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaX = (e.clientX - resizeStartRef.current.x) / scale;
+      const deltaY = (e.clientY - resizeStartRef.current.y) / scale;
+      
+      const newWidth = Math.max(40, Math.min(400, resizeStartRef.current.width + deltaX));
+      const newHeight = Math.max(20, Math.min(100, resizeStartRef.current.height + deltaY));
+      
+      setSize({ width: newWidth, height: newHeight });
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      onUpdate(index, { width: size.width, height: size.height });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing, size, scale, index, onUpdate]);
+
+  const isActive = isDragging || isResizing;
 
   return (
-    <Draggable
-      nodeRef={nodeRef}
-      position={position}
-      onDrag={handleDrag}
-      onStart={handleDragStart}
-      onStop={handleDragStop}
-      bounds={bounds}
-      grid={[1, 1]}
+    <div
+      style={{
+        position: 'absolute',
+        left: `${position.x * scale}px`,
+        top: `${position.y * scale}px`,
+        width: `${size.width * scale}px`,
+        height: `${size.height * scale}px`,
+        border: `2px solid ${signer?.color || '#3B82F6'}`,
+        backgroundColor: isPrepopulated ? '#FEF3C7' : `${signer?.color || '#3B82F6'}20`,
+        borderRadius: '4px',
+        cursor: isDragging ? 'grabbing' : 'grab',
+        userSelect: 'none',
+        zIndex: isActive ? 1000 : 10,
+        boxShadow: isActive ? '0 4px 12px rgba(0,0,0,0.3)' : 'none',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        pointerEvents: 'auto'
+      }}
+      onMouseDown={handleMouseDownDrag}
+      data-testid={`field-${field.fieldType}-${index}`}
     >
-      <div ref={nodeRef} style={{ position: 'absolute', zIndex: isDragging ? 1000 : 1 }}>
-        <Resizable
-          width={size.width}
-          height={size.height}
-          onResize={handleResize}
-          onResizeStop={handleResizeStop}
-          minConstraints={[40, 20]}
-          maxConstraints={[400, 100]}
-          resizeHandles={['se']}
-        >
-          <div
-            className={`group cursor-move select-none ${isDragging ? 'opacity-80 shadow-lg' : 'hover:shadow-md'}`}
-            style={{
-              width: size.width,
-              height: size.height,
-              border: `2px solid ${signer?.color || '#3B82F6'}`,
-              backgroundColor: isPrepopulated ? '#FEF3C7' : `${signer?.color || '#3B82F6'}20`,
-              borderRadius: '4px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: isDragging ? 'none' : 'box-shadow 0.2s'
-            }}
-            data-testid={`field-${field.fieldType}-${index}`}
-          >
-            <span 
-              className="text-xs font-medium truncate px-1" 
-              style={{ color: isPrepopulated ? '#92400E' : signer?.color }}
-            >
-              {isPrepopulated && field.value ? field.value : fieldLabel}
-            </span>
-            <button
-              className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10"
-              onClick={(e) => { e.stopPropagation(); onRemove(index); }}
-              onMouseDown={(e) => e.stopPropagation()}
-              data-testid={`remove-field-${index}`}
-            >
-              <X className="w-3 h-3" />
-            </button>
-          </div>
-        </Resizable>
-      </div>
-    </Draggable>
+      <span 
+        className="text-xs font-medium truncate px-1 pointer-events-none" 
+        style={{ 
+          color: isPrepopulated ? '#92400E' : signer?.color,
+          fontSize: `${Math.max(10, 12 * scale)}px`
+        }}
+      >
+        {isPrepopulated && field.value ? field.value : fieldLabel}
+      </span>
+      
+      <button
+        className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+        style={{ zIndex: 1001 }}
+        onClick={(e) => { 
+          e.stopPropagation(); 
+          onRemove(index); 
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+        data-testid={`remove-field-${index}`}
+      >
+        <X className="w-3 h-3" />
+      </button>
+      
+      <div
+        onMouseDown={handleMouseDownResize}
+        style={{
+          position: 'absolute',
+          right: '-4px',
+          bottom: '-4px',
+          width: '12px',
+          height: '12px',
+          backgroundColor: 'white',
+          border: `2px solid ${signer?.color || '#3B82F6'}`,
+          borderRadius: '50%',
+          cursor: 'nwse-resize',
+          zIndex: 100
+        }}
+        data-testid={`resize-field-${index}`}
+      />
+    </div>
   );
 }
 
@@ -382,13 +443,13 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
     setSelectedFieldType(null);
   };
 
-  const updateField = (index: number, updates: Partial<FieldData>) => {
+  const updateField = useCallback((index: number, updates: Partial<FieldData>) => {
     setFields(prev => prev.map((f, i) => i === index ? { ...f, ...updates } : f));
-  };
+  }, []);
 
-  const removeField = (index: number) => {
+  const removeField = useCallback((index: number) => {
     setFields(prev => prev.filter((_, i) => i !== index));
-  };
+  }, []);
 
   const currentPageFields = fields.filter(f => f.pageNumber === currentPage);
   const scaledWidth = pdfDimensions.width * pdfScale;
@@ -528,7 +589,7 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
 
           <TabsContent value="fields" className="flex-1 overflow-hidden p-4">
             <div className="flex gap-4 h-full">
-              <div className="w-64 space-y-4 overflow-auto">
+              <div className="w-64 space-y-4 flex-shrink-0 overflow-auto">
                 <div>
                   <Label className="text-sm font-medium">Select Signer</Label>
                   <div className="flex flex-wrap gap-2 mt-2">
@@ -594,7 +655,7 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                     }
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Drag fields to reposition. Resize using bottom-right corner.
+                    Drag fields to move. Use corner handle to resize.
                   </p>
                 </div>
                 
@@ -633,7 +694,10 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                 </Button>
               </div>
               
-              <div className="flex-1 overflow-auto border rounded-lg bg-slate-100">
+              <div 
+                className="flex-1 border rounded-lg bg-slate-100"
+                style={{ overflowY: 'auto', overflowX: 'auto' }}
+              >
                 <div className="p-4">
                   {pageCount > 1 && (
                     <div className="flex items-center justify-center gap-2 mb-4">
@@ -688,33 +752,32 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                     )}
                     
                     <div 
-                      className="absolute top-0 left-0"
                       style={{ 
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
                         width: scaledWidth, 
                         height: scaledHeight,
-                        pointerEvents: 'none',
-                        transform: `scale(${pdfScale})`,
-                        transformOrigin: 'top left'
+                        pointerEvents: 'none'
                       }}
                     >
-                      <div style={{ pointerEvents: 'auto' }}>
-                        {currentPageFields.map((field, i) => {
-                          const globalIndex = fields.findIndex(f => f === field);
-                          const signer = signers.find(s => s.id === field.signerId);
-                          return (
-                            <DraggableField
-                              key={globalIndex}
-                              field={field}
-                              index={globalIndex}
-                              signer={signer}
-                              onUpdate={updateField}
-                              onRemove={removeField}
-                              containerWidth={pdfDimensions.width}
-                              containerHeight={pdfDimensions.height}
-                            />
-                          );
-                        })}
-                      </div>
+                      {currentPageFields.map((field, i) => {
+                        const globalIndex = fields.findIndex(f => f === field);
+                        const signer = signers.find(s => s.id === field.signerId);
+                        return (
+                          <DraggableResizableField
+                            key={globalIndex}
+                            field={field}
+                            index={globalIndex}
+                            signer={signer}
+                            onUpdate={updateField}
+                            onRemove={removeField}
+                            containerWidth={pdfDimensions.width}
+                            containerHeight={pdfDimensions.height}
+                            scale={pdfScale}
+                          />
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
