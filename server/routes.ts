@@ -849,6 +849,9 @@ export async function registerRoutes(
     try {
       const documentId = parseInt(req.params.id);
       const { fields } = req.body;
+      
+      console.log(`📝 Saving ${fields?.length || 0} fields for document ${documentId}`);
+      console.log('Fields data:', JSON.stringify(fields, null, 2));
 
       // Delete existing fields
       await storage.deleteFieldsByDocumentId(documentId);

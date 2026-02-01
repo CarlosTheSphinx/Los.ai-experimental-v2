@@ -344,12 +344,23 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
 
   const saveFieldsMutation = useMutation({
     mutationFn: async () => {
+      console.log('Saving fields:', fields);
+      console.log('Document ID:', documentId);
       const res = await apiRequest('POST', `/api/documents/${documentId}/fields/bulk`, { fields });
-      return res.json();
+      const data = await res.json();
+      console.log('Save fields response:', data);
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to save fields');
+      }
+      return data;
     },
     onSuccess: () => {
       toast({ title: "Fields Saved", description: "Signature fields saved successfully" });
       setStep("send");
+    },
+    onError: (error: Error) => {
+      console.error('Save fields error:', error);
+      toast({ title: "Error", description: error.message || "Failed to save fields", variant: "destructive" });
     }
   });
 
