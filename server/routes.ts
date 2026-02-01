@@ -884,6 +884,14 @@ export async function registerRoutes(
       const documentId = parseInt(req.params.id);
       const { senderName } = req.body;
       
+      console.log(`📧 Send document request - ID: ${documentId}, Sender: ${senderName}`);
+      
+      if (!documentId || isNaN(documentId)) {
+        console.error('Invalid document ID:', req.params.id);
+        res.status(400).json({ success: false, error: 'Invalid document ID' });
+        return;
+      }
+      
       const doc = await storage.getDocumentById(documentId);
       if (!doc) {
         res.status(404).json({ success: false, error: 'Document not found' });
@@ -891,12 +899,14 @@ export async function registerRoutes(
       }
 
       const signers = await storage.getSignersByDocumentId(documentId);
+      console.log(`📧 Found ${signers.length} signers`);
       if (signers.length === 0) {
         res.status(400).json({ success: false, error: 'No signers added to document' });
         return;
       }
 
       const fields = await storage.getFieldsByDocumentId(documentId);
+      console.log(`📧 Found ${fields.length} fields`);
       if (fields.length === 0) {
         res.status(400).json({ success: false, error: 'No signature fields added to document' });
         return;
@@ -904,12 +914,15 @@ export async function registerRoutes(
 
       // Generate tokens for each signer and send emails
       const baseUrl = `${req.protocol}://${req.get('host')}`;
+      console.log(`📧 Base URL for signing links: ${baseUrl}`);
       const emailResults = [];
 
       for (const signer of signers) {
         const token = uuidv4();
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
+        console.log(`📧 Processing signer: ${signer.name} (${signer.email})`);
+        
         await storage.updateSigner(signer.id, {
           token,
           tokenExpiresAt: expiresAt,
@@ -917,7 +930,9 @@ export async function registerRoutes(
         });
 
         const signingLink = `${baseUrl}/sign/${token}`;
+        console.log(`📧 Signing link: ${signingLink}`);
         
+        console.log(`📧 Sending email to ${signer.email}...`);
         const emailResult = await sendSigningInvitation(
           signer.email,
           signer.name,
@@ -925,6 +940,7 @@ export async function registerRoutes(
           senderName || 'Sphinx Capital',
           signingLink
         );
+        console.log(`📧 Email result:`, emailResult);
 
         emailResults.push({ signerId: signer.id, email: signer.email, ...emailResult });
       }

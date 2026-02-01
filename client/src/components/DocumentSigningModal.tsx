@@ -355,18 +355,23 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
 
   const sendDocumentMutation = useMutation({
     mutationFn: async () => {
+      console.log('Sending document with ID:', documentId);
       const res = await apiRequest('POST', `/api/documents/${documentId}/send`, { senderName });
-      return res.json();
+      const data = await res.json();
+      console.log('Send response:', data);
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to send document');
+      }
+      return data;
     },
     onSuccess: (data) => {
-      if (data.success) {
-        toast({ title: "Document Sent!", description: `Signing invitations sent to ${signers.length} signer(s)` });
-        queryClient.invalidateQueries({ queryKey: ['/api/documents'] });
-        onClose();
-      }
+      toast({ title: "Document Sent!", description: `Signing invitations sent to ${signers.length} signer(s)` });
+      queryClient.invalidateQueries({ queryKey: ['/api/documents'] });
+      onClose();
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to send document", variant: "destructive" });
+    onError: (error: Error) => {
+      console.error('Send error:', error);
+      toast({ title: "Error", description: error.message || "Failed to send document", variant: "destructive" });
     }
   });
 
