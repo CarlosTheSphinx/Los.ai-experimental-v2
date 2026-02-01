@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useRoute, Link } from "wouter";
+import { useRoute, Link, useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +34,7 @@ import {
   Ban,
   User,
   Eye,
+  Edit,
   ChevronLeft,
   ChevronRight,
   ZoomIn,
@@ -160,6 +161,25 @@ export default function AgreementDetailPage() {
     }
   });
 
+  const [, navigate] = useLocation();
+
+  const editMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest('POST', `/api/esignature/agreements/${id}/edit`, {});
+      return res.json();
+    },
+    onSuccess: (result: any) => {
+      if (result.success && result.newDocumentId) {
+        toast({ title: "Document Copied", description: "A new draft has been created for editing." });
+        queryClient.invalidateQueries({ queryKey: ['/api/esignature/agreements'] });
+        navigate(`/quotes`);
+      }
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to create editable copy", variant: "destructive" });
+    }
+  });
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'draft':
@@ -206,6 +226,8 @@ export default function AgreementDetailPage() {
   const canVoid = (status: string) => ['sent', 'pending', 'in_progress'].includes(status);
   const canResend = (status: string) => ['sent', 'pending', 'in_progress'].includes(status);
   const canRemind = (status: string) => ['sent', 'pending', 'in_progress'].includes(status);
+  const canEdit = (status: string) => ['draft', 'sent', 'pending', 'in_progress'].includes(status);
+  const canDownload = (status: string) => ['completed', 'voided', 'voided_edited'].includes(status) || true;
 
   const currentPageFields = agreement?.fields.filter(f => f.pageNumber === currentPage) || [];
 
@@ -281,6 +303,24 @@ export default function AgreementDetailPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem asChild data-testid="action-download">
+                    <a href={`/api/documents/${agreement.id}/download`} target="_blank" rel="noopener noreferrer">
+                      <Download className="w-4 h-4 mr-2" />
+                      Download
+                    </a>
+                  </DropdownMenuItem>
+                  
+                  {canEdit(agreement.status) && (
+                    <DropdownMenuItem
+                      onClick={() => editMutation.mutate(agreement.id)}
+                      disabled={editMutation.isPending}
+                      data-testid="action-edit"
+                    >
+                      <Edit className="w-4 h-4 mr-2" />
+                      Edit & Resend
+                    </DropdownMenuItem>
+                  )}
+                  
                   {canResend(agreement.status) && (
                     <DropdownMenuItem
                       onClick={() => resendAllMutation.mutate(agreement.id)}
@@ -291,6 +331,7 @@ export default function AgreementDetailPage() {
                       Resend to All
                     </DropdownMenuItem>
                   )}
+                  
                   {canRemind(agreement.status) && (
                     <DropdownMenuItem
                       onClick={() => remindMutation.mutate(agreement.id)}
@@ -301,6 +342,7 @@ export default function AgreementDetailPage() {
                       Send Reminder
                     </DropdownMenuItem>
                   )}
+                  
                   {canVoid(agreement.status) && (
                     <>
                       <DropdownMenuSeparator />
@@ -310,7 +352,7 @@ export default function AgreementDetailPage() {
                         data-testid="action-void"
                       >
                         <Ban className="w-4 h-4 mr-2" />
-                        Void Document
+                        Cancel Document
                       </DropdownMenuItem>
                     </>
                   )}
