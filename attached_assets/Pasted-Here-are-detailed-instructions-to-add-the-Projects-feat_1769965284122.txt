@@ -1,0 +1,1947 @@
+Here are detailed instructions to add the Projects feature with progress tracking and external integrations:
+
+---
+
+# Add Projects Section with Progress Tracker & External Integrations
+
+## Overview
+Add a comprehensive projects management system that auto-creates from signed agreements, tracks loan closing progress, provides borrower-facing public progress links, and integrates with external loan origination systems via API/N8N webhooks.
+
+---
+
+## 1. Database Schema - New Tables Only
+
+```sql
+-- Projects main table
+CREATE TABLE projects (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  agreement_id INTEGER REFERENCES documents(id) ON DELETE SET NULL,
+  quote_id INTEGER, -- Reference to quotes table if you have one
+  
+  -- Project identification
+  project_name VARCHAR(255) NOT NULL,
+  project_number VARCHAR(50) UNIQUE, -- Auto-generated (e.g., PRJ-2026-0001)
+  
+  -- Loan details (carried from quote/agreement)
+  loan_amount DECIMAL(15, 2),
+  interest_rate DECIMAL(5, 3),
+  loan_term_months INTEGER,
+  loan_type VARCHAR(100),
+  property_address TEXT,
+  property_type VARCHAR(100),
+  borrower_name VARCHAR(255),
+  borrower_email VARCHAR(255),
+  borrower_phone VARCHAR(50),
+  
+  -- Status tracking
+  status VARCHAR(50) DEFAULT 'active', -- active, on_hold, completed, cancelled, funded
+  current_stage VARCHAR(100) DEFAULT 'documentation',
+  progress_percentage INTEGER DEFAULT 0,
+  
+  -- Dates
+  created_at TIMESTAMP DEFAULT NOW(),
+  application_date DATE,
+  target_close_date DATE,
+  actual_close_date DATE,
+  funding_date DATE,
+  last_updated TIMESTAMP DEFAULT NOW(),
+  
+  -- External system integration
+  external_los_id VARCHAR(255), -- Loan Origination System ID
+  external_sync_status VARCHAR(50), -- pending, synced, failed
+  external_sync_at TIMESTAMP,
+  
+  -- Borrower portal
+  borrower_portal_token VARCHAR(255) UNIQUE,
+  borrower_portal_enabled BOOLEAN DEFAULT true,
+  borrower_portal_last_viewed TIMESTAMP,
+  
+  -- Metadata
+  notes TEXT,
+  internal_notes TEXT, -- Private notes not visible to borrower
+  is_archived BOOLEAN DEFAULT FALSE,
+  metadata JSONB -- For additional flexible data
+);
+
+CREATE INDEX idx_projects_user ON projects(user_id);
+CREATE INDEX idx_projects_agreement ON projects(agreement_id);
+CREATE INDEX idx_projects_status ON projects(status);
+CREATE INDEX idx_projects_borrower_token ON projects(borrower_portal_token);
+CREATE INDEX idx_projects_number ON projects(project_number);
+
+-- Project stages/milestones
+CREATE TABLE project_stages (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+  
+  stage_name VARCHAR(100) NOT NULL,
+  stage_key VARCHAR(50) NOT NULL, -- documentation, underwriting, approval, etc.
+  stage_order INTEGER NOT NULL,
+  stage_description TEXT,
+  
+  status VARCHAR(50) DEFAULT 'pending', -- pending, in_progress, completed, skipped
+  
+  started_at TIMESTAMP,
+  completed_at TIMESTAMP,
+  estimated_duration_days INTEGER,
+  
+  visible_to_borrower BOOLEAN DEFAULT true,
+  
+  UNIQUE(project_id, stage_order)
+);
+
+CREATE INDEX idx_stages_project ON project_stages(project_id);
+
+-- Project tasks/checklist
+CREATE TABLE project_tasks (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+  stage_id INTEGER REFERENCES project_stages(id) ON DELETE CASCADE,
+  
+  task_title VARCHAR(255) NOT NULL,
+  task_description TEXT,
+  task_type VARCHAR(100), -- document_upload, review, approval, collection, scheduling, verification
+  
+  status VARCHAR(50) DEFAULT 'pending', -- pending, in_progress, completed, blocked, not_applicable
+  priority VARCHAR(50) DEFAULT 'medium', -- low, medium, high, critical
+  
+  assigned_to VARCHAR(255),
+  due_date DATE,
+  
+  completed_at TIMESTAMP,
+  completed_by VARCHAR(255),
+  
+  -- Document tracking
+  requires_document BOOLEAN DEFAULT false,
+  document_id INTEGER REFERENCES documents(id) ON DELETE SET NULL,
+  document_url TEXT,
+  
+  -- Borrower visibility
+  visible_to_borrower BOOLEAN DEFAULT true,
+  borrower_action_required BOOLEAN DEFAULT false,
+  
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_tasks_project ON project_tasks(project_id);
+CREATE INDEX idx_tasks_stage ON project_tasks(stage_id);
+CREATE INDEX idx_tasks_status ON project_tasks(status);
+
+-- Project activity log
+CREATE TABLE project_activity (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  
+  activity_type VARCHAR(100) NOT NULL,
+  activity_description TEXT NOT NULL,
+  
+  old_value TEXT,
+  new_value TEXT,
+  
+  metadata JSONB,
+  
+  visible_to_borrower BOOLEAN DEFAULT false,
+  
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_activity_project ON project_activity(project_id);
+CREATE INDEX idx_activity_created ON project_activity(created_at DESC);
+
+-- Project documents
+CREATE TABLE project_documents (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+  task_id INTEGER REFERENCES project_tasks(id) ON DELETE SET NULL,
+  
+  document_name VARCHAR(255) NOT NULL,
+  document_type VARCHAR(100),
+  document_category VARCHAR(100), -- borrower_submitted, internal, third_party
+  file_path TEXT NOT NULL,
+  file_size INTEGER,
+  
+  uploaded_by INTEGER REFERENCES users(id),
+  uploaded_at TIMESTAMP DEFAULT NOW(),
+  
+  status VARCHAR(50) DEFAULT 'pending_review',
+  reviewed_by INTEGER REFERENCES users(id),
+  reviewed_at TIMESTAMP,
+  review_notes TEXT,
+  
+  visible_to_borrower BOOLEAN DEFAULT true
+);
+
+CREATE INDEX idx_project_docs_project ON project_documents(project_id);
+
+-- Webhook/Integration log
+CREATE TABLE project_webhooks (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+  
+  webhook_type VARCHAR(100), -- n8n, external_los, custom
+  webhook_url TEXT,
+  
+  trigger_event VARCHAR(100), -- stage_completed, project_created, task_completed, etc.
+  
+  payload JSONB,
+  response_status INTEGER,
+  response_body TEXT,
+  
+  status VARCHAR(50), -- pending, success, failed, retry
+  attempts INTEGER DEFAULT 0,
+  
+  triggered_at TIMESTAMP DEFAULT NOW(),
+  completed_at TIMESTAMP
+);
+
+CREATE INDEX idx_webhooks_project ON project_webhooks(project_id);
+CREATE INDEX idx_webhooks_status ON project_webhooks(status);
+```
+
+---
+
+## 2. Loan Closing Stages Template
+
+```javascript
+// /config/loanStages.js
+
+const LOAN_CLOSING_STAGES = [
+  {
+    stage_name: 'Initial Documentation',
+    stage_key: 'documentation',
+    stage_order: 1,
+    stage_description: 'Collecting initial loan application and required documents',
+    estimated_duration_days: 3,
+    visible_to_borrower: true,
+    tasks: [
+      {
+        task_title: 'Loan Application Submitted',
+        task_type: 'document_upload',
+        priority: 'critical',
+        requires_document: true,
+        visible_to_borrower: true,
+        borrower_action_required: true
+      },
+      {
+        task_title: 'Financial Statements Collected',
+        task_type: 'document_upload',
+        priority: 'high',
+        requires_document: true,
+        visible_to_borrower: true,
+        borrower_action_required: true
+      },
+      {
+        task_title: 'Tax Returns (Last 2 Years)',
+        task_type: 'document_upload',
+        priority: 'high',
+        requires_document: true,
+        visible_to_borrower: true,
+        borrower_action_required: true
+      },
+      {
+        task_title: 'Property Information Package',
+        task_type: 'document_upload',
+        priority: 'medium',
+        requires_document: true,
+        visible_to_borrower: true,
+        borrower_action_required: true
+      },
+      {
+        task_title: 'Proof of Insurance',
+        task_type: 'document_upload',
+        priority: 'medium',
+        requires_document: true,
+        visible_to_borrower: true,
+        borrower_action_required: true
+      }
+    ]
+  },
+  {
+    stage_name: 'Document Review',
+    stage_key: 'document_review',
+    stage_order: 2,
+    stage_description: 'Internal review of submitted documentation',
+    estimated_duration_days: 2,
+    visible_to_borrower: true,
+    tasks: [
+      {
+        task_title: 'Application Completeness Check',
+        task_type: 'review',
+        priority: 'critical',
+        visible_to_borrower: false
+      },
+      {
+        task_title: 'Financial Analysis',
+        task_type: 'review',
+        priority: 'high',
+        visible_to_borrower: false
+      },
+      {
+        task_title: 'Property Review',
+        task_type: 'review',
+        priority: 'high',
+        visible_to_borrower: false
+      },
+      {
+        task_title: 'Request Additional Documents (if needed)',
+        task_type: 'collection',
+        priority: 'medium',
+        visible_to_borrower: true
+      }
+    ]
+  },
+  {
+    stage_name: 'Third-Party Orders',
+    stage_key: 'third_party_orders',
+    stage_order: 3,
+    stage_description: 'Ordering appraisals, title reports, and other third-party services',
+    estimated_duration_days: 7,
+    visible_to_borrower: true,
+    tasks: [
+      {
+        task_title: 'Property Appraisal Ordered',
+        task_type: 'scheduling',
+        priority: 'critical',
+        visible_to_borrower: true
+      },
+      {
+        task_title: 'Title Report Ordered',
+        task_type: 'scheduling',
+        priority: 'critical',
+        visible_to_borrower: true
+      },
+      {
+        task_title: 'Environmental Phase I Ordered',
+        task_type: 'scheduling',
+        priority: 'high',
+        visible_to_borrower: true
+      },
+      {
+        task_title: 'Survey Ordered',
+        task_type: 'scheduling',
+        priority: 'medium',
+        visible_to_borrower: true
+      },
+      {
+        task_title: 'Appraisal Received',
+        task_type: 'collection',
+        priority: 'critical',
+        requires_document: true,
+        visible_to_borrower: true
+      },
+      {
+        task_title: 'Title Report Received',
+        task_type: 'collection',
+        priority: 'critical',
+        requires_document: true,
+        visible_to_borrower: true
+      }
+    ]
+  },
+  {
+    stage_name: 'Underwriting',
+    stage_key: 'underwriting',
+    stage_order: 4,
+    stage_description: 'Detailed loan underwriting and risk assessment',
+    estimated_duration_days: 5,
+    visible_to_borrower: true,
+    tasks: [
+      {
+        task_title: 'Credit Review Completed',
+        task_type: 'review',
+        priority: 'critical',
+        visible_to_borrower: false
+      },
+      {
+        task_title: 'Property Valuation Review',
+        task_type: 'review',
+        priority: 'critical',
+        visible_to_borrower: false
+      },
+      {
+        task_title: 'Debt Service Coverage Analysis',
+        task_type: 'review',
+        priority: 'high',
+        visible_to_borrower: false
+      },
+      {
+        task_title: 'Title Review',
+        task_type: 'review',
+        priority: 'high',
+        visible_to_borrower: false
+      },
+      {
+        task_title: 'Environmental Review',
+        task_type: 'review',
+        priority: 'medium',
+        visible_to_borrower: false
+      },
+      {
+        task_title: 'Underwriting Memo Prepared',
+        task_type: 'review',
+        priority: 'critical',
+        visible_to_borrower: false
+      }
+    ]
+  },
+  {
+    stage_name: 'Credit Approval',
+    stage_key: 'approval',
+    stage_order: 5,
+    stage_description: 'Final credit decision and loan approval',
+    estimated_duration_days: 3,
+    visible_to_borrower: true,
+    tasks: [
+      {
+        task_title: 'Credit Committee Review',
+        task_type: 'approval',
+        priority: 'critical',
+        visible_to_borrower: false
+      },
+      {
+        task_title: 'Credit Committee Approval',
+        task_type: 'approval',
+        priority: 'critical',
+        visible_to_borrower: true
+      },
+      {
+        task_title: 'Loan Terms Finalized',
+        task_type: 'approval',
+        priority: 'high',
+        visible_to_borrower: true
+      },
+      {
+        task_title: 'Commitment Letter Issued',
+        task_type: 'document_upload',
+        priority: 'critical',
+        requires_document: true,
+        visible_to_borrower: true
+      },
+      {
+        task_title: 'Commitment Letter Signed',
+        task_type: 'document_upload',
+        priority: 'critical',
+        requires_document: true,
+        visible_to_borrower: true,
+        borrower_action_required: true
+      }
+    ]
+  },
+  {
+    stage_name: 'Closing Preparation',
+    stage_key: 'closing_prep',
+    stage_order: 6,
+    stage_description: 'Preparing all closing documents and final requirements',
+    estimated_duration_days: 7,
+    visible_to_borrower: true,
+    tasks: [
+      {
+        task_title: 'Closing Documents Prepared',
+        task_type: 'document_upload',
+        priority: 'critical',
+        visible_to_borrower: false
+      },
+      {
+        task_title: 'Title Insurance Ordered',
+        task_type: 'scheduling',
+        priority: 'critical',
+        visible_to_borrower: true
+      },
+      {
+        task_title: 'Final Insurance Binder Obtained',
+        task_type: 'collection',
+        priority: 'critical',
+        requires_document: true,
+        visible_to_borrower: true,
+        borrower_action_required: true
+      },
+      {
+        task_title: 'Survey Completed',
+        task_type: 'verification',
+        priority: 'high',
+        visible_to_borrower: true
+      },
+      {
+        task_title: 'Title Commitment Received',
+        task_type: 'collection',
+        priority: 'critical',
+        requires_document: true,
+        visible_to_borrower: true
+      },
+      {
+        task_title: 'Legal Review Completed',
+        task_type: 'review',
+        priority: 'high',
+        visible_to_borrower: false
+      },
+      {
+        task_title: 'Closing Statement Prepared',
+        task_type: 'document_upload',
+        priority: 'critical',
+        visible_to_borrower: true
+      }
+    ]
+  },
+  {
+    stage_name: 'Closing Scheduled',
+    stage_key: 'closing_scheduled',
+    stage_order: 7,
+    stage_description: 'Final closing coordination and scheduling',
+    estimated_duration_days: 3,
+    visible_to_borrower: true,
+    tasks: [
+      {
+        task_title: 'Closing Date Scheduled',
+        task_type: 'scheduling',
+        priority: 'critical',
+        visible_to_borrower: true
+      },
+      {
+        task_title: 'Closing Location Confirmed',
+        task_type: 'scheduling',
+        priority: 'high',
+        visible_to_borrower: true
+      },
+      {
+        task_title: 'Title Company Confirmed',
+        task_type: 'scheduling',
+        priority: 'high',
+        visible_to_borrower: true
+      },
+      {
+        task_title: 'Final Walkthrough Completed',
+        task_type: 'verification',
+        priority: 'medium',
+        visible_to_borrower: true
+      },
+      {
+        task_title: 'Wire Instructions Sent',
+        task_type: 'document_upload',
+        priority: 'critical',
+        visible_to_borrower: true
+      }
+    ]
+  },
+  {
+    stage_name: 'Closing',
+    stage_key: 'closing',
+    stage_order: 8,
+    stage_description: 'Document execution and loan closing',
+    estimated_duration_days: 1,
+    visible_to_borrower: true,
+    tasks: [
+      {
+        task_title: 'Closing Documents Executed',
+        task_type: 'document_upload',
+        priority: 'critical',
+        requires_document: true,
+        visible_to_borrower: true
+      },
+      {
+        task_title: 'Funds Wired to Title',
+        task_type: 'verification',
+        priority: 'critical',
+        visible_to_borrower: false
+      },
+      {
+        task_title: 'Title Insurance Issued',
+        task_type: 'collection',
+        priority: 'critical',
+        requires_document: true,
+        visible_to_borrower: true
+      },
+      {
+        task_title: 'Loan Documents Recorded',
+        task_type: 'verification',
+        priority: 'critical',
+        visible_to_borrower: true
+      }
+    ]
+  },
+  {
+    stage_name: 'Post-Closing & Funding',
+    stage_key: 'post_closing',
+    stage_order: 9,
+    stage_description: 'Final documentation and loan setup',
+    estimated_duration_days: 2,
+    visible_to_borrower: true,
+    tasks: [
+      {
+        task_title: 'Final Title Policy Received',
+        task_type: 'collection',
+        priority: 'high',
+        requires_document: true,
+        visible_to_borrower: true
+      },
+      {
+        task_title: 'Recorded Documents Filed',
+        task_type: 'document_upload',
+        priority: 'high',
+        visible_to_borrower: false
+      },
+      {
+        task_title: 'Loan Servicing Setup',
+        task_type: 'verification',
+        priority: 'medium',
+        visible_to_borrower: false
+      },
+      {
+        task_title: 'Borrower Welcome Package Sent',
+        task_type: 'document_upload',
+        priority: 'medium',
+        visible_to_borrower: true
+      },
+      {
+        task_title: 'Loan Funded',
+        task_type: 'verification',
+        priority: 'critical',
+        visible_to_borrower: true
+      }
+    ]
+  }
+];
+
+module.exports = { LOAN_CLOSING_STAGES };
+```
+
+---
+
+## 3. Auto-Generate Project Number Function
+
+```javascript
+// /utils/projectNumber.js
+
+const generateProjectNumber = async (db) => {
+  const year = new Date().getFullYear();
+  const prefix = `PRJ-${year}-`;
+  
+  // Get the last project number for this year
+  const result = await db.query(`
+    SELECT project_number 
+    FROM projects 
+    WHERE project_number LIKE $1 
+    ORDER BY project_number DESC 
+    LIMIT 1
+  `, [`${prefix}%`]);
+  
+  let nextNumber = 1;
+  
+  if (result.rows.length > 0) {
+    const lastNumber = result.rows[0].project_number;
+    const numberPart = parseInt(lastNumber.split('-').pop());
+    nextNumber = numberPart + 1;
+  }
+  
+  // Pad with zeros (e.g., PRJ-2026-0001)
+  const projectNumber = `${prefix}${String(nextNumber).padStart(4, '0')}`;
+  
+  return projectNumber;
+};
+
+module.exports = { generateProjectNumber };
+```
+
+---
+
+## 4. Auto-Create Project When Agreement Completes
+
+```javascript
+// Add to your existing agreement completion logic
+// /routes/esignature.js or wherever you handle agreement signing
+
+const { LOAN_CLOSING_STAGES } = require('../config/loanStages');
+const { generateProjectNumber } = require('../utils/projectNumber');
+const crypto = require('crypto');
+
+// Add this function
+const autoCreateProjectFromAgreement = async (documentId) => {
+  try {
+    // Get agreement and signer details
+    const agreementResult = await db.query(`
+      SELECT 
+        d.id,
+        d.user_id,
+        d.title,
+        s.name as borrower_name,
+        s.email as borrower_email
+      FROM documents d
+      LEFT JOIN signers s ON d.id = s.document_id
+      WHERE d.id = $1
+      LIMIT 1
+    `, [documentId]);
+    
+    if (agreementResult.rows.length === 0) return;
+    
+    const agreement = agreementResult.rows[0];
+    
+    // Generate unique project number
+    const projectNumber = await generateProjectNumber(db);
+    
+    // Generate borrower portal token
+    const borrowerToken = crypto.randomBytes(32).toString('hex');
+    
+    // Create project
+    const projectResult = await db.query(`
+      INSERT INTO projects (
+        user_id,
+        agreement_id,
+        project_name,
+        project_number,
+        borrower_name,
+        borrower_email,
+        status,
+        current_stage,
+        progress_percentage,
+        target_close_date,
+        application_date,
+        borrower_portal_token,
+        borrower_portal_enabled
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      RETURNING id
+    `, [
+      agreement.user_id,
+      documentId,
+      `${agreement.title} - Loan Project`,
+      projectNumber,
+      agreement.borrower_name,
+      agreement.borrower_email,
+      'active',
+      'documentation',
+      0,
+      new Date(Date.now() + 60 * 24 * 60 * 60 * 1000), // 60 days from now
+      new Date(),
+      borrowerToken,
+      true
+    ]);
+    
+    const projectId = projectResult.rows[0].id;
+    
+    // Create stages and tasks from template
+    for (const stageTemplate of LOAN_CLOSING_STAGES) {
+      // Create stage
+      const stageResult = await db.query(`
+        INSERT INTO project_stages (
+          project_id,
+          stage_name,
+          stage_key,
+          stage_order,
+          stage_description,
+          estimated_duration_days,
+          status,
+          visible_to_borrower
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING id
+      `, [
+        projectId,
+        stageTemplate.stage_name,
+        stageTemplate.stage_key,
+        stageTemplate.stage_order,
+        stageTemplate.stage_description,
+        stageTemplate.estimated_duration_days,
+        stageTemplate.stage_order === 1 ? 'in_progress' : 'pending',
+        stageTemplate.visible_to_borrower
+      ]);
+      
+      const stageId = stageResult.rows[0].id;
+      
+      // Create tasks for this stage
+      for (const taskTemplate of stageTemplate.tasks) {
+        await db.query(`
+          INSERT INTO project_tasks (
+            project_id,
+            stage_id,
+            task_title,
+            task_type,
+            priority,
+            requires_document,
+            visible_to_borrower,
+            borrower_action_required,
+            status
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `, [
+          projectId,
+          stageId,
+          taskTemplate.task_title,
+          taskTemplate.task_type,
+          taskTemplate.priority,
+          taskTemplate.requires_document || false,
+          taskTemplate.visible_to_borrower,
+          taskTemplate.borrower_action_required || false,
+          'pending'
+        ]);
+      }
+    }
+    
+    // Log activity
+    await db.query(`
+      INSERT INTO project_activity (
+        project_id,
+        user_id,
+        activity_type,
+        activity_description,
+        visible_to_borrower
+      ) VALUES ($1, $2, $3, $4, $5)
+    `, [
+      projectId,
+      agreement.user_id,
+      'project_created',
+      `Project ${projectNumber} created from signed agreement`,
+      true
+    ]);
+    
+    // Trigger webhook for project creation
+    await triggerWebhook(projectId, 'project_created', {
+      project_number: projectNumber,
+      borrower_name: agreement.borrower_name,
+      borrower_email: agreement.borrower_email,
+      agreement_id: documentId
+    });
+    
+    console.log(`✓ Project ${projectNumber} (ID: ${projectId}) created from agreement ${documentId}`);
+    
+    return projectId;
+    
+  } catch (error) {
+    console.error('Error auto-creating project:', error);
+  }
+};
+
+// Insert this into your existing agreement completion code
+// Find where you have: if (signed_count === total_signers) { ... }
+// After generating signed PDF and sending emails, add:
+
+await autoCreateProjectFromAgreement(documentId);
+```
+
+---
+
+## 5. Webhook/Integration Function
+
+```javascript
+// /utils/webhooks.js
+
+const axios = require('axios');
+
+const triggerWebhook = async (projectId, eventType, data) => {
+  try {
+    // Get project details
+    const projectResult = await db.query(`
+      SELECT 
+        p.*,
+        u.email as user_email,
+        u.full_name as user_name
+      FROM projects p
+      LEFT JOIN users u ON p.user_id = u.id
+      WHERE p.id = $1
+    `, [projectId]);
+    
+    if (projectResult.rows.length === 0) return;
+    
+    const project = projectResult.rows[0];
+    
+    // Get webhook URLs from environment or database
+    const webhookUrls = process.env.WEBHOOK_URLS ? JSON.parse(process.env.WEBHOOK_URLS) : [];
+    const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL;
+    const externalLosUrl = process.env.EXTERNAL_LOS_WEBHOOK_URL;
+    
+    const allWebhooks = [
+      ...webhookUrls,
+      ...(n8nWebhookUrl ? [{ url: n8nWebhookUrl, type: 'n8n' }] : []),
+      ...(externalLosUrl ? [{ url: externalLosUrl, type: 'external_los' }] : [])
+    ];
+    
+    if (allWebhooks.length === 0) return;
+    
+    // Prepare payload
+    const payload = {
+      event_type: eventType,
+      timestamp: new Date().toISOString(),
+      project: {
+        id: project.id,
+        project_number: project.project_number,
+        project_name: project.project_name,
+        status: project.status,
+        current_stage: project.current_stage,
+        progress_percentage: project.progress_percentage,
+        loan_amount: project.loan_amount,
+        interest_rate: project.interest_rate,
+        loan_term_months: project.loan_term_months,
+        loan_type: project.loan_type,
+        property_address: project.property_address,
+        property_type: project.property_type,
+        borrower_name: project.borrower_name,
+        borrower_email: project.borrower_email,
+        borrower_phone: project.borrower_phone,
+        target_close_date: project.target_close_date,
+        created_at: project.created_at
+      },
+      user: {
+        email: project.user_email,
+        name: project.user_name
+      },
+      event_data: data
+    };
+    
+    // Send to all webhooks
+    for (const webhook of allWebhooks) {
+      try {
+        const webhookLog = await db.query(`
+          INSERT INTO project_webhooks (
+            project_id,
+            webhook_type,
+            webhook_url,
+            trigger_event,
+            payload,
+            status,
+            attempts
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+          RETURNING id
+        `, [
+          projectId,
+          webhook.type || 'custom',
+          webhook.url,
+          eventType,
+          payload,
+          'pending',
+          0
+        ]);
+        
+        const webhookLogId = webhookLog.rows[0].id;
+        
+        // Send webhook
+        const response = await axios.post(webhook.url, payload, {
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Webhook-Event': eventType,
+            'X-Project-Id': project.id,
+            'X-Project-Number': project.project_number
+          },
+          timeout: 30000 // 30 second timeout
+        });
+        
+        // Update log with success
+        await db.query(`
+          UPDATE project_webhooks
+          SET 
+            status = 'success',
+            response_status = $1,
+            response_body = $2,
+            completed_at = NOW(),
+            attempts = attempts + 1
+          WHERE id = $3
+        `, [
+          response.status,
+          JSON.stringify(response.data),
+          webhookLogId
+        ]);
+        
+        console.log(`✓ Webhook sent to ${webhook.url} for event ${eventType}`);
+        
+      } catch (error) {
+        console.error(`✗ Webhook failed for ${webhook.url}:`, error.message);
+        
+        // Log failure
+        await db.query(`
+          UPDATE project_webhooks
+          SET 
+            status = 'failed',
+            response_status = $1,
+            response_body = $2,
+            completed_at = NOW(),
+            attempts = attempts + 1
+          WHERE project_id = $3 AND webhook_url = $4 AND trigger_event = $5
+        `, [
+          error.response?.status || 0,
+          error.message,
+          projectId,
+          webhook.url,
+          eventType
+        ]);
+      }
+    }
+    
+  } catch (error) {
+    console.error('Webhook trigger error:', error);
+  }
+};
+
+// Manual webhook trigger endpoint
+const manualTriggerWebhook = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { eventType, data } = req.body;
+    
+    // Verify project ownership
+    const projectCheck = await db.query(
+      'SELECT id FROM projects WHERE id = $1 AND user_id = $2',
+      [projectId, req.user.id]
+    );
+    
+    if (projectCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    await triggerWebhook(projectId, eventType, data);
+    
+    res.json({ success: true, message: 'Webhook triggered' });
+    
+  } catch (error) {
+    console.error('Manual webhook trigger error:', error);
+    res.status(500).json({ error: 'Failed to trigger webhook' });
+  }
+};
+
+module.exports = { triggerWebhook, manualTriggerWebhook };
+```
+
+---
+
+## 6. Projects API Routes
+
+```javascript
+// /routes/projects.js
+
+const express = require('express');
+const router = express.Router();
+const { authenticateUser } = require('../middleware/auth');
+const { LOAN_CLOSING_STAGES } = require('../config/loanStages');
+const { generateProjectNumber } = require('../utils/projectNumber');
+const { triggerWebhook, manualTriggerWebhook } = require('../utils/webhooks');
+const crypto = require('crypto');
+const db = require('../db');
+
+// All routes require authentication
+router.use(authenticateUser);
+
+// GET all projects
+router.get('/', async (req, res) => {
+  try {
+    const { status, archived } = req.query;
+    
+    let query = `
+      SELECT 
+        p.*,
+        d.title as agreement_title,
+        COUNT(DISTINCT CASE WHEN pt.status = 'completed' THEN pt.id END) as completed_tasks,
+        COUNT(DISTINCT pt.id) as total_tasks,
+        COUNT(DISTINCT CASE WHEN pt.borrower_action_required = true AND pt.status != 'completed' THEN pt.id END) as pending_borrower_actions
+      FROM projects p
+      LEFT JOIN documents d ON p.agreement_id = d.id
+      LEFT JOIN project_tasks pt ON p.id = pt.project_id
+      WHERE p.user_id = $1
+    `;
+    
+    const params = [req.user.id];
+    
+    if (status) {
+      query += ` AND p.status = $${params.length + 1}`;
+      params.push(status);
+    }
+    
+    if (archived !== undefined) {
+      query += ` AND p.is_archived = $${params.length + 1}`;
+      params.push(archived === 'true');
+    }
+    
+    query += `
+      GROUP BY p.id, d.title
+      ORDER BY p.last_updated DESC
+    `;
+    
+    const result = await db.query(query, params);
+    
+    res.json({ projects: result.rows });
+    
+  } catch (error) {
+    console.error('Get projects error:', error);
+    res.status(500).json({ error: 'Failed to get projects' });
+  }
+});
+
+// CREATE new project manually
+router.post('/', async (req, res) => {
+  try {
+    const {
+      project_name,
+      loan_amount,
+      interest_rate,
+      loan_term_months,
+      loan_type,
+      property_address,
+      property_type,
+      borrower_name,
+      borrower_email,
+      borrower_phone,
+      target_close_date,
+      notes
+    } = req.body;
+    
+    if (!project_name || !borrower_name || !borrower_email) {
+      return res.status(400).json({ error: 'Project name, borrower name, and email are required' });
+    }
+    
+    const projectNumber = await generateProjectNumber(db);
+    const borrowerToken = crypto.randomBytes(32).toString('hex');
+    
+    const projectResult = await db.query(`
+      INSERT INTO projects (
+        user_id,
+        project_name,
+        project_number,
+        loan_amount,
+        interest_rate,
+        loan_term_months,
+        loan_type,
+        property_address,
+        property_type,
+        borrower_name,
+        borrower_email,
+        borrower_phone,
+        status,
+        current_stage,
+        target_close_date,
+        application_date,
+        borrower_portal_token,
+        borrower_portal_enabled,
+        notes
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+      RETURNING *
+    `, [
+      req.user.id,
+      project_name,
+      projectNumber,
+      loan_amount,
+      interest_rate,
+      loan_term_months,
+      loan_type,
+      property_address,
+      property_type,
+      borrower_name,
+      borrower_email,
+      borrower_phone,
+      'active',
+      'documentation',
+      target_close_date || new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+      new Date(),
+      borrowerToken,
+      true,
+      notes
+    ]);
+    
+    const project = projectResult.rows[0];
+    
+    // Create stages and tasks
+    for (const stageTemplate of LOAN_CLOSING_STAGES) {
+      const stageResult = await db.query(`
+        INSERT INTO project_stages (
+          project_id,
+          stage_name,
+          stage_key,
+          stage_order,
+          stage_description,
+          estimated_duration_days,
+          status,
+          visible_to_borrower
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING id
+      `, [
+        project.id,
+        stageTemplate.stage_name,
+        stageTemplate.stage_key,
+        stageTemplate.stage_order,
+        stageTemplate.stage_description,
+        stageTemplate.estimated_duration_days,
+        stageTemplate.stage_order === 1 ? 'in_progress' : 'pending',
+        stageTemplate.visible_to_borrower
+      ]);
+      
+      const stageId = stageResult.rows[0].id;
+      
+      for (const taskTemplate of stageTemplate.tasks) {
+        await db.query(`
+          INSERT INTO project_tasks (
+            project_id,
+            stage_id,
+            task_title,
+            task_type,
+            priority,
+            requires_document,
+            visible_to_borrower,
+            borrower_action_required
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `, [
+          project.id,
+          stageId,
+          taskTemplate.task_title,
+          taskTemplate.task_type,
+          taskTemplate.priority,
+          taskTemplate.requires_document || false,
+          taskTemplate.visible_to_borrower,
+          taskTemplate.borrower_action_required || false
+        ]);
+      }
+    }
+    
+    // Log activity
+    await db.query(`
+      INSERT INTO project_activity (
+        project_id,
+        user_id,
+        activity_type,
+        activity_description,
+        visible_to_borrower
+      ) VALUES ($1, $2, $3, $4, $5)
+    `, [
+      project.id,
+      req.user.id,
+      'project_created',
+      `Project ${projectNumber} created manually`,
+      true
+    ]);
+    
+    // Trigger webhook
+    await triggerWebhook(project.id, 'project_created', {
+      project_number: projectNumber,
+      created_manually: true
+    });
+    
+    res.status(201).json({ project });
+    
+  } catch (error) {
+    console.error('Create project error:', error);
+    res.status(500).json({ error: 'Failed to create project' });
+  }
+});
+
+// GET single project (detailed view)
+router.get('/:id', async (req, res) => {
+  try {
+    const projectResult = await db.query(`
+      SELECT p.*, d.title as agreement_title, d.file_path as agreement_file
+      FROM projects p
+      LEFT JOIN documents d ON p.agreement_id = d.id
+      WHERE p.id = $1 AND p.user_id = $2
+    `, [req.params.id, req.user.id]);
+    
+    if (projectResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    const project = projectResult.rows[0];
+    
+    // Get stages with tasks
+    const stagesResult = await db.query(`
+      SELECT 
+        ps.*,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', pt.id,
+              'task_title', pt.task_title,
+              'task_description', pt.task_description,
+              'task_type', pt.task_type,
+              'status', pt.status,
+              'priority', pt.priority,
+              'due_date', pt.due_date,
+              'completed_at', pt.completed_at,
+              'completed_by', pt.completed_by,
+              'requires_document', pt.requires_document,
+              'document_url', pt.document_url,
+              'visible_to_borrower', pt.visible_to_borrower,
+              'borrower_action_required', pt.borrower_action_required
+            ) ORDER BY 
+              CASE pt.priority
+                WHEN 'critical' THEN 1
+                WHEN 'high' THEN 2
+                WHEN 'medium' THEN 3
+                WHEN 'low' THEN 4
+              END,
+              pt.id
+          ) FILTER (WHERE pt.id IS NOT NULL), '[]'
+        ) as tasks
+      FROM project_stages ps
+      LEFT JOIN project_tasks pt ON ps.id = pt.stage_id
+      WHERE ps.project_id = $1
+      GROUP BY ps.id
+      ORDER BY ps.stage_order
+    `, [req.params.id]);
+    
+    // Get activity
+    const activityResult = await db.query(`
+      SELECT *
+      FROM project_activity
+      WHERE project_id = $1
+      ORDER BY created_at DESC
+      LIMIT 100
+    `, [req.params.id]);
+    
+    // Get documents
+    const documentsResult = await db.query(`
+      SELECT *
+      FROM project_documents
+      WHERE project_id = $1
+      ORDER BY uploaded_at DESC
+    `, [req.params.id]);
+    
+    res.json({
+      project,
+      stages: stagesResult.rows,
+      activity: activityResult.rows,
+      documents: documentsResult.rows
+    });
+    
+  } catch (error) {
+    console.error('Get project error:', error);
+    res.status(500).json({ error: 'Failed to get project' });
+  }
+});
+
+// UPDATE project
+router.put('/:id', async (req, res) => {
+  try {
+    const allowedFields = [
+      'project_name', 'status', 'loan_amount', 'interest_rate', 'loan_term_months',
+      'loan_type', 'property_address', 'property_type', 'borrower_name',
+      'borrower_email', 'borrower_phone', 'target_close_date', 'notes', 'internal_notes'
+    ];
+    
+    const updates = [];
+    const values = [];
+    let paramIndex = 1;
+    
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updates.push(`${field} = $${paramIndex}`);
+        values.push(req.body[field]);
+        paramIndex++;
+      }
+    }
+    
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+    
+    updates.push(`last_updated = NOW()`);
+    values.push(req.params.id, req.user.id);
+    
+    const result = await db.query(`
+      UPDATE projects
+      SET ${updates.join(', ')}
+      WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1}
+      RETURNING *
+    `, values);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    // Log activity
+    await db.query(`
+      INSERT INTO project_activity (project_id, user_id, activity_type, activity_description)
+      VALUES ($1, $2, 'project_updated', 'Project details updated')
+    `, [req.params.id, req.user.id]);
+    
+    res.json({ project: result.rows[0] });
+    
+  } catch (error) {
+    console.error('Update project error:', error);
+    res.status(500).json({ error: 'Failed to update project' });
+  }
+});
+
+// UPDATE task status
+router.patch('/:projectId/tasks/:taskId', async (req, res) => {
+  try {
+    const { status, completed_by, document_url, notes } = req.body;
+    
+    const projectCheck = await db.query(
+      'SELECT id, current_stage FROM projects WHERE id = $1 AND user_id = $2',
+      [req.params.projectId, req.user.id]
+    );
+    
+    if (projectCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    const result = await db.query(`
+      UPDATE project_tasks
+      SET 
+        status = COALESCE($1, status),
+        completed_at = CASE WHEN $1 = 'completed' THEN NOW() ELSE completed_at END,
+        completed_by = COALESCE($2, completed_by),
+        document_url = COALESCE($3, document_url)
+      WHERE id = $4 AND project_id = $5
+      RETURNING *
+    `, [status, completed_by, document_url, req.params.taskId, req.params.projectId]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
+    const task = result.rows[0];
+    
+    // Log activity
+    await db.query(`
+      INSERT INTO project_activity (project_id, user_id, activity_type, activity_description, visible_to_borrower)
+      VALUES ($1, $2, 'task_updated', $3, $4)
+    `, [
+      req.params.projectId,
+      req.user.id,
+      `Task "${task.task_title}" marked as ${status}`,
+      task.visible_to_borrower
+    ]);
+    
+    // Update progress
+    await updateProjectProgress(req.params.projectId);
+    
+    // Trigger webhook
+    if (status === 'completed') {
+      await triggerWebhook(req.params.projectId, 'task_completed', {
+        task_id: task.id,
+        task_title: task.task_title,
+        task_type: task.task_type
+      });
+    }
+    
+    res.json({ task: result.rows[0] });
+    
+  } catch (error) {
+    console.error('Update task error:', error);
+    res.status(500).json({ error: 'Failed to update task' });
+  }
+});
+
+// Helper function to update progress
+const updateProjectProgress = async (projectId) => {
+  const result = await db.query(`
+    SELECT 
+      COUNT(*) FILTER (WHERE status = 'completed') as completed,
+      COUNT(*) as total
+    FROM project_tasks
+    WHERE project_id = $1
+  `, [projectId]);
+  
+  const { completed, total } = result.rows[0];
+  const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+  
+  await db.query(
+    'UPDATE projects SET progress_percentage = $1, last_updated = NOW() WHERE id = $2',
+    [percentage, projectId]
+  );
+  
+  // Check if current stage is complete
+  const stageCheck = await db.query(`
+    SELECT 
+      ps.id,
+      ps.stage_name,
+      ps.stage_key,
+      ps.stage_order,
+      COUNT(*) FILTER (WHERE pt.status = 'completed') as completed_tasks,
+      COUNT(*) as total_tasks
+    FROM project_stages ps
+    LEFT JOIN project_tasks pt ON ps.id = pt.stage_id
+    WHERE ps.project_id = $1 AND ps.status = 'in_progress'
+    GROUP BY ps.id
+  `, [projectId]);
+  
+  if (stageCheck.rows.length > 0) {
+    const currentStage = stageCheck.rows[0];
+    
+    if (currentStage.completed_tasks === currentStage.total_tasks) {
+      // Mark stage complete
+      await db.query(
+        'UPDATE project_stages SET status = $1, completed_at = NOW() WHERE id = $2',
+        ['completed', currentStage.id]
+      );
+      
+      // Activate next stage
+      const nextStageResult = await db.query(`
+        UPDATE project_stages
+        SET status = 'in_progress', started_at = NOW()
+        WHERE project_id = $1 AND stage_order = $2
+        RETURNING stage_key, stage_name
+      `, [projectId, currentStage.stage_order + 1]);
+      
+      if (nextStageResult.rows.length > 0) {
+        const nextStage = nextStageResult.rows[0];
+        
+        await db.query(
+          'UPDATE projects SET current_stage = $1 WHERE id = $2',
+          [nextStage.stage_key, projectId]
+        );
+        
+        // Log activity
+        await db.query(`
+          INSERT INTO project_activity (project_id, activity_type, activity_description, visible_to_borrower)
+          VALUES ($1, 'stage_completed', $2, true)
+        `, [
+          projectId,
+          `Completed "${currentStage.stage_name}" stage. Moving to "${nextStage.stage_name}"`
+        ]);
+        
+        // Trigger webhook
+        await triggerWebhook(projectId, 'stage_completed', {
+          completed_stage: currentStage.stage_key,
+          next_stage: nextStage.stage_key
+        });
+      }
+    }
+  }
+};
+
+// GET borrower portal link
+router.get('/:id/borrower-link', async (req, res) => {
+  try {
+    const result = await db.query(
+      'SELECT borrower_portal_token, borrower_portal_enabled FROM projects WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.user.id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    const { borrower_portal_token, borrower_portal_enabled } = result.rows[0];
+    
+    if (!borrower_portal_enabled) {
+      return res.status(403).json({ error: 'Borrower portal is disabled for this project' });
+    }
+    
+    const borrowerLink = `${process.env.BASE_URL}/portal/${borrower_portal_token}`;
+    
+    res.json({ borrower_link: borrowerLink });
+    
+  } catch (error) {
+    console.error('Get borrower link error:', error);
+    res.status(500).json({ error: 'Failed to get borrower link' });
+  }
+});
+
+// TOGGLE borrower portal
+router.patch('/:id/toggle-portal', async (req, res) => {
+  try {
+    const result = await db.query(`
+      UPDATE projects
+      SET borrower_portal_enabled = NOT borrower_portal_enabled
+      WHERE id = $1 AND user_id = $2
+      RETURNING borrower_portal_enabled
+    `, [req.params.id, req.user.id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    res.json({ borrower_portal_enabled: result.rows[0].borrower_portal_enabled });
+    
+  } catch (error) {
+    console.error('Toggle portal error:', error);
+    res.status(500).json({ error: 'Failed to toggle portal' });
+  }
+});
+
+// MANUAL webhook trigger
+router.post('/:id/trigger-webhook', manualTriggerWebhook);
+
+// PUSH to external LOS
+router.post('/:id/push-to-los', async (req, res) => {
+  try {
+    const projectResult = await db.query(
+      'SELECT * FROM projects WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.user.id]
+    );
+    
+    if (projectResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    const project = projectResult.rows[0];
+    
+    // Trigger webhook specifically for LOS integration
+    await triggerWebhook(req.params.id, 'push_to_los', {
+      initiated_manually: true,
+      project_data: {
+        project_number: project.project_number,
+        loan_amount: project.loan_amount,
+        borrower_name: project.borrower_name,
+        borrower_email: project.borrower_email,
+        property_address: project.property_address
+      }
+    });
+    
+    // Update external sync status
+    await db.query(`
+      UPDATE projects
+      SET external_sync_status = 'pending', external_sync_at = NOW()
+      WHERE id = $1
+    `, [req.params.id]);
+    
+    // Log activity
+    await db.query(`
+      INSERT INTO project_activity (project_id, user_id, activity_type, activity_description)
+      VALUES ($1, $2, 'los_sync', 'Project data pushed to external Loan Origination System')
+    `, [req.params.id, req.user.id]);
+    
+    res.json({ success: true, message: 'Project pushed to external LOS' });
+    
+  } catch (error) {
+    console.error('Push to LOS error:', error);
+    res.status(500).json({ error: 'Failed to push to LOS' });
+  }
+});
+
+module.exports = router;
+```
+
+---
+
+## 7. Public Borrower Portal (Continued in next message due to length)
+
+```javascript
+// /routes/borrowerPortal.js
+
+const express = require('express');
+const router = express.Router();
+const db = require('../db');
+
+// Public route - no authentication required
+// GET borrower portal view
+router.get('/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    
+    // Get project by token
+    const projectResult = await db.query(`
+      SELECT 
+        p.id,
+        p.project_number,
+        p.project_name,
+        p.borrower_name,
+        p.loan_amount,
+        p.interest_rate,
+        p.loan_term_months,
+        p.loan_type,
+        p.property_address,
+        p.status,
+        p.current_stage,
+        p.progress_percentage,
+        p.target_close_date,
+        p.application_date,
+        p.borrower_portal_enabled,
+        p.notes
+      FROM projects p
+      WHERE p.borrower_portal_token = $1
+    `, [token]);
+    
+    if (projectResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Project not found or link is invalid' });
+    }
+    
+    const project = projectResult.rows[0];
+    
+    if (!project.borrower_portal_enabled) {
+      return res.status(403).json({ error: 'Borrower portal is disabled for this project' });
+    }
+    
+    // Update last viewed timestamp
+    await db.query(
+      'UPDATE projects SET borrower_portal_last_viewed = NOW() WHERE borrower_portal_token = $1',
+      [token]
+    );
+    
+    // Get stages with visible tasks only
+    const stagesResult = await db.query(`
+      SELECT 
+        ps.*,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', pt.id,
+              'task_title', pt.task_title,
+              'task_description', pt.task_description,
+              'task_type', pt.task_type,
+              'status', pt.status,
+              'priority', pt.priority,
+              'completed_at', pt.completed_at,
+              'requires_document', pt.requires_document,
+              'borrower_action_required', pt.borrower_action_required
+            ) ORDER BY pt.id
+          ) FILTER (WHERE pt.id IS NOT NULL AND pt.visible_to_borrower = true), '[]'
+        ) as tasks
+      FROM project_stages ps
+      LEFT JOIN project_tasks pt ON ps.id = pt.stage_id
+      WHERE ps.project_id = $1 AND ps.visible_to_borrower = true
+      GROUP BY ps.id
+      ORDER BY ps.stage_order
+    `, [project.id]);
+    
+    // Get visible activity
+    const activityResult = await db.query(`
+      SELECT 
+        activity_type,
+        activity_description,
+        created_at
+      FROM project_activity
+      WHERE project_id = $1 AND visible_to_borrower = true
+      ORDER BY created_at DESC
+      LIMIT 50
+    `, [project.id]);
+    
+    res.json({
+      project,
+      stages: stagesResult.rows,
+      activity: activityResult.rows
+    });
+    
+  } catch (error) {
+    console.error('Borrower portal error:', error);
+    res.status(500).json({ error: 'Failed to load borrower portal' });
+  }
+});
+
+module.exports = router;
+```
+
+---
+
+## 8. Register New Routes in Server
+
+```javascript
+// In your server.js or app.js
+// Add these AFTER existing routes
+
+const projectsRoutes = require('./routes/projects');
+const borrowerPortalRoutes = require('./routes/borrowerPortal');
+
+// Protected project routes
+app.use('/api/projects', projectsRoutes);
+
+// Public borrower portal
+app.use('/api/portal', borrowerPortalRoutes);
+```
+
+---
+
+## 9. Frontend - Add to Sidebar Navigation
+
+```jsx
+// In your Navigation component
+// Add Projects to sidebar
+
+<nav className="sidebar">
+  <NavLink to="/dashboard">
+    <DashboardIcon /> Dashboard
+  </NavLink>
+  
+  <NavLink to="/quotes">
+    <QuoteIcon /> Quotes
+  </NavLink>
+  
+  <NavLink to="/agreements">
+    <DocumentIcon /> Agreements
+  </NavLink>
+  
+  {/* NEW: Projects */}
+  <NavLink to="/projects">
+    <ProjectIcon /> Projects
+  </NavLink>
+  
+  <NavLink to="/settings">
+    <SettingsIcon /> Settings
+  </NavLink>
+</nav>
+```
+
+---
+
+## 10. Environment Variables
+
+Add to `.env` or Replit Secrets:
+
+```
+# Webhooks
+N8N_WEBHOOK_URL=https://your-n8n-instance.com/webhook/loan-updates
+EXTERNAL_LOS_WEBHOOK_URL=https://external-los.com/api/webhooks/projects
+
+# Or multiple webhooks as JSON array
+WEBHOOK_URLS=[{"url":"https://webhook1.com","type":"n8n"},{"url":"https://webhook2.com","type":"custom"}]
+
+# Base URL for borrower portal links
+BASE_URL=https://your-replit-app.replit.dev
+```
+
+---
+
+## 11. Install Additional Dependencies
+
+```bash
+npm install axios
+```
+
+---
+
+## Complete Implementation Instructions for Replit Agent
+
+Add a comprehensive Projects management system with progress tracking, borrower portal, and external integrations:
+
+**1. Database Schema:**
+- Create all new tables: `projects`, `project_stages`, `project_tasks`, `project_activity`, `project_documents`, `project_webhooks`
+- Do NOT modify any existing tables
+- Add all specified indexes for performance
+
+**2. Auto-Create Project from Signed Agreement:**
+- Add `autoCreateProjectFromAgreement(documentId)` function to existing agreement completion logic
+- Insert call AFTER signed PDF generation and completion emails
+- Function should:
+  - Generate unique project number (PRJ-YYYY-####)
+  - Create project record with data from agreement
+  - Generate borrower portal token (32-byte random hex)
+  - Create all 9 loan closing stages from `LOAN_CLOSING_STAGES` template
+  - Create all tasks for each stage from template
+  - Set first stage status='in_progress', others='pending'
+  - Log "project_created" activity
+  - Trigger webhook for project creation event
+
+**3. Manual Project Creation:**
+- POST `/api/projects` endpoint for creating projects manually
+- Require: project_name, borrower_name, borrower_email
+- Auto-generate project number and borrower token
+- Create all default stages and tasks
+- Return created project
+
+**4. Projects API Endpoints:**
+- GET `/api/projects` - List all user's projects with task counts
+- GET `/api/projects/:id` - Full project details with stages, tasks, activity, documents
+- PUT `/api/projects/:id` - Update project details
+- PATCH `/api/projects/:id/tasks/:taskId` - Update task status (triggers progress calculation)
+- GET `/api/projects/:id/borrower-link` - Get borrower portal URL
+- PATCH `/api/projects/:id/toggle-portal` - Enable/disable borrower portal
+- POST `/api/projects/:id/trigger-webhook` - Manual webhook trigger
+- POST `/api/projects/:id/push-to-los` - Push project data to external LOS system
+- All endpoints verify user ownership (user_id)
+
+**5. Progress Calculation (Auto-Update):**
+- When task status changes to 'completed':
+  - Calculate project progress: (completed_tasks / total_tasks) * 100
+  - Update projects.progress_percentage
+  - Check if all tasks in current stage are completed
+  - If stage complete: mark stage completed, activate next stage, update project.current_stage
+  - Log stage completion activity (visible_to_borrower=true)
+  - Trigger webhook for stage_completed event
+
+**6. Webhook Integration System:**
+- Create `/utils/webhooks.js` with `triggerWebhook(projectId, eventType, data)` function
+- Read webhook URLs from environment variables: N8N_WEBHOOK_URL, EXTERNAL_LOS_WEBHOOK_URL, or WEBHOOK_URLS array
+- Send POST request with JSON payload containing:
+  - event_type, timestamp, project data, user data, event_data
+  - Custom headers: X-Webhook-Event, X-Project-Id, X-Project-Number
+- Log all webhook attempts to `project_webhooks` table with status (success/failed)
+- Handle failures gracefully (log but don't throw)
+- Trigger webhooks for events: project_created, task_completed, stage_completed, push_to_los
+
+**7. Borrower Portal (Public, No Auth):**
+- Create `/routes/borrowerPortal.js` with GET `/api/portal/:token` endpoint
+- Public route - no authentication required
+- Validate borrower_portal_token and borrower_portal_enabled
+- Return only borrower-visible data:
+  - Project details (no internal_notes)
+  - Stages where visible_to_borrower=true
+  - Tasks where visible_to_borrower=true
+  - Activity where visible_to_borrower=true
+- Update borrower_portal_last_viewed timestamp
+- Return 404 if token invalid, 403 if portal disabled
+
+**8. Frontend - Projects List Page:**
+- Create `/pages/Projects.jsx` showing grid of project cards
+- Each card displays: project_number, project_name, borrower_name, loan_amount, status badge, current_stage badge, progress bar with percentage, task completion (X/Y), pending borrower actions count
+- Filter tabs: All, Active, On Hold, Completed, Funded
+- "Create New Project" button opens modal
+- Click card navigates to `/projects/:id`
+
+**9. Frontend - Project Detail Page:**
+- Create `/pages/ProjectDetail.jsx` with:
+  - Header: project number, name, borrower info, loan details, status/stage badges
+  - Horizontal progress tracker showing all 9 stages (completed=green check, current=blue, future=gray)
+  - Overall progress bar (0-100%)
+  - Tabs: Progress Tracker, Checklist, Activity, Documents
+  - Action buttons: Edit Project, Get Borrower Link, Push to LOS, Trigger Webhook
+
+**10. Progress Tracker Tab:**
+- Visual timeline of all 9 stages horizontally
+- Each stage shows: stage name, status (pending/in_progress/completed), estimated duration
+- Completed stages: green circle with checkmark, completion date below
+- Current stage: blue circle with stage number, "In Progress" label
+- Future stages: gray circle with stage number
+- Connecting line between stages (gray for incomplete, green for completed)
+
+**11. Checklist Tab:**
+- Group tasks by stage in collapsible accordions
+- Each stage header shows: stage name, task completion count (X/Y), mini progress bar
+- Tasks display: checkbox (updates status on click), title, description, priority badge (color-coded), task type badge, due date if set
+- Show "Borrower Action Required" badge on applicable tasks
+- Completed tasks: checkmark icon, strikethrough text, completion timestamp
+- Click checkbox calls PATCH `/api/projects/:projectId/tasks/:taskId` with new status
+
+**12. Activity Tab:**
+- Timeline of all project activities (newest first)
+- Each activity: icon based on type, description, timestamp
+- Activity types: project created, task completed, stage completed, document uploaded, notes, LOS sync
+- Show only activities visible to internal user (all activities)
+
+**13. Documents Tab:**
+- List of all project documents
+- Upload button to add new documents
+- Link documents to specific tasks
+
+**14. Borrower Portal Page (Public):**
+- Create `/pages/BorrowerPortal.jsx` accessible at `/portal/:token`
+- No authentication required
+- Simplified view showing:
+  - Project details (loan amount, property, timeline)
+  - Progress tracker (borrower-visible stages only)
+  - Task checklist (borrower-visible tasks only)
+  - Highlight tasks requiring borrower action
+  - Activity timeline (borrower-visible activities only)
+- Clean, professional design
+- Display lender branding/contact info
+
+**15. Sidebar Navigation:**
+- Add "Projects" link to existing sidebar navigation component
+- Do NOT remove or modify existing navigation items
+
+**16. Routing:**
+- Add protected routes in App.jsx:
+  - /projects (list)
+  - /projects/:id (detail)
+- Add public route:
+  - /portal/:token (borrower portal)
+
+**17. Integration Features:**
+- "Get Borrower Link" button copies borrower portal URL to clipboard
+- "Toggle Borrower Portal" button enables/disables borrower access
+- "Push to LOS" button triggers manual webhook to external loan origination system
+- "Trigger Webhook" button for manual webhook testing
+- Display webhook log/history in admin view
+
+**18. Activity Logging:**
+- Auto-log all changes: project created, task completed, stage completed, status changes, document uploads, LOS sync
+- Set visible_to_borrower appropriately (true for borrower-relevant updates, false for internal operations)
+- Include old/new values for changes
+
+**19. Do NOT Modify:**
+- Existing authentication system
+- Existing quotes functionality
+- Existing agreements/e-signature functionality
+- Existing user management
+- Any other existing features
+
+**20. Visual Design:**
+- Use color-coded badges: Active=green, On Hold=yellow, Completed=blue, Funded=purple
+- Progress bars animated on value changes
+- Priority colors: Critical=red, High=orange, Medium=yellow, Low=gray
+- Task type icons for different task types
+- Responsive design for mobile
+- Professional, clean interface matching existing app style
+
+Make this a complete, production-ready project management system that integrates seamlessly with existing functionality. Ensure all webhook integrations are robust with proper error handling and logging. The borrower portal should be simple, clear, and provide transparency into the loan process.

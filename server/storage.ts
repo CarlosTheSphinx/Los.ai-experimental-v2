@@ -2,12 +2,16 @@
 import { db } from "./db";
 import { 
   pricingRequests, savedQuotes, documents, signers, documentFields, documentAuditLog, users,
+  projects, projectStages, projectTasks, projectActivity, projectDocuments, projectWebhooks,
   type InsertPricingRequest, type PricingRequest, type InsertSavedQuote, type SavedQuote,
   type Document, type InsertDocument, type Signer, type InsertSigner,
   type DocumentField, type InsertDocumentField, type DocumentAuditLog, type InsertDocumentAuditLog,
-  type User, type InsertUser
+  type User, type InsertUser,
+  type Project, type InsertProject, type ProjectStage, type InsertProjectStage,
+  type ProjectTask, type InsertProjectTask, type ProjectActivity, type InsertProjectActivity,
+  type ProjectDocument, type InsertProjectDocument, type ProjectWebhook, type InsertProjectWebhook
 } from "@shared/schema";
-import { desc, eq, and, gt } from "drizzle-orm";
+import { desc, eq, and, gt, like, sql, asc } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -242,6 +246,164 @@ export class DatabaseStorage implements IStorage {
 
   async getAuditLogsByDocumentId(documentId: number): Promise<DocumentAuditLog[]> {
     return await db.select().from(documentAuditLog).where(eq(documentAuditLog.documentId, documentId)).orderBy(desc(documentAuditLog.createdAt));
+  }
+
+  // Project methods
+  async generateProjectNumber(): Promise<string> {
+    const year = new Date().getFullYear();
+    const prefix = `PRJ-${year}-`;
+    
+    const result = await db.select({ projectNumber: projects.projectNumber })
+      .from(projects)
+      .where(like(projects.projectNumber, `${prefix}%`))
+      .orderBy(desc(projects.projectNumber))
+      .limit(1);
+    
+    let nextNumber = 1;
+    if (result.length > 0 && result[0].projectNumber) {
+      const lastNumber = result[0].projectNumber;
+      const numberPart = parseInt(lastNumber.split('-').pop() || '0');
+      nextNumber = numberPart + 1;
+    }
+    
+    return `${prefix}${String(nextNumber).padStart(4, '0')}`;
+  }
+
+  async createProject(project: InsertProject): Promise<Project> {
+    const [created] = await db.insert(projects).values(project).returning();
+    return created;
+  }
+
+  async getProjects(userId: number, status?: string, archived?: boolean): Promise<Project[]> {
+    let conditions = [eq(projects.userId, userId)];
+    if (status) {
+      conditions.push(eq(projects.status, status));
+    }
+    if (archived !== undefined) {
+      conditions.push(eq(projects.isArchived, archived));
+    }
+    return await db.select().from(projects)
+      .where(and(...conditions))
+      .orderBy(desc(projects.lastUpdated));
+  }
+
+  async getProjectById(id: number, userId: number): Promise<Project | undefined> {
+    const [project] = await db.select().from(projects)
+      .where(and(eq(projects.id, id), eq(projects.userId, userId)));
+    return project;
+  }
+
+  async getProjectByToken(token: string): Promise<Project | undefined> {
+    const [project] = await db.select().from(projects)
+      .where(eq(projects.borrowerPortalToken, token));
+    return project;
+  }
+
+  async updateProject(id: number, userId: number, updates: Partial<Project>): Promise<Project | undefined> {
+    const [updated] = await db.update(projects)
+      .set({ ...updates, lastUpdated: new Date() })
+      .where(and(eq(projects.id, id), eq(projects.userId, userId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteProject(id: number, userId: number): Promise<void> {
+    await db.delete(projects).where(and(eq(projects.id, id), eq(projects.userId, userId)));
+  }
+
+  // Project stages methods
+  async createProjectStage(stage: InsertProjectStage): Promise<ProjectStage> {
+    const [created] = await db.insert(projectStages).values(stage).returning();
+    return created;
+  }
+
+  async getStagesByProjectId(projectId: number): Promise<ProjectStage[]> {
+    return await db.select().from(projectStages)
+      .where(eq(projectStages.projectId, projectId))
+      .orderBy(asc(projectStages.stageOrder));
+  }
+
+  async updateStage(id: number, updates: Partial<ProjectStage>): Promise<ProjectStage | undefined> {
+    const [updated] = await db.update(projectStages).set(updates).where(eq(projectStages.id, id)).returning();
+    return updated;
+  }
+
+  // Project tasks methods
+  async createProjectTask(task: InsertProjectTask): Promise<ProjectTask> {
+    const [created] = await db.insert(projectTasks).values(task).returning();
+    return created;
+  }
+
+  async getTasksByProjectId(projectId: number): Promise<ProjectTask[]> {
+    return await db.select().from(projectTasks).where(eq(projectTasks.projectId, projectId));
+  }
+
+  async getTasksByStageId(stageId: number): Promise<ProjectTask[]> {
+    return await db.select().from(projectTasks).where(eq(projectTasks.stageId, stageId));
+  }
+
+  async getTaskById(id: number): Promise<ProjectTask | undefined> {
+    const [task] = await db.select().from(projectTasks).where(eq(projectTasks.id, id));
+    return task;
+  }
+
+  async updateTask(id: number, updates: Partial<ProjectTask>): Promise<ProjectTask | undefined> {
+    const [updated] = await db.update(projectTasks).set(updates).where(eq(projectTasks.id, id)).returning();
+    return updated;
+  }
+
+  async getProjectTaskStats(projectId: number): Promise<{ completed: number; total: number }> {
+    const result = await db.select({
+      completed: sql<number>`COUNT(*) FILTER (WHERE ${projectTasks.status} = 'completed')`,
+      total: sql<number>`COUNT(*)`
+    }).from(projectTasks).where(eq(projectTasks.projectId, projectId));
+    return { completed: Number(result[0]?.completed || 0), total: Number(result[0]?.total || 0) };
+  }
+
+  // Project activity methods
+  async createProjectActivity(activity: InsertProjectActivity): Promise<ProjectActivity> {
+    const [created] = await db.insert(projectActivity).values(activity).returning();
+    return created;
+  }
+
+  async getActivityByProjectId(projectId: number, visibleToBorrower?: boolean): Promise<ProjectActivity[]> {
+    let conditions = [eq(projectActivity.projectId, projectId)];
+    if (visibleToBorrower !== undefined) {
+      conditions.push(eq(projectActivity.visibleToBorrower, visibleToBorrower));
+    }
+    return await db.select().from(projectActivity)
+      .where(and(...conditions))
+      .orderBy(desc(projectActivity.createdAt))
+      .limit(100);
+  }
+
+  // Project documents methods
+  async createProjectDocument(doc: InsertProjectDocument): Promise<ProjectDocument> {
+    const [created] = await db.insert(projectDocuments).values(doc).returning();
+    return created;
+  }
+
+  async getDocumentsByProjectId(projectId: number): Promise<ProjectDocument[]> {
+    return await db.select().from(projectDocuments)
+      .where(eq(projectDocuments.projectId, projectId))
+      .orderBy(desc(projectDocuments.uploadedAt));
+  }
+
+  // Project webhooks methods
+  async createProjectWebhook(webhook: InsertProjectWebhook): Promise<ProjectWebhook> {
+    const [created] = await db.insert(projectWebhooks).values(webhook).returning();
+    return created;
+  }
+
+  async updateProjectWebhook(id: number, updates: Partial<ProjectWebhook>): Promise<ProjectWebhook | undefined> {
+    const [updated] = await db.update(projectWebhooks).set(updates).where(eq(projectWebhooks.id, id)).returning();
+    return updated;
+  }
+
+  async getWebhooksByProjectId(projectId: number): Promise<ProjectWebhook[]> {
+    return await db.select().from(projectWebhooks)
+      .where(eq(projectWebhooks.projectId, projectId))
+      .orderBy(desc(projectWebhooks.triggeredAt));
   }
 }
 

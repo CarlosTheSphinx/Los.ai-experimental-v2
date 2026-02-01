@@ -166,3 +166,181 @@ export type DocumentField = typeof documentFields.$inferSelect;
 export type InsertDocumentField = z.infer<typeof insertDocumentFieldSchema>;
 export type DocumentAuditLog = typeof documentAuditLog.$inferSelect;
 export type InsertDocumentAuditLog = z.infer<typeof insertDocumentAuditLogSchema>;
+
+// Projects table for loan closing progress tracking
+export const projects = pgTable("projects", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  agreementId: integer("agreement_id").references(() => documents.id, { onDelete: 'set null' }),
+  quoteId: integer("quote_id").references(() => savedQuotes.id, { onDelete: 'set null' }),
+  
+  projectName: varchar("project_name", { length: 255 }).notNull(),
+  projectNumber: varchar("project_number", { length: 50 }).unique(),
+  
+  loanAmount: real("loan_amount"),
+  interestRate: real("interest_rate"),
+  loanTermMonths: integer("loan_term_months"),
+  loanType: varchar("loan_type", { length: 100 }),
+  propertyAddress: text("property_address"),
+  propertyType: varchar("property_type", { length: 100 }),
+  borrowerName: varchar("borrower_name", { length: 255 }),
+  borrowerEmail: varchar("borrower_email", { length: 255 }),
+  borrowerPhone: varchar("borrower_phone", { length: 50 }),
+  
+  status: varchar("status", { length: 50 }).default("active").notNull(), // active, on_hold, completed, cancelled, funded
+  currentStage: varchar("current_stage", { length: 100 }).default("documentation"),
+  progressPercentage: integer("progress_percentage").default(0),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  applicationDate: timestamp("application_date"),
+  targetCloseDate: timestamp("target_close_date"),
+  actualCloseDate: timestamp("actual_close_date"),
+  fundingDate: timestamp("funding_date"),
+  lastUpdated: timestamp("last_updated").defaultNow(),
+  
+  externalLosId: varchar("external_los_id", { length: 255 }),
+  externalSyncStatus: varchar("external_sync_status", { length: 50 }),
+  externalSyncAt: timestamp("external_sync_at"),
+  
+  borrowerPortalToken: varchar("borrower_portal_token", { length: 255 }).unique(),
+  borrowerPortalEnabled: boolean("borrower_portal_enabled").default(true),
+  borrowerPortalLastViewed: timestamp("borrower_portal_last_viewed"),
+  
+  notes: text("notes"),
+  internalNotes: text("internal_notes"),
+  isArchived: boolean("is_archived").default(false),
+  metadata: jsonb("metadata"),
+});
+
+// Project stages/milestones
+export const projectStages = pgTable("project_stages", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  
+  stageName: varchar("stage_name", { length: 100 }).notNull(),
+  stageKey: varchar("stage_key", { length: 50 }).notNull(),
+  stageOrder: integer("stage_order").notNull(),
+  stageDescription: text("stage_description"),
+  
+  status: varchar("status", { length: 50 }).default("pending").notNull(), // pending, in_progress, completed, skipped
+  
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  estimatedDurationDays: integer("estimated_duration_days"),
+  
+  visibleToBorrower: boolean("visible_to_borrower").default(true),
+});
+
+// Project tasks/checklist
+export const projectTasks = pgTable("project_tasks", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  stageId: integer("stage_id").references(() => projectStages.id, { onDelete: 'cascade' }),
+  
+  taskTitle: varchar("task_title", { length: 255 }).notNull(),
+  taskDescription: text("task_description"),
+  taskType: varchar("task_type", { length: 100 }), // document_upload, review, approval, collection, scheduling, verification
+  
+  status: varchar("status", { length: 50 }).default("pending").notNull(), // pending, in_progress, completed, blocked, not_applicable
+  priority: varchar("priority", { length: 50 }).default("medium"), // low, medium, high, critical
+  
+  assignedTo: varchar("assigned_to", { length: 255 }),
+  dueDate: timestamp("due_date"),
+  
+  completedAt: timestamp("completed_at"),
+  completedBy: varchar("completed_by", { length: 255 }),
+  
+  requiresDocument: boolean("requires_document").default(false),
+  documentId: integer("document_id").references(() => documents.id, { onDelete: 'set null' }),
+  documentUrl: text("document_url"),
+  
+  visibleToBorrower: boolean("visible_to_borrower").default(true),
+  borrowerActionRequired: boolean("borrower_action_required").default(false),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Project activity log
+export const projectActivity = pgTable("project_activity", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  userId: integer("user_id").references(() => users.id, { onDelete: 'set null' }),
+  
+  activityType: varchar("activity_type", { length: 100 }).notNull(),
+  activityDescription: text("activity_description").notNull(),
+  
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  
+  metadata: jsonb("metadata"),
+  
+  visibleToBorrower: boolean("visible_to_borrower").default(false),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Project documents
+export const projectDocuments = pgTable("project_documents", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  taskId: integer("task_id").references(() => projectTasks.id, { onDelete: 'set null' }),
+  
+  documentName: varchar("document_name", { length: 255 }).notNull(),
+  documentType: varchar("document_type", { length: 100 }),
+  documentCategory: varchar("document_category", { length: 100 }), // borrower_submitted, internal, third_party
+  filePath: text("file_path").notNull(),
+  fileSize: integer("file_size"),
+  
+  uploadedBy: integer("uploaded_by").references(() => users.id),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+  
+  status: varchar("status", { length: 50 }).default("pending_review"),
+  reviewedBy: integer("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  
+  visibleToBorrower: boolean("visible_to_borrower").default(true),
+});
+
+// Webhook/Integration log
+export const projectWebhooks = pgTable("project_webhooks", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  
+  webhookType: varchar("webhook_type", { length: 100 }), // n8n, external_los, custom
+  webhookUrl: text("webhook_url"),
+  
+  triggerEvent: varchar("trigger_event", { length: 100 }), // stage_completed, project_created, task_completed, etc.
+  
+  payload: jsonb("payload"),
+  responseStatus: integer("response_status"),
+  responseBody: text("response_body"),
+  
+  status: varchar("status", { length: 50 }), // pending, success, failed, retry
+  attempts: integer("attempts").default(0),
+  
+  triggeredAt: timestamp("triggered_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+// Insert schemas for projects
+export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, createdAt: true, lastUpdated: true });
+export const insertProjectStageSchema = createInsertSchema(projectStages).omit({ id: true });
+export const insertProjectTaskSchema = createInsertSchema(projectTasks).omit({ id: true, createdAt: true });
+export const insertProjectActivitySchema = createInsertSchema(projectActivity).omit({ id: true, createdAt: true });
+export const insertProjectDocumentSchema = createInsertSchema(projectDocuments).omit({ id: true, uploadedAt: true });
+export const insertProjectWebhookSchema = createInsertSchema(projectWebhooks).omit({ id: true, triggeredAt: true });
+
+// Project types
+export type Project = typeof projects.$inferSelect;
+export type InsertProject = z.infer<typeof insertProjectSchema>;
+export type ProjectStage = typeof projectStages.$inferSelect;
+export type InsertProjectStage = z.infer<typeof insertProjectStageSchema>;
+export type ProjectTask = typeof projectTasks.$inferSelect;
+export type InsertProjectTask = z.infer<typeof insertProjectTaskSchema>;
+export type ProjectActivity = typeof projectActivity.$inferSelect;
+export type InsertProjectActivity = z.infer<typeof insertProjectActivitySchema>;
+export type ProjectDocument = typeof projectDocuments.$inferSelect;
+export type InsertProjectDocument = z.infer<typeof insertProjectDocumentSchema>;
+export type ProjectWebhook = typeof projectWebhooks.$inferSelect;
+export type InsertProjectWebhook = z.infer<typeof insertProjectWebhookSchema>;
