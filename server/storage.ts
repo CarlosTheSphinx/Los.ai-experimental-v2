@@ -1,28 +1,36 @@
 
 import { db } from "./db";
 import { 
-  pricingRequests, savedQuotes, documents, signers, documentFields, documentAuditLog,
+  pricingRequests, savedQuotes, documents, signers, documentFields, documentAuditLog, users,
   type InsertPricingRequest, type PricingRequest, type InsertSavedQuote, type SavedQuote,
   type Document, type InsertDocument, type Signer, type InsertSigner,
-  type DocumentField, type InsertDocumentField, type DocumentAuditLog, type InsertDocumentAuditLog
+  type DocumentField, type InsertDocumentField, type DocumentAuditLog, type InsertDocumentAuditLog,
+  type User, type InsertUser
 } from "@shared/schema";
-import { desc, eq, and } from "drizzle-orm";
+import { desc, eq, and, gt } from "drizzle-orm";
 
 export interface IStorage {
+  // User methods
+  createUser(user: Omit<InsertUser, 'id' | 'createdAt'>): Promise<User>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getUserById(id: number): Promise<User | undefined>;
+  updateUser(id: number, updates: Partial<User>): Promise<User | undefined>;
+  getUserByResetToken(token: string): Promise<User | undefined>;
+  
   logPricingRequest(request: InsertPricingRequest): Promise<PricingRequest>;
-  saveQuote(quote: InsertSavedQuote): Promise<SavedQuote>;
-  getQuotes(): Promise<SavedQuote[]>;
-  getQuoteById(id: number): Promise<SavedQuote | undefined>;
-  deleteQuote(id: number): Promise<void>;
+  saveQuote(quote: InsertSavedQuote, userId: number): Promise<SavedQuote>;
+  getQuotes(userId: number): Promise<SavedQuote[]>;
+  getQuoteById(id: number, userId: number): Promise<SavedQuote | undefined>;
+  deleteQuote(id: number, userId: number): Promise<void>;
   
   // Document methods
-  createDocument(doc: InsertDocument): Promise<Document>;
-  getDocuments(): Promise<Document[]>;
-  getDocumentById(id: number): Promise<Document | undefined>;
-  getDocumentsByQuoteId(quoteId: number): Promise<Document[]>;
+  createDocument(doc: InsertDocument, userId: number): Promise<Document>;
+  getDocuments(userId: number): Promise<Document[]>;
+  getDocumentById(id: number, userId?: number): Promise<Document | undefined>;
+  getDocumentsByQuoteId(quoteId: number, userId: number): Promise<Document[]>;
   updateDocumentStatus(id: number, status: string, completedAt?: Date): Promise<Document | undefined>;
-  updateDocument(id: number, updates: Partial<Document>): Promise<Document | undefined>;
-  deleteDocument(id: number): Promise<void>;
+  updateDocument(id: number, updates: Partial<Document>, userId?: number): Promise<Document | undefined>;
+  deleteDocument(id: number, userId: number): Promise<void>;
   
   // Signer methods
   createSigner(signer: InsertSigner): Promise<Signer>;
@@ -47,46 +55,89 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  // User methods
+  async createUser(user: Omit<InsertUser, 'id' | 'createdAt'>): Promise<User> {
+    const [created] = await db.insert(users).values(user).returning();
+    return created;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
+  async getUserById(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async updateUser(id: number, updates: Partial<User>): Promise<User | undefined> {
+    const [updated] = await db.update(users).set(updates).where(eq(users.id, id)).returning();
+    return updated;
+  }
+
+  async getUserByResetToken(token: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(
+      and(
+        eq(users.passwordResetToken, token),
+        gt(users.passwordResetExpires, new Date())
+      )
+    );
+    return user;
+  }
+
   async logPricingRequest(request: InsertPricingRequest): Promise<PricingRequest> {
     const [log] = await db.insert(pricingRequests).values(request).returning();
     return log;
   }
 
-  async saveQuote(quote: InsertSavedQuote): Promise<SavedQuote> {
-    const [saved] = await db.insert(savedQuotes).values(quote).returning();
+  async saveQuote(quote: InsertSavedQuote, userId: number): Promise<SavedQuote> {
+    const [saved] = await db.insert(savedQuotes).values({ ...quote, userId }).returning();
     return saved;
   }
 
-  async getQuotes(): Promise<SavedQuote[]> {
-    return await db.select().from(savedQuotes).orderBy(desc(savedQuotes.createdAt));
+  async getQuotes(userId: number): Promise<SavedQuote[]> {
+    return await db.select().from(savedQuotes).where(eq(savedQuotes.userId, userId)).orderBy(desc(savedQuotes.createdAt));
   }
 
-  async getQuoteById(id: number): Promise<SavedQuote | undefined> {
-    const [quote] = await db.select().from(savedQuotes).where(eq(savedQuotes.id, id));
+  async getQuoteById(id: number, userId: number): Promise<SavedQuote | undefined> {
+    const [quote] = await db.select().from(savedQuotes).where(
+      and(eq(savedQuotes.id, id), eq(savedQuotes.userId, userId))
+    );
     return quote;
   }
 
-  async deleteQuote(id: number): Promise<void> {
-    await db.delete(savedQuotes).where(eq(savedQuotes.id, id));
+  async deleteQuote(id: number, userId: number): Promise<void> {
+    await db.delete(savedQuotes).where(
+      and(eq(savedQuotes.id, id), eq(savedQuotes.userId, userId))
+    );
   }
 
   // Document methods
-  async createDocument(doc: InsertDocument): Promise<Document> {
-    const [created] = await db.insert(documents).values(doc).returning();
+  async createDocument(doc: InsertDocument, userId: number): Promise<Document> {
+    const [created] = await db.insert(documents).values({ ...doc, userId }).returning();
     return created;
   }
 
-  async getDocuments(): Promise<Document[]> {
-    return await db.select().from(documents).orderBy(desc(documents.createdAt));
+  async getDocuments(userId: number): Promise<Document[]> {
+    return await db.select().from(documents).where(eq(documents.userId, userId)).orderBy(desc(documents.createdAt));
   }
 
-  async getDocumentById(id: number): Promise<Document | undefined> {
+  async getDocumentById(id: number, userId?: number): Promise<Document | undefined> {
+    if (userId !== undefined) {
+      const [doc] = await db.select().from(documents).where(
+        and(eq(documents.id, id), eq(documents.userId, userId))
+      );
+      return doc;
+    }
     const [doc] = await db.select().from(documents).where(eq(documents.id, id));
     return doc;
   }
 
-  async getDocumentsByQuoteId(quoteId: number): Promise<Document[]> {
-    return await db.select().from(documents).where(eq(documents.quoteId, quoteId)).orderBy(desc(documents.createdAt));
+  async getDocumentsByQuoteId(quoteId: number, userId: number): Promise<Document[]> {
+    return await db.select().from(documents).where(
+      and(eq(documents.quoteId, quoteId), eq(documents.userId, userId))
+    ).orderBy(desc(documents.createdAt));
   }
 
   async updateDocumentStatus(id: number, status: string, completedAt?: Date): Promise<Document | undefined> {
@@ -96,16 +147,25 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async updateDocument(id: number, updates: Partial<Document>): Promise<Document | undefined> {
+  async updateDocument(id: number, updates: Partial<Document>, userId?: number): Promise<Document | undefined> {
+    if (userId !== undefined) {
+      const [updated] = await db.update(documents).set(updates).where(
+        and(eq(documents.id, id), eq(documents.userId, userId))
+      ).returning();
+      return updated;
+    }
     const [updated] = await db.update(documents).set(updates).where(eq(documents.id, id)).returning();
     return updated;
   }
 
-  async deleteDocument(id: number): Promise<void> {
+  async deleteDocument(id: number, userId: number): Promise<void> {
+    const doc = await this.getDocumentById(id, userId);
+    if (!doc) return;
+    
     await db.delete(documentAuditLog).where(eq(documentAuditLog.documentId, id));
     await db.delete(documentFields).where(eq(documentFields.documentId, id));
     await db.delete(signers).where(eq(signers.documentId, id));
-    await db.delete(documents).where(eq(documents.id, id));
+    await db.delete(documents).where(and(eq(documents.id, id), eq(documents.userId, userId)));
   }
 
   // Signer methods

@@ -1,5 +1,5 @@
 
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
@@ -7,7 +7,17 @@ import { ApifyClient } from 'apify-client';
 import { z } from "zod";
 import { v4 as uuidv4 } from 'uuid';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import { sendSigningInvitation, sendCompletedDocument, sendVoidNotification, sendSigningReminder } from './email';
+import { sendSigningInvitation, sendCompletedDocument, sendVoidNotification, sendSigningReminder, sendPasswordResetEmail } from './email';
+import { 
+  hashPassword, 
+  comparePassword, 
+  generateToken, 
+  generateRandomToken, 
+  authenticateUser, 
+  setAuthCookie, 
+  clearAuthCookie,
+  type AuthRequest 
+} from './auth';
 
 // Initialize Apify client
 // In a real app, this should be an env var. Using the token from the provided code for fidelity.
@@ -18,6 +28,203 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  // ==================== AUTH ROUTES (PUBLIC) ====================
+  
+  // Register
+  app.post('/api/auth/register', async (req: Request, res: Response) => {
+    try {
+      const { email, password, fullName, companyName, phone } = req.body;
+      
+      if (!email || !password || !fullName) {
+        return res.status(400).json({ error: 'Email, password, and full name are required' });
+      }
+      
+      if (password.length < 8) {
+        return res.status(400).json({ error: 'Password must be at least 8 characters' });
+      }
+      
+      const existingUser = await storage.getUserByEmail(email.toLowerCase());
+      if (existingUser) {
+        return res.status(409).json({ error: 'Email already registered' });
+      }
+      
+      const passwordHash = await hashPassword(password);
+      
+      const user = await storage.createUser({
+        email: email.toLowerCase(),
+        passwordHash,
+        fullName,
+        companyName: companyName || null,
+        phone: phone || null,
+        emailVerified: false,
+        isActive: true,
+        passwordResetToken: null,
+        passwordResetExpires: null
+      });
+      
+      const token = generateToken(user.id, user.email);
+      setAuthCookie(res, token);
+      
+      res.status(201).json({
+        success: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          fullName: user.fullName,
+          companyName: user.companyName
+        },
+        token
+      });
+    } catch (error) {
+      console.error('Registration error:', error);
+      res.status(500).json({ error: 'Registration failed' });
+    }
+  });
+
+  // Login
+  app.post('/api/auth/login', async (req: Request, res: Response) => {
+    try {
+      const { email, password } = req.body;
+      
+      if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required' });
+      }
+      
+      const user = await storage.getUserByEmail(email.toLowerCase());
+      
+      if (!user) {
+        return res.status(401).json({ error: 'Invalid email or password' });
+      }
+      
+      if (!user.isActive) {
+        return res.status(403).json({ error: 'Account has been deactivated' });
+      }
+      
+      const isValid = await comparePassword(password, user.passwordHash);
+      
+      if (!isValid) {
+        return res.status(401).json({ error: 'Invalid email or password' });
+      }
+      
+      await storage.updateUser(user.id, { lastLoginAt: new Date() });
+      
+      const token = generateToken(user.id, user.email);
+      setAuthCookie(res, token);
+      
+      res.json({
+        success: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          fullName: user.fullName,
+          companyName: user.companyName
+        },
+        token
+      });
+    } catch (error) {
+      console.error('Login error:', error);
+      res.status(500).json({ error: 'Login failed' });
+    }
+  });
+
+  // Logout
+  app.post('/api/auth/logout', (_req: Request, res: Response) => {
+    clearAuthCookie(res);
+    res.json({ success: true, message: 'Logged out successfully' });
+  });
+
+  // Get current user
+  app.get('/api/auth/me', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const user = await storage.getUserById(req.user!.id);
+      
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      res.json({
+        user: {
+          id: user.id,
+          email: user.email,
+          fullName: user.fullName,
+          companyName: user.companyName,
+          phone: user.phone,
+          createdAt: user.createdAt
+        }
+      });
+    } catch (error) {
+      console.error('Get user error:', error);
+      res.status(500).json({ error: 'Failed to get user' });
+    }
+  });
+
+  // Forgot password
+  app.post('/api/auth/forgot-password', async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body;
+      
+      const user = await storage.getUserByEmail(email?.toLowerCase());
+      
+      if (!user) {
+        return res.json({ success: true, message: 'If email exists, reset link sent' });
+      }
+      
+      const resetToken = generateRandomToken();
+      const resetExpires = new Date(Date.now() + 3600000); // 1 hour
+      
+      await storage.updateUser(user.id, {
+        passwordResetToken: resetToken,
+        passwordResetExpires: resetExpires
+      });
+      
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+      const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
+      
+      await sendPasswordResetEmail(user.email, user.fullName || 'User', resetUrl);
+      
+      res.json({ success: true, message: 'Password reset email sent' });
+    } catch (error) {
+      console.error('Password reset error:', error);
+      res.status(500).json({ error: 'Failed to process request' });
+    }
+  });
+
+  // Reset password
+  app.post('/api/auth/reset-password', async (req: Request, res: Response) => {
+    try {
+      const { token, password } = req.body;
+      
+      if (!token || !password) {
+        return res.status(400).json({ error: 'Token and password are required' });
+      }
+      
+      if (password.length < 8) {
+        return res.status(400).json({ error: 'Password must be at least 8 characters' });
+      }
+      
+      const user = await storage.getUserByResetToken(token);
+      
+      if (!user) {
+        return res.status(400).json({ error: 'Invalid or expired reset token' });
+      }
+      
+      const passwordHash = await hashPassword(password);
+      
+      await storage.updateUser(user.id, {
+        passwordHash,
+        passwordResetToken: null,
+        passwordResetExpires: null
+      });
+      
+      res.json({ success: true, message: 'Password reset successful' });
+    } catch (error) {
+      console.error('Reset password error:', error);
+      res.status(500).json({ error: 'Failed to reset password' });
+    }
+  });
+
+  // ==================== PUBLIC SIGNING ROUTES (Token-based, no user auth) ====================
 
   app.post(api.pricing.submit.path, async (req, res) => {
     try {
@@ -590,8 +797,8 @@ export async function registerRoutes(
     }
   });
 
-  // Quotes API endpoints
-  app.post(api.quotes.save.path, async (req, res) => {
+  // Quotes API endpoints (Protected)
+  app.post(api.quotes.save.path, authenticateUser, async (req: AuthRequest, res) => {
     try {
       const quoteData = api.quotes.save.input.parse(req.body);
       
@@ -610,7 +817,7 @@ export async function registerRoutes(
         tpoPremiumAmount,
         totalRevenue,
         commission
-      });
+      }, req.user!.id);
       res.json({ success: true, quote: saved });
     } catch (error) {
       console.error('Error saving quote:', error);
@@ -622,9 +829,9 @@ export async function registerRoutes(
     }
   });
 
-  app.get(api.quotes.list.path, async (req, res) => {
+  app.get(api.quotes.list.path, authenticateUser, async (req: AuthRequest, res) => {
     try {
-      const quotes = await storage.getQuotes();
+      const quotes = await storage.getQuotes(req.user!.id);
       res.json({ success: true, quotes });
     } catch (error) {
       console.error('Error fetching quotes:', error);
@@ -632,10 +839,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/quotes/:id', async (req, res) => {
+  app.get('/api/quotes/:id', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
-      const quote = await storage.getQuoteById(id);
+      const quote = await storage.getQuoteById(id, req.user!.id);
       if (!quote) {
         res.status(404).json({ success: false, error: 'Quote not found' });
         return;
@@ -647,10 +854,10 @@ export async function registerRoutes(
     }
   });
 
-  app.delete('/api/quotes/:id', async (req, res) => {
+  app.delete('/api/quotes/:id', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
-      await storage.deleteQuote(id);
+      await storage.deleteQuote(id, req.user!.id);
       res.json({ success: true });
     } catch (error) {
       console.error('Error deleting quote:', error);
@@ -658,10 +865,10 @@ export async function registerRoutes(
     }
   });
 
-  // ========== DOCUMENT SIGNING ENDPOINTS ==========
+  // ========== DOCUMENT SIGNING ENDPOINTS (Protected) ==========
 
   // Create a new document (upload PDF)
-  app.post('/api/documents', async (req, res) => {
+  app.post('/api/documents', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const { quoteId, name, fileName, fileData, pageCount } = req.body;
       
@@ -669,6 +876,7 @@ export async function registerRoutes(
         res.status(400).json({ success: false, error: 'Missing required fields' });
         return;
       }
+      const userId = req.user!.id;
 
       const doc = await storage.createDocument({
         quoteId: quoteId || null,
@@ -677,7 +885,7 @@ export async function registerRoutes(
         fileData,
         pageCount: pageCount || 1,
         status: 'draft'
-      });
+      }, userId);
 
       await storage.createAuditLog({
         documentId: doc.id,
@@ -694,9 +902,9 @@ export async function registerRoutes(
   });
 
   // List all documents
-  app.get('/api/documents', async (req, res) => {
+  app.get('/api/documents', authenticateUser, async (req: AuthRequest, res) => {
     try {
-      const docs = await storage.getDocuments();
+      const docs = await storage.getDocuments(req.user!.id);
       const documentsWithSigners = await Promise.all(
         docs.map(async (doc) => {
           const signers = await storage.getSignersByDocumentId(doc.id);
@@ -711,10 +919,10 @@ export async function registerRoutes(
   });
 
   // Get document by ID
-  app.get('/api/documents/:id', async (req, res) => {
+  app.get('/api/documents/:id', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
-      const doc = await storage.getDocumentById(id);
+      const doc = await storage.getDocumentById(id, req.user!.id);
       if (!doc) {
         res.status(404).json({ success: false, error: 'Document not found' });
         return;
@@ -731,10 +939,10 @@ export async function registerRoutes(
   });
 
   // Get documents by quote ID with signers
-  app.get('/api/quotes/:quoteId/documents', async (req, res) => {
+  app.get('/api/quotes/:quoteId/documents', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const quoteId = parseInt(req.params.quoteId);
-      const docs = await storage.getDocumentsByQuoteId(quoteId);
+      const docs = await storage.getDocumentsByQuoteId(quoteId, req.user!.id);
       
       // Fetch signers for each document
       const documentsWithSigners = await Promise.all(
@@ -752,10 +960,10 @@ export async function registerRoutes(
   });
 
   // Delete document
-  app.delete('/api/documents/:id', async (req, res) => {
+  app.delete('/api/documents/:id', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
-      await storage.deleteDocument(id);
+      await storage.deleteDocument(id, req.user!.id);
       res.json({ success: true });
     } catch (error) {
       console.error('Error deleting document:', error);
@@ -1220,12 +1428,12 @@ export async function registerRoutes(
     }
   });
 
-  // ========== AGREEMENTS API ENDPOINTS ==========
+  // ========== AGREEMENTS API ENDPOINTS (Protected) ==========
 
   // Get agreements list with signer counts
-  app.get('/api/esignature/agreements', async (req, res) => {
+  app.get('/api/esignature/agreements', authenticateUser, async (req: AuthRequest, res) => {
     try {
-      const docs = await storage.getDocuments();
+      const docs = await storage.getDocuments(req.user!.id);
       
       const agreements = await Promise.all(docs.map(async (doc) => {
         const docSigners = await storage.getSignersByDocumentId(doc.id);
@@ -1260,10 +1468,10 @@ export async function registerRoutes(
   });
 
   // Get single agreement detail with signers and fields
-  app.get('/api/esignature/agreements/:id', async (req, res) => {
+  app.get('/api/esignature/agreements/:id', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const documentId = parseInt(req.params.id);
-      const doc = await storage.getDocumentById(documentId);
+      const doc = await storage.getDocumentById(documentId, req.user!.id);
       
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Agreement not found' });
@@ -1325,12 +1533,12 @@ export async function registerRoutes(
   });
 
   // Void/Cancel document
-  app.post('/api/esignature/agreements/:id/void', async (req, res) => {
+  app.post('/api/esignature/agreements/:id/void', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const documentId = parseInt(req.params.id);
       const { reason } = req.body;
       
-      const doc = await storage.getDocumentById(documentId);
+      const doc = await storage.getDocumentById(documentId, req.user!.id);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Agreement not found' });
       }
@@ -1384,11 +1592,12 @@ export async function registerRoutes(
   });
 
   // Edit & Resend - creates a copy of the document
-  app.post('/api/esignature/agreements/:id/edit', async (req, res) => {
+  app.post('/api/esignature/agreements/:id/edit', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const documentId = parseInt(req.params.id);
+      const userId = req.user!.id;
       
-      const doc = await storage.getDocumentById(documentId);
+      const doc = await storage.getDocumentById(documentId, userId);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Agreement not found' });
       }
@@ -1406,7 +1615,7 @@ export async function registerRoutes(
         status: 'voided_edited',
         voidedAt: new Date(),
         voidedReason: 'Edited and replaced with new version'
-      });
+      }, userId);
       
       // Disable old tokens
       const oldSigners = await storage.getSignersByDocumentId(documentId);
@@ -1422,7 +1631,7 @@ export async function registerRoutes(
         fileData: doc.fileData,
         pageCount: doc.pageCount,
         status: 'draft'
-      });
+      }, userId);
       
       // Copy signers (new tokens will be generated when sent)
       const signerIdMap = new Map<number, number>();
@@ -1482,12 +1691,12 @@ export async function registerRoutes(
   });
 
   // Resend to all pending signers
-  app.post('/api/esignature/agreements/:id/resend-all', async (req, res) => {
+  app.post('/api/esignature/agreements/:id/resend-all', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const documentId = parseInt(req.params.id);
       const { senderName } = req.body;
       
-      const doc = await storage.getDocumentById(documentId);
+      const doc = await storage.getDocumentById(documentId, req.user!.id);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Agreement not found' });
       }
@@ -1550,13 +1759,13 @@ export async function registerRoutes(
   });
 
   // Resend to individual signer
-  app.post('/api/esignature/agreements/:id/resend-signer/:signerId', async (req, res) => {
+  app.post('/api/esignature/agreements/:id/resend-signer/:signerId', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const documentId = parseInt(req.params.id);
       const signerId = parseInt(req.params.signerId);
       const { senderName } = req.body;
       
-      const doc = await storage.getDocumentById(documentId);
+      const doc = await storage.getDocumentById(documentId, req.user!.id);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Agreement not found' });
       }
@@ -1617,12 +1826,12 @@ export async function registerRoutes(
   });
 
   // Send reminder to all pending signers
-  app.post('/api/esignature/agreements/:id/remind', async (req, res) => {
+  app.post('/api/esignature/agreements/:id/remind', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const documentId = parseInt(req.params.id);
       const { senderName } = req.body;
       
-      const doc = await storage.getDocumentById(documentId);
+      const doc = await storage.getDocumentById(documentId, req.user!.id);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Agreement not found' });
       }
@@ -1684,11 +1893,12 @@ export async function registerRoutes(
   });
 
   // Delete draft document
-  app.delete('/api/esignature/agreements/:id', async (req, res) => {
+  app.delete('/api/esignature/agreements/:id', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const documentId = parseInt(req.params.id);
+      const userId = req.user!.id;
       
-      const doc = await storage.getDocumentById(documentId);
+      const doc = await storage.getDocumentById(documentId, userId);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Agreement not found' });
       }
@@ -1702,7 +1912,7 @@ export async function registerRoutes(
       }
       
       // Delete document (cascades to signers, fields, audit log)
-      await storage.deleteDocument(documentId);
+      await storage.deleteDocument(documentId, userId);
       
       res.json({ success: true, message: 'Draft deleted successfully' });
     } catch (error) {
