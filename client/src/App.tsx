@@ -8,6 +8,7 @@ import Home from "@/pages/home";
 import Quotes from "@/pages/quotes";
 import SignPage from "@/pages/sign";
 import Agreements from "@/pages/agreements";
+import AgreementDetail from "@/pages/agreement-detail";
 import { AppLayout } from "@/components/AppLayout";
 
 function MainRoutes() {
@@ -17,6 +18,7 @@ function MainRoutes() {
         <Route path="/" component={Home} />
         <Route path="/quotes" component={Quotes} />
         <Route path="/agreements" component={Agreements} />
+        <Route path="/agreements/:id" component={AgreementDetail} />
         <Route component={NotFound} />
       </Switch>
     </AppLayout>
