@@ -587,9 +587,9 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
             </Card>
           </TabsContent>
 
-          <TabsContent value="fields" className="flex-1 overflow-hidden p-4">
+          <TabsContent value="fields" className="flex-1 min-h-0 p-4">
             <div className="flex gap-4 h-full">
-              <div className="w-64 space-y-4 flex-shrink-0 overflow-auto">
+              <div className="w-64 space-y-4 flex-shrink-0 overflow-y-auto">
                 <div>
                   <Label className="text-sm font-medium">Select Signer</Label>
                   <div className="flex flex-wrap gap-2 mt-2">
@@ -695,10 +695,9 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
               </div>
               
               <div 
-                className="flex-1 border rounded-lg bg-slate-100"
-                style={{ overflowY: 'auto', overflowX: 'auto' }}
+                className="flex-1 border rounded-lg bg-slate-100 min-h-0 overflow-auto"
               >
-                <div className="p-4">
+                <div className="p-4 inline-block min-w-full">
                   {pageCount > 1 && (
                     <div className="flex items-center justify-center gap-2 mb-4">
                       <Button
