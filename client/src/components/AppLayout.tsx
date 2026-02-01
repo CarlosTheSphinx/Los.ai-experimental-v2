@@ -3,6 +3,7 @@ import {
   Calculator, 
   FileText, 
   ClipboardList,
+  FolderKanban,
   LogOut
 } from "lucide-react";
 import { 
@@ -30,6 +31,7 @@ const navItems = [
   { href: "/", label: "New Quote", icon: Calculator },
   { href: "/quotes", label: "Saved Quotes", icon: FileText },
   { href: "/agreements", label: "Agreements", icon: ClipboardList },
+  { href: "/projects", label: "Projects", icon: FolderKanban },
 ];
 
 export function AppLayout({ children }: AppLayoutProps) {

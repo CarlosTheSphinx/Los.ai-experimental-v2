@@ -10,6 +10,10 @@ import Quotes from "@/pages/quotes";
 import SignPage from "@/pages/sign";
 import Agreements from "@/pages/agreements";
 import AgreementDetail from "@/pages/agreement-detail";
+import Projects from "@/pages/projects";
+import ProjectDetail from "@/pages/project-detail";
+import NewProject from "@/pages/new-project";
+import BorrowerPortal from "@/pages/borrower-portal";
 import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
 import ForgotPasswordPage from "@/pages/forgot-password";
@@ -62,6 +66,9 @@ function MainRoutes() {
         <Route path="/quotes" component={() => <ProtectedRoute component={Quotes} />} />
         <Route path="/agreements" component={() => <ProtectedRoute component={Agreements} />} />
         <Route path="/agreements/:id" component={() => <ProtectedRoute component={AgreementDetail} />} />
+        <Route path="/projects" component={() => <ProtectedRoute component={Projects} />} />
+        <Route path="/projects/new" component={() => <ProtectedRoute component={NewProject} />} />
+        <Route path="/projects/:id" component={() => <ProtectedRoute component={ProjectDetail} />} />
         <Route component={NotFound} />
       </Switch>
     </AppLayout>
@@ -70,6 +77,7 @@ function MainRoutes() {
 
 function AppContent() {
   const [isSignPage] = useRoute("/sign/:token");
+  const [isPortalPage] = useRoute("/portal/:token");
   const [isLoginPage] = useRoute("/login");
   const [isRegisterPage] = useRoute("/register");
   const [isForgotPasswordPage] = useRoute("/forgot-password");
@@ -81,6 +89,14 @@ function AppContent() {
     return (
       <Switch>
         <Route path="/sign/:token" component={SignPage} />
+      </Switch>
+    );
+  }
+
+  if (isPortalPage) {
+    return (
+      <Switch>
+        <Route path="/portal/:token" component={BorrowerPortal} />
       </Switch>
     );
   }
