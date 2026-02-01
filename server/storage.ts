@@ -221,6 +221,11 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  async getFieldById(id: number): Promise<DocumentField | undefined> {
+    const [field] = await db.select().from(documentFields).where(eq(documentFields.id, id));
+    return field;
+  }
+
   async deleteField(id: number): Promise<void> {
     await db.delete(documentFields).where(eq(documentFields.id, id));
   }

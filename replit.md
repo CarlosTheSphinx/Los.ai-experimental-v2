@@ -44,11 +44,47 @@ The signing page (/sign/:token) is rendered outside the sidebar layout for a foc
 - **Database ORM**: Drizzle ORM with PostgreSQL
 - **API Pattern**: REST endpoints defined in `shared/routes.ts`
 - **Validation**: Zod schemas shared between frontend and backend
+- **Authentication**: JWT tokens in httpOnly cookies with bcrypt password hashing
 
 Key backend files:
 - `server/routes.ts` - API endpoint handlers
 - `server/storage.ts` - Database operations via Drizzle
 - `server/db.ts` - Database connection setup
+- `server/auth.ts` - Authentication utilities (password hashing, JWT generation/verification)
+- `server/email.ts` - Email service for password reset notifications
+
+### Authentication System
+Multi-tenant authentication with complete data isolation:
+- **Password Security**: bcrypt with 10 salt rounds
+- **Session Management**: JWT tokens in httpOnly cookies with 7-day expiration
+- **Cookie Settings**: secure=true in production, sameSite='lax'
+- **Data Isolation**: All database queries filter by user_id
+
+Auth Routes (Public):
+- POST `/api/auth/register` - Register new user (accepts firstName/lastName or fullName)
+- POST `/api/auth/login` - Login with email/password
+- POST `/api/auth/logout` - Logout and clear session cookie
+- GET `/api/auth/me` - Get current authenticated user
+- POST `/api/auth/forgot-password` - Request password reset email
+- POST `/api/auth/reset-password` - Reset password with token
+
+Protected Routes (require authentication):
+- All `/api/quotes/*` endpoints
+- All `/api/documents/*` endpoints
+- All `/api/esignature/agreements/*` endpoints
+- All `/api/signers/*` and `/api/fields/*` endpoints
+
+Public Routes (token-based or no auth):
+- `/sign/:token` - Document signing page (uses signing token, not user auth)
+- `/api/sign/:token` - Get signing data by token
+- `/api/sign/:token/complete` - Complete document signing
+
+Frontend Auth Components:
+- `client/src/hooks/use-auth.tsx` - AuthContext and useAuth hook
+- `client/src/pages/login.tsx` - Login page
+- `client/src/pages/register.tsx` - Registration page
+- `client/src/pages/forgot-password.tsx` - Password reset request
+- `client/src/pages/reset-password.tsx` - Password reset completion
 
 ### External Automation
 The core pricing functionality uses Apify's Puppeteer Scraper actor to:
@@ -67,13 +103,16 @@ The core pricing functionality uses Apify's Puppeteer Scraper actor to:
 
 ### Database Schema
 Tables defined in `shared/schema.ts`:
+- `users` - User accounts with authentication fields (email, passwordHash, fullName, passwordResetToken)
 - `pricing_requests` - Logs all pricing API requests with status
-- `saved_quotes` - Stores saved quotes with customer info, loan data, and commission calculations
-- `documents` - E-signature documents with status tracking (draft/sent/in_progress/completed/voided)
+- `saved_quotes` - Stores saved quotes with customer info, loan data, and commission calculations (user_id foreign key)
+- `documents` - E-signature documents with status tracking (draft/sent/in_progress/completed/voided) (user_id foreign key)
   - Fields: sentAt, completedAt, voidedAt, voidedReason for timeline tracking
 - `signers` - Document signers with email, token, status, and lastReminderSent
 - `document_fields` - Signature/form fields positioned on document pages
 - `audit_logs` - Tracks all document actions for compliance
+
+Note: `saved_quotes` and `documents` have `user_id` foreign keys with CASCADE delete to ensure data isolation.
 
 ## External Dependencies
 
@@ -84,6 +123,8 @@ Tables defined in `shared/schema.ts`:
 ### Environment Variables Required
 - `DATABASE_URL` - PostgreSQL connection string
 - `APIFY_TOKEN` - API token for Apify client (has fallback in code)
+- `JWT_SECRET` - Secret key for JWT token signing (required for production)
+- `SESSION_SECRET` - Secret for session management
 
 ### Key NPM Packages
 - `apify-client` - Apify API integration

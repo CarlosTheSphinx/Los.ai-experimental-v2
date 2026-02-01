@@ -34,10 +34,13 @@ export async function registerRoutes(
   // Register
   app.post('/api/auth/register', async (req: Request, res: Response) => {
     try {
-      const { email, password, fullName, companyName, phone } = req.body;
+      const { email, password, fullName, firstName, lastName, companyName, phone } = req.body;
       
-      if (!email || !password || !fullName) {
-        return res.status(400).json({ error: 'Email, password, and full name are required' });
+      // Support both fullName and firstName/lastName
+      const resolvedFullName = fullName || (firstName && lastName ? `${firstName} ${lastName}` : null);
+      
+      if (!email || !password || !resolvedFullName) {
+        return res.status(400).json({ error: 'Email, password, and name are required' });
       }
       
       if (password.length < 8) {
@@ -54,7 +57,7 @@ export async function registerRoutes(
       const user = await storage.createUser({
         email: email.toLowerCase(),
         passwordHash,
-        fullName,
+        fullName: resolvedFullName,
         companyName: companyName || null,
         phone: phone || null,
         emailVerified: false,
@@ -66,11 +69,18 @@ export async function registerRoutes(
       const token = generateToken(user.id, user.email);
       setAuthCookie(res, token);
       
+      // Parse firstName and lastName from fullName for response
+      const respNameParts = user.fullName?.split(' ') || [];
+      const respFirstName = respNameParts[0] || '';
+      const respLastName = respNameParts.slice(1).join(' ') || '';
+      
       res.status(201).json({
         success: true,
         user: {
           id: user.id,
           email: user.email,
+          firstName: respFirstName,
+          lastName: respLastName,
           fullName: user.fullName,
           companyName: user.companyName
         },
@@ -112,11 +122,18 @@ export async function registerRoutes(
       const token = generateToken(user.id, user.email);
       setAuthCookie(res, token);
       
+      // Parse firstName and lastName from fullName
+      const nameParts = user.fullName?.split(' ') || [];
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+      
       res.json({
         success: true,
         user: {
           id: user.id,
           email: user.email,
+          firstName,
+          lastName,
           fullName: user.fullName,
           companyName: user.companyName
         },
@@ -143,10 +160,17 @@ export async function registerRoutes(
         return res.status(404).json({ error: 'User not found' });
       }
       
+      // Parse firstName and lastName from fullName
+      const nameParts = user.fullName?.split(' ') || [];
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+      
       res.json({
         user: {
           id: user.id,
           email: user.email,
+          firstName,
+          lastName,
           fullName: user.fullName,
           companyName: user.companyName,
           phone: user.phone,
@@ -972,10 +996,17 @@ export async function registerRoutes(
   });
 
   // Add signer to document
-  app.post('/api/documents/:id/signers', async (req, res) => {
+  app.post('/api/documents/:id/signers', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const documentId = parseInt(req.params.id);
+      const userId = req.user!.id;
       const { name, email, color, signingOrder } = req.body;
+
+      // Verify user owns this document
+      const doc = await storage.getDocumentById(documentId, userId);
+      if (!doc) {
+        return res.status(404).json({ success: false, error: 'Document not found' });
+      }
 
       if (!name || !email) {
         res.status(400).json({ success: false, error: 'Name and email are required' });
@@ -999,9 +1030,21 @@ export async function registerRoutes(
   });
 
   // Delete signer
-  app.delete('/api/signers/:id', async (req, res) => {
+  app.delete('/api/signers/:id', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
+      const userId = req.user!.id;
+      
+      // Get signer and verify ownership through document
+      const signer = await storage.getSignerById(id);
+      if (!signer) {
+        return res.status(404).json({ success: false, error: 'Signer not found' });
+      }
+      const doc = await storage.getDocumentById(signer.documentId, userId);
+      if (!doc) {
+        return res.status(404).json({ success: false, error: 'Document not found' });
+      }
+      
       await storage.deleteSigner(id);
       res.json({ success: true });
     } catch (error) {
@@ -1011,10 +1054,17 @@ export async function registerRoutes(
   });
 
   // Add field to document
-  app.post('/api/documents/:id/fields', async (req, res) => {
+  app.post('/api/documents/:id/fields', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const documentId = parseInt(req.params.id);
+      const userId = req.user!.id;
       const { signerId, pageNumber, fieldType, x, y, width, height, required, label } = req.body;
+
+      // Verify user owns this document
+      const doc = await storage.getDocumentById(documentId, userId);
+      if (!doc) {
+        return res.status(404).json({ success: false, error: 'Document not found' });
+      }
 
       const field = await storage.createField({
         documentId,
@@ -1037,10 +1087,22 @@ export async function registerRoutes(
   });
 
   // Update field
-  app.patch('/api/fields/:id', async (req, res) => {
+  app.patch('/api/fields/:id', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
+      const userId = req.user!.id;
       const updates = req.body;
+      
+      // Get field and verify ownership through document
+      const existingField = await storage.getFieldById(id);
+      if (!existingField) {
+        return res.status(404).json({ success: false, error: 'Field not found' });
+      }
+      const doc = await storage.getDocumentById(existingField.documentId, userId);
+      if (!doc) {
+        return res.status(404).json({ success: false, error: 'Document not found' });
+      }
+      
       const field = await storage.updateField(id, updates);
       res.json({ success: true, field });
     } catch (error) {
@@ -1050,9 +1112,21 @@ export async function registerRoutes(
   });
 
   // Delete field
-  app.delete('/api/fields/:id', async (req, res) => {
+  app.delete('/api/fields/:id', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
+      const userId = req.user!.id;
+      
+      // Get field and verify ownership through document
+      const existingField = await storage.getFieldById(id);
+      if (!existingField) {
+        return res.status(404).json({ success: false, error: 'Field not found' });
+      }
+      const doc = await storage.getDocumentById(existingField.documentId, userId);
+      if (!doc) {
+        return res.status(404).json({ success: false, error: 'Document not found' });
+      }
+      
       await storage.deleteField(id);
       res.json({ success: true });
     } catch (error) {
@@ -1062,10 +1136,17 @@ export async function registerRoutes(
   });
 
   // Save all fields for a document (bulk update)
-  app.post('/api/documents/:id/fields/bulk', async (req, res) => {
+  app.post('/api/documents/:id/fields/bulk', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const documentId = parseInt(req.params.id);
+      const userId = req.user!.id;
       const { fields } = req.body;
+      
+      // Verify user owns this document
+      const doc = await storage.getDocumentById(documentId, userId);
+      if (!doc) {
+        return res.status(404).json({ success: false, error: 'Document not found' });
+      }
       
       console.log(`📝 Saving ${fields?.length || 0} fields for document ${documentId}`);
       console.log('Fields data:', JSON.stringify(fields, null, 2));
@@ -1099,9 +1180,10 @@ export async function registerRoutes(
   });
 
   // Send document for signing
-  app.post('/api/documents/:id/send', async (req, res) => {
+  app.post('/api/documents/:id/send', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const documentId = parseInt(req.params.id);
+      const userId = req.user!.id;
       const { senderName } = req.body;
       
       console.log(`📧 Send document request - ID: ${documentId}, Sender: ${senderName}`);
@@ -1112,7 +1194,8 @@ export async function registerRoutes(
         return;
       }
       
-      const doc = await storage.getDocumentById(documentId);
+      // Verify user owns this document
+      const doc = await storage.getDocumentById(documentId, userId);
       if (!doc) {
         res.status(404).json({ success: false, error: 'Document not found' });
         return;
@@ -1347,11 +1430,12 @@ export async function registerRoutes(
   });
 
   // Download signed document
-  app.get('/api/documents/:id/download', async (req, res) => {
+  app.get('/api/documents/:id/download', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const documentId = parseInt(req.params.id);
+      const userId = req.user!.id;
       
-      const doc = await storage.getDocumentById(documentId);
+      const doc = await storage.getDocumentById(documentId, userId);
       if (!doc) {
         res.status(404).json({ success: false, error: 'Document not found' });
         return;
@@ -1417,9 +1501,15 @@ export async function registerRoutes(
   });
 
   // Get audit log for document
-  app.get('/api/documents/:id/audit', async (req, res) => {
+  app.get('/api/documents/:id/audit', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const documentId = parseInt(req.params.id);
+      const userId = req.user!.id;
+      // Verify user owns this document before returning audit logs
+      const doc = await storage.getDocumentById(documentId, userId);
+      if (!doc) {
+        return res.status(404).json({ success: false, error: 'Document not found' });
+      }
       const logs = await storage.getAuditLogsByDocumentId(documentId);
       res.json({ success: true, logs });
     } catch (error) {
