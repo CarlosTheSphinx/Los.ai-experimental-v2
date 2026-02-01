@@ -293,6 +293,11 @@ export class DatabaseStorage implements IStorage {
     return project;
   }
 
+  async getProjectByIdInternal(id: number): Promise<Project | undefined> {
+    const [project] = await db.select().from(projects).where(eq(projects.id, id));
+    return project;
+  }
+
   async getProjectByToken(token: string): Promise<Project | undefined> {
     const [project] = await db.select().from(projects)
       .where(eq(projects.borrowerPortalToken, token));

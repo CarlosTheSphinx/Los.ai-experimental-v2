@@ -2011,5 +2011,502 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== PROJECTS ROUTES ====================
+
+  // Get all projects
+  app.get('/api/projects', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const { status, archived } = req.query;
+      
+      const projectsList = await storage.getProjects(
+        userId, 
+        status as string | undefined, 
+        archived !== undefined ? archived === 'true' : undefined
+      );
+      
+      // Get task stats for each project
+      const projectsWithStats = await Promise.all(
+        projectsList.map(async (project) => {
+          const stats = await storage.getProjectTaskStats(project.id);
+          return {
+            ...project,
+            completedTasks: stats.completed,
+            totalTasks: stats.total,
+          };
+        })
+      );
+      
+      res.json({ projects: projectsWithStats });
+    } catch (error) {
+      console.error('Get projects error:', error);
+      res.status(500).json({ error: 'Failed to get projects' });
+    }
+  });
+
+  // Create new project manually
+  app.post('/api/projects', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const {
+        projectName,
+        loanAmount,
+        interestRate,
+        loanTermMonths,
+        loanType,
+        propertyAddress,
+        propertyType,
+        borrowerName,
+        borrowerEmail,
+        borrowerPhone,
+        targetCloseDate,
+        notes
+      } = req.body;
+      
+      if (!projectName || !borrowerName || !borrowerEmail) {
+        return res.status(400).json({ error: 'Project name, borrower name, and email are required' });
+      }
+      
+      const projectNumber = await storage.generateProjectNumber();
+      const borrowerToken = uuidv4().replace(/-/g, '') + uuidv4().replace(/-/g, '');
+      
+      const project = await storage.createProject({
+        userId,
+        projectName,
+        projectNumber,
+        loanAmount: loanAmount ? parseFloat(loanAmount) : null,
+        interestRate: interestRate ? parseFloat(interestRate) : null,
+        loanTermMonths: loanTermMonths ? parseInt(loanTermMonths) : null,
+        loanType,
+        propertyAddress,
+        propertyType,
+        borrowerName,
+        borrowerEmail,
+        borrowerPhone,
+        status: 'active',
+        currentStage: 'documentation',
+        progressPercentage: 0,
+        applicationDate: new Date(),
+        targetCloseDate: targetCloseDate ? new Date(targetCloseDate) : new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+        borrowerPortalToken: borrowerToken,
+        borrowerPortalEnabled: true,
+        notes,
+      });
+      
+      // Create stages and tasks from template
+      const { LOAN_CLOSING_STAGES } = await import('./config/loanStages');
+      
+      for (const stageTemplate of LOAN_CLOSING_STAGES) {
+        const stage = await storage.createProjectStage({
+          projectId: project.id,
+          stageName: stageTemplate.stage_name,
+          stageKey: stageTemplate.stage_key,
+          stageOrder: stageTemplate.stage_order,
+          stageDescription: stageTemplate.stage_description,
+          estimatedDurationDays: stageTemplate.estimated_duration_days,
+          status: stageTemplate.stage_order === 1 ? 'in_progress' : 'pending',
+          visibleToBorrower: stageTemplate.visible_to_borrower,
+          startedAt: stageTemplate.stage_order === 1 ? new Date() : null,
+        });
+        
+        for (const taskTemplate of stageTemplate.tasks) {
+          await storage.createProjectTask({
+            projectId: project.id,
+            stageId: stage.id,
+            taskTitle: taskTemplate.task_title,
+            taskType: taskTemplate.task_type,
+            priority: taskTemplate.priority,
+            requiresDocument: taskTemplate.requires_document || false,
+            visibleToBorrower: taskTemplate.visible_to_borrower,
+            borrowerActionRequired: taskTemplate.borrower_action_required || false,
+            status: 'pending',
+          });
+        }
+      }
+      
+      // Log activity
+      await storage.createProjectActivity({
+        projectId: project.id,
+        userId,
+        activityType: 'project_created',
+        activityDescription: `Project ${projectNumber} created manually`,
+        visibleToBorrower: true,
+      });
+      
+      // Trigger webhook
+      const { triggerWebhook } = await import('./utils/webhooks');
+      await triggerWebhook(project.id, 'project_created', {
+        project_number: projectNumber,
+        created_manually: true,
+      });
+      
+      res.status(201).json({ project });
+    } catch (error) {
+      console.error('Create project error:', error);
+      res.status(500).json({ error: 'Failed to create project' });
+    }
+  });
+
+  // Get single project with details
+  app.get('/api/projects/:id', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const projectId = parseInt(req.params.id);
+      
+      const project = await storage.getProjectById(projectId, userId);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+      
+      const stages = await storage.getStagesByProjectId(projectId);
+      const tasks = await storage.getTasksByProjectId(projectId);
+      const activity = await storage.getActivityByProjectId(projectId);
+      const documents = await storage.getDocumentsByProjectId(projectId);
+      
+      // Group tasks by stage
+      const stagesWithTasks = stages.map(stage => ({
+        ...stage,
+        tasks: tasks.filter(t => t.stageId === stage.id),
+      }));
+      
+      res.json({
+        project,
+        stages: stagesWithTasks,
+        activity,
+        documents,
+      });
+    } catch (error) {
+      console.error('Get project error:', error);
+      res.status(500).json({ error: 'Failed to get project' });
+    }
+  });
+
+  // Update project
+  app.put('/api/projects/:id', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const projectId = parseInt(req.params.id);
+      
+      const existingProject = await storage.getProjectById(projectId, userId);
+      if (!existingProject) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+      
+      const allowedFields = [
+        'projectName', 'status', 'loanAmount', 'interestRate', 'loanTermMonths',
+        'loanType', 'propertyAddress', 'propertyType', 'borrowerName',
+        'borrowerEmail', 'borrowerPhone', 'targetCloseDate', 'notes', 'internalNotes'
+      ];
+      
+      const updates: Record<string, unknown> = {};
+      for (const field of allowedFields) {
+        if (req.body[field] !== undefined) {
+          updates[field] = req.body[field];
+        }
+      }
+      
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: 'No valid fields to update' });
+      }
+      
+      const updated = await storage.updateProject(projectId, userId, updates);
+      
+      // Log activity
+      await storage.createProjectActivity({
+        projectId,
+        userId,
+        activityType: 'project_updated',
+        activityDescription: 'Project details updated',
+        visibleToBorrower: false,
+      });
+      
+      res.json({ project: updated });
+    } catch (error) {
+      console.error('Update project error:', error);
+      res.status(500).json({ error: 'Failed to update project' });
+    }
+  });
+
+  // Update task status
+  app.patch('/api/projects/:projectId/tasks/:taskId', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const projectId = parseInt(req.params.projectId);
+      const taskId = parseInt(req.params.taskId);
+      const { status, completedBy, documentUrl } = req.body;
+      
+      const project = await storage.getProjectById(projectId, userId);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+      
+      const task = await storage.getTaskById(taskId);
+      if (!task || task.projectId !== projectId) {
+        return res.status(404).json({ error: 'Task not found' });
+      }
+      
+      const updates: Record<string, unknown> = {};
+      if (status) updates.status = status;
+      if (completedBy) updates.completedBy = completedBy;
+      if (documentUrl) updates.documentUrl = documentUrl;
+      if (status === 'completed') updates.completedAt = new Date();
+      
+      const updatedTask = await storage.updateTask(taskId, updates);
+      
+      // Log activity
+      await storage.createProjectActivity({
+        projectId,
+        userId,
+        activityType: 'task_updated',
+        activityDescription: `Task "${task.taskTitle}" marked as ${status}`,
+        visibleToBorrower: task.visibleToBorrower ?? false,
+      });
+      
+      // Update progress
+      await updateProjectProgress(projectId, userId);
+      
+      // Trigger webhook for completed tasks
+      if (status === 'completed') {
+        const { triggerWebhook } = await import('./utils/webhooks');
+        await triggerWebhook(projectId, 'task_completed', {
+          task_id: task.id,
+          task_title: task.taskTitle,
+          task_type: task.taskType,
+        });
+      }
+      
+      res.json({ task: updatedTask });
+    } catch (error) {
+      console.error('Update task error:', error);
+      res.status(500).json({ error: 'Failed to update task' });
+    }
+  });
+
+  // Helper function to update progress
+  async function updateProjectProgress(projectId: number, userId: number) {
+    const stats = await storage.getProjectTaskStats(projectId);
+    const percentage = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
+    
+    await storage.updateProject(projectId, userId, { progressPercentage: percentage });
+    
+    // Check if current stage is complete
+    const stages = await storage.getStagesByProjectId(projectId);
+    const currentStage = stages.find(s => s.status === 'in_progress');
+    
+    if (currentStage) {
+      const stageTasks = await storage.getTasksByStageId(currentStage.id);
+      const completedStageTasks = stageTasks.filter(t => t.status === 'completed').length;
+      
+      if (completedStageTasks === stageTasks.length && stageTasks.length > 0) {
+        // Mark stage complete
+        await storage.updateStage(currentStage.id, { 
+          status: 'completed', 
+          completedAt: new Date() 
+        });
+        
+        // Find and activate next stage
+        const nextStage = stages.find(s => s.stageOrder === currentStage.stageOrder + 1);
+        if (nextStage) {
+          await storage.updateStage(nextStage.id, { 
+            status: 'in_progress', 
+            startedAt: new Date() 
+          });
+          
+          await storage.updateProject(projectId, userId, { 
+            currentStage: nextStage.stageKey 
+          });
+          
+          // Log activity
+          await storage.createProjectActivity({
+            projectId,
+            userId,
+            activityType: 'stage_completed',
+            activityDescription: `Completed "${currentStage.stageName}" stage. Moving to "${nextStage.stageName}"`,
+            visibleToBorrower: true,
+          });
+          
+          // Trigger webhook
+          const { triggerWebhook } = await import('./utils/webhooks');
+          await triggerWebhook(projectId, 'stage_completed', {
+            completed_stage: currentStage.stageKey,
+            next_stage: nextStage.stageKey,
+          });
+        }
+      }
+    }
+  }
+
+  // Get borrower portal link
+  app.get('/api/projects/:id/borrower-link', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const projectId = parseInt(req.params.id);
+      
+      const project = await storage.getProjectById(projectId, userId);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+      
+      if (!project.borrowerPortalEnabled) {
+        return res.status(403).json({ error: 'Borrower portal is disabled for this project' });
+      }
+      
+      const baseUrl = process.env.BASE_URL || `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+      const borrowerLink = `${baseUrl}/portal/${project.borrowerPortalToken}`;
+      
+      res.json({ borrowerLink });
+    } catch (error) {
+      console.error('Get borrower link error:', error);
+      res.status(500).json({ error: 'Failed to get borrower link' });
+    }
+  });
+
+  // Toggle borrower portal
+  app.patch('/api/projects/:id/toggle-portal', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const projectId = parseInt(req.params.id);
+      
+      const project = await storage.getProjectById(projectId, userId);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+      
+      const updated = await storage.updateProject(projectId, userId, {
+        borrowerPortalEnabled: !project.borrowerPortalEnabled,
+      });
+      
+      res.json({ borrowerPortalEnabled: updated?.borrowerPortalEnabled });
+    } catch (error) {
+      console.error('Toggle portal error:', error);
+      res.status(500).json({ error: 'Failed to toggle portal' });
+    }
+  });
+
+  // Manual webhook trigger
+  app.post('/api/projects/:id/trigger-webhook', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const projectId = parseInt(req.params.id);
+      const { eventType, data } = req.body;
+      
+      const project = await storage.getProjectById(projectId, userId);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+      
+      const { triggerWebhook } = await import('./utils/webhooks');
+      await triggerWebhook(projectId, eventType || 'manual_trigger', data || {});
+      
+      res.json({ success: true, message: 'Webhook triggered' });
+    } catch (error) {
+      console.error('Manual webhook trigger error:', error);
+      res.status(500).json({ error: 'Failed to trigger webhook' });
+    }
+  });
+
+  // Push to external LOS
+  app.post('/api/projects/:id/push-to-los', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const projectId = parseInt(req.params.id);
+      
+      const project = await storage.getProjectById(projectId, userId);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+      
+      const { triggerWebhook } = await import('./utils/webhooks');
+      await triggerWebhook(projectId, 'push_to_los', {
+        initiated_manually: true,
+        project_data: {
+          project_number: project.projectNumber,
+          loan_amount: project.loanAmount,
+          borrower_name: project.borrowerName,
+          borrower_email: project.borrowerEmail,
+          property_address: project.propertyAddress,
+        },
+      });
+      
+      await storage.updateProject(projectId, userId, {
+        externalSyncStatus: 'pending',
+        externalSyncAt: new Date(),
+      });
+      
+      await storage.createProjectActivity({
+        projectId,
+        userId,
+        activityType: 'los_sync',
+        activityDescription: 'Project data pushed to external Loan Origination System',
+        visibleToBorrower: false,
+      });
+      
+      res.json({ success: true, message: 'Project pushed to external LOS' });
+    } catch (error) {
+      console.error('Push to LOS error:', error);
+      res.status(500).json({ error: 'Failed to push to LOS' });
+    }
+  });
+
+  // ==================== BORROWER PORTAL (PUBLIC) ====================
+
+  // Get borrower portal view (no auth required)
+  app.get('/api/portal/:token', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      
+      const project = await storage.getProjectByToken(token);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found or link is invalid' });
+      }
+      
+      if (!project.borrowerPortalEnabled) {
+        return res.status(403).json({ error: 'Borrower portal is disabled for this project' });
+      }
+      
+      // Update last viewed timestamp
+      await storage.updateProject(project.id, project.userId!, {
+        borrowerPortalLastViewed: new Date(),
+      });
+      
+      // Get stages with visible tasks only
+      const stages = await storage.getStagesByProjectId(project.id);
+      const tasks = await storage.getTasksByProjectId(project.id);
+      const activity = await storage.getActivityByProjectId(project.id, true); // Only borrower-visible
+      
+      // Filter to borrower-visible stages and tasks
+      const visibleStages = stages.filter(s => s.visibleToBorrower).map(stage => ({
+        ...stage,
+        tasks: tasks.filter(t => t.stageId === stage.id && t.visibleToBorrower),
+      }));
+      
+      // Return limited project data
+      res.json({
+        project: {
+          id: project.id,
+          projectNumber: project.projectNumber,
+          projectName: project.projectName,
+          borrowerName: project.borrowerName,
+          loanAmount: project.loanAmount,
+          interestRate: project.interestRate,
+          loanTermMonths: project.loanTermMonths,
+          loanType: project.loanType,
+          propertyAddress: project.propertyAddress,
+          status: project.status,
+          currentStage: project.currentStage,
+          progressPercentage: project.progressPercentage,
+          targetCloseDate: project.targetCloseDate,
+          applicationDate: project.applicationDate,
+          notes: project.notes,
+        },
+        stages: visibleStages,
+        activity,
+      });
+    } catch (error) {
+      console.error('Borrower portal error:', error);
+      res.status(500).json({ error: 'Failed to load borrower portal' });
+    }
+  });
+
   return httpServer;
 }
