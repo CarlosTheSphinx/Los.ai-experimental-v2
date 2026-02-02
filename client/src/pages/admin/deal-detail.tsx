@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -23,6 +24,9 @@ import {
   XCircle,
   FileCheck,
   Folder,
+  Eye,
+  Download,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -208,6 +212,9 @@ export default function AdminDealDetail() {
   const [, params] = useRoute("/admin/deals/:id");
   const dealId = params?.id;
   const { toast } = useToast();
+  const [uploadingDocId, setUploadingDocId] = useState<number | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data, isLoading, error } = useQuery<DealDetailResponse>({
     queryKey: [`/api/admin/deals/${dealId}`],
@@ -226,6 +233,79 @@ export default function AdminDealDetail() {
       });
     },
   });
+
+  const handleFileUpload = async (docId: number, file: File) => {
+    setUploadingDocId(docId);
+    setUploadProgress(10);
+
+    try {
+      // Step 1: Get presigned URL
+      const urlResponse = await apiRequest("POST", `/api/admin/deals/${dealId}/documents/${docId}/upload-url`, {
+        name: file.name,
+        size: file.size,
+        contentType: file.type || "application/octet-stream",
+      });
+      const { uploadURL, objectPath } = await urlResponse.json();
+      setUploadProgress(30);
+
+      // Step 2: Upload directly to storage
+      await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: {
+          "Content-Type": file.type || "application/octet-stream",
+        },
+      });
+      setUploadProgress(70);
+
+      // Step 3: Update database record
+      await apiRequest("POST", `/api/admin/deals/${dealId}/documents/${docId}/upload-complete`, {
+        objectPath,
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.type || "application/octet-stream",
+      });
+      setUploadProgress(100);
+
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
+      toast({
+        title: "Document uploaded",
+        description: `${file.name} has been uploaded successfully.`,
+      });
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast({
+        title: "Upload failed",
+        description: "There was an error uploading the document. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingDocId(null);
+      setUploadProgress(0);
+    }
+  };
+
+  const handleFileInputChange = (docId: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleFileUpload(docId, file);
+    }
+    // Reset the input so the same file can be selected again
+    e.target.value = "";
+  };
+
+  const handleViewDocument = (docId: number) => {
+    window.open(`/api/admin/deals/${dealId}/documents/${docId}/download`, "_blank");
+  };
+
+  const handleDownloadDocument = (docId: number, fileName: string | null) => {
+    const link = document.createElement("a");
+    link.href = `/api/admin/deals/${dealId}/documents/${docId}/download?download=true`;
+    link.download = fileName || "document";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const deal = data?.deal;
   const documents = data?.documents || [];
@@ -518,7 +598,12 @@ export default function AdminDealDetail() {
                                   <div>
                                     <p className="font-medium text-sm">{doc.documentName}</p>
                                     {doc.documentDescription && (
-                                      <p className="text-xs text-muted-foreground">{doc.documentDescription}</p>
+                                      <p className="text-xs text-muted-foreground max-w-md">{doc.documentDescription}</p>
+                                    )}
+                                    {doc.fileName && doc.uploadedAt && (
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        {doc.fileName} • Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}
+                                      </p>
                                     )}
                                   </div>
                                   {doc.isRequired && (
@@ -527,14 +612,57 @@ export default function AdminDealDetail() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   {getDocumentStatusBadge(doc.status)}
+                                  
+                                  {/* Upload progress indicator */}
+                                  {uploadingDocId === doc.id && (
+                                    <div className="flex items-center gap-2">
+                                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                                      <span className="text-xs text-muted-foreground">{uploadProgress}%</span>
+                                    </div>
+                                  )}
+                                  
                                   <div className="flex gap-1">
+                                    {/* View/Download buttons for uploaded files */}
+                                    {doc.filePath && (
+                                      <>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => handleViewDocument(doc.id)}
+                                          data-testid={`button-view-${doc.id}`}
+                                          title="View document"
+                                        >
+                                          <Eye className="h-3 w-3" />
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => handleDownloadDocument(doc.id, doc.fileName)}
+                                          data-testid={`button-download-${doc.id}`}
+                                          title="Download document"
+                                        >
+                                          <Download className="h-3 w-3" />
+                                        </Button>
+                                      </>
+                                    )}
+
+                                    {/* File upload input (hidden) */}
+                                    <input
+                                      type="file"
+                                      id={`file-input-${doc.id}`}
+                                      className="hidden"
+                                      accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                                      onChange={handleFileInputChange(doc.id)}
+                                      data-testid={`input-file-${doc.id}`}
+                                    />
+                                    
                                     {doc.status === 'pending' && (
                                       <>
                                         <Button
                                           size="sm"
                                           variant="ghost"
                                           onClick={() => updateDocumentStatus.mutate({ docId: doc.id, status: 'not_applicable' })}
-                                          disabled={updateDocumentStatus.isPending}
+                                          disabled={updateDocumentStatus.isPending || uploadingDocId === doc.id}
                                           data-testid={`button-na-${doc.id}`}
                                         >
                                           N/A
@@ -542,17 +670,27 @@ export default function AdminDealDetail() {
                                         <Button
                                           size="sm"
                                           variant="outline"
-                                          onClick={() => updateDocumentStatus.mutate({ docId: doc.id, status: 'uploaded' })}
-                                          disabled={updateDocumentStatus.isPending}
+                                          onClick={() => document.getElementById(`file-input-${doc.id}`)?.click()}
+                                          disabled={uploadingDocId === doc.id}
                                           data-testid={`button-upload-${doc.id}`}
                                         >
                                           <Upload className="h-3 w-3 mr-1" />
-                                          Mark Uploaded
+                                          Upload
                                         </Button>
                                       </>
                                     )}
                                     {doc.status === 'uploaded' && (
                                       <>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => document.getElementById(`file-input-${doc.id}`)?.click()}
+                                          disabled={uploadingDocId === doc.id}
+                                          data-testid={`button-reupload-${doc.id}`}
+                                          title="Replace file"
+                                        >
+                                          <Upload className="h-3 w-3" />
+                                        </Button>
                                         <Button
                                           size="sm"
                                           variant="ghost"
@@ -575,16 +713,40 @@ export default function AdminDealDetail() {
                                         </Button>
                                       </>
                                     )}
-                                    {doc.status === 'rejected' && (
+                                    {doc.status === 'approved' && (
                                       <Button
                                         size="sm"
-                                        variant="outline"
-                                        onClick={() => updateDocumentStatus.mutate({ docId: doc.id, status: 'pending' })}
-                                        disabled={updateDocumentStatus.isPending}
-                                        data-testid={`button-reset-${doc.id}`}
+                                        variant="ghost"
+                                        onClick={() => document.getElementById(`file-input-${doc.id}`)?.click()}
+                                        disabled={uploadingDocId === doc.id}
+                                        data-testid={`button-reupload-${doc.id}`}
+                                        title="Replace file"
                                       >
-                                        Reset
+                                        <Upload className="h-3 w-3" />
                                       </Button>
+                                    )}
+                                    {doc.status === 'rejected' && (
+                                      <>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => document.getElementById(`file-input-${doc.id}`)?.click()}
+                                          disabled={uploadingDocId === doc.id}
+                                          data-testid={`button-upload-${doc.id}`}
+                                        >
+                                          <Upload className="h-3 w-3 mr-1" />
+                                          Re-upload
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => updateDocumentStatus.mutate({ docId: doc.id, status: 'pending' })}
+                                          disabled={updateDocumentStatus.isPending}
+                                          data-testid={`button-reset-${doc.id}`}
+                                        >
+                                          Reset
+                                        </Button>
+                                      </>
                                     )}
                                   </div>
                                 </div>
