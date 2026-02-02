@@ -247,10 +247,7 @@ export default function AdminPrograms() {
 
   const updateProgram = useMutation({
     mutationFn: async (data: typeof programForm & { id: number }) => {
-      return apiRequest(`/api/admin/programs/${data.id}`, {
-        method: "PUT",
-        body: JSON.stringify(data),
-      });
+      return apiRequest("PUT", `/api/admin/programs/${data.id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/programs"] });
@@ -266,9 +263,7 @@ export default function AdminPrograms() {
 
   const toggleProgram = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest(`/api/admin/programs/${id}/toggle`, {
-        method: "PATCH",
-      });
+      return apiRequest("PATCH", `/api/admin/programs/${id}/toggle`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/programs"] });
@@ -280,9 +275,7 @@ export default function AdminPrograms() {
 
   const deleteProgram = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest(`/api/admin/programs/${id}`, {
-        method: "DELETE",
-      });
+      return apiRequest("DELETE", `/api/admin/programs/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/programs"] });
@@ -295,10 +288,7 @@ export default function AdminPrograms() {
 
   const createDocument = useMutation({
     mutationFn: async (data: typeof documentForm) => {
-      return apiRequest(`/api/admin/programs/${selectedProgram?.id}/documents`, {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
+      return apiRequest("POST", `/api/admin/programs/${selectedProgram?.id}/documents`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/programs", selectedProgram?.id] });
@@ -314,9 +304,7 @@ export default function AdminPrograms() {
 
   const deleteDocument = useMutation({
     mutationFn: async (docId: number) => {
-      return apiRequest(`/api/admin/programs/${selectedProgram?.id}/documents/${docId}`, {
-        method: "DELETE",
-      });
+      return apiRequest("DELETE", `/api/admin/programs/${selectedProgram?.id}/documents/${docId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/programs", selectedProgram?.id] });
@@ -330,10 +318,7 @@ export default function AdminPrograms() {
 
   const createTask = useMutation({
     mutationFn: async (data: typeof taskForm) => {
-      return apiRequest(`/api/admin/programs/${selectedProgram?.id}/tasks`, {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
+      return apiRequest("POST", `/api/admin/programs/${selectedProgram?.id}/tasks`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/programs", selectedProgram?.id] });
@@ -349,9 +334,7 @@ export default function AdminPrograms() {
 
   const deleteTask = useMutation({
     mutationFn: async (taskId: number) => {
-      return apiRequest(`/api/admin/programs/${selectedProgram?.id}/tasks/${taskId}`, {
-        method: "DELETE",
-      });
+      return apiRequest("DELETE", `/api/admin/programs/${selectedProgram?.id}/tasks/${taskId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/programs", selectedProgram?.id] });
