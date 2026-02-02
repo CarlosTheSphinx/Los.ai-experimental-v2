@@ -2699,6 +2699,59 @@ export async function registerRoutes(
     }
   });
 
+  // Admin - Create user manually
+  app.post('/api/admin/users', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { email, password, fullName, companyName, phone, role } = req.body;
+      
+      if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required' });
+      }
+      
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ error: 'User with this email already exists' });
+      }
+      
+      const bcrypt = await import('bcrypt');
+      const passwordHash = await bcrypt.hash(password, 10);
+      
+      const newUser = await storage.createUser({
+        email,
+        passwordHash,
+        fullName: fullName || null,
+        companyName: companyName || null,
+        phone: phone || null,
+        role: role || 'user',
+        isActive: true,
+        emailVerified: true,
+      });
+      
+      await storage.createAdminActivity({
+        userId: req.user!.id,
+        actionType: 'user_created',
+        actionDescription: `Created new user: ${email} with role ${role || 'user'}`,
+      });
+      
+      res.json({ 
+        user: {
+          id: newUser.id,
+          email: newUser.email,
+          fullName: newUser.fullName,
+          companyName: newUser.companyName,
+          phone: newUser.phone,
+          role: newUser.role,
+          createdAt: newUser.createdAt,
+          isActive: newUser.isActive,
+          emailVerified: newUser.emailVerified,
+        }
+      });
+    } catch (error) {
+      console.error('Admin create user error:', error);
+      res.status(500).json({ error: 'Failed to create user' });
+    }
+  });
+
   // Admin - Update user (role, active status)
   app.patch('/api/admin/users/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
