@@ -138,10 +138,10 @@ export default function PricingRulesPage() {
     enabled: !!selectedProgramId,
   });
 
-  const selectedProgram = programsData?.programs.find(p => p.id === selectedProgramId);
-  const activeRuleset = rulesetsData?.rulesets.find(r => r.status === 'active');
-  const draftRulesets = rulesetsData?.rulesets.filter(r => r.status === 'draft') || [];
-  const pendingProposals = proposalsData?.proposals.filter(p => p.status === 'pending') || [];
+  const selectedProgram = programsData?.programs?.find(p => p.id === selectedProgramId);
+  const activeRuleset = rulesetsData?.rulesets?.find(r => r.status === 'active');
+  const draftRulesets = rulesetsData?.rulesets?.filter(r => r.status === 'draft') || [];
+  const pendingProposals = proposalsData?.proposals?.filter(p => p.status === 'pending') || [];
 
   // Create sample ruleset mutation
   const createSampleMutation = useMutation({
