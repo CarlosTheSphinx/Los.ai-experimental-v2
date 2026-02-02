@@ -3906,29 +3906,70 @@ export async function registerRoutes(
         minLtv, maxLtv, 
         minInterestRate, maxInterestRate,
         termOptions, eligiblePropertyTypes,
-        isActive
+        isActive,
+        documents,
+        tasks
       } = req.body;
       
       if (!name || !loanType) {
         return res.status(400).json({ error: 'Name and loan type are required' });
       }
       
-      const [program] = await db.insert(loanPrograms).values({
-        name,
-        description,
-        loanType,
-        minLoanAmount: minLoanAmount ? parseFloat(minLoanAmount) : 100000,
-        maxLoanAmount: maxLoanAmount ? parseFloat(maxLoanAmount) : 5000000,
-        minLtv: minLtv ? parseFloat(minLtv) : 50,
-        maxLtv: maxLtv ? parseFloat(maxLtv) : 80,
-        minInterestRate: minInterestRate ? parseFloat(minInterestRate) : 8,
-        maxInterestRate: maxInterestRate ? parseFloat(maxInterestRate) : 15,
-        termOptions,
-        eligiblePropertyTypes: eligiblePropertyTypes || [],
-        isActive: isActive !== false,
-      }).returning();
+      // Use a transaction to ensure atomicity of program + templates creation
+      const result = await db.transaction(async (tx) => {
+        const [program] = await tx.insert(loanPrograms).values({
+          name,
+          description,
+          loanType,
+          minLoanAmount: minLoanAmount ? parseFloat(minLoanAmount) : 100000,
+          maxLoanAmount: maxLoanAmount ? parseFloat(maxLoanAmount) : 5000000,
+          minLtv: minLtv ? parseFloat(minLtv) : 50,
+          maxLtv: maxLtv ? parseFloat(maxLtv) : 80,
+          minInterestRate: minInterestRate ? parseFloat(minInterestRate) : 8,
+          maxInterestRate: maxInterestRate ? parseFloat(maxInterestRate) : 15,
+          termOptions,
+          eligiblePropertyTypes: eligiblePropertyTypes || [],
+          isActive: isActive !== false,
+        }).returning();
+        
+        // Create inline document templates if provided
+        if (documents && Array.isArray(documents) && documents.length > 0) {
+          // Filter out documents with empty names
+          const validDocs = documents.filter((doc: any) => doc.documentName?.trim());
+          if (validDocs.length > 0) {
+            const documentEntries = validDocs.map((doc: any, index: number) => ({
+              programId: program.id,
+              documentName: doc.documentName.trim(),
+              documentCategory: doc.documentCategory || 'other',
+              documentDescription: doc.documentDescription || null,
+              isRequired: doc.isRequired !== false,
+              sortOrder: index,
+            }));
+            await tx.insert(programDocumentTemplates).values(documentEntries);
+          }
+        }
+        
+        // Create inline task templates if provided
+        if (tasks && Array.isArray(tasks) && tasks.length > 0) {
+          // Filter out tasks with empty names
+          const validTasks = tasks.filter((task: any) => task.taskName?.trim());
+          if (validTasks.length > 0) {
+            const taskEntries = validTasks.map((task: any, index: number) => ({
+              programId: program.id,
+              taskName: task.taskName.trim(),
+              taskDescription: task.taskDescription || null,
+              taskCategory: task.taskCategory || 'other',
+              priority: task.priority || 'medium',
+              sortOrder: index,
+            }));
+            await tx.insert(programTaskTemplates).values(taskEntries);
+          }
+        }
+        
+        return program;
+      });
       
-      res.json({ program });
+      res.json({ program: result });
     } catch (error) {
       console.error('Create program error:', error);
       res.status(500).json({ error: 'Failed to create program' });

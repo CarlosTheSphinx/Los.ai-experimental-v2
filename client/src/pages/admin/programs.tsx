@@ -215,12 +215,20 @@ export default function AdminPrograms() {
   // Mutations
   const createProgram = useMutation({
     mutationFn: async (data: typeof programForm) => {
+      // Filter out any documents/tasks with empty names
+      const validDocuments = inlineDocuments
+        .filter(doc => doc.documentName.trim())
+        .map(({ id, ...doc }) => doc);
+      const validTasks = inlineTasks
+        .filter(task => task.taskName.trim())
+        .map(({ id, ...task }) => task);
+      
       return apiRequest("/api/admin/programs", {
         method: "POST",
         body: JSON.stringify({
           ...data,
-          documents: inlineDocuments.map(({ id, ...doc }) => doc),
-          tasks: inlineTasks.map(({ id, ...task }) => task),
+          documents: validDocuments,
+          tasks: validTasks,
         }),
       });
     },
