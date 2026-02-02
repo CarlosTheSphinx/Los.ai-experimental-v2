@@ -168,10 +168,24 @@ The application includes a comprehensive admin back office for staff to manage u
     - Support email
     - Puppeteer quote URL for pricing scraper
 
+13. Partners Management (/admin/partners) - Track referral partners:
+    - Partners list with search functionality
+    - Add Partner dialog with fields: name, company, email, phone, entity type, experience level, notes
+    - Partner statistics: loans in process, all-time loans count
+    - Entity types: individual, llc, corporation, partnership, trust
+    - Experience levels: beginner, intermediate, experienced, expert
+
+**Partner Integration with Deals:**
+- Deals can be associated with partners via partnerId (linked to partners table) or partnerName (manual text entry)
+- Partner column visible on Deals page table
+- Add Deal dialog includes partner selector with toggle for list selection or manual entry
+- Partner name searchable in deals search functionality
+
 **Admin Database Tables:**
 - `system_settings` - Key-value store for system configuration
 - `admin_tasks` - Internal admin tasks with project linking
 - `admin_activity` - Audit log of admin actions
+- `partners` - Referral partner tracking with contact info, entity type, experience level
 
 Frontend Auth Components:
 - `client/src/hooks/use-auth.tsx` - AuthContext and useAuth hook
