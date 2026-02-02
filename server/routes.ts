@@ -174,6 +174,7 @@ export async function registerRoutes(
           fullName: user.fullName,
           companyName: user.companyName,
           phone: user.phone,
+          role: user.role,
           createdAt: user.createdAt
         }
       });
@@ -182,6 +183,25 @@ export async function registerRoutes(
       res.status(500).json({ error: 'Failed to get user' });
     }
   });
+
+  // Admin authentication middleware - requires admin, staff, or super_admin role
+  const requireAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+      
+      const user = await storage.getUserById(req.user.id);
+      if (!user || !['admin', 'staff', 'super_admin'].includes(user.role)) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      
+      next();
+    } catch (error) {
+      console.error('Admin auth error:', error);
+      res.status(500).json({ error: 'Authorization failed' });
+    }
+  };
 
   // Forgot password
   app.post('/api/auth/forgot-password', async (req: Request, res: Response) => {
@@ -2628,6 +2648,321 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Borrower portal error:', error);
       res.status(500).json({ error: 'Failed to load borrower portal' });
+    }
+  });
+
+  // ==================== ADMIN ROUTES ====================
+
+  // Admin Dashboard Stats
+  app.get('/api/admin/dashboard', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const stats = await storage.getAdminDashboardStats();
+      const recentActivity = await storage.getRecentAdminActivity(10);
+      
+      res.json({ stats, recentActivity });
+    } catch (error) {
+      console.error('Admin dashboard error:', error);
+      res.status(500).json({ error: 'Failed to load dashboard' });
+    }
+  });
+
+  // Admin - List all users
+  app.get('/api/admin/users', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const role = req.query.role as string | undefined;
+      const search = req.query.search as string | undefined;
+      
+      const usersList = await storage.getAllUsers({ role, search });
+      
+      // Remove password hashes
+      const safeUsers = usersList.map(u => ({
+        id: u.id,
+        email: u.email,
+        fullName: u.fullName,
+        companyName: u.companyName,
+        phone: u.phone,
+        role: u.role,
+        createdAt: u.createdAt,
+        lastLoginAt: u.lastLoginAt,
+        emailVerified: u.emailVerified,
+        isActive: u.isActive
+      }));
+      
+      res.json({ users: safeUsers });
+    } catch (error) {
+      console.error('Admin users error:', error);
+      res.status(500).json({ error: 'Failed to load users' });
+    }
+  });
+
+  // Admin - Update user (role, active status)
+  app.patch('/api/admin/users/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = parseInt(req.params.id);
+      const { role, isActive } = req.body;
+      
+      const updates: { role?: string; isActive?: boolean } = {};
+      if (role !== undefined && ['user', 'admin', 'staff', 'super_admin'].includes(role)) {
+        updates.role = role;
+      }
+      if (isActive !== undefined) {
+        updates.isActive = isActive;
+      }
+      
+      const updated = await storage.updateUser(userId, updates);
+      
+      if (!updated) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      // Log admin activity
+      await storage.createAdminActivity({
+        userId: req.user!.id,
+        actionType: 'user_updated',
+        actionDescription: `Updated user ${updated.email}: ${JSON.stringify(updates)}`,
+        metadata: { targetUserId: userId, updates }
+      });
+      
+      res.json({ 
+        user: {
+          id: updated.id,
+          email: updated.email,
+          fullName: updated.fullName,
+          role: updated.role,
+          isActive: updated.isActive
+        }
+      });
+    } catch (error) {
+      console.error('Admin update user error:', error);
+      res.status(500).json({ error: 'Failed to update user' });
+    }
+  });
+
+  // Admin - List all projects
+  app.get('/api/admin/projects', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const status = req.query.status as string | undefined;
+      const stage = req.query.stage as string | undefined;
+      const userId = req.query.userId ? parseInt(req.query.userId as string) : undefined;
+      
+      const projectsList = await storage.getAllProjects({ status, stage, userId });
+      
+      // Get owner info for each project
+      const projectsWithOwners = await Promise.all(projectsList.map(async (p) => {
+        let ownerName = 'Unknown';
+        let ownerEmail = '';
+        if (p.userId) {
+          const owner = await storage.getUserById(p.userId);
+          if (owner) {
+            ownerName = owner.fullName || owner.email;
+            ownerEmail = owner.email;
+          }
+        }
+        return { ...p, ownerName, ownerEmail };
+      }));
+      
+      res.json({ projects: projectsWithOwners });
+    } catch (error) {
+      console.error('Admin projects error:', error);
+      res.status(500).json({ error: 'Failed to load projects' });
+    }
+  });
+
+  // Admin - Get single project with admin tasks
+  app.get('/api/admin/projects/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const projectId = parseInt(req.params.id);
+      
+      // Get project without user filter (admin can see all)
+      const project = await storage.getProjectById(projectId);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+      
+      const stages = await storage.getStagesByProjectId(projectId);
+      const tasks = await storage.getTasksByProjectId(projectId);
+      const activity = await storage.getProjectActivity({ projectId });
+      const adminTasks = await storage.getAdminTasksByProjectId(projectId);
+      const adminActivityList = await storage.getAdminActivityByProjectId(projectId);
+      
+      // Get owner info
+      let owner = null;
+      if (project.userId) {
+        const ownerData = await storage.getUserById(project.userId);
+        if (ownerData) {
+          owner = { id: ownerData.id, email: ownerData.email, fullName: ownerData.fullName };
+        }
+      }
+      
+      res.json({ project, stages, tasks, activity, adminTasks, adminActivity: adminActivityList, owner });
+    } catch (error) {
+      console.error('Admin project detail error:', error);
+      res.status(500).json({ error: 'Failed to load project' });
+    }
+  });
+
+  // Admin - Create admin task for project
+  app.post('/api/admin/projects/:id/tasks', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const projectId = parseInt(req.params.id);
+      const { taskTitle, taskDescription, taskCategory, priority, dueDate, assignedTo, userMilestoneTaskId, autoUpdateUserTask, requiresDocument } = req.body;
+      
+      const task = await storage.createAdminTask({
+        projectId,
+        taskTitle,
+        taskDescription,
+        taskCategory,
+        priority: priority || 'medium',
+        dueDate: dueDate ? new Date(dueDate) : null,
+        assignedTo,
+        userMilestoneTaskId,
+        autoUpdateUserTask: autoUpdateUserTask ?? true,
+        requiresDocument: requiresDocument ?? false,
+        status: 'pending'
+      });
+      
+      await storage.createAdminActivity({
+        projectId,
+        userId: req.user!.id,
+        actionType: 'task_created',
+        actionDescription: `Created admin task: ${taskTitle}`,
+        metadata: { taskId: task.id }
+      });
+      
+      res.status(201).json({ task });
+    } catch (error) {
+      console.error('Admin create task error:', error);
+      res.status(500).json({ error: 'Failed to create task' });
+    }
+  });
+
+  // Admin - Update admin task
+  app.patch('/api/admin/tasks/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const taskId = parseInt(req.params.id);
+      const { status, internalNotes, assignedTo, priority } = req.body;
+      
+      const updates: any = {};
+      if (status) updates.status = status;
+      if (internalNotes !== undefined) updates.internalNotes = internalNotes;
+      if (assignedTo !== undefined) updates.assignedTo = assignedTo;
+      if (priority) updates.priority = priority;
+      
+      if (status === 'completed') {
+        updates.completedAt = new Date();
+        updates.completedBy = req.user!.id;
+      }
+      
+      const task = await storage.updateAdminTask(taskId, updates);
+      
+      if (!task) {
+        return res.status(404).json({ error: 'Task not found' });
+      }
+      
+      // If task completed and linked to user milestone, update that too
+      if (status === 'completed' && task.autoUpdateUserTask && task.userMilestoneTaskId) {
+        await storage.updateProjectTask(task.userMilestoneTaskId, { status: 'completed', completedAt: new Date() });
+        
+        // Log activity
+        await storage.createAdminActivity({
+          projectId: task.projectId,
+          userId: req.user!.id,
+          actionType: 'milestone_synced',
+          actionDescription: `Synced user milestone task after admin task completion`,
+          metadata: { adminTaskId: taskId, userTaskId: task.userMilestoneTaskId }
+        });
+      }
+      
+      await storage.createAdminActivity({
+        projectId: task.projectId,
+        userId: req.user!.id,
+        actionType: 'task_updated',
+        actionDescription: `Updated admin task: ${task.taskTitle} - ${JSON.stringify(updates)}`,
+        metadata: { taskId, updates }
+      });
+      
+      res.json({ task });
+    } catch (error) {
+      console.error('Admin update task error:', error);
+      res.status(500).json({ error: 'Failed to update task' });
+    }
+  });
+
+  // Admin - List all agreements/documents
+  app.get('/api/admin/agreements', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const status = req.query.status as string | undefined;
+      const userId = req.query.userId ? parseInt(req.query.userId as string) : undefined;
+      
+      const documentsList = await storage.getAllDocuments({ status, userId });
+      
+      // Get owner info
+      const docsWithOwners = await Promise.all(documentsList.map(async (d) => {
+        let ownerName = 'Unknown';
+        let ownerEmail = '';
+        if (d.userId) {
+          const owner = await storage.getUserById(d.userId);
+          if (owner) {
+            ownerName = owner.fullName || owner.email;
+            ownerEmail = owner.email;
+          }
+        }
+        return { ...d, ownerName, ownerEmail };
+      }));
+      
+      res.json({ agreements: docsWithOwners });
+    } catch (error) {
+      console.error('Admin agreements error:', error);
+      res.status(500).json({ error: 'Failed to load agreements' });
+    }
+  });
+
+  // Admin - System settings
+  app.get('/api/admin/settings', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const settings = await storage.getAllSettings();
+      res.json({ settings });
+    } catch (error) {
+      console.error('Admin settings error:', error);
+      res.status(500).json({ error: 'Failed to load settings' });
+    }
+  });
+
+  // Admin - Update system setting
+  app.put('/api/admin/settings/:key', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { key } = req.params;
+      const { value, description } = req.body;
+      
+      if (!value) {
+        return res.status(400).json({ error: 'Value is required' });
+      }
+      
+      const setting = await storage.upsertSetting(key, value, description || null, req.user!.id);
+      
+      await storage.createAdminActivity({
+        userId: req.user!.id,
+        actionType: 'setting_updated',
+        actionDescription: `Updated setting: ${key}`,
+        metadata: { key, value }
+      });
+      
+      res.json({ setting });
+    } catch (error) {
+      console.error('Admin update setting error:', error);
+      res.status(500).json({ error: 'Failed to update setting' });
+    }
+  });
+
+  // Admin - Recent activity log
+  app.get('/api/admin/activity', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+      const activity = await storage.getRecentAdminActivity(limit);
+      res.json({ activity });
+    } catch (error) {
+      console.error('Admin activity error:', error);
+      res.status(500).json({ error: 'Failed to load activity' });
     }
   });
 
