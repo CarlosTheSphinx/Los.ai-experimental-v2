@@ -562,3 +562,174 @@ export const programTaskTemplates = pgTable("program_task_templates", {
 export const insertProgramTaskTemplateSchema = createInsertSchema(programTaskTemplates).omit({ id: true, createdAt: true });
 export type ProgramTaskTemplate = typeof programTaskTemplates.$inferSelect;
 export type InsertProgramTaskTemplate = z.infer<typeof insertProgramTaskTemplateSchema>;
+
+// Pricing Rulesets - versioned pricing rules per loan program
+export const pricingRulesets = pgTable("pricing_rulesets", {
+  id: serial("id").primaryKey(),
+  programId: integer("program_id").references(() => loanPrograms.id, { onDelete: 'cascade' }).notNull(),
+  
+  version: integer("version").notNull(),
+  name: varchar("name", { length: 255 }),
+  description: text("description"),
+  
+  // The rules JSON structure contains:
+  // - baseRates: { loanType: rate } - starting rates by loan sub-type
+  // - points: { default: number } - default points
+  // - adjusters: [{ id, label, when: conditions, rateAdd, pointsAdd }] - rate adjustments
+  // - leverageCaps: [{ tier, loanTypes, max: { ltc, ltaiv, ltarv } }] - max leverage by tier
+  // - overlays: [{ id, label, when: conditions, effects: { ltcAdd, etc } }] - cap adjustments
+  // - eligibilityRules: [{ id, label, when: conditions, result: 'ineligible' }] - disqualifiers
+  rulesJson: jsonb("rules_json").notNull(),
+  
+  status: varchar("status", { length: 50 }).default("draft").notNull(), // draft, active, archived
+  
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  activatedAt: timestamp("activated_at"),
+  archivedAt: timestamp("archived_at"),
+});
+
+export const insertPricingRulesetSchema = createInsertSchema(pricingRulesets).omit({ id: true, createdAt: true, activatedAt: true, archivedAt: true });
+export type PricingRuleset = typeof pricingRulesets.$inferSelect;
+export type InsertPricingRuleset = z.infer<typeof insertPricingRulesetSchema>;
+
+// Rule Proposals - AI-generated rule suggestions pending review
+export const ruleProposals = pgTable("rule_proposals", {
+  id: serial("id").primaryKey(),
+  programId: integer("program_id").references(() => loanPrograms.id, { onDelete: 'cascade' }).notNull(),
+  
+  ruleType: varchar("rule_type", { length: 50 }).notNull(), // adjuster, leverage_cap, overlay, eligibility_rule
+  proposalJson: jsonb("proposal_json").notNull(), // The proposed rule object
+  
+  status: varchar("status", { length: 50 }).default("pending").notNull(), // pending, accepted, rejected, modified
+  confidence: real("confidence"), // AI confidence score 0-1
+  reasoning: text("reasoning"), // AI explanation for the proposal
+  
+  sourceText: text("source_text"), // Original guideline text that generated this
+  
+  reviewedBy: integer("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertRuleProposalSchema = createInsertSchema(ruleProposals).omit({ id: true, createdAt: true, reviewedAt: true });
+export type RuleProposal = typeof ruleProposals.$inferSelect;
+export type InsertRuleProposal = z.infer<typeof insertRuleProposalSchema>;
+
+// Guideline Uploads - PDF/text files uploaded for rule extraction
+export const guidelineUploads = pgTable("guideline_uploads", {
+  id: serial("id").primaryKey(),
+  programId: integer("program_id").references(() => loanPrograms.id, { onDelete: 'cascade' }).notNull(),
+  
+  fileName: varchar("file_name", { length: 255 }).notNull(),
+  filePath: text("file_path"),
+  mimeType: varchar("mime_type", { length: 100 }),
+  fileSize: integer("file_size"),
+  
+  extractedText: text("extracted_text"), // Text extracted from PDF
+  
+  status: varchar("status", { length: 50 }).default("pending").notNull(), // pending, processed, failed
+  processedAt: timestamp("processed_at"),
+  
+  uploadedBy: integer("uploaded_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertGuidelineUploadSchema = createInsertSchema(guidelineUploads).omit({ id: true, createdAt: true, processedAt: true });
+export type GuidelineUpload = typeof guidelineUploads.$inferSelect;
+export type InsertGuidelineUpload = z.infer<typeof insertGuidelineUploadSchema>;
+
+// Pricing Quote Logs - audit trail for deterministic pricing calculations
+export const pricingQuoteLogs = pgTable("pricing_quote_logs", {
+  id: serial("id").primaryKey(),
+  programId: integer("program_id").references(() => loanPrograms.id, { onDelete: 'set null' }),
+  rulesetId: integer("ruleset_id").references(() => pricingRulesets.id, { onDelete: 'set null' }),
+  userId: integer("user_id").references(() => users.id, { onDelete: 'set null' }),
+  
+  inputsJson: jsonb("inputs_json").notNull(), // The loan scenario inputs
+  outputsJson: jsonb("outputs_json").notNull(), // The calculated pricing result
+  
+  eligible: boolean("eligible").notNull(),
+  finalRate: real("final_rate"),
+  points: real("points"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPricingQuoteLogSchema = createInsertSchema(pricingQuoteLogs).omit({ id: true, createdAt: true });
+export type PricingQuoteLog = typeof pricingQuoteLogs.$inferSelect;
+export type InsertPricingQuoteLog = z.infer<typeof insertPricingQuoteLogSchema>;
+
+// Zod schemas for ruleset structure validation
+export const ruleConditionSchema = z.object({
+  loanType: z.string().optional(),
+  purpose: z.string().optional(),
+  tier: z.string().optional(),
+  propertyType: z.string().optional(),
+  state: z.string().optional(),
+  ficoLt: z.number().optional(),
+  ficoGte: z.number().optional(),
+  ltvLt: z.number().optional(),
+  ltvGte: z.number().optional(),
+  dscrLt: z.number().optional(),
+  dscrGte: z.number().optional(),
+  loanAmountLt: z.number().optional(),
+  loanAmountGte: z.number().optional(),
+  isMidstream: z.boolean().optional(),
+  msaIn: z.array(z.string()).optional(),
+}).passthrough();
+
+export const ruleAdjusterSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  when: ruleConditionSchema.optional(),
+  rateAdd: z.number().optional(),
+  pointsAdd: z.number().optional(),
+});
+
+export const leverageCapSchema = z.object({
+  tier: z.string(),
+  loanTypes: z.array(z.string()),
+  max: z.object({
+    ltc: z.number().optional(),
+    ltaiv: z.number().optional(),
+    ltarv: z.number().optional(),
+  }),
+});
+
+export const overlaySchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  when: ruleConditionSchema.optional(),
+  effects: z.object({
+    ltcAdd: z.number().optional(),
+    ltaivAdd: z.number().optional(),
+    ltarvAdd: z.number().optional(),
+  }),
+});
+
+export const eligibilityRuleSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  when: ruleConditionSchema,
+  result: z.literal("ineligible"),
+});
+
+export const pricingRulesSchema = z.object({
+  product: z.string(),
+  baseRates: z.record(z.string(), z.number()),
+  points: z.object({ default: z.number() }).optional(),
+  adjusters: z.array(ruleAdjusterSchema).optional(),
+  leverageCaps: z.array(leverageCapSchema).optional(),
+  overlays: z.array(overlaySchema).optional(),
+  eligibilityRules: z.array(eligibilityRuleSchema).optional(),
+});
+
+export type RuleCondition = z.infer<typeof ruleConditionSchema>;
+export type RuleAdjuster = z.infer<typeof ruleAdjusterSchema>;
+export type LeverageCap = z.infer<typeof leverageCapSchema>;
+export type Overlay = z.infer<typeof overlaySchema>;
+export type EligibilityRule = z.infer<typeof eligibilityRuleSchema>;
+export type PricingRules = z.infer<typeof pricingRulesSchema>;
