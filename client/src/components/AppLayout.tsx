@@ -8,7 +8,8 @@ import {
   LayoutDashboard,
   Users,
   Settings,
-  Shield
+  Shield,
+  Handshake
 } from "lucide-react";
 import { 
   Sidebar, 
@@ -43,6 +44,7 @@ const navItems = [
 const adminNavItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/deals", label: "Deals", icon: FileText },
+  { href: "/admin/partners", label: "Partners", icon: Handshake },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/projects", label: "All Projects", icon: FolderKanban },
   { href: "/admin/settings", label: "Settings", icon: Settings },
