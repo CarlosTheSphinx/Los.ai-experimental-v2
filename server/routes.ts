@@ -2,6 +2,9 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
+import { db } from "./db";
+import { savedQuotes, users } from "@shared/schema";
+import { eq, desc } from "drizzle-orm";
 import { api } from "@shared/routes";
 import { ApifyClient } from 'apify-client';
 import { z } from "zod";
@@ -2963,6 +2966,106 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Admin activity error:', error);
       res.status(500).json({ error: 'Failed to load activity' });
+    }
+  });
+
+  // Admin - Deals dashboard with all quotes across users
+  app.get('/api/admin/deals', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { search, status } = req.query;
+      
+      // Get all quotes across all users
+      const allQuotes = await db.select({
+        id: savedQuotes.id,
+        userId: savedQuotes.userId,
+        customerFirstName: savedQuotes.customerFirstName,
+        customerLastName: savedQuotes.customerLastName,
+        propertyAddress: savedQuotes.propertyAddress,
+        loanData: savedQuotes.loanData,
+        interestRate: savedQuotes.interestRate,
+        pointsCharged: savedQuotes.pointsCharged,
+        pointsAmount: savedQuotes.pointsAmount,
+        tpoPremiumAmount: savedQuotes.tpoPremiumAmount,
+        totalRevenue: savedQuotes.totalRevenue,
+        commission: savedQuotes.commission,
+        createdAt: savedQuotes.createdAt,
+        userName: users.fullName,
+        userEmail: users.email,
+      })
+        .from(savedQuotes)
+        .leftJoin(users, eq(savedQuotes.userId, users.id))
+        .orderBy(desc(savedQuotes.createdAt));
+      
+      // Filter by search term if provided
+      let filteredQuotes = allQuotes;
+      if (search) {
+        const searchLower = (search as string).toLowerCase();
+        filteredQuotes = allQuotes.filter(q => 
+          q.customerFirstName?.toLowerCase().includes(searchLower) ||
+          q.customerLastName?.toLowerCase().includes(searchLower) ||
+          q.propertyAddress?.toLowerCase().includes(searchLower) ||
+          q.userName?.toLowerCase().includes(searchLower)
+        );
+      }
+      
+      // Calculate stats
+      const totalDeals = allQuotes.length;
+      const totalLoanAmount = allQuotes.reduce((sum, q) => {
+        const loanData = q.loanData as any;
+        return sum + (loanData?.loanAmount || 0);
+      }, 0);
+      const totalRevenue = allQuotes.reduce((sum, q) => sum + (q.totalRevenue || 0), 0);
+      const totalCommission = allQuotes.reduce((sum, q) => sum + (q.commission || 0), 0);
+      
+      // Calculate pipeline by loan type
+      const loanTypeStats: Record<string, { count: number; amount: number }> = {};
+      allQuotes.forEach(q => {
+        const loanData = q.loanData as any;
+        const loanType = loanData?.loanType || 'Unknown';
+        if (!loanTypeStats[loanType]) {
+          loanTypeStats[loanType] = { count: 0, amount: 0 };
+        }
+        loanTypeStats[loanType].count++;
+        loanTypeStats[loanType].amount += loanData?.loanAmount || 0;
+      });
+      
+      // Calculate deals by month (last 6 months)
+      const now = new Date();
+      const monthlyStats: { month: string; count: number; amount: number }[] = [];
+      for (let i = 5; i >= 0; i--) {
+        const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+        const monthName = monthDate.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+        
+        const monthDeals = allQuotes.filter(q => {
+          const created = new Date(q.createdAt!);
+          return created >= monthDate && created <= monthEnd;
+        });
+        
+        monthlyStats.push({
+          month: monthName,
+          count: monthDeals.length,
+          amount: monthDeals.reduce((sum, q) => {
+            const loanData = q.loanData as any;
+            return sum + (loanData?.loanAmount || 0);
+          }, 0)
+        });
+      }
+      
+      res.json({
+        deals: filteredQuotes,
+        stats: {
+          totalDeals,
+          totalLoanAmount,
+          totalRevenue,
+          totalCommission,
+          loanTypeStats,
+          monthlyStats
+        }
+      });
+    } catch (error) {
+      console.error('Admin deals error:', error);
+      res.status(500).json({ error: 'Failed to load deals' });
     }
   });
 

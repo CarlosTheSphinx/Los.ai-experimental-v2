@@ -42,6 +42,7 @@ const navItems = [
 
 const adminNavItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/admin/deals", label: "Deals", icon: FileText },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/projects", label: "All Projects", icon: FolderKanban },
   { href: "/admin/settings", label: "Settings", icon: Settings },

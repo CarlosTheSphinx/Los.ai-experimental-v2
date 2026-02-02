@@ -1,0 +1,304 @@
+Here's the complete dashboard code:
+
+---
+
+**// FILE: src/pages/Index.tsx**
+```tsx
+import { Layout } from '@/components/layout/Layout';
+import Dashboard from './Dashboard';
+
+const Index = () => {
+  return (
+
+  );
+};
+
+export default Index;
+```
+
+---
+
+**// FILE: src/pages/Dashboard.tsx**
+```tsx
+import { useAuth } from '@/contexts/AuthContext';
+import { mockLoans, mockDocuments, mockTasks } from '@/data/mockData';
+import { LoanCard } from '@/components/loans/LoanCard';
+import { LoanTable } from '@/components/loans/LoanTable';
+import { StatsCard } from '@/components/dashboard/StatsCard';
+import { LoanStageTracker } from '@/components/dashboard/LoanStageTracker';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import {
+  FileText,
+  DollarSign,
+  PlusCircle,
+  LayoutGrid,
+  List,
+  ClipboardList,
+  CheckCircle,
+} from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { useState } from 'react';
+
+export default function Dashboard() {
+  const { role, user } = useAuth();
+  const location = useLocation();
+  const isPipelineView = location.pathname === '/loans';
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(role === 'lender' ? 'list' : 'grid');
+  const [completedTasks, setCompletedTasks] = useState([]);
+
+  const getFilteredLoans = () => {
+    if (role === 'lender') return mockLoans;
+    if (role === 'borrower') return mockLoans.filter((loan) => loan.borrowerEmail === user?.email);
+    if (role === 'broker') return mockLoans.filter((loan) => loan.brokerId === user?.id);
+    return [];
+  };
+
+  const loans = getFilteredLoans();
+  const lenderOpenTasks = mockTasks.filter(
+    (task) => task.assignedTo === 'lender' && !task.completed && !completedTasks.includes(task.id)
+  );
+
+  const getLoanForTask = (loanId: string) => mockLoans.find((loan) => loan.id === loanId);
+
+  const handleTaskToggle = (taskId: string) => {
+    setCompletedTasks((prev) =>
+      prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId]
+    );
+  };
+
+  const isOverdue = (dueDate: string) => new Date(dueDate) < new Date();
+
+  const totalLoanValue = loans.reduce((acc, loan) => acc + loan.loanAmount, 0);
+  const formatCurrency = (amount: number) => {
+    if (amount >= 1000000) return `$${(amount / 1000000).toFixed(1)}M`;
+    return `$${(amount / 1000).toFixed(0)}K`;
+  };
+
+  const getTitleAndDescription = () => {
+    if (role === 'lender') return { title: 'Loan Pipeline', description: 'Overview of all active loan applications' };
+    if (role === 'borrower') return { title: 'My Loans', description: 'Track your loan applications' };
+    return { title: 'My Submissions', description: 'Loans submitted on behalf of your clients' };
+  };
+
+  const { title, description } = getTitleAndDescription();
+
+  return (
+
+          {title}
+          {description}
+
+        {(role === 'borrower' || role === 'broker') && (
+
+            New Application
+
+        )}
+
+        {role === 'lender' && }
+
+          {role === 'lender' ? 'All Loans' : 'Your Loans'}
+
+             setViewMode('grid')}>
+
+             setViewMode('list')}>
+
+        {loans.length === 0 ? (
+
+            No loans yet
+
+              {role === 'lender' ? 'No loan applications in the pipeline' : 'Start by submitting a new loan application'}
+
+            {(role === 'borrower' || role === 'broker') && (
+
+                New Application
+
+            )}
+
+        ) : viewMode === 'grid' ? (
+
+            {loans.map((loan) => )}
+
+        ) : (
+
+        )}
+
+      {role === 'lender' && !isPipelineView && (
+
+            Your Open Tasks
+            {lenderOpenTasks.length}
+
+          {lenderOpenTasks.length === 0 ? (
+
+                All caught up!
+                You have no open tasks assigned to you.
+
+          ) : (
+
+                Tasks Assigned to You
+                Complete these tasks to keep loans moving forward
+
+                  {lenderOpenTasks.map((task) => {
+                    const loan = getLoanForTask(task.loanId);
+                    const overdue = isOverdue(task.dueDate);
+                    return (
+
+                         handleTaskToggle(task.id)} className="mt-1" />
+
+                            {task.title}
+                            {overdue && Overdue}
+
+                          {task.description}
+                          {loan && (
+
+                              {loan.borrowerName} - {loan.address}
+
+                          )}
+
+                            Due: {new Date(task.dueDate).toLocaleDateString()}
+
+                    );
+                  })}
+
+          )}
+
+      )}
+
+  );
+}
+```
+
+---
+
+**// FILE: src/components/dashboard/StatsCard.tsx**
+```tsx
+import { Card, CardContent } from '@/components/ui/card';
+import { LucideIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface StatsCardProps {
+  title: string;
+  value: string | number;
+  subtitle?: string;
+  icon: LucideIcon;
+  trend?: { value: number; positive: boolean };
+  className?: string;
+}
+
+export function StatsCard({ title, value, subtitle, icon: Icon, trend, className }: StatsCardProps) {
+  return (
+
+            {title}
+
+              {value}
+              {trend && (
+
+                  {trend.positive ? '+' : ''}{trend.value}%
+
+              )}
+
+            {subtitle && {subtitle}}
+
+  );
+}
+```
+
+---
+
+**// FILE: src/components/dashboard/LoanStageTracker.tsx**
+```tsx
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loan, LoanStage } from '@/types/loan';
+import { cn } from '@/lib/utils';
+
+interface LoanStageTrackerProps {
+  loans: Loan[];
+}
+
+const stageConfig: { stage: LoanStage; label: string; color: string }[] = [
+  { stage: 'initial-review', label: 'Initial Review', color: 'bg-yellow-500' },
+  { stage: 'term-sheet-issued', label: 'Term Sheet', color: 'bg-blue-500' },
+  { stage: 'onboarding', label: 'Onboarding', color: 'bg-purple-500' },
+  { stage: 'processing', label: 'Processing', color: 'bg-orange-500' },
+  { stage: 'underwriting', label: 'Underwriting', color: 'bg-indigo-500' },
+  { stage: 'closing', label: 'Closing', color: 'bg-teal-500' },
+  { stage: 'closed', label: 'Closed', color: 'bg-green-500' },
+];
+
+export function LoanStageTracker({ loans }: LoanStageTrackerProps) {
+  const stageCounts = stageConfig.map(({ stage, label, color }) => ({
+    stage, label, color,
+    count: loans.filter((loan) => loan.stage === stage).length,
+  }));
+
+  const totalLoans = loans.length;
+
+  return (
+
+        Pipeline by Stage
+
+          {stageCounts.map(({ stage, label, color, count }, index) => (
+
+                  {count}
+                  {label}
+
+                   0 ? 1 : 0.2 }} />
+                  {index < stageCounts.length - 1 && →}
+
+          ))}
+
+  );
+}
+```
+
+---
+
+**// FILE: src/contexts/AuthContext.tsx**
+```tsx
+import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { UserRole } from '@/types/loan';
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+}
+
+interface AuthContextType {
+  user: User | null;
+  role: UserRole;
+  setRole: (role: UserRole) => void;
+  isAuthenticated: boolean;
+}
+
+const AuthContext = createContext(undefined);
+
+const mockUsers: Record = {
+  lender: { id: 'lender-1', name: 'Alex Thompson', email: 'alex@lender.com', role: 'lender' },
+  borrower: { id: 'borrower-1', name: 'John Smith', email: 'john.smith@email.com', role: 'borrower' },
+  broker: { id: 'broker-1', name: 'Maria Garcia', email: 'maria@abcmortgage.com', role: 'broker' },
+};
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [role, setRole] = useState('lender');
+  const user = mockUsers[role];
+
+  return (
+
+      {children}
+
+  );
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
+  return context;
+}
+```
+
+Get LoanCard & LoanTable code
+Get Layout & Sidebar code
+Get mock data
