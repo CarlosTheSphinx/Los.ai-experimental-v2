@@ -3120,7 +3120,7 @@ export async function registerRoutes(
           loanAmount: loanAmountNum,
           propertyValue: propertyValueNum,
           ltv,
-          loanType: loanType || 'fix-and-flip',
+          loanType: loanType || 'rtl',
           loanPurpose: 'purchase',
           propertyType: propertyType || 'single-family',
           loanTerm: '12 months',

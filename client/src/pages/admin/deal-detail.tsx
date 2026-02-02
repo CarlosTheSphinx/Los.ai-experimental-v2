@@ -79,6 +79,18 @@ function formatCurrency(amount: number) {
   }).format(amount);
 }
 
+function getLoanTypeLabel(loanType: string): string {
+  const labels: Record<string, string> = {
+    "rtl": "RTL",
+    "dscr": "DSCR",
+    "fix-and-flip": "Fix & Flip",
+    "bridge": "Bridge",
+    "ground-up": "Ground Up",
+    "rental": "Rental",
+  };
+  return labels[loanType?.toLowerCase()] || loanType || "N/A";
+}
+
 function parseAddress(address: string) {
   const parts = address.split(",").map((p) => p.trim());
   const street = parts[0] || "";
@@ -220,7 +232,7 @@ export default function AdminDealDetail() {
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Loan Type</p>
-                      <p className="text-xl font-bold" data-testid="text-loan-type">{deal.loanData?.loanType || "N/A"}</p>
+                      <p className="text-xl font-bold" data-testid="text-loan-type">{getLoanTypeLabel(deal.loanData?.loanType)}</p>
                     </div>
                   </div>
                 </CardContent>

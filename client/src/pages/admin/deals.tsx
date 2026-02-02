@@ -201,6 +201,18 @@ function formatCurrency(amount: number) {
   return `$${amount.toFixed(0)}`;
 }
 
+function getLoanTypeLabel(loanType: string): string {
+  const labels: Record<string, string> = {
+    "rtl": "RTL",
+    "dscr": "DSCR",
+    "fix-and-flip": "Fix & Flip",
+    "bridge": "Bridge",
+    "ground-up": "Ground Up",
+    "rental": "Rental",
+  };
+  return labels[loanType?.toLowerCase()] || loanType || "N/A";
+}
+
 export default function AdminDeals() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -213,7 +225,7 @@ export default function AdminDeals() {
     loanAmount: "",
     propertyValue: "",
     interestRate: "",
-    loanType: "fix-and-flip",
+    loanType: "rtl",
     propertyType: "single-family",
     stage: "initial-review",
   });
@@ -245,7 +257,7 @@ export default function AdminDeals() {
         loanAmount: "",
         propertyValue: "",
         interestRate: "",
-        loanType: "fix-and-flip",
+        loanType: "rtl",
         propertyType: "single-family",
         stage: "initial-review",
       });
@@ -377,11 +389,8 @@ export default function AdminDeals() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="fix-and-flip">Fix and Flip</SelectItem>
-                      <SelectItem value="bridge">Bridge</SelectItem>
-                      <SelectItem value="ground-up">Ground Up</SelectItem>
+                      <SelectItem value="rtl">RTL (Residential Transition Loan)</SelectItem>
                       <SelectItem value="dscr">DSCR</SelectItem>
-                      <SelectItem value="rental">Rental</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -574,7 +583,7 @@ export default function AdminDeals() {
                       <TableCell>
                         <Link href={`/admin/deals/${deal.id}`} className="block">
                           <Badge variant="outline">
-                            {deal.loanData?.loanType || "N/A"}
+                            {getLoanTypeLabel(deal.loanData?.loanType)}
                           </Badge>
                         </Link>
                       </TableCell>
