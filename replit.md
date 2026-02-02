@@ -47,27 +47,6 @@ A core feature is the project management system, which tracks the 9-stage loan c
 **Admin Back Office System:**
 The admin system provides role-based access for managing users, deals, projects, partners, and loan programs. It includes an admin dashboard, a deals dashboard for tracking cumulative deals, user management, global project oversight, system settings configuration, and a partners management section. Loan programs can be configured with associated document and task templates, which auto-populate for new deals based on loan type.
 
-**AI-Powered Pricing Rules Engine:**
-Located in `server/pricing/`, this system allows lenders to configure deterministic pricing rules for loan programs:
-
-- **matcher.ts**: Pattern matching system for rule conditions. Supports all comparison operators (Lt/Lte/Gt/Gte) for FICO, LTV, DSCR, and loan amount. Also supports stateIn, msaIn, isRural, isMidstream. Uses conservative undefined handling (conditions return false if required input is missing).
-  
-- **engine.ts**: Core pricing calculation engine. Takes a ruleset and loan inputs, returns: eligibility (with reasons if ineligible), base rate, final rate (base + adjusters), points, leverage caps (LTC/LTAIV/LTARV), and applied adjusters list.
-
-- **ai-proposal.ts**: OpenAI integration (via Replit AI Integrations with gpt-5.2) that analyzes pasted loan guidelines and proposes structured pricing rules. Supports iterative refinement before deployment.
-
-**Pricing Workflow:**
-1. Admin navigates to `/admin/pricing-rules`
-2. Selects a loan program (RTL or DSCR)
-3. Either creates a sample ruleset or uses AI to analyze guidelines
-4. Reviews, refines, and deploys ruleset (as draft or active)
-5. Sales reps see "Instant Pricing" button on New Quote page when programs have active rulesets
-6. Real-time pricing calculation shows eligibility, rates, adjusters, and leverage caps
-
-**Loan Type Naming Conventions:**
-- RTL: `light_rehab`, `heavy_rehab`, `bridge_no_rehab`, `guc`
-- DSCR: `30yr_fixed`, `5yr_arm`, `7yr_arm`, `10yr_arm`, `interest_only`
-
 **Data Flow:**
 User input from the frontend is validated, then the backend triggers an Apify actor with loan parameters. The Apify script scrapes the external pricing provider, and the interest rate is returned to the user. Users can save quotes with customer details and commission calculations.
 
