@@ -35,6 +35,7 @@ interface SigningData {
     width: number;
     height: number;
     label?: string;
+    value?: string | null; // Pre-filled value from document setup
   }>;
 }
 
@@ -42,6 +43,7 @@ export default function SignPage() {
   const { token } = useParams<{ token: string }>();
   const { toast } = useToast();
   const [fieldValues, setFieldValues] = useState<Record<number, string>>({});
+  const [preFilledFieldIds, setPreFilledFieldIds] = useState<Set<number>>(new Set());
   const [signingComplete, setSigningComplete] = useState(false);
   const [activeSignatureField, setActiveSignatureField] = useState<number | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -51,6 +53,24 @@ export default function SignPage() {
     queryKey: ['/api/sign', token],
     enabled: !!token
   });
+
+  // Initialize fieldValues with pre-filled values from server
+  useEffect(() => {
+    if (data?.fields) {
+      const initialValues: Record<number, string> = {};
+      const preFilledIds = new Set<number>();
+      
+      data.fields.forEach(field => {
+        if (field.value) {
+          initialValues[field.id] = field.value;
+          preFilledIds.add(field.id);
+        }
+      });
+      
+      setFieldValues(prev => ({ ...initialValues, ...prev }));
+      setPreFilledFieldIds(preFilledIds);
+    }
+  }, [data?.fields]);
 
   const completeMutation = useMutation({
     mutationFn: async () => {
@@ -144,7 +164,8 @@ export default function SignPage() {
     setNumPages(numPages);
   };
 
-  const allFieldsFilled = data?.fields?.every(f => fieldValues[f.id]) ?? false;
+  // Only check non-pre-filled fields for completion - pre-filled fields are already complete
+  const allFieldsFilled = data?.fields?.every(f => preFilledFieldIds.has(f.id) || fieldValues[f.id]) ?? false;
 
   if (isLoading) {
     return (
@@ -278,56 +299,68 @@ export default function SignPage() {
                     />
                     
                     {/* Render fields on top of the PDF */}
-                    {currentPageFields.map((field) => (
-                      <div
-                        key={field.id}
-                        className="absolute cursor-pointer transition-all"
-                        style={{
-                          left: field.x,
-                          top: field.y,
-                          width: field.width,
-                          height: field.height,
-                          border: `2px solid ${signer?.color}`,
-                          backgroundColor: fieldValues[field.id] 
-                            ? `${signer?.color}20` 
-                            : `${signer?.color}40`,
-                          borderRadius: '4px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          overflow: 'hidden',
-                        }}
-                        onClick={() => {
-                          if (field.fieldType === 'signature' || field.fieldType === 'initial') {
-                            setActiveSignatureField(field.id);
-                          } else if (field.fieldType === 'date') {
-                            handleDateClick(field.id);
-                          }
-                        }}
-                        data-testid={`field-${field.id}`}
-                      >
-                        {fieldValues[field.id] ? (
-                          field.fieldType === 'signature' || field.fieldType === 'initial' ? (
-                            <img 
-                              src={fieldValues[field.id]} 
-                              alt="Signature" 
-                              className="w-full h-full object-contain"
-                            />
+                    {currentPageFields.map((field) => {
+                      const isPreFilled = preFilledFieldIds.has(field.id);
+                      const hasValue = !!fieldValues[field.id];
+                      
+                      return (
+                        <div
+                          key={field.id}
+                          className={`absolute transition-all ${isPreFilled ? 'cursor-default' : 'cursor-pointer'}`}
+                          style={{
+                            left: field.x,
+                            top: field.y,
+                            width: field.width,
+                            height: field.height,
+                            border: isPreFilled 
+                              ? '2px solid #64748b' 
+                              : `2px solid ${signer?.color}`,
+                            backgroundColor: isPreFilled
+                              ? '#f1f5f9'
+                              : hasValue 
+                                ? `${signer?.color}20` 
+                                : `${signer?.color}40`,
+                            borderRadius: '4px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            overflow: 'hidden',
+                          }}
+                          onClick={() => {
+                            // Don't allow clicking on pre-filled fields
+                            if (isPreFilled) return;
+                            
+                            if (field.fieldType === 'signature' || field.fieldType === 'initial') {
+                              setActiveSignatureField(field.id);
+                            } else if (field.fieldType === 'date') {
+                              handleDateClick(field.id);
+                            }
+                          }}
+                          data-testid={`field-${field.id}`}
+                        >
+                          {hasValue ? (
+                            field.fieldType === 'signature' || field.fieldType === 'initial' ? (
+                              <img 
+                                src={fieldValues[field.id]} 
+                                alt="Signature" 
+                                className="w-full h-full object-contain"
+                              />
+                            ) : (
+                              <span className={`text-xs font-medium px-1 truncate ${isPreFilled ? 'text-slate-700' : ''}`}>
+                                {fieldValues[field.id]}
+                              </span>
+                            )
                           ) : (
-                            <span className="text-xs font-medium px-1 truncate">
-                              {fieldValues[field.id]}
+                            <span className="text-xs font-medium px-1" style={{ color: signer?.color }}>
+                              {field.fieldType === 'signature' ? 'Click to Sign' :
+                               field.fieldType === 'initial' ? 'Click to Initial' :
+                               field.fieldType === 'date' ? 'Click for Date' :
+                               'Click to Edit'}
                             </span>
-                          )
-                        ) : (
-                          <span className="text-xs font-medium px-1" style={{ color: signer?.color }}>
-                            {field.fieldType === 'signature' ? 'Click to Sign' :
-                             field.fieldType === 'initial' ? 'Click to Initial' :
-                             field.fieldType === 'date' ? 'Click for Date' :
-                             'Click to Edit'}
-                          </span>
-                        )}
-                      </div>
-                    ))}
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </Document>
               )}
@@ -339,47 +372,58 @@ export default function SignPage() {
             <CardHeader className="bg-slate-50 border-b py-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <PenTool className="w-4 h-4 text-primary" />
-                Fields to Complete ({fields?.filter(f => fieldValues[f.id]).length || 0}/{fields?.length || 0})
+                Fields to Complete ({fields?.filter(f => !preFilledFieldIds.has(f.id) && fieldValues[f.id]).length || 0}/{fields?.filter(f => !preFilledFieldIds.has(f.id)).length || 0})
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4">
               <div className="grid gap-3 sm:grid-cols-2">
-                {fields?.map((field) => (
-                  <div
-                    key={field.id}
-                    className={`p-3 rounded-lg border-2 transition-all ${
-                      fieldValues[field.id] ? 'bg-green-50 border-green-300' : ''
-                    }`}
-                    style={{ 
-                      borderColor: fieldValues[field.id] ? undefined : signer?.color,
-                      backgroundColor: fieldValues[field.id] ? undefined : `${signer?.color}10`
-                    }}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        {fieldValues[field.id] ? (
-                          <Check className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <AlertCircle className="w-4 h-4" style={{ color: signer?.color }} />
+                {fields?.map((field) => {
+                  const isPreFilled = preFilledFieldIds.has(field.id);
+                  const hasValue = !!fieldValues[field.id];
+                  
+                  return (
+                    <div
+                      key={field.id}
+                      className={`p-3 rounded-lg border-2 transition-all ${
+                        isPreFilled 
+                          ? 'bg-slate-50 border-slate-300'
+                          : hasValue 
+                            ? 'bg-green-50 border-green-300' 
+                            : ''
+                      }`}
+                      style={{ 
+                        borderColor: isPreFilled ? undefined : hasValue ? undefined : signer?.color,
+                        backgroundColor: isPreFilled ? undefined : hasValue ? undefined : `${signer?.color}10`
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          {isPreFilled ? (
+                            <Check className="w-4 h-4 text-slate-500" />
+                          ) : hasValue ? (
+                            <Check className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <AlertCircle className="w-4 h-4" style={{ color: signer?.color }} />
+                          )}
+                          <span className={`text-sm font-medium capitalize ${isPreFilled ? 'text-slate-500' : ''}`}>
+                            {field.fieldType}
+                            {field.label && <span className="text-slate-500 ml-1">({field.label})</span>}
+                            {isPreFilled && <span className="text-slate-400 ml-1">(pre-filled)</span>}
+                          </span>
+                          <span className="text-xs text-slate-400">Page {field.pageNumber}</span>
+                        </div>
+                        
+                        {field.fieldType === 'text' && !hasValue && !isPreFilled && (
+                          <Input
+                            value={fieldValues[field.id] || ''}
+                            onChange={(e) => handleTextChange(field.id, e.target.value)}
+                            placeholder="Enter text..."
+                            className="h-7 text-xs max-w-[120px]"
+                            data-testid={`input-text-field-${field.id}`}
+                          />
                         )}
-                        <span className="text-sm font-medium capitalize">
-                          {field.fieldType}
-                          {field.label && <span className="text-slate-500 ml-1">({field.label})</span>}
-                        </span>
-                        <span className="text-xs text-slate-400">Page {field.pageNumber}</span>
-                      </div>
                       
-                      {field.fieldType === 'text' && !fieldValues[field.id] && (
-                        <Input
-                          value={fieldValues[field.id] || ''}
-                          onChange={(e) => handleTextChange(field.id, e.target.value)}
-                          placeholder="Enter text..."
-                          className="h-7 text-xs max-w-[120px]"
-                          data-testid={`input-text-field-${field.id}`}
-                        />
-                      )}
-                      
-                      {(field.fieldType === 'signature' || field.fieldType === 'initial') && !fieldValues[field.id] && (
+                      {(field.fieldType === 'signature' || field.fieldType === 'initial') && !hasValue && !isPreFilled && (
                         <Button
                           size="sm"
                           onClick={() => setActiveSignatureField(field.id)}
@@ -391,7 +435,7 @@ export default function SignPage() {
                         </Button>
                       )}
                       
-                      {field.fieldType === 'date' && !fieldValues[field.id] && (
+                      {field.fieldType === 'date' && !hasValue && !isPreFilled && (
                         <Button
                           size="sm"
                           variant="outline"
@@ -402,9 +446,17 @@ export default function SignPage() {
                           Add Date
                         </Button>
                       )}
+                      
+                      {/* Show pre-filled value for display */}
+                      {isPreFilled && hasValue && (
+                        <span className="text-xs text-slate-600 truncate max-w-[150px]">
+                          {fieldValues[field.id]}
+                        </span>
+                      )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               {!allFieldsFilled && (
