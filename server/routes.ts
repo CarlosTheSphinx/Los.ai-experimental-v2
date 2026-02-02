@@ -1216,9 +1216,13 @@ export async function registerRoutes(
       }
 
       // Generate tokens for each signer and send emails
-      // Use Replit's public URL in production, fallback to request host for local dev
+      // Use the published production domain if available, otherwise fallback
       let baseUrl: string;
-      if (process.env.REPLIT_DEV_DOMAIN) {
+      if (process.env.REPLIT_DOMAINS) {
+        // REPLIT_DOMAINS contains the published production domain
+        const domains = process.env.REPLIT_DOMAINS.split(',');
+        baseUrl = `https://${domains[0]}`;
+      } else if (process.env.REPLIT_DEV_DOMAIN) {
         baseUrl = `https://${process.env.REPLIT_DEV_DOMAIN}`;
       } else if (process.env.REPL_SLUG && process.env.REPL_OWNER) {
         baseUrl = `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
@@ -1900,9 +1904,16 @@ export async function registerRoutes(
       const pendingSigners = docSigners.filter(s => s.status !== 'signed');
       
       let resentCount = 0;
-      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-        : 'http://localhost:5000';
+      // Use the published production domain if available
+      let baseUrl: string;
+      if (process.env.REPLIT_DOMAINS) {
+        const domains = process.env.REPLIT_DOMAINS.split(',');
+        baseUrl = `https://${domains[0]}`;
+      } else if (process.env.REPLIT_DEV_DOMAIN) {
+        baseUrl = `https://${process.env.REPLIT_DEV_DOMAIN}`;
+      } else {
+        baseUrl = 'http://localhost:5000';
+      }
       
       for (const signer of pendingSigners) {
         if (signer.token) {
@@ -1977,9 +1988,16 @@ export async function registerRoutes(
         });
       }
       
-      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-        : 'http://localhost:5000';
+      // Use the published production domain if available
+      let baseUrl: string;
+      if (process.env.REPLIT_DOMAINS) {
+        const domains = process.env.REPLIT_DOMAINS.split(',');
+        baseUrl = `https://${domains[0]}`;
+      } else if (process.env.REPLIT_DEV_DOMAIN) {
+        baseUrl = `https://${process.env.REPLIT_DEV_DOMAIN}`;
+      } else {
+        baseUrl = 'http://localhost:5000';
+      }
       const signingLink = `${baseUrl}/sign/${signer.token}`;
       
       await sendSigningInvitation(
@@ -2035,9 +2053,16 @@ export async function registerRoutes(
       const pendingSigners = docSigners.filter(s => s.status !== 'signed');
       
       let reminderCount = 0;
-      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-        : 'http://localhost:5000';
+      // Use the published production domain if available
+      let baseUrl: string;
+      if (process.env.REPLIT_DOMAINS) {
+        const domains = process.env.REPLIT_DOMAINS.split(',');
+        baseUrl = `https://${domains[0]}`;
+      } else if (process.env.REPLIT_DEV_DOMAIN) {
+        baseUrl = `https://${process.env.REPLIT_DEV_DOMAIN}`;
+      } else {
+        baseUrl = 'http://localhost:5000';
+      }
       
       for (const signer of pendingSigners) {
         if (signer.token) {
