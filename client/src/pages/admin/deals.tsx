@@ -1,9 +1,27 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -18,9 +36,12 @@ import {
   TrendingUp,
   Wallet,
   Search,
+  Plus,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 
 interface Deal {
   id: number;
@@ -182,6 +203,20 @@ function formatCurrency(amount: number) {
 
 export default function AdminDeals() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const { toast } = useToast();
+  
+  const [newDeal, setNewDeal] = useState({
+    customerFirstName: "",
+    customerLastName: "",
+    propertyAddress: "",
+    loanAmount: "",
+    propertyValue: "",
+    interestRate: "",
+    loanType: "fix-and-flip",
+    propertyType: "single-family",
+    stage: "initial-review",
+  });
 
   const { data, isLoading } = useQuery<DealsResponse>({
     queryKey: ["/api/admin/deals", searchTerm],
@@ -196,14 +231,220 @@ export default function AdminDeals() {
     },
   });
 
+  const createDealMutation = useMutation({
+    mutationFn: async (dealData: typeof newDeal) => {
+      return apiRequest("POST", "/api/admin/deals", dealData);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/deals"] });
+      setIsAddDialogOpen(false);
+      setNewDeal({
+        customerFirstName: "",
+        customerLastName: "",
+        propertyAddress: "",
+        loanAmount: "",
+        propertyValue: "",
+        interestRate: "",
+        loanType: "fix-and-flip",
+        propertyType: "single-family",
+        stage: "initial-review",
+      });
+      toast({
+        title: "Deal created",
+        description: "The deal has been added successfully.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to create deal. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleCreateDeal = () => {
+    if (!newDeal.customerFirstName || !newDeal.customerLastName || !newDeal.propertyAddress || !newDeal.loanAmount) {
+      toast({
+        title: "Missing fields",
+        description: "Please fill in all required fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+    createDealMutation.mutate(newDeal);
+  };
+
   const stats = data?.stats;
   const deals = data?.deals || [];
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-bold" data-testid="text-page-title">Deals Dashboard</h1>
-        <p className="text-muted-foreground">Overview of all deals submitted by users</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-2xl font-bold" data-testid="text-page-title">Deals Dashboard</h1>
+          <p className="text-muted-foreground">Overview of all deals submitted by users</p>
+        </div>
+        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+          <DialogTrigger asChild>
+            <Button data-testid="button-add-deal">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Deal
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Add New Deal</DialogTitle>
+              <DialogDescription>
+                Manually add a new deal to the pipeline
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="firstName">First Name *</Label>
+                  <Input
+                    id="firstName"
+                    value={newDeal.customerFirstName}
+                    onChange={(e) => setNewDeal({ ...newDeal, customerFirstName: e.target.value })}
+                    placeholder="John"
+                    data-testid="input-first-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lastName">Last Name *</Label>
+                  <Input
+                    id="lastName"
+                    value={newDeal.customerLastName}
+                    onChange={(e) => setNewDeal({ ...newDeal, customerLastName: e.target.value })}
+                    placeholder="Smith"
+                    data-testid="input-last-name"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="address">Property Address *</Label>
+                <Input
+                  id="address"
+                  value={newDeal.propertyAddress}
+                  onChange={(e) => setNewDeal({ ...newDeal, propertyAddress: e.target.value })}
+                  placeholder="123 Main Street, Los Angeles, CA 90001"
+                  data-testid="input-property-address"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="loanAmount">Loan Amount *</Label>
+                  <Input
+                    id="loanAmount"
+                    type="number"
+                    value={newDeal.loanAmount}
+                    onChange={(e) => setNewDeal({ ...newDeal, loanAmount: e.target.value })}
+                    placeholder="680000"
+                    data-testid="input-loan-amount"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="propertyValue">Property Value</Label>
+                  <Input
+                    id="propertyValue"
+                    type="number"
+                    value={newDeal.propertyValue}
+                    onChange={(e) => setNewDeal({ ...newDeal, propertyValue: e.target.value })}
+                    placeholder="850000"
+                    data-testid="input-property-value"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="interestRate">Interest Rate</Label>
+                  <Input
+                    id="interestRate"
+                    value={newDeal.interestRate}
+                    onChange={(e) => setNewDeal({ ...newDeal, interestRate: e.target.value })}
+                    placeholder="11.5%"
+                    data-testid="input-interest-rate"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="loanType">Loan Type</Label>
+                  <Select
+                    value={newDeal.loanType}
+                    onValueChange={(value) => setNewDeal({ ...newDeal, loanType: value })}
+                  >
+                    <SelectTrigger data-testid="select-loan-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fix-and-flip">Fix and Flip</SelectItem>
+                      <SelectItem value="bridge">Bridge</SelectItem>
+                      <SelectItem value="ground-up">Ground Up</SelectItem>
+                      <SelectItem value="dscr">DSCR</SelectItem>
+                      <SelectItem value="rental">Rental</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="propertyType">Property Type</Label>
+                  <Select
+                    value={newDeal.propertyType}
+                    onValueChange={(value) => setNewDeal({ ...newDeal, propertyType: value })}
+                  >
+                    <SelectTrigger data-testid="select-property-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="single-family">Single Family</SelectItem>
+                      <SelectItem value="multi-family">Multi-Family</SelectItem>
+                      <SelectItem value="condo">Condo</SelectItem>
+                      <SelectItem value="townhouse">Townhouse</SelectItem>
+                      <SelectItem value="commercial">Commercial</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="stage">Initial Stage</Label>
+                  <Select
+                    value={newDeal.stage}
+                    onValueChange={(value) => setNewDeal({ ...newDeal, stage: value })}
+                  >
+                    <SelectTrigger data-testid="select-stage">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="initial-review">Initial Review</SelectItem>
+                      <SelectItem value="term-sheet">Term Sheet</SelectItem>
+                      <SelectItem value="onboarding">Onboarding</SelectItem>
+                      <SelectItem value="processing">Processing</SelectItem>
+                      <SelectItem value="underwriting">Underwriting</SelectItem>
+                      <SelectItem value="closing">Closing</SelectItem>
+                      <SelectItem value="closed">Closed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsAddDialogOpen(false)}
+                data-testid="button-cancel"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreateDeal}
+                disabled={createDealMutation.isPending}
+                data-testid="button-create-deal"
+              >
+                {createDealMutation.isPending ? "Creating..." : "Create Deal"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {isLoading ? (

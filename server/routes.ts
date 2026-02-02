@@ -3088,6 +3088,59 @@ export async function registerRoutes(
     }
   });
 
+  // Admin - Create deal manually
+  app.post('/api/admin/deals', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { 
+        customerFirstName, 
+        customerLastName, 
+        propertyAddress, 
+        loanAmount, 
+        propertyValue, 
+        interestRate, 
+        loanType, 
+        propertyType, 
+        stage 
+      } = req.body;
+      
+      if (!customerFirstName || !customerLastName || !propertyAddress || !loanAmount) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+      
+      const loanAmountNum = parseFloat(loanAmount);
+      const propertyValueNum = propertyValue ? parseFloat(propertyValue) : loanAmountNum * 1.25;
+      const ltv = ((loanAmountNum / propertyValueNum) * 100).toFixed(0) + '%';
+      
+      const [deal] = await db.insert(savedQuotes).values({
+        userId: req.user!.id,
+        customerFirstName,
+        customerLastName,
+        propertyAddress,
+        loanData: {
+          loanAmount: loanAmountNum,
+          propertyValue: propertyValueNum,
+          ltv,
+          loanType: loanType || 'fix-and-flip',
+          loanPurpose: 'purchase',
+          propertyType: propertyType || 'single-family',
+          loanTerm: '12 months',
+        },
+        interestRate: interestRate || 'TBD',
+        pointsCharged: 0,
+        pointsAmount: 0,
+        tpoPremiumAmount: 0,
+        totalRevenue: 0,
+        commission: 0,
+        stage: stage || 'initial-review',
+      }).returning();
+      
+      res.json({ deal });
+    } catch (error) {
+      console.error('Admin create deal error:', error);
+      res.status(500).json({ error: 'Failed to create deal' });
+    }
+  });
+
   // Admin - Get single deal by ID
   app.get('/api/admin/deals/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
