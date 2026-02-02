@@ -1,0 +1,1102 @@
+Cool. Here’s a **copy-paste Replit repo** (Express + React) that gives you a working **Quote Maker** + **Admin Ruleset Builder**.
+
+This design does exactly what you described:
+
+* Admin creates a **Product** + **Ruleset version**
+* Admin can upload guidelines (PDF) to store/extract text (optional)
+* Quote Maker lets user pick a product + ruleset version, input loan scenario, and get **deterministic pricing** from the engine
+
+You can drop this into a new Replit Node.js project and run.
+
+---
+
+# 1) File Tree
+
+```
+.
+├── package.json
+├── server
+│   ├── index.js
+│   ├── db.js
+│   ├── pricing
+│   │   ├── engine.js
+│   │   └── matcher.js
+│   ├── routes
+│   │   ├── products.js
+│   │   ├── rulesets.js
+│   │   ├── quotes.js
+│   │   └── uploads.js
+│   └── seed
+│       └── sampleRuleset.json
+└── client
+    ├── index.html
+    ├── package.json
+    ├── vite.config.js
+    └── src
+        ├── main.jsx
+        ├── App.jsx
+        ├── api.js
+        ├── pages
+        │   ├── Admin.jsx
+        │   └── QuoteMaker.jsx
+        └── components
+            ├── JsonEditor.jsx
+            └── Field.jsx
+```
+
+---
+
+# 2) Root `package.json`
+
+```json
+{
+  "name": "quote-maker-express-react",
+  "private": true,
+  "scripts": {
+    "install:all": "npm i && npm --prefix client i",
+    "dev": "concurrently \"nodemon server/index.js\" \"npm --prefix client run dev\"",
+    "start": "node server/index.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.6.0",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1",
+    "pdf-parse": "^1.1.1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0",
+    "nodemon": "^3.1.4"
+  }
+}
+```
+
+---
+
+# 3) Server
+
+## `/server/db.js`
+
+```js
+import Database from "better-sqlite3";
+
+const db = new Database("app.db");
+
+db.exec(`
+  PRAGMA journal_mode = WAL;
+
+  CREATE TABLE IF NOT EXISTS products (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS rulesets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL,
+    version INTEGER NOT NULL,
+    rules_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY(product_id) REFERENCES products(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS uploads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL,
+    filename TEXT NOT NULL,
+    extracted_text TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY(product_id) REFERENCES products(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS quotes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL,
+    ruleset_id INTEGER NOT NULL,
+    inputs_json TEXT NOT NULL,
+    outputs_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY(product_id) REFERENCES products(id),
+    FOREIGN KEY(ruleset_id) REFERENCES rulesets(id)
+  );
+`);
+
+export function createProduct({ name, category }) {
+  const stmt = db.prepare(`INSERT INTO products (name, category) VALUES (?, ?)`);
+  const info = stmt.run(name, category);
+  return info.lastInsertRowid;
+}
+
+export function listProducts() {
+  return db.prepare(`SELECT * FROM products ORDER BY created_at DESC`).all();
+}
+
+export function getProduct(id) {
+  return db.prepare(`SELECT * FROM products WHERE id = ?`).get(id);
+}
+
+export function createRuleset({ productId, rulesJson }) {
+  const latest = db
+    .prepare(`SELECT MAX(version) as v FROM rulesets WHERE product_id = ?`)
+    .get(productId);
+  const nextVersion = (latest?.v ?? 0) + 1;
+
+  const stmt = db.prepare(`
+    INSERT INTO rulesets (product_id, version, rules_json)
+    VALUES (?, ?, ?)
+  `);
+
+  const info = stmt.run(productId, nextVersion, JSON.stringify(rulesJson));
+  return { rulesetId: info.lastInsertRowid, version: nextVersion };
+}
+
+export function listRulesets(productId) {
+  return db
+    .prepare(`SELECT id, product_id, version, created_at FROM rulesets WHERE product_id = ? ORDER BY version DESC`)
+    .all(productId);
+}
+
+export function getRuleset(rulesetId) {
+  const row = db.prepare(`SELECT * FROM rulesets WHERE id = ?`).get(rulesetId);
+  if (!row) return null;
+  return { ...row, rules_json: JSON.parse(row.rules_json) };
+}
+
+export function saveQuote({ productId, rulesetId, inputs, outputs }) {
+  const stmt = db.prepare(`
+    INSERT INTO quotes (product_id, ruleset_id, inputs_json, outputs_json)
+    VALUES (?, ?, ?, ?)
+  `);
+  const info = stmt.run(productId, rulesetId, JSON.stringify(inputs), JSON.stringify(outputs));
+  return info.lastInsertRowid;
+}
+
+export function saveUpload({ productId, filename, extractedText }) {
+  const stmt = db.prepare(`
+    INSERT INTO uploads (product_id, filename, extracted_text)
+    VALUES (?, ?, ?)
+  `);
+  const info = stmt.run(productId, filename, extractedText ?? null);
+  return info.lastInsertRowid;
+}
+
+export default db;
+```
+
+## `/server/pricing/matcher.js`
+
+```js
+// Simple matcher used by ruleset conditions.
+// Add more operators as you evolve your products.
+export function matches(when, inputs) {
+  if (!when) return true;
+
+  // direct equals checks
+  for (const key of ["loanType", "purpose", "tier", "propertyType", "state"]) {
+    if (when[key] !== undefined && when[key] !== inputs[key]) return false;
+  }
+
+  // numeric operators
+  if (typeof when.ficoLt === "number" && !(inputs.fico < when.ficoLt)) return false;
+  if (typeof when.ficoGte === "number" && !(inputs.fico >= when.ficoGte)) return false;
+
+  // boolean
+  if (when.isMidstream === true && inputs.isMidstream !== true) return false;
+
+  // array membership
+  if (Array.isArray(when.msaIn)) {
+    if (!inputs.msa || !when.msaIn.includes(inputs.msa)) return false;
+  }
+
+  return true;
+}
+```
+
+## `/server/pricing/engine.js`
+
+```js
+import { matches } from "./matcher.js";
+
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
+export function validateRuleset(rules) {
+  const errors = [];
+  if (!rules?.product) errors.push("Missing rules.product");
+  if (!rules?.baseRates) errors.push("Missing rules.baseRates");
+  if (!Array.isArray(rules?.leverageCaps)) errors.push("Missing rules.leverageCaps[]");
+  return errors;
+}
+
+export function priceQuote(rules, inputs) {
+  const errors = validateRuleset(rules);
+  if (errors.length) return { eligible: false, reasons: errors };
+
+  const baseRate = rules.baseRates?.[inputs.loanType];
+  if (typeof baseRate !== "number") {
+    return { eligible: false, reasons: [`Unknown loanType: ${inputs.loanType}`] };
+  }
+
+  // Eligibility rules
+  const reasons = [];
+  for (const r of rules.eligibilityRules ?? []) {
+    if (matches(r.when, inputs)) {
+      if (r.result === "ineligible") reasons.push(r.label);
+    }
+  }
+  if (reasons.length) return { eligible: false, reasons };
+
+  // Cap selection
+  const cap = (rules.leverageCaps ?? []).find(
+    (c) => c.tier === inputs.tier && (c.loanTypes ?? []).includes(inputs.loanType)
+  );
+
+  let maxLTC = cap?.max?.ltc ?? 0;
+  let maxLTAIV = cap?.max?.ltaiv ?? 0;
+  let maxLTARV = cap?.max?.ltarv ?? 0;
+
+  // Overlays (cap adjustments)
+  const notes = [];
+  for (const o of rules.overlays ?? []) {
+    if (matches(o.when, inputs)) {
+      if (o.effects?.ltcAdd) maxLTC += o.effects.ltcAdd;
+      if (o.effects?.ltaivAdd) maxLTAIV += o.effects.ltaivAdd;
+      if (o.effects?.ltarvAdd) maxLTARV += o.effects.ltarvAdd;
+      notes.push(o.label);
+    }
+  }
+
+  maxLTC = clamp(maxLTC, 0, 0.95);
+  maxLTAIV = clamp(maxLTAIV, 0, 0.95);
+  maxLTARV = clamp(maxLTARV, 0, 0.95);
+
+  // Rate + points adjusters
+  let rate = baseRate;
+  let points = rules.points?.default ?? 0;
+  const appliedAdjusters = [];
+
+  for (const a of rules.adjusters ?? []) {
+    if (matches(a.when, inputs)) {
+      const rateAdd = a.rateAdd ?? 0;
+      const pointsAdd = a.pointsAdd ?? 0;
+      rate += rateAdd;
+      points += pointsAdd;
+      appliedAdjusters.push({ id: a.id, label: a.label, rateAdd, pointsAdd });
+    }
+  }
+
+  return {
+    eligible: true,
+    baseRate,
+    finalRate: Number(rate.toFixed(3)),
+    points: Number(points.toFixed(3)),
+    caps: { maxLTC, maxLTAIV, maxLTARV },
+    appliedAdjusters,
+    notes
+  };
+}
+```
+
+## `/server/routes/products.js`
+
+```js
+import { Router } from "express";
+import { createProduct, listProducts } from "../db.js";
+
+const router = Router();
+
+router.get("/", (req, res) => {
+  res.json(listProducts());
+});
+
+router.post("/", (req, res) => {
+  const { name, category } = req.body ?? {};
+  if (!name || !category) return res.status(400).json({ error: "name and category required" });
+
+  const id = createProduct({ name, category });
+  res.json({ id });
+});
+
+export default router;
+```
+
+## `/server/routes/rulesets.js`
+
+```js
+import { Router } from "express";
+import { createRuleset, listRulesets, getRuleset } from "../db.js";
+import { validateRuleset } from "../pricing/engine.js";
+
+const router = Router();
+
+router.get("/:productId", (req, res) => {
+  const productId = Number(req.params.productId);
+  res.json(listRulesets(productId));
+});
+
+router.get("/one/:rulesetId", (req, res) => {
+  const rulesetId = Number(req.params.rulesetId);
+  const ruleset = getRuleset(rulesetId);
+  if (!ruleset) return res.status(404).json({ error: "ruleset not found" });
+  res.json(ruleset);
+});
+
+router.post("/:productId", (req, res) => {
+  const productId = Number(req.params.productId);
+  const rulesJson = req.body?.rules;
+
+  const errors = validateRuleset(rulesJson);
+  if (errors.length) return res.status(400).json({ error: "invalid ruleset", errors });
+
+  const out = createRuleset({ productId, rulesJson });
+  res.json(out);
+});
+
+export default router;
+```
+
+## `/server/routes/quotes.js`
+
+```js
+import { Router } from "express";
+import { getRuleset, saveQuote } from "../db.js";
+import { priceQuote } from "../pricing/engine.js";
+
+const router = Router();
+
+/**
+ * POST /api/quotes/price
+ * body: { productId, rulesetId, inputs }
+ */
+router.post("/price", (req, res) => {
+  const { productId, rulesetId, inputs } = req.body ?? {};
+  if (!productId || !rulesetId || !inputs) {
+    return res.status(400).json({ error: "productId, rulesetId, inputs required" });
+  }
+
+  const ruleset = getRuleset(Number(rulesetId));
+  if (!ruleset) return res.status(404).json({ error: "ruleset not found" });
+
+  const output = priceQuote(ruleset.rules_json, inputs);
+
+  // Save quote for audit trail
+  const quoteId = saveQuote({
+    productId: Number(productId),
+    rulesetId: Number(rulesetId),
+    inputs,
+    outputs: output
+  });
+
+  res.json({ quoteId, ...output });
+});
+
+export default router;
+```
+
+## `/server/routes/uploads.js`
+
+```js
+import { Router } from "express";
+import multer from "multer";
+import pdfParse from "pdf-parse";
+import { saveUpload } from "../db.js";
+
+const router = Router();
+const upload = multer({ storage: multer.memoryStorage() });
+
+/**
+ * POST /api/uploads/:productId
+ * form-data: file=<pdf>
+ * returns extracted text (basic)
+ */
+router.post("/:productId", upload.single("file"), async (req, res) => {
+  const productId = Number(req.params.productId);
+  if (!req.file) return res.status(400).json({ error: "file required" });
+
+  let extractedText = "";
+  try {
+    if (req.file.mimetype === "application/pdf") {
+      const parsed = await pdfParse(req.file.buffer);
+      extractedText = parsed.text ?? "";
+    } else {
+      extractedText = req.file.buffer.toString("utf-8");
+    }
+  } catch (e) {
+    return res.status(500).json({ error: "failed to extract text", details: String(e) });
+  }
+
+  const uploadId = saveUpload({
+    productId,
+    filename: req.file.originalname,
+    extractedText
+  });
+
+  res.json({ uploadId, filename: req.file.originalname, extractedText });
+});
+
+export default router;
+```
+
+## `/server/seed/sampleRuleset.json`
+
+```json
+{
+  "product": "RTL",
+  "baseRates": {
+    "light_rehab": 9.25,
+    "heavy_rehab": 9.5,
+    "bridge_no_rehab": 9.25,
+    "guc": 10.0
+  },
+  "points": { "default": 2.0 },
+  "adjusters": [
+    { "id": "mff", "label": "Multifamily", "when": { "propertyType": "multifamily" }, "rateAdd": 1.0 },
+    { "id": "fico_lt_700", "label": "FICO < 700", "when": { "ficoLt": 700 }, "rateAdd": 0.25 },
+    { "id": "midstream", "label": "Midstream", "when": { "isMidstream": true }, "rateAdd": 0.25 },
+    { "id": "cash_out", "label": "Cash Out", "when": { "purpose": "cash_out" }, "rateAdd": 0.5 }
+  ],
+  "leverageCaps": [
+    {
+      "tier": "institutional",
+      "loanTypes": ["light_rehab", "heavy_rehab", "bridge_no_rehab", "guc"],
+      "max": { "ltc": 0.9, "ltaiv": 0.85, "ltarv": 0.75 }
+    },
+    {
+      "tier": "experienced",
+      "loanTypes": ["light_rehab", "heavy_rehab", "bridge_no_rehab", "guc"],
+      "max": { "ltc": 0.85, "ltaiv": 0.85, "ltarv": 0.75 }
+    },
+    {
+      "tier": "no_experience",
+      "loanTypes": ["light_rehab", "heavy_rehab", "bridge_no_rehab", "guc"],
+      "max": { "ltc": 0.75, "ltaiv": 0.75, "ltarv": 0.7 }
+    }
+  ],
+  "overlays": [
+    {
+      "id": "msa_5pct_ltc_reduction",
+      "label": "Selected MSAs require 5% reduction to LTC",
+      "when": { "msaIn": ["Austin", "Bay Area, CA", "Boise", "Baltimore", "Sacramento", "San Jose"] },
+      "effects": { "ltcAdd": -0.05 }
+    },
+    {
+      "id": "fl_bridge_no_rehab_reduction",
+      "label": "FL no-rehab bridge requires 5% reduction to leverage metrics",
+      "when": { "state": "FL", "loanType": "bridge_no_rehab" },
+      "effects": { "ltcAdd": -0.05, "ltaivAdd": -0.05, "ltarvAdd": -0.05 }
+    }
+  ],
+  "eligibilityRules": [
+    {
+      "id": "no_exp_cash_out_bridge_not_allowed",
+      "label": "Cash-out bridge not allowed for no-experience borrowers",
+      "when": { "tier": "no_experience", "loanType": "bridge_no_rehab", "purpose": "cash_out" },
+      "result": "ineligible"
+    }
+  ]
+}
+```
+
+## `/server/index.js`
+
+```js
+import express from "express";
+import cors from "cors";
+import products from "./routes/products.js";
+import rulesets from "./routes/rulesets.js";
+import quotes from "./routes/quotes.js";
+import uploads from "./routes/uploads.js";
+
+const app = express();
+
+app.use(cors());
+app.use(express.json({ limit: "10mb" }));
+
+app.get("/api/health", (req, res) => res.json({ ok: true }));
+
+app.use("/api/products", products);
+app.use("/api/rulesets", rulesets);
+app.use("/api/quotes", quotes);
+app.use("/api/uploads", uploads);
+
+const port = process.env.PORT || 3001;
+app.listen(port, () => console.log(`Server running on http://localhost:${port}`));
+```
+
+---
+
+# 4) Client (Vite + React)
+
+## `/client/package.json`
+
+```json
+{
+  "name": "client",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 5173"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.2",
+    "vite": "^5.4.8"
+  }
+}
+```
+
+## `/client/vite.config.js`
+
+```js
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      "/api": "http://localhost:3001"
+    }
+  }
+});
+```
+
+## `/client/index.html`
+
+```html
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Quote Maker</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+```
+
+## `/client/src/main.jsx`
+
+```jsx
+import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App.jsx";
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+```
+
+## `/client/src/api.js`
+
+```js
+export async function apiGet(path) {
+  const res = await fetch(path);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function apiPost(path, body) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+```
+
+## `/client/src/App.jsx`
+
+```jsx
+import { useState } from "react";
+import Admin from "./pages/Admin.jsx";
+import QuoteMaker from "./pages/QuoteMaker.jsx";
+
+export default function App() {
+  const [tab, setTab] = useState("quote");
+
+  return (
+    <div style={{ fontFamily: "system-ui, Arial", padding: 16, maxWidth: 1100, margin: "0 auto" }}>
+      <h1 style={{ marginBottom: 8 }}>Quote Maker</h1>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <button onClick={() => setTab("quote")}>Quote Maker</button>
+        <button onClick={() => setTab("admin")}>Admin</button>
+      </div>
+
+      {tab === "quote" ? <QuoteMaker /> : <Admin />}
+    </div>
+  );
+}
+```
+
+## `/client/src/components/Field.jsx`
+
+```jsx
+export default function Field({ label, children }) {
+  return (
+    <div style={{ display: "grid", gap: 6, marginBottom: 10 }}>
+      <div style={{ fontSize: 13, opacity: 0.8 }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+```
+
+## `/client/src/components/JsonEditor.jsx`
+
+```jsx
+import { useMemo, useState } from "react";
+
+export default function JsonEditor({ initialObject, onSave }) {
+  const [text, setText] = useState(() => JSON.stringify(initialObject, null, 2));
+  const [error, setError] = useState("");
+
+  const parsed = useMemo(() => {
+    try {
+      const obj = JSON.parse(text);
+      setError("");
+      return obj;
+    } catch (e) {
+      setError(String(e));
+      return null;
+    }
+  }, [text]);
+
+  return (
+    <div>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        style={{
+          width: "100%",
+          minHeight: 280,
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas",
+          fontSize: 12
+        }}
+      />
+      {error && <div style={{ color: "crimson", marginTop: 6 }}>{error}</div>}
+
+      <div style={{ marginTop: 10 }}>
+        <button disabled={!parsed} onClick={() => onSave(parsed)}>
+          Save Ruleset Version
+        </button>
+      </div>
+    </div>
+  );
+}
+```
+
+## `/client/src/pages/Admin.jsx`
+
+```jsx
+import { useEffect, useMemo, useState } from "react";
+import { apiGet, apiPost } from "../api.js";
+import JsonEditor from "../components/JsonEditor.jsx";
+import Field from "../components/Field.jsx";
+
+// Mirrors /server/seed/sampleRuleset.json for convenience
+const SAMPLE_RULESET = {
+  product: "RTL",
+  baseRates: { light_rehab: 9.25, heavy_rehab: 9.5, bridge_no_rehab: 9.25, guc: 10.0 },
+  points: { default: 2.0 },
+  adjusters: [
+    { id: "mff", label: "Multifamily", when: { propertyType: "multifamily" }, rateAdd: 1.0 },
+    { id: "fico_lt_700", label: "FICO < 700", when: { ficoLt: 700 }, rateAdd: 0.25 },
+    { id: "midstream", label: "Midstream", when: { isMidstream: true }, rateAdd: 0.25 },
+    { id: "cash_out", label: "Cash Out", when: { purpose: "cash_out" }, rateAdd: 0.5 }
+  ],
+  leverageCaps: [
+    { tier: "institutional", loanTypes: ["light_rehab", "heavy_rehab", "bridge_no_rehab", "guc"], max: { ltc: 0.9, ltaiv: 0.85, ltarv: 0.75 } },
+    { tier: "experienced", loanTypes: ["light_rehab", "heavy_rehab", "bridge_no_rehab", "guc"], max: { ltc: 0.85, ltaiv: 0.85, ltarv: 0.75 } },
+    { tier: "no_experience", loanTypes: ["light_rehab", "heavy_rehab", "bridge_no_rehab", "guc"], max: { ltc: 0.75, ltaiv: 0.75, ltarv: 0.7 } }
+  ],
+  overlays: [
+    { id: "msa_5pct_ltc_reduction", label: "Selected MSAs require 5% reduction to LTC", when: { msaIn: ["Austin", "Bay Area, CA", "Boise", "Baltimore", "Sacramento", "San Jose"] }, effects: { ltcAdd: -0.05 } },
+    { id: "fl_bridge_no_rehab_reduction", label: "FL no-rehab bridge requires 5% reduction to leverage metrics", when: { state: "FL", loanType: "bridge_no_rehab" }, effects: { ltcAdd: -0.05, ltaivAdd: -0.05, ltarvAdd: -0.05 } }
+  ],
+  eligibilityRules: [
+    { id: "no_exp_cash_out_bridge_not_allowed", label: "Cash-out bridge not allowed for no-experience borrowers", when: { tier: "no_experience", loanType: "bridge_no_rehab", purpose: "cash_out" }, result: "ineligible" }
+  ]
+};
+
+export default function Admin() {
+  const [products, setProducts] = useState([]);
+  const [selectedProductId, setSelectedProductId] = useState("");
+  const [rulesets, setRulesets] = useState([]);
+
+  const [newName, setNewName] = useState("RTL Fix & Flip");
+  const [newCategory, setNewCategory] = useState("RTL");
+
+  useEffect(() => {
+    loadProducts();
+  }, []);
+
+  async function loadProducts() {
+    const p = await apiGet("/api/products");
+    setProducts(p);
+    if (p[0]?.id) setSelectedProductId(String(p[0].id));
+  }
+
+  useEffect(() => {
+    if (!selectedProductId) return;
+    loadRulesets(selectedProductId);
+  }, [selectedProductId]);
+
+  async function loadRulesets(pid) {
+    const r = await apiGet(`/api/rulesets/${pid}`);
+    setRulesets(r);
+  }
+
+  async function createNewProduct() {
+    const out = await apiPost("/api/products", { name: newName, category: newCategory });
+    await loadProducts();
+    setSelectedProductId(String(out.id));
+  }
+
+  async function saveRulesetVersion(rulesObj) {
+    const out = await apiPost(`/api/rulesets/${selectedProductId}`, { rules: rulesObj });
+    await loadRulesets(selectedProductId);
+    alert(`Saved ruleset version ${out.version} (rulesetId=${out.rulesetId})`);
+  }
+
+  const selectedProduct = useMemo(
+    () => products.find((p) => String(p.id) === String(selectedProductId)),
+    [products, selectedProductId]
+  );
+
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 10 }}>
+        <h2 style={{ marginTop: 0 }}>Admin</h2>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div>
+            <h3>Create Product</h3>
+            <Field label="Name">
+              <input value={newName} onChange={(e) => setNewName(e.target.value)} />
+            </Field>
+            <Field label="Category">
+              <input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} />
+            </Field>
+            <button onClick={createNewProduct}>Create Product</button>
+          </div>
+
+          <div>
+            <h3>Select Product</h3>
+            <Field label="Product">
+              <select value={selectedProductId} onChange={(e) => setSelectedProductId(e.target.value)}>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} (#{p.id})
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            {selectedProduct && (
+              <div style={{ fontSize: 13, opacity: 0.8 }}>
+                Category: {selectedProduct.category} | Status: {selectedProduct.status}
+              </div>
+            )}
+
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 13, opacity: 0.7, marginBottom: 6 }}>Ruleset Versions</div>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {rulesets.map((r) => (
+                  <li key={r.id}>
+                    v{r.version} (rulesetId={r.id}) | {r.created_at}
+                  </li>
+                ))}
+                {!rulesets.length && <li>No rulesets yet.</li>}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 10 }}>
+        <h3 style={{ marginTop: 0 }}>Ruleset Editor</h3>
+        <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 10 }}>
+          Paste/modify JSON rules. Saving creates a NEW version.
+        </div>
+        <JsonEditor initialObject={SAMPLE_RULESET} onSave={saveRulesetVersion} />
+      </div>
+
+      <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 10 }}>
+        <h3 style={{ marginTop: 0 }}>Upload Guidelines (PDF)</h3>
+        <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 10 }}>
+          This stores and extracts text from the PDF. Next step is to wire AI to turn extracted text into ruleset JSON.
+        </div>
+
+        <UploadBox productId={selectedProductId} />
+      </div>
+    </div>
+  );
+}
+
+function UploadBox({ productId }) {
+  const [file, setFile] = useState(null);
+  const [text, setText] = useState("");
+
+  async function upload() {
+    if (!file || !productId) return;
+
+    const fd = new FormData();
+    fd.append("file", file);
+
+    const res = await fetch(`/api/uploads/${productId}`, { method: "POST", body: fd });
+    const out = await res.json();
+    setText(out.extractedText || "");
+  }
+
+  return (
+    <div>
+      <input type="file" accept=".pdf,.txt" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+      <div style={{ marginTop: 10 }}>
+        <button onClick={upload} disabled={!file || !productId}>
+          Upload + Extract
+        </button>
+      </div>
+
+      {text && (
+        <textarea
+          value={text}
+          readOnly
+          style={{
+            width: "100%",
+            minHeight: 160,
+            marginTop: 10,
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas",
+            fontSize: 12
+          }}
+        />
+      )}
+    </div>
+  );
+}
+```
+
+## `/client/src/pages/QuoteMaker.jsx`
+
+```jsx
+import { useEffect, useMemo, useState } from "react";
+import { apiGet, apiPost } from "../api.js";
+import Field from "../components/Field.jsx";
+
+export default function QuoteMaker() {
+  const [products, setProducts] = useState([]);
+  const [rulesets, setRulesets] = useState([]);
+
+  const [productId, setProductId] = useState("");
+  const [rulesetId, setRulesetId] = useState("");
+
+  const [inputs, setInputs] = useState({
+    loanType: "light_rehab",
+    purpose: "purchase",
+    tier: "experienced",
+    fico: 720,
+    propertyType: "1-4",
+    state: "TX",
+    msa: "Austin",
+    isMidstream: false
+  });
+
+  const [result, setResult] = useState(null);
+  const selectedProduct = useMemo(() => products.find(p => String(p.id) === String(productId)), [products, productId]);
+
+  useEffect(() => {
+    (async () => {
+      const p = await apiGet("/api/products");
+      setProducts(p);
+      if (p[0]?.id) setProductId(String(p[0].id));
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!productId) return;
+    (async () => {
+      const r = await apiGet(`/api/rulesets/${productId}`);
+      setRulesets(r);
+      if (r[0]?.id) setRulesetId(String(r[0].id));
+    })();
+  }, [productId]);
+
+  async function price() {
+    const out = await apiPost("/api/quotes/price", {
+      productId: Number(productId),
+      rulesetId: Number(rulesetId),
+      inputs
+    });
+    setResult(out);
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 10 }}>
+        <h2 style={{ marginTop: 0 }}>Quote Maker</h2>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div>
+            <Field label="Product">
+              <select value={productId} onChange={(e) => setProductId(e.target.value)}>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} (#{p.id})
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="Ruleset Version">
+              <select value={rulesetId} onChange={(e) => setRulesetId(e.target.value)}>
+                {rulesets.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    v{r.version} (rulesetId={r.id})
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            {selectedProduct && (
+              <div style={{ fontSize: 13, opacity: 0.75 }}>
+                Category: {selectedProduct.category}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <Field label="Loan Type">
+              <select value={inputs.loanType} onChange={(e) => setInputs({ ...inputs, loanType: e.target.value })}>
+                <option value="light_rehab">Light Rehab</option>
+                <option value="heavy_rehab">Heavy Rehab</option>
+                <option value="bridge_no_rehab">Bridge (No Rehab)</option>
+                <option value="guc">GUC</option>
+              </select>
+            </Field>
+
+            <Field label="Purpose">
+              <select value={inputs.purpose} onChange={(e) => setInputs({ ...inputs, purpose: e.target.value })}>
+                <option value="purchase">Purchase</option>
+                <option value="refi">Refi</option>
+                <option value="cash_out">Cash Out</option>
+              </select>
+            </Field>
+
+            <Field label="Experience Tier">
+              <select value={inputs.tier} onChange={(e) => setInputs({ ...inputs, tier: e.target.value })}>
+                <option value="no_experience">No Experience</option>
+                <option value="experienced">Experienced</option>
+                <option value="institutional">Institutional</option>
+              </select>
+            </Field>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 10 }}>
+          <Field label="FICO">
+            <input
+              type="number"
+              value={inputs.fico}
+              onChange={(e) => setInputs({ ...inputs, fico: Number(e.target.value) })}
+            />
+          </Field>
+
+          <Field label="Property Type">
+            <select value={inputs.propertyType} onChange={(e) => setInputs({ ...inputs, propertyType: e.target.value })}>
+              <option value="1-4">1-4</option>
+              <option value="multifamily">Multifamily</option>
+            </select>
+          </Field>
+
+          <Field label="State">
+            <input value={inputs.state} onChange={(e) => setInputs({ ...inputs, state: e.target.value })} />
+          </Field>
+
+          <Field label="MSA">
+            <input value={inputs.msa} onChange={(e) => setInputs({ ...inputs, msa: e.target.value })} />
+          </Field>
+
+          <Field label="Midstream?">
+            <input
+              type="checkbox"
+              checked={inputs.isMidstream}
+              onChange={(e) => setInputs({ ...inputs, isMidstream: e.target.checked })}
+            />
+          </Field>
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <button onClick={price} disabled={!productId || !rulesetId}>
+            Price Quote
+          </button>
+        </div>
+      </div>
+
+      {result && (
+        <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 10 }}>
+          <h3 style={{ marginTop: 0 }}>Result</h3>
+          <pre style={{ background: "#111", color: "#0f0", padding: 12, borderRadius: 8, overflowX: "auto" }}>
+            {JSON.stringify(result, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+---
+
+# 5) Run it in Replit
+
+In Replit Shell:
+
+```bash
+npm run install:all
+npm run dev
+```
+
+* Express runs on `:3001`
+* React runs on `:5173`
+* Vite proxies `/api/*` to the server automatically
+
+---
+
+# 6) How this becomes “AI-driven” (but safe)
+
+Right now, the PDF upload extracts text and stores it. The next step is:
+
+**Admin Flow**
+
+1. Upload PDF → get extracted text
+2. Click “Generate ruleset from text”
+3. AI returns ONLY JSON rules
+4. You review and save as a new version
+
+That’s the right pattern because it gives you:
+
+* auditability
+* version control
+* deterministic quoting
+* ability to handle exceptions without “AI guessing”
+
+If you want, I’ll add the **AI endpoint + strict JSON prompt + validation + “diff viewer”** so it’s extremely hard for the model to hallucinate pricing.
+
+Also: tell me if your reps should see **just final rate/points** or also the **explainability** (which adjusters fired + cap reductions). That’s a product decision and affects UI.
