@@ -35,6 +35,9 @@ import {
   ListChecks,
   Settings2,
   Loader2,
+  X,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -146,6 +149,23 @@ export default function AdminPrograms() {
   const [showAddDocument, setShowAddDocument] = useState(false);
   const [showAddTask, setShowAddTask] = useState(false);
 
+  // Inline document/task templates for program creation
+  interface InlineDocument {
+    id: string;
+    documentName: string;
+    documentCategory: string;
+    documentDescription: string;
+    isRequired: boolean;
+  }
+
+  interface InlineTask {
+    id: string;
+    taskName: string;
+    taskDescription: string;
+    taskCategory: string;
+    priority: string;
+  }
+
   // Form states
   const [programForm, setProgramForm] = useState({
     name: "",
@@ -160,6 +180,9 @@ export default function AdminPrograms() {
     termOptions: "12, 24",
     eligiblePropertyTypes: [] as string[],
   });
+
+  const [inlineDocuments, setInlineDocuments] = useState<InlineDocument[]>([]);
+  const [inlineTasks, setInlineTasks] = useState<InlineTask[]>([]);
 
   const [documentForm, setDocumentForm] = useState({
     documentName: "",
@@ -194,13 +217,19 @@ export default function AdminPrograms() {
     mutationFn: async (data: typeof programForm) => {
       return apiRequest("/api/admin/programs", {
         method: "POST",
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          ...data,
+          documents: inlineDocuments.map(({ id, ...doc }) => doc),
+          tasks: inlineTasks.map(({ id, ...task }) => task),
+        }),
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/programs"] });
       setShowAddProgram(false);
       resetProgramForm();
+      setInlineDocuments([]);
+      setInlineTasks([]);
       toast({ title: "Program created successfully" });
     },
     onError: () => {
@@ -340,6 +369,58 @@ export default function AdminPrograms() {
       termOptions: "12, 24",
       eligiblePropertyTypes: [],
     });
+    setInlineDocuments([]);
+    setInlineTasks([]);
+  };
+
+  const addInlineDocument = () => {
+    setInlineDocuments([
+      ...inlineDocuments,
+      {
+        id: crypto.randomUUID(),
+        documentName: "",
+        documentCategory: "borrower_docs",
+        documentDescription: "",
+        isRequired: true,
+      },
+    ]);
+  };
+
+  const updateInlineDocument = (id: string, field: keyof InlineDocument, value: any) => {
+    setInlineDocuments(
+      inlineDocuments.map((doc) =>
+        doc.id === id ? { ...doc, [field]: value } : doc
+      )
+    );
+  };
+
+  const removeInlineDocument = (id: string) => {
+    setInlineDocuments(inlineDocuments.filter((doc) => doc.id !== id));
+  };
+
+  const addInlineTask = () => {
+    setInlineTasks([
+      ...inlineTasks,
+      {
+        id: crypto.randomUUID(),
+        taskName: "",
+        taskDescription: "",
+        taskCategory: "other",
+        priority: "medium",
+      },
+    ]);
+  };
+
+  const updateInlineTask = (id: string, field: keyof InlineTask, value: any) => {
+    setInlineTasks(
+      inlineTasks.map((task) =>
+        task.id === id ? { ...task, [field]: value } : task
+      )
+    );
+  };
+
+  const removeInlineTask = (id: string) => {
+    setInlineTasks(inlineTasks.filter((task) => task.id !== id));
   };
 
   const resetDocumentForm = () => {
@@ -581,6 +662,193 @@ export default function AdminPrograms() {
                         </Badge>
                       ))}
                     </div>
+                  </div>
+
+                  {/* Inline Documents Section */}
+                  <div className="space-y-3 border-t pt-4">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-base font-semibold flex items-center gap-2">
+                        <FileText className="h-4 w-4" />
+                        Document Requirements ({inlineDocuments.length})
+                      </Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addInlineDocument}
+                        data-testid="button-add-inline-document"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Document
+                      </Button>
+                    </div>
+                    {inlineDocuments.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No document requirements added yet. Click "Add Document" to add one.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        {inlineDocuments.map((doc, index) => (
+                          <Card key={doc.id} className="p-3">
+                            <div className="flex items-start gap-2">
+                              <div className="flex-1 space-y-2">
+                                <div className="grid grid-cols-2 gap-2">
+                                  <Input
+                                    placeholder="Document name"
+                                    value={doc.documentName}
+                                    onChange={(e) =>
+                                      updateInlineDocument(doc.id, "documentName", e.target.value)
+                                    }
+                                    data-testid={`input-doc-name-${index}`}
+                                  />
+                                  <Select
+                                    value={doc.documentCategory}
+                                    onValueChange={(v) =>
+                                      updateInlineDocument(doc.id, "documentCategory", v)
+                                    }
+                                  >
+                                    <SelectTrigger data-testid={`select-doc-category-${index}`}>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {documentCategories.map((cat) => (
+                                        <SelectItem key={cat.value} value={cat.value}>
+                                          {cat.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <Input
+                                  placeholder="Description (optional)"
+                                  value={doc.documentDescription}
+                                  onChange={(e) =>
+                                    updateInlineDocument(doc.id, "documentDescription", e.target.value)
+                                  }
+                                  data-testid={`input-doc-desc-${index}`}
+                                />
+                                <div className="flex items-center gap-2">
+                                  <Switch
+                                    checked={doc.isRequired}
+                                    onCheckedChange={(checked) =>
+                                      updateInlineDocument(doc.id, "isRequired", checked)
+                                    }
+                                    data-testid={`switch-doc-required-${index}`}
+                                  />
+                                  <Label className="text-sm">Required</Label>
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeInlineDocument(doc.id)}
+                                data-testid={`button-remove-doc-${index}`}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Inline Tasks Section */}
+                  <div className="space-y-3 border-t pt-4">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-base font-semibold flex items-center gap-2">
+                        <ListChecks className="h-4 w-4" />
+                        Task Workflow ({inlineTasks.length})
+                      </Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addInlineTask}
+                        data-testid="button-add-inline-task"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Task
+                      </Button>
+                    </div>
+                    {inlineTasks.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No tasks added yet. Click "Add Task" to add one.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        {inlineTasks.map((task, index) => (
+                          <Card key={task.id} className="p-3">
+                            <div className="flex items-start gap-2">
+                              <div className="flex-1 space-y-2">
+                                <Input
+                                  placeholder="Task name"
+                                  value={task.taskName}
+                                  onChange={(e) =>
+                                    updateInlineTask(task.id, "taskName", e.target.value)
+                                  }
+                                  data-testid={`input-task-name-${index}`}
+                                />
+                                <Input
+                                  placeholder="Description (optional)"
+                                  value={task.taskDescription}
+                                  onChange={(e) =>
+                                    updateInlineTask(task.id, "taskDescription", e.target.value)
+                                  }
+                                  data-testid={`input-task-desc-${index}`}
+                                />
+                                <div className="grid grid-cols-2 gap-2">
+                                  <Select
+                                    value={task.taskCategory}
+                                    onValueChange={(v) =>
+                                      updateInlineTask(task.id, "taskCategory", v)
+                                    }
+                                  >
+                                    <SelectTrigger data-testid={`select-task-category-${index}`}>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {taskCategories.map((cat) => (
+                                        <SelectItem key={cat.value} value={cat.value}>
+                                          {cat.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <Select
+                                    value={task.priority}
+                                    onValueChange={(v) =>
+                                      updateInlineTask(task.id, "priority", v)
+                                    }
+                                  >
+                                    <SelectTrigger data-testid={`select-task-priority-${index}`}>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {priorityOptions.map((p) => (
+                                        <SelectItem key={p.value} value={p.value}>
+                                          {p.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeInlineTask(task.id)}
+                                data-testid={`button-remove-task-${index}`}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <DialogFooter>
