@@ -112,6 +112,61 @@ Public Routes (token-based or no auth):
 - PATCH `/api/projects/:id/toggle-portal` - Enable/disable borrower portal
 - POST `/api/projects/:id/push-to-los` - Trigger external LOS webhook
 
+**Admin Routes (Protected - requires admin/staff/super_admin role):**
+- GET `/api/admin/dashboard` - Get dashboard stats (active users, pipeline value, funded volume, pending tasks)
+- GET `/api/admin/users` - List all users with search/filter
+- PATCH `/api/admin/users/:id` - Update user role
+- GET `/api/admin/projects` - List all projects across all users
+- GET `/api/admin/projects/:id` - Get project details with admin tasks
+- POST `/api/admin/projects/:id/tasks` - Create admin task linked to project
+- PATCH `/api/admin/tasks/:id` - Update admin task status
+- GET `/api/admin/agreements` - List all agreements across all users
+- GET `/api/admin/settings` - Get system settings
+- PUT `/api/admin/settings/:key` - Update system setting
+- GET `/api/admin/activity` - Get admin activity log
+
+### Admin Back Office System
+The application includes a comprehensive admin back office for staff to manage users, view all projects/agreements, and configure system settings.
+
+**Role-Based Access Control:**
+- `user` - Standard user, can only see their own data
+- `staff` - Can access admin pages but limited write access
+- `admin` - Full admin access except user role changes to super_admin
+- `super_admin` - Complete system access including role management
+
+**Admin Pages:**
+8. Admin Dashboard (/admin) - Overview with key metrics:
+   - Active users count
+   - Pipeline value (active projects)
+   - Funded volume (completed projects)
+   - Pending admin tasks
+   - Recent admin activity
+
+9. User Management (/admin/users) - Manage all users:
+   - Search by name or email
+   - View user details and registration date
+   - Change user roles (with appropriate permissions)
+
+10. All Projects (/admin/projects) - View projects across all users:
+    - Search by project number, borrower, or address
+    - Filter by status (All, Active, Completed)
+    - Access project details with admin task management
+
+11. Admin Project Detail (/admin/projects/:id) - Full project view with:
+    - All standard project information
+    - Admin task management (internal tasks that can link to user milestones)
+    - Task sync with user-facing milestones on completion
+
+12. System Settings (/admin/settings) - Configure system-wide settings:
+    - Company name
+    - Support email
+    - Puppeteer quote URL for pricing scraper
+
+**Admin Database Tables:**
+- `system_settings` - Key-value store for system configuration
+- `admin_tasks` - Internal admin tasks with project linking
+- `admin_activity` - Audit log of admin actions
+
 Frontend Auth Components:
 - `client/src/hooks/use-auth.tsx` - AuthContext and useAuth hook
 - `client/src/pages/login.tsx` - Login page
