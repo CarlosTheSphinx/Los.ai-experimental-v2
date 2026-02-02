@@ -18,12 +18,16 @@ import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
+import AdminDashboard from "@/pages/admin/dashboard";
+import AdminUsers from "@/pages/admin/users";
+import AdminProjects from "@/pages/admin/projects";
+import AdminProjectDetail from "@/pages/admin/project-detail";
+import AdminSettings from "@/pages/admin/settings";
 import { AppLayout } from "@/components/AppLayout";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { isAuthenticated, isLoading } = useAuth();
-  const [, setLocation] = useLocation();
 
   if (isLoading) {
     return (
@@ -35,6 +39,29 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 
   if (!isAuthenticated) {
     return <Redirect to="/login" />;
+  }
+
+  return <Component />;
+}
+
+function AdminProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+  const { isAuthenticated, isLoading, user } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect to="/login" />;
+  }
+
+  const isAdmin = user?.role && ['admin', 'staff', 'super_admin'].includes(user.role);
+  if (!isAdmin) {
+    return <Redirect to="/" />;
   }
 
   return <Component />;
@@ -69,6 +96,15 @@ function MainRoutes() {
         <Route path="/projects" component={() => <ProtectedRoute component={Projects} />} />
         <Route path="/projects/new" component={() => <ProtectedRoute component={NewProject} />} />
         <Route path="/projects/:id" component={() => <ProtectedRoute component={ProjectDetail} />} />
+        
+        {/* Admin Routes */}
+        <Route path="/admin" component={() => <AdminProtectedRoute component={AdminDashboard} />} />
+        <Route path="/admin/dashboard" component={() => <AdminProtectedRoute component={AdminDashboard} />} />
+        <Route path="/admin/users" component={() => <AdminProtectedRoute component={AdminUsers} />} />
+        <Route path="/admin/projects" component={() => <AdminProtectedRoute component={AdminProjects} />} />
+        <Route path="/admin/projects/:id" component={() => <AdminProtectedRoute component={AdminProjectDetail} />} />
+        <Route path="/admin/settings" component={() => <AdminProtectedRoute component={AdminSettings} />} />
+        
         <Route component={NotFound} />
       </Switch>
     </AppLayout>

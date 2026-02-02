@@ -4,13 +4,18 @@ import {
   FileText, 
   ClipboardList,
   FolderKanban,
-  LogOut
+  LogOut,
+  LayoutDashboard,
+  Users,
+  Settings,
+  Shield
 } from "lucide-react";
 import { 
   Sidebar, 
   SidebarContent, 
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -20,6 +25,7 @@ import {
   SidebarTrigger
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
 import sphinxLogo from "@assets/Sphinx_Capital_Logo_-_Blue_-_No_Background_(1)_1769811166428.jpeg";
 
@@ -34,9 +40,18 @@ const navItems = [
   { href: "/projects", label: "Projects", icon: FolderKanban },
 ];
 
+const adminNavItems = [
+  { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/admin/users", label: "Users", icon: Users },
+  { href: "/admin/projects", label: "All Projects", icon: FolderKanban },
+  { href: "/admin/settings", label: "Settings", icon: Settings },
+];
+
 export function AppLayout({ children }: AppLayoutProps) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
+  
+  const isAdmin = user?.role && ['admin', 'staff', 'super_admin'].includes(user.role);
 
   const handleLogout = async () => {
     await logout();
@@ -66,7 +81,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <SidebarMenu>
                   {navItems.map((item) => {
                     const isActive = location === item.href || 
-                      (item.href !== "/" && location.startsWith(item.href));
+                      (item.href !== "/" && location.startsWith(item.href) && !location.startsWith("/admin"));
                     const Icon = item.icon;
                     
                     return (
@@ -90,12 +105,56 @@ export function AppLayout({ children }: AppLayoutProps) {
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
+            
+            {isAdmin && (
+              <SidebarGroup>
+                <SidebarGroupLabel className="flex items-center gap-2">
+                  <Shield className="h-3 w-3" />
+                  Admin
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {adminNavItems.map((item) => {
+                      const isActive = location === item.href || 
+                        (item.href !== "/admin" && location.startsWith(item.href));
+                      const Icon = item.icon;
+                      
+                      return (
+                        <SidebarMenuItem key={item.href}>
+                          <SidebarMenuButton 
+                            asChild 
+                            isActive={isActive}
+                            tooltip={item.label}
+                          >
+                            <Link 
+                              href={item.href}
+                              data-testid={`nav-admin-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+                            >
+                              <Icon className="h-5 w-5" />
+                              <span>{item.label}</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      );
+                    })}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )}
           </SidebarContent>
           <SidebarFooter className="border-t border-sidebar-border p-2">
             <div className="flex flex-col gap-2">
               {user && (
-                <div className="px-2 py-1 text-sm text-muted-foreground truncate group-data-[collapsible=icon]:hidden">
-                  {user.firstName} {user.lastName}
+                <div className="px-2 py-1 group-data-[collapsible=icon]:hidden">
+                  <div className="text-sm text-muted-foreground truncate">
+                    {user.firstName} {user.lastName}
+                  </div>
+                  {isAdmin && (
+                    <Badge variant="secondary" className="mt-1 text-xs">
+                      <Shield className="h-3 w-3 mr-1" />
+                      {user.role?.replace('_', ' ')}
+                    </Badge>
+                  )}
                 </div>
               )}
               <Button
