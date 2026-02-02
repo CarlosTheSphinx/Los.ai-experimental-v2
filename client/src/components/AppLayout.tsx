@@ -10,7 +10,8 @@ import {
   Settings,
   Settings2,
   Shield,
-  Handshake
+  Handshake,
+  Sparkles
 } from "lucide-react";
 import { 
   Sidebar, 
@@ -47,6 +48,7 @@ const adminNavItems = [
   { href: "/admin/deals", label: "Deals", icon: FileText },
   { href: "/admin/partners", label: "Partners", icon: Handshake },
   { href: "/admin/programs", label: "Programs", icon: Settings2 },
+  { href: "/admin/pricing-rules", label: "Pricing Rules", icon: Sparkles },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/projects", label: "All Projects", icon: FolderKanban },
   { href: "/admin/settings", label: "Settings", icon: Settings },

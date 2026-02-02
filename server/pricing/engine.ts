@@ -175,9 +175,11 @@ export const SAMPLE_RTL_RULESET: PricingRules = {
 export const SAMPLE_DSCR_RULESET: PricingRules = {
   product: "DSCR",
   baseRates: {
-    standard: 7.5,
-    interest_only: 7.75,
-    cash_out: 8.0
+    "30yr_fixed": 7.5,
+    "5yr_arm": 7.25,
+    "7yr_arm": 7.35,
+    "10yr_arm": 7.45,
+    interest_only: 7.75
   },
   points: { default: 1.5 },
   adjusters: [
@@ -187,16 +189,17 @@ export const SAMPLE_DSCR_RULESET: PricingRules = {
     { id: "fico_lt_680", label: "FICO < 680", when: { ficoLt: 680 }, rateAdd: 0.25 },
     { id: "high_ltv", label: "LTV > 75%", when: { ltvGte: 75 }, rateAdd: 0.25 },
     { id: "large_loan", label: "Loan > $1.5M", when: { loanAmountGte: 1500000 }, rateAdd: -0.125 },
+    { id: "cash_out", label: "Cash Out", when: { purpose: "cash_out" }, rateAdd: 0.5 },
   ],
   leverageCaps: [
     {
       tier: "experienced",
-      loanTypes: ["standard", "interest_only", "cash_out"],
+      loanTypes: ["30yr_fixed", "5yr_arm", "7yr_arm", "10yr_arm", "interest_only"],
       max: { ltc: 0.80, ltaiv: 0.80, ltarv: 0.75 }
     },
     {
       tier: "no_experience",
-      loanTypes: ["standard", "interest_only"],
+      loanTypes: ["30yr_fixed", "5yr_arm", "7yr_arm", "10yr_arm"],
       max: { ltc: 0.75, ltaiv: 0.75, ltarv: 0.70 }
     }
   ],
