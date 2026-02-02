@@ -3088,5 +3088,71 @@ export async function registerRoutes(
     }
   });
 
+  // Admin - Get single deal by ID
+  app.get('/api/admin/deals/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.id);
+      
+      const [deal] = await db.select({
+        id: savedQuotes.id,
+        userId: savedQuotes.userId,
+        customerFirstName: savedQuotes.customerFirstName,
+        customerLastName: savedQuotes.customerLastName,
+        propertyAddress: savedQuotes.propertyAddress,
+        loanData: savedQuotes.loanData,
+        interestRate: savedQuotes.interestRate,
+        pointsCharged: savedQuotes.pointsCharged,
+        pointsAmount: savedQuotes.pointsAmount,
+        tpoPremiumAmount: savedQuotes.tpoPremiumAmount,
+        totalRevenue: savedQuotes.totalRevenue,
+        commission: savedQuotes.commission,
+        stage: savedQuotes.stage,
+        createdAt: savedQuotes.createdAt,
+        userName: users.fullName,
+        userEmail: users.email,
+      })
+        .from(savedQuotes)
+        .leftJoin(users, eq(savedQuotes.userId, users.id))
+        .where(eq(savedQuotes.id, dealId))
+        .limit(1);
+      
+      if (!deal) {
+        return res.status(404).json({ error: 'Deal not found' });
+      }
+      
+      res.json({ deal });
+    } catch (error) {
+      console.error('Admin get deal error:', error);
+      res.status(500).json({ error: 'Failed to load deal' });
+    }
+  });
+
+  // Admin - Update deal stage
+  app.patch('/api/admin/deals/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.id);
+      const { stage } = req.body;
+      
+      const validStages = ['initial-review', 'term-sheet', 'onboarding', 'processing', 'underwriting', 'closing', 'closed'];
+      if (stage && !validStages.includes(stage)) {
+        return res.status(400).json({ error: 'Invalid stage' });
+      }
+      
+      const [updated] = await db.update(savedQuotes)
+        .set({ stage })
+        .where(eq(savedQuotes.id, dealId))
+        .returning();
+      
+      if (!updated) {
+        return res.status(404).json({ error: 'Deal not found' });
+      }
+      
+      res.json({ deal: updated });
+    } catch (error) {
+      console.error('Admin update deal error:', error);
+      res.status(500).json({ error: 'Failed to update deal' });
+    }
+  });
+
   return httpServer;
 }

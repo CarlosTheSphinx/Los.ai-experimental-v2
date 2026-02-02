@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -17,8 +18,6 @@ import {
   TrendingUp,
   Wallet,
   Search,
-  Building,
-  User,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -294,38 +293,56 @@ export default function AdminDeals() {
                 </TableHeader>
                 <TableBody>
                   {deals.map((deal) => (
-                    <TableRow key={deal.id} data-testid={`row-deal-${deal.id}`}>
+                    <TableRow 
+                      key={deal.id} 
+                      data-testid={`row-deal-${deal.id}`}
+                      className="cursor-pointer hover-elevate"
+                    >
                       <TableCell>
-                        <span className="font-medium">
-                          {deal.customerFirstName} {deal.customerLastName}
-                        </span>
+                        <Link href={`/admin/deals/${deal.id}`} className="block">
+                          <span className="font-medium">
+                            {deal.customerFirstName} {deal.customerLastName}
+                          </span>
+                        </Link>
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-col">
-                          <span className="max-w-[180px] truncate">{deal.propertyAddress?.split(',')[0]}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {deal.propertyAddress?.split(',').slice(1).join(',').trim()}
-                          </span>
-                        </div>
+                        <Link href={`/admin/deals/${deal.id}`} className="block">
+                          <div className="flex flex-col">
+                            <span className="max-w-[180px] truncate">{deal.propertyAddress?.split(',')[0]}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {deal.propertyAddress?.split(',').slice(1).join(',').trim()}
+                            </span>
+                          </div>
+                        </Link>
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        {formatCurrency(deal.loanData?.loanAmount || 0)}
+                        <Link href={`/admin/deals/${deal.id}`} className="block">
+                          {formatCurrency(deal.loanData?.loanAmount || 0)}
+                        </Link>
                       </TableCell>
                       <TableCell className="text-right">
-                        {deal.interestRate}
+                        <Link href={`/admin/deals/${deal.id}`} className="block">
+                          {deal.interestRate}
+                        </Link>
                       </TableCell>
                       <TableCell className="text-right">
-                        {deal.loanData?.ltv || "N/A"}
+                        <Link href={`/admin/deals/${deal.id}`} className="block">
+                          {deal.loanData?.ltv || "N/A"}
+                        </Link>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">
-                          {deal.loanData?.loanType || "N/A"}
-                        </Badge>
+                        <Link href={`/admin/deals/${deal.id}`} className="block">
+                          <Badge variant="outline">
+                            {deal.loanData?.loanType || "N/A"}
+                          </Badge>
+                        </Link>
                       </TableCell>
                       <TableCell>
-                        <Badge className={cn("text-xs", getStageColor(deal.stage))}>
-                          {getStageLabel(deal.stage)}
-                        </Badge>
+                        <Link href={`/admin/deals/${deal.id}`} className="block">
+                          <Badge className={cn("text-xs", getStageColor(deal.stage))}>
+                            {getStageLabel(deal.stage)}
+                          </Badge>
+                        </Link>
                       </TableCell>
                     </TableRow>
                   ))}
