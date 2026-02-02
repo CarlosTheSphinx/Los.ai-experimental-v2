@@ -3037,6 +3037,8 @@ export async function registerRoutes(
       const allQuotes = await db.select({
         id: savedQuotes.id,
         userId: savedQuotes.userId,
+        partnerId: savedQuotes.partnerId,
+        partnerName: savedQuotes.partnerName,
         customerFirstName: savedQuotes.customerFirstName,
         customerLastName: savedQuotes.customerLastName,
         propertyAddress: savedQuotes.propertyAddress,
@@ -3051,20 +3053,35 @@ export async function registerRoutes(
         createdAt: savedQuotes.createdAt,
         userName: users.fullName,
         userEmail: users.email,
+        partnerData: partners,
       })
         .from(savedQuotes)
         .leftJoin(users, eq(savedQuotes.userId, users.id))
+        .leftJoin(partners, eq(savedQuotes.partnerId, partners.id))
         .orderBy(desc(savedQuotes.createdAt));
       
+      // Map partner data to deals
+      const quotesWithPartners = allQuotes.map(q => ({
+        ...q,
+        partner: q.partnerData ? {
+          id: q.partnerData.id,
+          name: q.partnerData.name,
+          companyName: q.partnerData.companyName,
+        } : null,
+        partnerData: undefined,
+      }));
+      
       // Filter by search term if provided
-      let filteredQuotes = allQuotes;
+      let filteredQuotes = quotesWithPartners;
       if (search) {
         const searchLower = (search as string).toLowerCase();
-        filteredQuotes = allQuotes.filter(q => 
+        filteredQuotes = quotesWithPartners.filter(q => 
           q.customerFirstName?.toLowerCase().includes(searchLower) ||
           q.customerLastName?.toLowerCase().includes(searchLower) ||
           q.propertyAddress?.toLowerCase().includes(searchLower) ||
-          q.userName?.toLowerCase().includes(searchLower)
+          q.userName?.toLowerCase().includes(searchLower) ||
+          q.partner?.name?.toLowerCase().includes(searchLower) ||
+          q.partnerName?.toLowerCase().includes(searchLower)
         );
       }
       
@@ -3159,7 +3176,9 @@ export async function registerRoutes(
         interestRate, 
         loanType, 
         propertyType, 
-        stage 
+        stage,
+        partnerId,
+        partnerName
       } = req.body;
       
       if (!customerFirstName || !customerLastName || !propertyAddress || !loanAmount) {
@@ -3174,6 +3193,8 @@ export async function registerRoutes(
       
       const [deal] = await db.insert(savedQuotes).values({
         userId: req.user!.id,
+        partnerId: partnerId ? parseInt(partnerId) : null,
+        partnerName: partnerName || null,
         customerFirstName,
         customerLastName,
         propertyAddress,

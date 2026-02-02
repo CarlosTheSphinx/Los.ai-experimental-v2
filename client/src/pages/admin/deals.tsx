@@ -43,9 +43,17 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 
+interface Partner {
+  id: number;
+  name: string;
+  companyName: string | null;
+}
+
 interface Deal {
   id: number;
   userId: number;
+  partnerId: number | null;
+  partnerName: string | null;
   customerFirstName: string;
   customerLastName: string;
   propertyAddress: string;
@@ -67,6 +75,7 @@ interface Deal {
   createdAt: string;
   userName: string | null;
   userEmail: string | null;
+  partner?: Partner | null;
 }
 
 interface StageInfo {
@@ -228,6 +237,19 @@ export default function AdminDeals() {
     loanType: "rtl",
     propertyType: "single-family",
     stage: "initial-review",
+    partnerId: "",
+    partnerName: "",
+  });
+  
+  const [partnerInputMode, setPartnerInputMode] = useState<"select" | "manual">("select");
+  
+  const { data: partnersData } = useQuery<{ partners: Partner[] }>({
+    queryKey: ["/api/admin/partners"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/partners", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch partners");
+      return res.json();
+    },
   });
 
   const { data, isLoading } = useQuery<DealsResponse>({
@@ -260,7 +282,10 @@ export default function AdminDeals() {
         loanType: "rtl",
         propertyType: "single-family",
         stage: "initial-review",
+        partnerId: "",
+        partnerName: "",
       });
+      setPartnerInputMode("select");
       toast({
         title: "Deal created",
         description: "The deal has been added successfully.",
@@ -435,6 +460,49 @@ export default function AdminDeals() {
                   </Select>
                 </div>
               </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="partner">Partner</Label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    type="button"
+                    onClick={() => {
+                      setPartnerInputMode(partnerInputMode === "select" ? "manual" : "select");
+                      setNewDeal({ ...newDeal, partnerId: "", partnerName: "" });
+                    }}
+                    data-testid="button-toggle-partner-mode"
+                  >
+                    {partnerInputMode === "select" ? "Type manually" : "Select from list"}
+                  </Button>
+                </div>
+                {partnerInputMode === "select" ? (
+                  <Select
+                    value={newDeal.partnerId}
+                    onValueChange={(value) => setNewDeal({ ...newDeal, partnerId: value, partnerName: "" })}
+                  >
+                    <SelectTrigger data-testid="select-partner">
+                      <SelectValue placeholder="Select a partner (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">None</SelectItem>
+                      {partnersData?.partners?.map((partner) => (
+                        <SelectItem key={partner.id} value={partner.id.toString()}>
+                          {partner.name}{partner.companyName ? ` (${partner.companyName})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    id="partnerName"
+                    value={newDeal.partnerName}
+                    onChange={(e) => setNewDeal({ ...newDeal, partnerName: e.target.value, partnerId: "" })}
+                    placeholder="Enter partner name manually"
+                    data-testid="input-partner-name"
+                  />
+                )}
+              </div>
             </div>
             <DialogFooter>
               <Button
@@ -538,6 +606,7 @@ export default function AdminDeals() {
                     <TableHead className="text-right">Rate</TableHead>
                     <TableHead className="text-right">LTV</TableHead>
                     <TableHead>Type</TableHead>
+                    <TableHead>Partner</TableHead>
                     <TableHead>Stage</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -585,6 +654,13 @@ export default function AdminDeals() {
                           <Badge variant="outline">
                             {getLoanTypeLabel(deal.loanData?.loanType)}
                           </Badge>
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <Link href={`/admin/deals/${deal.id}`} className="block">
+                          {deal.partner?.name || deal.partnerName || (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </Link>
                       </TableCell>
                       <TableCell>
