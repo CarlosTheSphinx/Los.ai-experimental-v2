@@ -93,14 +93,7 @@ export default function AdminDealDetail() {
   const dealId = params?.id;
 
   const { data, isLoading, error } = useQuery<{ deal: Deal }>({
-    queryKey: ["/api/admin/deals", dealId],
-    queryFn: async () => {
-      const res = await fetch(`/api/admin/deals/${dealId}`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to fetch deal");
-      return res.json();
-    },
+    queryKey: [`/api/admin/deals/${dealId}`],
     enabled: !!dealId,
   });
 
@@ -144,7 +137,7 @@ export default function AdminDealDetail() {
   return (
     <div className="p-6 space-y-6">
       <Link href="/admin/deals">
-        <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground" data-testid="button-back">
+        <Button variant="ghost" size="sm" className="text-muted-foreground" data-testid="button-back">
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Dashboard
         </Button>
@@ -154,11 +147,11 @@ export default function AdminDealDetail() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold" data-testid="text-borrower-name">{borrowerName}</h1>
-            <Badge className={cn("text-sm", getStageColor(deal.stage))}>
+            <Badge className={cn("text-sm", getStageColor(deal.stage))} data-testid="badge-deal-stage">
               {getStageLabel(deal.stage)}
             </Badge>
           </div>
-          <p className="text-muted-foreground flex items-center gap-1 mt-1">
+          <p className="text-muted-foreground flex items-center gap-1 mt-1" data-testid="text-property-address">
             <Building className="h-4 w-4" />
             {deal.propertyAddress}
           </p>
@@ -175,21 +168,21 @@ export default function AdminDealDetail() {
         </div>
       </div>
 
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList>
-          <TabsTrigger value="overview" className="flex items-center gap-2">
+      <Tabs defaultValue="overview" className="w-full" data-testid="tabs-deal-detail">
+        <TabsList data-testid="tabs-list">
+          <TabsTrigger value="overview" className="flex items-center gap-2" data-testid="tab-overview">
             <DollarSign className="h-4 w-4" />
             Overview
           </TabsTrigger>
-          <TabsTrigger value="documents" className="flex items-center gap-2">
+          <TabsTrigger value="documents" className="flex items-center gap-2" data-testid="tab-documents">
             <FileText className="h-4 w-4" />
             Documents
-            <Badge variant="secondary" className="ml-1 text-xs">0</Badge>
+            <Badge variant="secondary" className="ml-1 text-xs" data-testid="badge-documents-count">0</Badge>
           </TabsTrigger>
-          <TabsTrigger value="tasks" className="flex items-center gap-2">
+          <TabsTrigger value="tasks" className="flex items-center gap-2" data-testid="tab-tasks">
             <CheckSquare className="h-4 w-4" />
             Tasks
-            <Badge variant="secondary" className="ml-1 text-xs">0</Badge>
+            <Badge variant="secondary" className="ml-1 text-xs" data-testid="badge-tasks-count">0</Badge>
           </TabsTrigger>
         </TabsList>
 
@@ -207,27 +200,27 @@ export default function AdminDealDetail() {
                   <div className="grid grid-cols-2 gap-6">
                     <div>
                       <p className="text-sm text-muted-foreground">Loan Amount</p>
-                      <p className="text-xl font-bold">{formatCurrency(deal.loanData?.loanAmount || 0)}</p>
+                      <p className="text-xl font-bold" data-testid="text-loan-amount">{formatCurrency(deal.loanData?.loanAmount || 0)}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Interest Rate</p>
-                      <p className="text-xl font-bold">{deal.interestRate}</p>
+                      <p className="text-xl font-bold" data-testid="text-interest-rate">{deal.interestRate}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Property Value</p>
-                      <p className="text-xl font-bold">{formatCurrency(deal.loanData?.propertyValue || 0)}</p>
+                      <p className="text-xl font-bold" data-testid="text-property-value">{formatCurrency(deal.loanData?.propertyValue || 0)}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Loan Term</p>
-                      <p className="text-xl font-bold">{deal.loanData?.loanTerm || "12 months"}</p>
+                      <p className="text-xl font-bold" data-testid="text-loan-term">{deal.loanData?.loanTerm || "12 months"}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Loan-to-Value (LTV)</p>
-                      <p className="text-xl font-bold">{deal.loanData?.ltv || "N/A"}</p>
+                      <p className="text-xl font-bold" data-testid="text-ltv">{deal.loanData?.ltv || "N/A"}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Loan Type</p>
-                      <p className="text-xl font-bold">{deal.loanData?.loanType || "N/A"}</p>
+                      <p className="text-xl font-bold" data-testid="text-loan-type">{deal.loanData?.loanType || "N/A"}</p>
                     </div>
                   </div>
                 </CardContent>
