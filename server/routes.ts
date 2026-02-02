@@ -4,7 +4,7 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
 import { savedQuotes, users, dealDocuments, dealTasks, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema } from "@shared/schema";
-import { priceQuote, validateRuleset, SAMPLE_RTL_RULESET, SAMPLE_DSCR_RULESET, type PricingInputs } from "./pricing";
+import { priceQuote, validateRuleset, SAMPLE_RTL_RULESET, SAMPLE_DSCR_RULESET, type PricingInputs, analyzeGuidelines, refineProposal } from "./pricing";
 import { getDocumentTemplatesForLoanType } from "./document-templates";
 import { eq, desc, inArray, and } from "drizzle-orm";
 import { api } from "@shared/routes";
@@ -4595,6 +4595,181 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Get programs with pricing error:', error);
       res.status(500).json({ error: 'Failed to get programs' });
+    }
+  });
+
+  // ==================== AI RULE PROPOSAL ROUTES ====================
+  
+  // Analyze guidelines and generate rule proposal
+  app.post('/api/admin/programs/:programId/ai-analyze', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { programId } = req.params;
+      const { guidelineText } = req.body;
+      
+      if (!guidelineText || typeof guidelineText !== 'string') {
+        return res.status(400).json({ error: 'guidelineText is required' });
+      }
+      
+      // Get the program
+      const [program] = await db.select()
+        .from(loanPrograms)
+        .where(eq(loanPrograms.id, parseInt(programId)));
+      
+      if (!program) {
+        return res.status(404).json({ error: 'Program not found' });
+      }
+      
+      // Save the guideline upload
+      const [upload] = await db.insert(guidelineUploads)
+        .values({
+          programId: parseInt(programId),
+          fileName: 'text-input',
+          fileUrl: null,
+          textContent: guidelineText,
+          uploadedBy: req.user!.id
+        })
+        .returning();
+      
+      // Analyze with AI
+      const result = await analyzeGuidelines({
+        guidelineText,
+        loanType: program.loanType as 'rtl' | 'dscr',
+        programName: program.name
+      });
+      
+      if (!result.success) {
+        return res.status(422).json({ error: result.error });
+      }
+      
+      // Save the proposal
+      const [proposal] = await db.insert(ruleProposals)
+        .values({
+          programId: parseInt(programId),
+          guidelineUploadId: upload.id,
+          proposalJson: result.proposal,
+          aiExplanation: result.explanation,
+          status: 'pending',
+          createdBy: req.user!.id
+        })
+        .returning();
+      
+      res.status(201).json({
+        proposal,
+        explanation: result.explanation
+      });
+    } catch (error) {
+      console.error('AI analyze error:', error);
+      res.status(500).json({ error: 'Failed to analyze guidelines' });
+    }
+  });
+  
+  // Refine an existing proposal with feedback
+  app.post('/api/admin/proposals/:proposalId/refine', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { proposalId } = req.params;
+      const { feedback } = req.body;
+      
+      if (!feedback || typeof feedback !== 'string') {
+        return res.status(400).json({ error: 'feedback is required' });
+      }
+      
+      // Get the current proposal
+      const [proposal] = await db.select()
+        .from(ruleProposals)
+        .where(eq(ruleProposals.id, parseInt(proposalId)));
+      
+      if (!proposal) {
+        return res.status(404).json({ error: 'Proposal not found' });
+      }
+      
+      // Refine with AI
+      const result = await refineProposal(proposal.proposalJson as any, feedback);
+      
+      if (!result.success) {
+        return res.status(422).json({ error: result.error });
+      }
+      
+      // Update the proposal
+      const [updated] = await db.update(ruleProposals)
+        .set({
+          proposalJson: result.proposal,
+          aiExplanation: result.explanation,
+          status: 'pending'
+        })
+        .where(eq(ruleProposals.id, parseInt(proposalId)))
+        .returning();
+      
+      res.json({
+        proposal: updated,
+        explanation: result.explanation
+      });
+    } catch (error) {
+      console.error('Refine proposal error:', error);
+      res.status(500).json({ error: 'Failed to refine proposal' });
+    }
+  });
+  
+  // Convert an accepted proposal to a ruleset
+  app.post('/api/admin/proposals/:proposalId/deploy', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { proposalId } = req.params;
+      const { name, description, activateImmediately } = req.body;
+      
+      // Get the proposal
+      const [proposal] = await db.select()
+        .from(ruleProposals)
+        .where(eq(ruleProposals.id, parseInt(proposalId)));
+      
+      if (!proposal) {
+        return res.status(404).json({ error: 'Proposal not found' });
+      }
+      
+      // Get next version number
+      const existingRulesets = await db.select()
+        .from(pricingRulesets)
+        .where(eq(pricingRulesets.programId, proposal.programId))
+        .orderBy(desc(pricingRulesets.version))
+        .limit(1);
+      
+      const nextVersion = (existingRulesets[0]?.version ?? 0) + 1;
+      
+      // If activating immediately, deactivate existing active ruleset
+      if (activateImmediately) {
+        await db.update(pricingRulesets)
+          .set({ status: 'archived', archivedAt: new Date() })
+          .where(and(
+            eq(pricingRulesets.programId, proposal.programId),
+            eq(pricingRulesets.status, 'active')
+          ));
+      }
+      
+      // Create the ruleset
+      const [ruleset] = await db.insert(pricingRulesets)
+        .values({
+          programId: proposal.programId,
+          version: nextVersion,
+          name: name || `AI Generated v${nextVersion}`,
+          description: description || proposal.aiExplanation,
+          rulesJson: proposal.proposalJson,
+          status: activateImmediately ? 'active' : 'draft',
+          createdBy: req.user!.id,
+          activatedAt: activateImmediately ? new Date() : null
+        })
+        .returning();
+      
+      // Mark the proposal as accepted
+      await db.update(ruleProposals)
+        .set({
+          status: 'accepted',
+          reviewedBy: req.user!.id,
+          reviewedAt: new Date()
+        })
+        .where(eq(ruleProposals.id, parseInt(proposalId)));
+      
+      res.status(201).json({ ruleset });
+    } catch (error) {
+      console.error('Deploy proposal error:', error);
+      res.status(500).json({ error: 'Failed to deploy proposal' });
     }
   });
 
