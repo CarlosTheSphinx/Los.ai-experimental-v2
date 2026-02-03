@@ -12,11 +12,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, Plus, CheckCircle2, Clock, AlertCircle, User, Building, FileText, ClipboardList } from "lucide-react";
+import { ArrowLeft, Plus, CheckCircle2, Clock, AlertCircle, User, Building, FileText, ClipboardList, CalendarDays } from "lucide-react";
 import { Link } from "wouter";
 import { format, formatDistanceToNow } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { DigestConfigPanel } from "@/components/DigestConfigPanel";
 
 interface AdminTask {
   id: number;
@@ -191,6 +192,10 @@ export default function AdminProjectDetail() {
               </TabsTrigger>
               <TabsTrigger value="activity" data-testid="tab-activity">
                 Activity
+              </TabsTrigger>
+              <TabsTrigger value="digests" data-testid="tab-digests">
+                <CalendarDays className="h-4 w-4 mr-2" />
+                Digests
               </TabsTrigger>
             </TabsList>
 
@@ -398,6 +403,10 @@ export default function AdminProjectDetail() {
                   )}
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            <TabsContent value="digests">
+              {projectId && <DigestConfigPanel projectId={projectId} />}
             </TabsContent>
           </Tabs>
         </div>

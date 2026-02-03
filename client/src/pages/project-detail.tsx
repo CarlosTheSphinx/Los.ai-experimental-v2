@@ -467,7 +467,7 @@ export default function ProjectDetail() {
         </TabsContent>
 
         <TabsContent value="digests">
-          {projectId && <DigestConfigPanel projectId={projectId} />}
+          {projectId && <DigestConfigPanel projectId={Number(projectId)} />}
         </TabsContent>
       </Tabs>
     </div>
