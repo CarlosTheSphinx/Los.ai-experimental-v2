@@ -76,7 +76,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               <img 
                 src={sphinxLogo} 
                 alt="Sphinx Capital" 
-                className="h-10 w-auto object-contain group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8"
+                className="h-[52px] w-auto object-contain group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:w-10"
               />
             </div>
           </SidebarHeader>
