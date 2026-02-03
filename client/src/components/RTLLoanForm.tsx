@@ -662,27 +662,26 @@ export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
                 </div>
 
                 <div className="border-t pt-6">
-                  <h4 className="font-medium text-slate-700 mb-4">Credit Events (Leave blank if none)</h4>
+                  <h4 className="font-medium text-slate-700 mb-4">Credit Events (In last 5 years)</h4>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-4">
                     <FormField
                       control={form.control}
                       name="monthsSinceBK"
                       render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-slate-700">Months Since Bankruptcy</FormLabel>
+                        <FormItem className="flex flex-row items-start space-x-3 space-y-0">
                           <FormControl>
-                            <Input
-                              type="number"
-                              className="h-11 bg-slate-50 border-slate-200"
-                              placeholder="N/A"
-                              data-testid="input-bk"
-                              {...field}
-                              value={field.value ?? ""}
+                            <Checkbox
+                              checked={field.value !== null && field.value !== undefined}
+                              onCheckedChange={(checked) => {
+                                field.onChange(checked ? 12 : null);
+                              }}
+                              data-testid="checkbox-bk"
                             />
                           </FormControl>
-                          <p className="text-xs text-slate-500">Min: 60 months</p>
-                          <FormMessage />
+                          <div className="space-y-1 leading-none">
+                            <FormLabel className="text-slate-700">Bankruptcy in the last 5 years?</FormLabel>
+                          </div>
                         </FormItem>
                       )}
                     />
@@ -691,20 +690,19 @@ export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
                       control={form.control}
                       name="monthsSinceForeclosure"
                       render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-slate-700">Months Since Foreclosure</FormLabel>
+                        <FormItem className="flex flex-row items-start space-x-3 space-y-0">
                           <FormControl>
-                            <Input
-                              type="number"
-                              className="h-11 bg-slate-50 border-slate-200"
-                              placeholder="N/A"
-                              data-testid="input-foreclosure"
-                              {...field}
-                              value={field.value ?? ""}
+                            <Checkbox
+                              checked={field.value !== null && field.value !== undefined}
+                              onCheckedChange={(checked) => {
+                                field.onChange(checked ? 12 : null);
+                              }}
+                              data-testid="checkbox-foreclosure"
                             />
                           </FormControl>
-                          <p className="text-xs text-slate-500">Min: 60 months</p>
-                          <FormMessage />
+                          <div className="space-y-1 leading-none">
+                            <FormLabel className="text-slate-700">Foreclosure in the last 5 years?</FormLabel>
+                          </div>
                         </FormItem>
                       )}
                     />
@@ -713,20 +711,19 @@ export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
                       control={form.control}
                       name="monthsSinceShortSaleOrDIL"
                       render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-slate-700">Months Since Short Sale/DIL</FormLabel>
+                        <FormItem className="flex flex-row items-start space-x-3 space-y-0">
                           <FormControl>
-                            <Input
-                              type="number"
-                              className="h-11 bg-slate-50 border-slate-200"
-                              placeholder="N/A"
-                              data-testid="input-shortsale"
-                              {...field}
-                              value={field.value ?? ""}
+                            <Checkbox
+                              checked={field.value !== null && field.value !== undefined}
+                              onCheckedChange={(checked) => {
+                                field.onChange(checked ? 12 : null);
+                              }}
+                              data-testid="checkbox-shortsale"
                             />
                           </FormControl>
-                          <p className="text-xs text-slate-500">Min: 60 months</p>
-                          <FormMessage />
+                          <div className="space-y-1 leading-none">
+                            <FormLabel className="text-slate-700">Short Sale/DIL in the last 5 years?</FormLabel>
+                          </div>
                         </FormItem>
                       )}
                     />
