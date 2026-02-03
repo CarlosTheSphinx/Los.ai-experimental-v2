@@ -7,10 +7,32 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Save, Settings as SettingsIcon, RefreshCw, HardDrive, Phone, Mail, Brain, MapPin, Bot, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Save, Settings as SettingsIcon, RefreshCw, HardDrive, Phone, Mail, Brain, MapPin, Bot, CheckCircle2, XCircle, AlertCircle, Layers, Plus, Trash2, GripVertical } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+
+// Default deal stages
+const DEFAULT_STAGES = [
+  { key: "new", label: "New", color: "gray" },
+  { key: "initial-review", label: "Initial Review", color: "yellow" },
+  { key: "under-review", label: "Under Review", color: "orange" },
+  { key: "term-sheet", label: "Term Sheet", color: "blue" },
+  { key: "approved", label: "Approved", color: "emerald" },
+  { key: "processing", label: "Processing", color: "cyan" },
+  { key: "underwriting", label: "Underwriting", color: "indigo" },
+  { key: "closing", label: "Closing", color: "teal" },
+  { key: "funded", label: "Funded", color: "green" },
+  { key: "closed", label: "Closed", color: "green" },
+  { key: "declined", label: "Declined", color: "red" },
+  { key: "withdrawn", label: "Withdrawn", color: "slate" },
+];
+
+interface DealStage {
+  key: string;
+  label: string;
+  color: string;
+}
 
 interface SystemSetting {
   id: number;
@@ -441,6 +463,57 @@ export default function AdminSettings() {
           <div className="p-4 bg-muted/50 rounded-lg">
             <p className="text-sm text-muted-foreground">
               <strong>Setup Instructions:</strong> To enable Google Drive integration, you need to create a Google Cloud service account and share the parent folder with the service account email. The service account credentials (JSON key file) should be stored as a secret named <code className="bg-muted px-1 py-0.5 rounded">GOOGLE_SERVICE_ACCOUNT_KEY</code>.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Layers className="h-5 w-5" />
+            Deal Stages
+          </CardTitle>
+          <CardDescription>
+            Configure the workflow stages for loan deals. These stages help track the progress of each loan from initial review to closing.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {DEFAULT_STAGES.map((stage, index) => {
+              const colorMap: Record<string, string> = {
+                gray: "bg-gray-100 text-gray-800",
+                yellow: "bg-yellow-100 text-yellow-800",
+                orange: "bg-orange-100 text-orange-800",
+                blue: "bg-blue-100 text-blue-800",
+                emerald: "bg-emerald-100 text-emerald-800",
+                cyan: "bg-cyan-100 text-cyan-800",
+                indigo: "bg-indigo-100 text-indigo-800",
+                teal: "bg-teal-100 text-teal-800",
+                green: "bg-green-100 text-green-800",
+                red: "bg-red-100 text-red-800",
+                slate: "bg-slate-100 text-slate-600",
+              };
+              return (
+                <div 
+                  key={stage.key} 
+                  className="flex items-center gap-3 p-3 border rounded-lg"
+                  data-testid={`stage-row-${stage.key}`}
+                >
+                  <GripVertical className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground w-6">{index + 1}</span>
+                  <Badge className={`${colorMap[stage.color] || "bg-gray-100 text-gray-800"} min-w-[100px] justify-center`}>
+                    {stage.label}
+                  </Badge>
+                  <code className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">{stage.key}</code>
+                  <span className="flex-1" />
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-4 p-4 bg-muted/50 rounded-lg">
+            <p className="text-sm text-muted-foreground">
+              <strong>Note:</strong> Deal stages are currently pre-configured. The ability to add, remove, or reorder stages will be available in a future update. Contact your administrator for custom stage requirements.
             </p>
           </div>
         </CardContent>

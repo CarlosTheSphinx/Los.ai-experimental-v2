@@ -136,26 +136,38 @@ interface DealDetailResponse {
 
 function getStageColor(stage: string): string {
   const colors: Record<string, string> = {
+    "new": "bg-gray-100 text-gray-800",
     "initial-review": "bg-yellow-100 text-yellow-800",
+    "under-review": "bg-orange-100 text-orange-800",
     "term-sheet": "bg-blue-100 text-blue-800",
+    "approved": "bg-emerald-100 text-emerald-800",
     "onboarding": "bg-purple-100 text-purple-800",
-    "processing": "bg-red-100 text-red-800",
+    "processing": "bg-cyan-100 text-cyan-800",
     "underwriting": "bg-indigo-100 text-indigo-800",
     "closing": "bg-teal-100 text-teal-800",
-    "closed": "bg-green-100 text-green-800",
+    "funded": "bg-green-100 text-green-800",
+    "closed": "bg-green-200 text-green-900",
+    "declined": "bg-red-100 text-red-800",
+    "withdrawn": "bg-slate-100 text-slate-600",
   };
   return colors[stage] || "bg-gray-100 text-gray-800";
 }
 
 function getStageLabel(stage: string): string {
   const labels: Record<string, string> = {
+    "new": "New",
     "initial-review": "Initial Review",
+    "under-review": "Under Review",
     "term-sheet": "Term Sheet",
+    "approved": "Approved",
     "onboarding": "Onboarding",
     "processing": "Processing",
     "underwriting": "Underwriting",
     "closing": "Closing",
+    "funded": "Funded",
     "closed": "Closed",
+    "declined": "Declined",
+    "withdrawn": "Withdrawn",
   };
   return labels[stage] || stage;
 }
@@ -345,6 +357,26 @@ export default function AdminDealDetail() {
     onError: () => {
       toast({
         title: "Update failed",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateStageMutation = useMutation({
+    mutationFn: async (stage: string) => {
+      return apiRequest("PUT", `/api/admin/deals/${dealId}`, { stage });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/deals'] });
+      toast({
+        title: "Stage updated",
+        description: "The deal stage has been updated.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Failed to update stage",
         variant: "destructive",
       });
     },
@@ -568,9 +600,32 @@ export default function AdminDealDetail() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold" data-testid="text-borrower-name">{borrowerName}</h1>
-            <Badge className={cn("text-sm", getStageColor(deal.stage))} data-testid="badge-deal-stage">
-              {getStageLabel(deal.stage)}
-            </Badge>
+            <Select 
+              value={deal.stage} 
+              onValueChange={(value) => updateStageMutation.mutate(value)}
+              disabled={updateStageMutation.isPending}
+            >
+              <SelectTrigger 
+                className={cn("w-[160px] text-sm font-medium", getStageColor(deal.stage))}
+                data-testid="select-deal-stage"
+              >
+                <SelectValue>{getStageLabel(deal.stage)}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="new">New</SelectItem>
+                <SelectItem value="initial-review">Initial Review</SelectItem>
+                <SelectItem value="under-review">Under Review</SelectItem>
+                <SelectItem value="term-sheet">Term Sheet</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
+                <SelectItem value="processing">Processing</SelectItem>
+                <SelectItem value="underwriting">Underwriting</SelectItem>
+                <SelectItem value="closing">Closing</SelectItem>
+                <SelectItem value="funded">Funded</SelectItem>
+                <SelectItem value="closed">Closed</SelectItem>
+                <SelectItem value="declined">Declined</SelectItem>
+                <SelectItem value="withdrawn">Withdrawn</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <p className="text-muted-foreground flex items-center gap-1 mt-1" data-testid="text-property-address">
             <Building className="h-4 w-4" />
