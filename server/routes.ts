@@ -3791,7 +3791,11 @@ export async function registerRoutes(
         return sum + (loanData?.loanAmount || 0);
       }, 0);
       const totalRevenue = allQuotes.reduce((sum, q) => sum + (q.totalRevenue || 0), 0);
-      const totalCommission = allQuotes.reduce((sum, q) => sum + (q.commission || 0), 0);
+      // Total commission = Sphinx's base points (totalRevenue - broker's additional points)
+      const totalCommission = allQuotes.reduce((sum, q) => {
+        const sphinxRevenue = (q.totalRevenue || 0) - (q.commission || 0);
+        return sum + sphinxRevenue;
+      }, 0);
       
       // Calculate pipeline by loan type
       const loanTypeStats: Record<string, { count: number; amount: number }> = {};
