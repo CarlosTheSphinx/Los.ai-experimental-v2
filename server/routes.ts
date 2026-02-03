@@ -4339,6 +4339,50 @@ export async function registerRoutes(
         .where(eq(savedQuotes.id, dealId))
         .returning();
       
+      // Auto-populate documents if loan type changed and there are no existing documents
+      const previousLoanType = existingLoanData.loanType as string | undefined;
+      const newLoanType = updatedLoanData.loanType as string | undefined;
+      
+      if (newLoanType && newLoanType !== previousLoanType) {
+        // Check if deal already has documents
+        const existingDocs = await db.select({ id: dealDocuments.id })
+          .from(dealDocuments)
+          .where(eq(dealDocuments.dealId, dealId))
+          .limit(1);
+        
+        // Only auto-populate if no documents exist
+        if (existingDocs.length === 0) {
+          const [loanProgram] = await db.select()
+            .from(loanPrograms)
+            .where(and(
+              eq(loanPrograms.loanType, newLoanType),
+              eq(loanPrograms.isActive, true)
+            ))
+            .limit(1);
+          
+          if (loanProgram) {
+            const templates = await db.select()
+              .from(programDocumentTemplates)
+              .where(eq(programDocumentTemplates.programId, loanProgram.id))
+              .orderBy(programDocumentTemplates.sortOrder);
+            
+            if (templates.length > 0) {
+              const documentEntries = templates.map((doc, index) => ({
+                dealId,
+                documentName: doc.documentName,
+                documentCategory: doc.documentCategory,
+                documentDescription: doc.documentDescription,
+                isRequired: doc.isRequired,
+                sortOrder: doc.sortOrder || index,
+                status: 'pending' as const,
+              }));
+              
+              await db.insert(dealDocuments).values(documentEntries);
+            }
+          }
+        }
+      }
+      
       res.json({ deal: updated });
     } catch (error) {
       console.error('Admin full deal update error:', error);
