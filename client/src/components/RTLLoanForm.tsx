@@ -32,8 +32,8 @@ export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
     defaultValues: {
       loanType: "light_rehab",
       purpose: "purchase",
-      loanAmount: 0,
       propertyUnits: 1,
+      asIsValue: 0,
       propertyType: "sfr_1_4",
       state: "",
       isMidstream: false,
@@ -114,8 +114,8 @@ export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="light_rehab">Light Rehab</SelectItem>
-                            <SelectItem value="heavy_rehab">Heavy Rehab</SelectItem>
+                            <SelectItem value="light_rehab">Light Rehab (rehab &lt; 50% of as-is value)</SelectItem>
+                            <SelectItem value="heavy_rehab">Heavy Rehab (rehab &gt; 50% of as-is value)</SelectItem>
                             <SelectItem value="bridge_no_rehab">Bridge (No Rehab)</SelectItem>
                             <SelectItem value="guc">Ground Up Construction (GUC)</SelectItem>
                           </SelectContent>
@@ -149,31 +149,8 @@ export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField
-                    control={form.control}
-                    name="loanAmount"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-slate-700">Loan Amount ($)</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                            <Input
-                              type="number"
-                              className="pl-9 h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all"
-                              placeholder="Enter amount"
-                              data-testid="input-rtl-loan-amount"
-                              {...field}
-                            />
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {purpose === "cash_out" && (
+                {purpose === "cash_out" && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <FormField
                       control={form.control}
                       name="cashOutAmount"
@@ -196,8 +173,8 @@ export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
                         </FormItem>
                       )}
                     />
-                  )}
-                </div>
+                  </div>
+                )}
 
                 <FormField
                   control={form.control}
@@ -499,6 +476,29 @@ export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
                             ))}
                           </SelectContent>
                         </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="asIsValue"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-slate-700">As-Is Value ($)</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                            <Input
+                              type="number"
+                              className="pl-9 h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all"
+                              placeholder="Enter as-is value"
+                              data-testid="input-as-is-value"
+                              {...field}
+                            />
+                          </div>
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}

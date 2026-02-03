@@ -132,10 +132,11 @@ export const rtlPricingFormSchema = z.object({
   // Loan basics (required)
   loanType: rtlLoanTypeEnum,
   purpose: rtlPurposeEnum,
-  loanAmount: z.coerce.number().min(1, "Loan amount is required"),
+  loanAmount: z.coerce.number().optional(),
   propertyUnits: z.coerce.number().min(1, "Property units is required"),
   propertyType: rtlPropertyTypeEnum,
   state: z.string().length(2, "State must be 2-letter code"),
+  asIsValue: z.coerce.number().min(1, "As-Is Value is required"),
   isMidstream: z.boolean().default(false),
 
   // Borrower basics (required)
