@@ -195,18 +195,8 @@ export default function Home() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="dscr">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700">DSCR</Badge>
-                    <span>DSCR</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="rtl">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="text-xs bg-orange-100 text-orange-700">RTL</Badge>
-                    <span>Fix and Flip / RTL (Residential Transitional Loan)</span>
-                  </div>
-                </SelectItem>
+                <SelectItem value="dscr">DSCR</SelectItem>
+                <SelectItem value="rtl">Fix and Flip/Ground Up Construction</SelectItem>
               </SelectContent>
             </Select>
           </CardContent>
@@ -486,12 +476,11 @@ export default function Home() {
                         <Calculator className="h-6 w-6 text-orange-600" />
                       </div>
                       <div>
-                        <CardTitle className="text-2xl font-bold text-slate-800">Fix and Flip / RTL Parameters</CardTitle>
-                        <Badge variant="secondary" className="mt-1 bg-orange-100 text-orange-700">Residential Transitional Loan</Badge>
+                        <CardTitle className="text-2xl font-bold text-slate-800">Fix and Flip/Ground Up Construction</CardTitle>
                       </div>
                     </div>
                     <CardDescription className="text-base text-slate-500 mt-2">
-                      Enter the loan details for your Fix and Flip or RTL pricing quote.
+                      Enter the loan details for your Fix and Flip or Ground Up Construction pricing quote.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="pt-8 px-6 pb-8">
@@ -499,9 +488,9 @@ export default function Home() {
                       <div className="p-4 bg-orange-100 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
                         <Calculator className="h-10 w-10 text-orange-600" />
                       </div>
-                      <h3 className="text-xl font-semibold text-slate-700 mb-2">RTL Pricing Coming Soon</h3>
+                      <h3 className="text-xl font-semibold text-slate-700 mb-2">Pricing Coming Soon</h3>
                       <p className="text-slate-500 max-w-md mx-auto">
-                        The Fix and Flip / RTL loan pricing form is being configured. 
+                        The Fix and Flip/Ground Up Construction pricing form is being configured. 
                         Please check back soon or contact support for manual pricing.
                       </p>
                     </div>
