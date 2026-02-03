@@ -8,7 +8,7 @@ export const savedQuoteInputSchema = z.object({
   propertyAddress: z.string().min(1, "Property address is required"),
   loanData: z.record(z.any()),
   interestRate: z.string(),
-  pointsCharged: z.number().min(0).max(3),
+  pointsCharged: z.number().min(0).max(5),
 });
 
 export const api = {

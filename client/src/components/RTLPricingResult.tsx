@@ -420,6 +420,52 @@ export function RTLPricingResult({ result, formData, onReset, onEdit }: RTLPrici
               </div>
             </div>
 
+            <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
+              <h4 className="font-semibold text-slate-700 text-sm">Loan Details Summary</h4>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Loan Type:</span>
+                  <span className="font-medium">{formData?.loanType?.replace(/_/g, ' ').toUpperCase()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Interest Rate:</span>
+                  <span className="font-medium">{result.finalRate?.toFixed(3)}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">As-Is Value:</span>
+                  <span className="font-medium">${asIsValue.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">ARV:</span>
+                  <span className="font-medium">${arv.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Rehab Budget:</span>
+                  <span className="font-medium">${rehabBudget.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Total Cost:</span>
+                  <span className="font-medium">${totalCost.toLocaleString()}</span>
+                </div>
+              </div>
+              <div className="border-t pt-3 mt-3 grid grid-cols-2 gap-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Max Loan Amount:</span>
+                  <span className="font-bold text-green-600">${maxLoanAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Total Points:</span>
+                  <span className="font-bold text-primary">{totalPoints.toFixed(2)}</span>
+                </div>
+              </div>
+              <div className="border-t pt-3 mt-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Your Commission:</span>
+                  <span className="font-bold text-green-600">${additionalPointsAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+            </div>
+
             <div className="flex gap-3">
               <Button
                 variant="outline"
