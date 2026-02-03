@@ -11,6 +11,7 @@ import {
   projects,
   projectDocuments,
   projectTasks,
+  dealDocuments,
   users,
   type LoanDigestConfig,
   type LoanDigestRecipient,
@@ -42,8 +43,52 @@ interface DigestContent {
 }
 
 // Get outstanding documents for a project (documents not yet received/approved)
+// Checks both projectDocuments and dealDocuments (via project's linked deal/quote)
 export async function getOutstandingDocuments(projectId: number): Promise<OutstandingDocument[]> {
-  const docs = await db
+  const outstandingDocs: OutstandingDocument[] = [];
+  
+  // First, get the project to find the linked deal (quoteId)
+  const [project] = await db
+    .select({ quoteId: projects.quoteId })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  
+  // Get outstanding documents from dealDocuments (if project has a linked deal)
+  if (project?.quoteId) {
+    const dealDocs = await db
+      .select({
+        id: dealDocuments.id,
+        name: dealDocuments.documentName,
+        category: dealDocuments.documentCategory,
+        status: dealDocuments.status,
+        notes: dealDocuments.reviewNotes,
+        isRequired: dealDocuments.isRequired,
+      })
+      .from(dealDocuments)
+      .where(and(
+        eq(dealDocuments.dealId, project.quoteId),
+        or(
+          eq(dealDocuments.status, 'pending'),
+          eq(dealDocuments.status, 'uploaded'),
+          eq(dealDocuments.status, 'rejected')
+        )
+      ));
+    
+    dealDocs.forEach(doc => {
+      outstandingDocs.push({
+        id: doc.id,
+        name: doc.name,
+        category: doc.category,
+        status: doc.status ?? 'pending',
+        dueDate: null,
+        notes: doc.notes,
+      });
+    });
+  }
+  
+  // Also check projectDocuments table (legacy/additional docs)
+  const projectDocs = await db
     .select({
       id: projectDocuments.id,
       name: projectDocuments.documentName,
@@ -62,6 +107,23 @@ export async function getOutstandingDocuments(projectId: number): Promise<Outsta
       )
     ));
 
+  projectDocs.forEach(doc => {
+    // Avoid duplicates (check by name and category combination)
+    const isDuplicate = outstandingDocs.some(d => 
+      d.name === doc.name && d.category === doc.category
+    );
+    if (!isDuplicate) {
+      outstandingDocs.push({
+        id: doc.id,
+        name: doc.name,
+        category: doc.category,
+        status: doc.status ?? 'pending',
+        dueDate: null,
+        notes: doc.notes,
+      });
+    }
+  });
+
   // Also get tasks that require documents but don't have them
   const tasksNeedingDocs = await db
     .select({
@@ -76,15 +138,6 @@ export async function getOutstandingDocuments(projectId: number): Promise<Outsta
       isNull(projectTasks.documentId),
       eq(projectTasks.status, 'pending')
     ));
-
-  const outstandingDocs: OutstandingDocument[] = docs.map(doc => ({
-    id: doc.id,
-    name: doc.name,
-    category: doc.category,
-    status: doc.status ?? 'pending',
-    dueDate: null,
-    notes: doc.notes,
-  }));
 
   // Add tasks needing documents as "missing" documents
   tasksNeedingDocs.forEach(task => {
