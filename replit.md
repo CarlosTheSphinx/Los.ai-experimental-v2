@@ -47,6 +47,26 @@ The frontend features a left sidebar navigation leading to key sections:
 **Authentication System:**
 The system employs a robust authentication system supporting multi-tenancy and data isolation. It uses bcrypt for password hashing and JWT tokens in httpOnly cookies for session management. Public routes exist for registration, login, logout, and password recovery, while most API endpoints are protected, requiring authentication. Token-based access is implemented for document signing and the borrower portal.
 
+**User Types and Onboarding System:**
+The platform supports two user types with different experiences:
+- **Brokers**: Full platform access after completing onboarding (partnership agreement + training). Navigation includes: New Quote, Saved Quotes, Agreements, Projects, Messages, Resources.
+- **Borrowers**: Simplified dashboard showing their loans/projects with milestones. Navigation includes: My Loans, Messages, Resources. No onboarding required.
+
+**Onboarding Flow (Brokers Only):**
+- User type selection at registration (Broker/Borrower)
+- Brokers must complete two steps before accessing the platform:
+  1. Sign the Partnership Agreement (signature capture)
+  2. Complete required training materials (documents, videos, links)
+- Onboarding enforcement is applied both frontend (route protection) and backend (requireOnboarding middleware)
+- Admins and borrowers are exempt from onboarding requirements
+- Training materials accessible via Resources page after onboarding completion
+
+**Admin Onboarding Management:**
+- Admins can upload onboarding documents (partnership agreements, training docs, videos, links)
+- View user onboarding completion status
+- Track who has signed agreements and completed training
+- Routes: /admin/onboarding for document management and user status
+
 **Project System:**
 A core feature is the project management system, which tracks the 9-stage loan closing process. Projects include tasks with priorities, borrower visibility flags, an activity timeline, and document management. Projects are automatically created upon agreement completion, populating data from linked quotes and enabling the borrower portal.
 
@@ -66,7 +86,7 @@ The platform includes a deal-linked messaging system for communication between u
 - Individual messages stored in `messages` table with sender info and type (message/notification)
 
 **Database Schema Highlights:**
-Key tables include `users`, `pricing_requests`, `saved_quotes`, `documents`, `signers`, `document_fields`, `audit_logs`, `projects`, `project_stages`, `project_tasks`, `project_activity`, `project_documents`, `project_webhooks`, `system_settings`, `admin_tasks`, `admin_activity`, `partners`, `loanPrograms`, `programDocumentTemplates`, `programTaskTemplates`, `message_threads`, `messages`, and `message_reads`. Foreign keys with CASCADE delete ensure data integrity and isolation.
+Key tables include `users`, `pricing_requests`, `saved_quotes`, `documents`, `signers`, `document_fields`, `audit_logs`, `projects`, `project_stages`, `project_tasks`, `project_activity`, `project_documents`, `project_webhooks`, `system_settings`, `admin_tasks`, `admin_activity`, `partners`, `loanPrograms`, `programDocumentTemplates`, `programTaskTemplates`, `message_threads`, `messages`, `message_reads`, `onboardingDocuments`, and `userOnboardingProgress`. Foreign keys with CASCADE delete ensure data integrity and isolation.
 
 ## External Dependencies
 
