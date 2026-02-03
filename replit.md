@@ -85,8 +85,25 @@ The platform includes a deal-linked messaging system for communication between u
 - Message threads are stored in `message_threads` table with `dealId` (required), `userId`, and `subject`
 - Individual messages stored in `messages` table with sender info and type (message/notification)
 
+**Loan Digest Notification System:**
+An automated notification system that sends periodic updates to borrowers and partners about their loan progress. Key features:
+- **Per-loan configuration**: Each project can have its own digest settings
+- **Configurable frequency**: Daily, every 3 days, weekly, or custom intervals
+- **Configurable time of day**: Choose when digests are sent (9am, 10am, etc.)
+- **Multiple recipients**: Add borrowers, partners, or manual email/phone contacts
+- **Delivery methods**: Email (via Resend), SMS (via Twilio), or both
+- **Content options**: 
+  - Documents needed (most important - shows outstanding/missing docs)
+  - General updates (stage changes, status updates)
+  - Notes and messages from the lender
+- **Digest history**: Track all sent digests with delivery status
+- **Test digest**: Send a test to verify configuration
+- Key tables: `loan_digest_configs`, `loan_digest_recipients`, `loan_updates`, `digest_history`, `digest_state`
+- The `loan_updates` table serves as an event ledger - admin actions (stage changes, task completions, document requests) are logged here and included in the next digest
+- Cron endpoint: POST `/api/cron/digests` (requires X-Cron-Key header)
+
 **Database Schema Highlights:**
-Key tables include `users`, `pricing_requests`, `saved_quotes`, `documents`, `signers`, `document_fields`, `audit_logs`, `projects`, `project_stages`, `project_tasks`, `project_activity`, `project_documents`, `project_webhooks`, `system_settings`, `admin_tasks`, `admin_activity`, `partners`, `loanPrograms`, `programDocumentTemplates`, `programTaskTemplates`, `message_threads`, `messages`, `message_reads`, `onboardingDocuments`, and `userOnboardingProgress`. Foreign keys with CASCADE delete ensure data integrity and isolation.
+Key tables include `users`, `pricing_requests`, `saved_quotes`, `documents`, `signers`, `document_fields`, `audit_logs`, `projects`, `project_stages`, `project_tasks`, `project_activity`, `project_documents`, `project_webhooks`, `system_settings`, `admin_tasks`, `admin_activity`, `partners`, `loanPrograms`, `programDocumentTemplates`, `programTaskTemplates`, `message_threads`, `messages`, `message_reads`, `onboardingDocuments`, `userOnboardingProgress`, `loan_digest_configs`, `loan_digest_recipients`, `loan_updates`, `digest_history`, and `digest_state`. Foreign keys with CASCADE delete ensure data integrity and isolation.
 
 ## External Dependencies
 

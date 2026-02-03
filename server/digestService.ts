@@ -305,15 +305,32 @@ async function sendEmailDigest(
   }
 }
 
-// Send SMS digest (placeholder - requires Twilio setup)
+// Send SMS digest using Twilio
 async function sendSmsDigest(
   recipient: LoanDigestRecipient,
   content: DigestContent,
   phone: string
 ): Promise<{ success: boolean; error?: string }> {
-  // TODO: Implement with Twilio
-  console.log(`SMS digest would be sent to ${phone}`);
-  return { success: false, error: 'SMS not yet configured - Twilio integration required' };
+  try {
+    const { sendDigestSms } = await import('./smsService');
+    
+    const portalLink = content.project.borrowerPortalToken
+      ? `${BASE_URL}/portal/${content.project.borrowerPortalToken}`
+      : `${BASE_URL}/app/projects/${content.project.id}`;
+    
+    const result = await sendDigestSms(
+      phone,
+      content.project.projectName,
+      content.outstandingDocs.length,
+      content.recentUpdates.length,
+      portalLink
+    );
+    
+    return result;
+  } catch (error: any) {
+    console.error('Failed to send SMS digest:', error);
+    return { success: false, error: error.message };
+  }
 }
 
 // Process a single digest
