@@ -611,26 +611,6 @@ export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
 
                   <FormField
                     control={form.control}
-                    name="isDecliningMarket"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                            data-testid="checkbox-declining"
-                          />
-                        </FormControl>
-                        <div className="space-y-1 leading-none">
-                          <FormLabel className="text-slate-700">Declining Market</FormLabel>
-                          <p className="text-sm text-slate-500">-10% LTC and LTARV reduction</p>
-                        </div>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
                     name="isListedLast12Months"
                     render={({ field }) => (
                       <FormItem className="flex flex-row items-start space-x-3 space-y-0">
