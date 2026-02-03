@@ -8,8 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Calculator, DollarSign, Building, User, FileText, CreditCard, Landmark } from "lucide-react";
-import { useState, useEffect } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useEffect } from "react";
 
 interface RTLLoanFormProps {
   onSubmit: (data: RTLPricingFormData) => void;
@@ -25,8 +24,6 @@ const US_STATES = [
 ];
 
 export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
-  const [activeTab, setActiveTab] = useState("loan");
-
   const form = useForm<RTLPricingFormData>({
     resolver: zodResolver(rtlPricingFormSchema),
     defaultValues: {
@@ -125,28 +122,9 @@ export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
 
       <CardContent className="pt-6 px-6 pb-8">
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-4 mb-6">
-                <TabsTrigger value="loan" data-testid="tab-loan">
-                  <DollarSign className="w-4 h-4 mr-1" />
-                  Loan
-                </TabsTrigger>
-                <TabsTrigger value="borrower" data-testid="tab-borrower">
-                  <User className="w-4 h-4 mr-1" />
-                  Borrower
-                </TabsTrigger>
-                <TabsTrigger value="property" data-testid="tab-property">
-                  <Building className="w-4 h-4 mr-1" />
-                  Property
-                </TabsTrigger>
-                <TabsTrigger value="credit" data-testid="tab-credit">
-                  <CreditCard className="w-4 h-4 mr-1" />
-                  Credit
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="loan" className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+            {/* Loan Details Section */}
+            <div className="space-y-4">
                 <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
                   <DollarSign className="w-5 h-5 text-slate-400" />
                   Loan Details
@@ -258,13 +236,14 @@ export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
                     />
                   </div>
                 )}
-              </TabsContent>
+            </div>
 
-              <TabsContent value="borrower" className="space-y-6">
-                <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                  <User className="w-5 h-5 text-slate-400" />
-                  Borrower Information
-                </h3>
+            {/* Borrower Information Section */}
+            <div className="border-t pt-6 space-y-4">
+              <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                <User className="w-5 h-5 text-slate-400" />
+                Borrower Information
+              </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <FormField
@@ -389,13 +368,14 @@ export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
                     )}
                   />
                 </div>
-              </TabsContent>
+            </div>
 
-              <TabsContent value="property" className="space-y-6">
-                <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                  <Building className="w-5 h-5 text-slate-400" />
-                  Property Details
-                </h3>
+            {/* Property Details Section */}
+            <div className="border-t pt-6 space-y-4">
+              <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                <Building className="w-5 h-5 text-slate-400" />
+                Property Details
+              </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <FormField
@@ -609,13 +589,14 @@ export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
                     />
                   )}
                 </div>
-              </TabsContent>
+            </div>
 
-              <TabsContent value="credit" className="space-y-6">
-                <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                  <CreditCard className="w-5 h-5 text-slate-400" />
-                  Credit History
-                </h3>
+            {/* Credit History Section */}
+            <div className="border-t pt-6 space-y-4">
+              <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-slate-400" />
+                Credit History
+              </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <FormField
@@ -729,8 +710,7 @@ export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
                     />
                   </div>
                 </div>
-              </TabsContent>
-            </Tabs>
+            </div>
 
             <div className="pt-6 border-t">
               <Button
