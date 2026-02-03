@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { Save, Settings as SettingsIcon, RefreshCw, HardDrive } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Save, Settings as SettingsIcon, RefreshCw, HardDrive, Phone, Mail, Brain, MapPin, Bot, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -18,6 +19,26 @@ interface SystemSetting {
   settingDescription: string | null;
   updatedBy: number | null;
   updatedAt: string | null;
+}
+
+interface IntegrationStatus {
+  connected: boolean;
+  status: string;
+  details?: {
+    phoneNumber?: string;
+    fromEmail?: string;
+    configured?: boolean;
+  };
+}
+
+interface IntegrationsResponse {
+  integrations: {
+    twilio?: IntegrationStatus;
+    resend?: IntegrationStatus;
+    apify?: IntegrationStatus;
+    openai?: IntegrationStatus;
+    geoapify?: IntegrationStatus;
+  };
 }
 
 const settingLabels: Record<string, { label: string; description: string; type: "text" | "textarea" | "url"; category: string }> = {
@@ -59,6 +80,10 @@ export default function AdminSettings() {
 
   const { data, isLoading } = useQuery<{ settings: SystemSetting[] }>({
     queryKey: ["/api/admin/settings"],
+  });
+
+  const { data: integrationsData, isLoading: integrationsLoading, refetch: refetchIntegrations } = useQuery<IntegrationsResponse>({
+    queryKey: ["/api/admin/integrations/status"],
   });
 
   const updateSettingMutation = useMutation({
@@ -123,6 +148,170 @@ export default function AdminSettings() {
         <SettingsIcon className="h-6 w-6 text-muted-foreground" />
         <h1 className="text-2xl font-semibold" data-testid="text-admin-settings-title">System Settings</h1>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bot className="h-5 w-5" />
+            External Integrations
+          </CardTitle>
+          <CardDescription>
+            Status of connected external services for notifications, AI, and automation
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {integrationsLoading ? (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <Skeleton key={i} className="h-24" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className="border rounded-lg p-4 space-y-3" data-testid="integration-twilio">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Phone className="h-5 w-5 text-blue-500" />
+                    <span className="font-medium">Twilio SMS</span>
+                  </div>
+                  {integrationsData?.integrations.twilio?.connected ? (
+                    <Badge variant="default">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Connected
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">
+                      <XCircle className="h-3 w-3 mr-1" />
+                      Not Connected
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Send SMS notifications for loan digests and updates
+                </p>
+                {integrationsData?.integrations.twilio?.details?.phoneNumber && (
+                  <p className="text-xs text-muted-foreground">
+                    From: {integrationsData.integrations.twilio.details.phoneNumber}
+                  </p>
+                )}
+              </div>
+
+              <div className="border rounded-lg p-4 space-y-3" data-testid="integration-resend">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-5 w-5 text-purple-500" />
+                    <span className="font-medium">Resend Email</span>
+                  </div>
+                  {integrationsData?.integrations.resend?.connected ? (
+                    <Badge variant="default">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Connected
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">
+                      <XCircle className="h-3 w-3 mr-1" />
+                      Not Connected
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Send email notifications for loan digests and system alerts
+                </p>
+                {integrationsData?.integrations.resend?.details?.fromEmail && (
+                  <p className="text-xs text-muted-foreground">
+                    From: {integrationsData.integrations.resend.details.fromEmail}
+                  </p>
+                )}
+              </div>
+
+              <div className="border rounded-lg p-4 space-y-3" data-testid="integration-openai">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Brain className="h-5 w-5 text-green-500" />
+                    <span className="font-medium">OpenAI</span>
+                  </div>
+                  {integrationsData?.integrations.openai?.connected ? (
+                    <Badge variant="default">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Connected
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">
+                      <XCircle className="h-3 w-3 mr-1" />
+                      Not Connected
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  AI-powered features for document analysis and automation
+                </p>
+              </div>
+
+              <div className="border rounded-lg p-4 space-y-3" data-testid="integration-apify">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bot className="h-5 w-5 text-orange-500" />
+                    <span className="font-medium">Apify Scraper</span>
+                  </div>
+                  {integrationsData?.integrations.apify?.connected ? (
+                    <Badge variant="default">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Connected
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline">
+                      <AlertCircle className="h-3 w-3 mr-1" />
+                      Not Configured
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Automated quote scraping from external pricing providers
+                </p>
+              </div>
+
+              <div className="border rounded-lg p-4 space-y-3" data-testid="integration-geoapify">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-5 w-5 text-red-500" />
+                    <span className="font-medium">Geoapify</span>
+                  </div>
+                  {integrationsData?.integrations.geoapify?.connected ? (
+                    <Badge variant="default">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Connected
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">
+                      <XCircle className="h-3 w-3 mr-1" />
+                      Not Connected
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Address autocomplete and geocoding for property locations
+                </p>
+              </div>
+            </div>
+          )}
+          <div className="mt-4 flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetchIntegrations()}
+              data-testid="button-refresh-integrations"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh Status
+            </Button>
+          </div>
+          <div className="mt-4 p-4 bg-muted/50 rounded-lg">
+            <p className="text-sm text-muted-foreground">
+              <strong>Note:</strong> Integrations are managed through Replit's connector system. To connect or update an integration, use the Replit Integrations panel or contact your administrator.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

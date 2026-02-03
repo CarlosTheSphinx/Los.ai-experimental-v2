@@ -3574,6 +3574,146 @@ export async function registerRoutes(
     }
   });
 
+  // Admin - Check integration statuses
+  app.get('/api/admin/integrations/status', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const integrations: Record<string, { connected: boolean; status: string; details?: any }> = {};
+      
+      // Check Twilio integration
+      try {
+        const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
+        const xReplitToken = process.env.REPL_IDENTITY 
+          ? 'repl ' + process.env.REPL_IDENTITY 
+          : process.env.WEB_REPL_RENEWAL 
+          ? 'depl ' + process.env.WEB_REPL_RENEWAL 
+          : null;
+        
+        if (hostname && xReplitToken) {
+          const twilioResponse = await fetch(
+            `https://${hostname}/api/v2/connection?include_secrets=false&connector_names=twilio`,
+            {
+              headers: {
+                'Accept': 'application/json',
+                'X_REPLIT_TOKEN': xReplitToken
+              }
+            }
+          );
+          const twilioData = await twilioResponse.json();
+          const twilioConnection = twilioData.items?.[0];
+          
+          if (twilioConnection && twilioConnection.settings?.account_sid) {
+            integrations.twilio = {
+              connected: true,
+              status: 'Connected',
+              details: {
+                phoneNumber: twilioConnection.settings?.phone_number || 'Not configured'
+              }
+            };
+          } else {
+            integrations.twilio = { connected: false, status: 'Not connected' };
+          }
+        } else {
+          integrations.twilio = { connected: false, status: 'Connector not available' };
+        }
+      } catch (error) {
+        integrations.twilio = { connected: false, status: 'Error checking status' };
+      }
+      
+      // Check Resend integration
+      try {
+        const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
+        const xReplitToken = process.env.REPL_IDENTITY 
+          ? 'repl ' + process.env.REPL_IDENTITY 
+          : process.env.WEB_REPL_RENEWAL 
+          ? 'depl ' + process.env.WEB_REPL_RENEWAL 
+          : null;
+        
+        if (hostname && xReplitToken) {
+          const resendResponse = await fetch(
+            `https://${hostname}/api/v2/connection?include_secrets=false&connector_names=resend`,
+            {
+              headers: {
+                'Accept': 'application/json',
+                'X_REPLIT_TOKEN': xReplitToken
+              }
+            }
+          );
+          const resendData = await resendResponse.json();
+          const resendConnection = resendData.items?.[0];
+          
+          if (resendConnection && resendConnection.settings) {
+            integrations.resend = {
+              connected: true,
+              status: 'Connected',
+              details: {
+                fromEmail: resendConnection.settings?.from_email || 'Default'
+              }
+            };
+          } else {
+            integrations.resend = { connected: false, status: 'Not connected' };
+          }
+        } else {
+          integrations.resend = { connected: false, status: 'Connector not available' };
+        }
+      } catch (error) {
+        integrations.resend = { connected: false, status: 'Error checking status' };
+      }
+      
+      // Check Apify integration (environment variable based)
+      integrations.apify = {
+        connected: !!process.env.APIFY_TOKEN,
+        status: process.env.APIFY_TOKEN ? 'Connected' : 'Not configured',
+        details: process.env.APIFY_TOKEN ? { configured: true } : undefined
+      };
+      
+      // Check OpenAI integration
+      try {
+        const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
+        const xReplitToken = process.env.REPL_IDENTITY 
+          ? 'repl ' + process.env.REPL_IDENTITY 
+          : process.env.WEB_REPL_RENEWAL 
+          ? 'depl ' + process.env.WEB_REPL_RENEWAL 
+          : null;
+        
+        if (hostname && xReplitToken) {
+          const openaiResponse = await fetch(
+            `https://${hostname}/api/v2/connection?include_secrets=false&connector_names=openai`,
+            {
+              headers: {
+                'Accept': 'application/json',
+                'X_REPLIT_TOKEN': xReplitToken
+              }
+            }
+          );
+          const openaiData = await openaiResponse.json();
+          const openaiConnection = openaiData.items?.[0];
+          
+          if (openaiConnection) {
+            integrations.openai = { connected: true, status: 'Connected' };
+          } else {
+            integrations.openai = { connected: false, status: 'Not connected' };
+          }
+        } else {
+          integrations.openai = { connected: false, status: 'Connector not available' };
+        }
+      } catch (error) {
+        integrations.openai = { connected: false, status: 'Error checking status' };
+      }
+      
+      // Check Geoapify integration (environment variable based)
+      integrations.geoapify = {
+        connected: !!process.env.GEOAPIFY_API_KEY,
+        status: process.env.GEOAPIFY_API_KEY ? 'Connected' : 'Not configured',
+        details: process.env.GEOAPIFY_API_KEY ? { configured: true } : undefined
+      };
+      
+      res.json({ integrations });
+    } catch (error) {
+      console.error('Error checking integration statuses:', error);
+      res.status(500).json({ error: 'Failed to check integration statuses' });
+    }
+  });
+
   // Admin - Recent activity log
   app.get('/api/admin/activity', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
