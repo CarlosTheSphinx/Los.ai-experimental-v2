@@ -39,9 +39,8 @@ export function RTLPricingResult({ result, formData, onReset }: RTLPricingResult
   // The actual max loan is the minimum of all three constraints
   const maxLoanAmount = Math.min(maxLoanByLTC, maxLoanByLTAIV, maxLoanByLTARV);
   
-  // Commission calculation (points on max loan)
-  const pointsAmount = (maxLoanAmount * totalPoints) / 100;
-  const commission = pointsAmount * 0.30;
+  // Commission is the additional points amount on max loan
+  const additionalPointsAmount = (maxLoanAmount * additionalPoints) / 100;
   if (!result.eligible) {
     return (
       <Card className="w-full bg-white/90 backdrop-blur-sm shadow-xl border-red-200/60 overflow-hidden">
@@ -271,9 +270,9 @@ export function RTLPricingResult({ result, formData, onReset }: RTLPricingResult
               
               <div className="bg-green-50 rounded-lg p-4 border border-green-200">
                 <div className="flex justify-between items-center">
-                  <span className="font-semibold text-green-700">Your Commission (30%)</span>
+                  <span className="font-semibold text-green-700">Your Commission</span>
                   <span className="text-2xl font-bold text-green-600" data-testid="text-rtl-commission">
-                    ${commission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ${additionalPointsAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
