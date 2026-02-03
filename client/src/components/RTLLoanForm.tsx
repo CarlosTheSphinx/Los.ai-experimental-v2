@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Calculator, DollarSign, Building, User, FileText, CreditCard, Landmark } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface RTLLoanFormProps {
@@ -30,10 +30,11 @@ export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
   const form = useForm<RTLPricingFormData>({
     resolver: zodResolver(rtlPricingFormSchema),
     defaultValues: {
-      loanType: "light_rehab",
+      loanType: "bridge_no_rehab",
       purpose: "purchase",
       propertyUnits: 1,
       asIsValue: 0,
+      rehabBudget: 0,
       propertyType: "sfr_1_4",
       state: "",
       isMidstream: false,
@@ -51,6 +52,34 @@ export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
 
   const loanType = form.watch("loanType");
   const purpose = form.watch("purpose");
+  const asIsValue = form.watch("asIsValue");
+  const rehabBudget = form.watch("rehabBudget");
+
+  // Auto-calculate loan type for rehab loans based on 50% rule
+  const calculatedRehabType = (() => {
+    if (loanType === "bridge_no_rehab" || loanType === "guc") return null;
+    if (!asIsValue || asIsValue <= 0) return null;
+    const rehabPercent = (rehabBudget || 0) / asIsValue * 100;
+    return rehabPercent >= 50 ? "heavy_rehab" : "light_rehab";
+  })();
+
+  // Determine if this is a rehab loan (has rehab budget > 0)
+  const isRehabLoan = (rehabBudget || 0) > 0 && loanType !== "guc";
+
+  // Auto-set loan type based on rehab budget
+  useEffect(() => {
+    if (loanType === "guc") return; // Don't override GUC
+    
+    if (asIsValue > 0 && rehabBudget > 0) {
+      const rehabPercent = rehabBudget / asIsValue * 100;
+      const newType = rehabPercent >= 50 ? "heavy_rehab" : "light_rehab";
+      if (loanType !== newType && loanType !== "guc") {
+        form.setValue("loanType", newType);
+      }
+    } else if (rehabBudget === 0 && loanType !== "bridge_no_rehab" && loanType !== "guc") {
+      form.setValue("loanType", "bridge_no_rehab");
+    }
+  }, [asIsValue, rehabBudget, loanType, form]);
 
   return (
     <Card className="w-full bg-white/90 backdrop-blur-sm shadow-xl border-slate-200/60 overflow-hidden">
@@ -114,8 +143,6 @@ export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="light_rehab">Light Rehab (rehab &lt; 50% of as-is value)</SelectItem>
-                            <SelectItem value="heavy_rehab">Heavy Rehab (rehab &gt; 50% of as-is value)</SelectItem>
                             <SelectItem value="bridge_no_rehab">Bridge (No Rehab)</SelectItem>
                             <SelectItem value="guc">Ground Up Construction (GUC)</SelectItem>
                           </SelectContent>
@@ -503,6 +530,55 @@ export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
                       </FormItem>
                     )}
                   />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <FormField
+                    control={form.control}
+                    name="rehabBudget"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-slate-700">Rehab Budget ($)</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                            <Input
+                              type="number"
+                              className="pl-9 h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all"
+                              placeholder="Enter rehab budget (0 for no rehab)"
+                              data-testid="input-rehab-budget"
+                              {...field}
+                            />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {loanType !== "guc" && asIsValue > 0 && (
+                    <div className="flex items-end">
+                      <div className="w-full p-3 bg-slate-100 rounded-lg border border-slate-200">
+                        <p className="text-sm text-slate-500 mb-1">Calculated Loan Type</p>
+                        <p className="text-lg font-semibold text-slate-800" data-testid="text-calculated-loan-type">
+                          {rehabBudget > 0 ? (
+                            (rehabBudget / asIsValue * 100) >= 50 ? (
+                              <span className="text-orange-600">Heavy Rehab</span>
+                            ) : (
+                              <span className="text-green-600">Light Rehab</span>
+                            )
+                          ) : (
+                            <span className="text-blue-600">Bridge (No Rehab)</span>
+                          )}
+                        </p>
+                        {rehabBudget > 0 && (
+                          <p className="text-xs text-slate-500 mt-1">
+                            Rehab is {((rehabBudget / asIsValue) * 100).toFixed(1)}% of as-is value
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="border-t pt-6 space-y-4">
