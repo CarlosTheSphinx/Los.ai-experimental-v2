@@ -6,7 +6,10 @@ import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { type RTLPricingResponse, type RTLPricingFormData } from "@shared/schema";
-import { CheckCircle2, XCircle, AlertTriangle, RotateCcw, TrendingUp, Percent, DollarSign, Building, Calculator } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, RotateCcw, TrendingUp, Percent, DollarSign, Building, Calculator, Save, User, MapPin } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface RTLPricingResultProps {
   result: RTLPricingResponse;
@@ -15,9 +18,55 @@ interface RTLPricingResultProps {
 }
 
 export function RTLPricingResult({ result, formData, onReset }: RTLPricingResultProps) {
+  const { toast } = useToast();
   const MIN_POINTS = 2.0;
   const MAX_ADDITIONAL_POINTS = 3.0;
   const [additionalPoints, setAdditionalPoints] = useState(0);
+  const [showQuoteForm, setShowQuoteForm] = useState(false);
+  const [customerFirstName, setCustomerFirstName] = useState("");
+  const [customerLastName, setCustomerLastName] = useState("");
+  
+  const saveQuoteMutation = useMutation({
+    mutationFn: async () => {
+      const formattedRate = result.finalRate ? `${result.finalRate.toFixed(3)}%` : "N/A";
+      
+      return apiRequest('POST', '/api/quotes', {
+        customerFirstName,
+        customerLastName,
+        propertyAddress: formData?.propertyAddress || "",
+        loanData: formData,
+        interestRate: formattedRate,
+        pointsCharged: MIN_POINTS + additionalPoints
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Quote Saved!",
+        description: "Your quote has been saved successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/quotes'] });
+      setShowQuoteForm(false);
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to save quote",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const handleSaveQuote = () => {
+    if (!customerFirstName.trim() || !customerLastName.trim()) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in customer name.",
+        variant: "destructive"
+      });
+      return;
+    }
+    saveQuoteMutation.mutate();
+  };
   
   const totalPoints = MIN_POINTS + additionalPoints;
   
@@ -306,6 +355,76 @@ export function RTLPricingResult({ result, formData, onReset }: RTLPricingResult
                   <p className="text-sm text-slate-700">{flag.message}</p>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {!showQuoteForm ? (
+          <Button 
+            onClick={() => setShowQuoteForm(true)}
+            className="w-full mb-3 h-12 text-lg font-semibold bg-gradient-to-r from-green-600 to-emerald-600 shadow-lg shadow-green-500/20"
+            data-testid="button-save-rtl-quote"
+          >
+            <Save className="mr-2 h-5 w-5" />
+            Save as Quote
+          </Button>
+        ) : (
+          <div className="bg-blue-50 rounded-xl p-5 border border-blue-100 space-y-5 mb-3">
+            <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+              <User className="w-4 h-4 text-primary" />
+              Customer Details
+            </h3>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="rtlFirstName">First Name</Label>
+                <Input
+                  id="rtlFirstName"
+                  value={customerFirstName}
+                  onChange={(e) => setCustomerFirstName(e.target.value)}
+                  placeholder="John"
+                  data-testid="input-rtl-first-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="rtlLastName">Last Name</Label>
+                <Input
+                  id="rtlLastName"
+                  value={customerLastName}
+                  onChange={(e) => setCustomerLastName(e.target.value)}
+                  placeholder="Doe"
+                  data-testid="input-rtl-last-name"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1">
+                <MapPin className="w-3 h-3" />
+                Property Address
+              </Label>
+              <div className="p-3 bg-white rounded border border-slate-200 text-sm text-slate-700">
+                {formData?.propertyAddress || "Not provided"}
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowQuoteForm(false)}
+                className="flex-1"
+                data-testid="button-cancel-rtl-quote"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveQuote}
+                disabled={saveQuoteMutation.isPending}
+                className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600"
+                data-testid="button-confirm-rtl-save"
+              >
+                {saveQuoteMutation.isPending ? "Saving..." : "Save Quote"}
+              </Button>
             </div>
           </div>
         )}
