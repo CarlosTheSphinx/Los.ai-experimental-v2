@@ -4029,6 +4029,31 @@ export async function registerRoutes(
     }
   });
 
+  // Admin - Get linked project for a deal
+  app.get('/api/admin/deals/:dealId/project', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      
+      const [project] = await db.select({
+        id: projects.id,
+        projectName: projects.projectName,
+        status: projects.status,
+      })
+        .from(projects)
+        .where(eq(projects.quoteId, dealId))
+        .limit(1);
+      
+      if (!project) {
+        return res.json({ project: null });
+      }
+      
+      res.json({ project });
+    } catch (error) {
+      console.error('Admin get linked project error:', error);
+      res.status(500).json({ error: 'Failed to load linked project' });
+    }
+  });
+
   // Admin - Get deal documents
   app.get('/api/admin/deals/:dealId/documents', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {

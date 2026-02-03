@@ -30,6 +30,7 @@ import {
   Building,
   User,
   Calendar,
+  CalendarDays,
   FileText,
   CheckSquare,
   Mail,
@@ -54,6 +55,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { DigestConfigPanel } from "@/components/DigestConfigPanel";
 
 interface Deal {
   id: number;
@@ -308,6 +310,11 @@ export default function AdminDealDetail() {
   
   const { data: teamData } = useQuery<{ teamMembers: TeamMember[] }>({
     queryKey: ['/api/admin/team-members'],
+  });
+
+  const { data: linkedProjectData } = useQuery<{ project: { id: number; projectName: string; status: string } | null }>({
+    queryKey: [`/api/admin/deals/${dealId}/project`],
+    enabled: !!dealId,
   });
 
   const updateDocumentStatus = useMutation({
@@ -576,6 +583,10 @@ export default function AdminDealDetail() {
             <CheckSquare className="h-4 w-4" />
             Tasks
             <Badge variant="secondary" className="ml-1 text-xs" data-testid="badge-tasks-count">0</Badge>
+          </TabsTrigger>
+          <TabsTrigger value="digests" className="flex items-center gap-2" data-testid="tab-digests">
+            <CalendarDays className="h-4 w-4" />
+            Digests
           </TabsTrigger>
         </TabsList>
 
@@ -1036,6 +1047,26 @@ export default function AdminDealDetail() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="digests" className="mt-6" data-testid="tabcontent-digests">
+          {linkedProjectData?.project ? (
+            <div data-testid="digest-config-container">
+              <DigestConfigPanel projectId={linkedProjectData.project.id} />
+            </div>
+          ) : (
+            <Card data-testid="card-no-project">
+              <CardContent className="pt-6">
+                <div className="text-center py-8 text-muted-foreground" data-testid="digests-empty-state">
+                  <CalendarDays className="h-12 w-12 mx-auto mb-4 opacity-50" data-testid="icon-digests-empty" />
+                  <p className="text-lg font-medium mb-2" data-testid="text-no-project-title">No Project Linked</p>
+                  <p className="text-sm" data-testid="text-no-project-description">
+                    Digest notifications will be available once this deal is converted to a project.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
 
