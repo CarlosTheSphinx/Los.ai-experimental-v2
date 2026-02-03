@@ -173,6 +173,10 @@ export default function Home() {
     rtlPricingMutation.mutate(data);
   };
 
+  const handleRTLEdit = () => {
+    setRtlResult(null); // Clear result but keep form data for editing
+  };
+
   return (
     <div className="min-h-screen">
       <header className="bg-white/80 dark:bg-background/80 backdrop-blur-md border-b border-primary/10 sticky top-0 z-40">
@@ -501,11 +505,13 @@ export default function Home() {
                   result={rtlResult} 
                   formData={rtlFormData}
                   onReset={handleReset}
+                  onEdit={handleRTLEdit}
                 />
               ) : (
                 <RTLLoanForm 
                   onSubmit={handleRTLSubmit} 
                   isLoading={rtlPricingMutation.isPending}
+                  defaultData={rtlFormData}
                 />
               )}
             </motion.div>

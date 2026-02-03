@@ -13,12 +13,13 @@ import { useEffect } from "react";
 interface RTLLoanFormProps {
   onSubmit: (data: RTLPricingFormData) => void;
   isLoading: boolean;
+  defaultData?: RTLPricingFormData | null;
 }
 
-export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
+export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormProps) {
   const form = useForm<RTLPricingFormData>({
     resolver: zodResolver(rtlPricingFormSchema),
-    defaultValues: {
+    defaultValues: defaultData || {
       loanType: "light_rehab",
       purpose: "purchase",
       propertyUnits: 1,
@@ -40,6 +41,13 @@ export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
       isForeignNational: false,
     },
   });
+
+  // Reset form when defaultData changes (for editing)
+  useEffect(() => {
+    if (defaultData) {
+      form.reset(defaultData);
+    }
+  }, [defaultData, form]);
 
   const loanType = form.watch("loanType");
   const purpose = form.watch("purpose");

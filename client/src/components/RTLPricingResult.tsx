@@ -15,9 +15,10 @@ interface RTLPricingResultProps {
   result: RTLPricingResponse;
   formData: RTLPricingFormData | null;
   onReset: () => void;
+  onEdit: () => void;
 }
 
-export function RTLPricingResult({ result, formData, onReset }: RTLPricingResultProps) {
+export function RTLPricingResult({ result, formData, onReset, onEdit }: RTLPricingResultProps) {
   const { toast } = useToast();
   const MIN_POINTS = 2.0;
   const MAX_ADDITIONAL_POINTS = 3.0;
@@ -360,14 +361,25 @@ export function RTLPricingResult({ result, formData, onReset }: RTLPricingResult
         )}
 
         {!showQuoteForm ? (
-          <Button 
-            onClick={() => setShowQuoteForm(true)}
-            className="w-full mb-3 h-12 text-lg font-semibold bg-gradient-to-r from-green-600 to-emerald-600 shadow-lg shadow-green-500/20"
-            data-testid="button-save-rtl-quote"
-          >
-            <Save className="mr-2 h-5 w-5" />
-            Save as Quote
-          </Button>
+          <>
+            <Button 
+              onClick={() => setShowQuoteForm(true)}
+              className="w-full mb-3 h-12 text-lg font-semibold bg-gradient-to-r from-green-600 to-emerald-600 shadow-lg shadow-green-500/20"
+              data-testid="button-save-rtl-quote"
+            >
+              <Save className="mr-2 h-5 w-5" />
+              Save as Quote
+            </Button>
+            <Button 
+              onClick={onEdit}
+              variant="secondary"
+              className="w-full mb-3"
+              data-testid="button-edit-rtl-quote"
+            >
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Edit Quote
+            </Button>
+          </>
         ) : (
           <div className="bg-blue-50 rounded-xl p-5 border border-blue-100 space-y-5 mb-3">
             <h3 className="font-semibold text-slate-800 flex items-center gap-2">
