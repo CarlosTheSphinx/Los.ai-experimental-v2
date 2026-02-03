@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,27 +11,124 @@ import { Save, Settings as SettingsIcon, RefreshCw, HardDrive, Phone, Mail, Brai
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-
-// Default deal stages
-const DEFAULT_STAGES = [
-  { key: "new", label: "New", color: "gray" },
-  { key: "initial-review", label: "Initial Review", color: "yellow" },
-  { key: "under-review", label: "Under Review", color: "orange" },
-  { key: "term-sheet", label: "Term Sheet", color: "blue" },
-  { key: "approved", label: "Approved", color: "emerald" },
-  { key: "processing", label: "Processing", color: "cyan" },
-  { key: "underwriting", label: "Underwriting", color: "indigo" },
-  { key: "closing", label: "Closing", color: "teal" },
-  { key: "funded", label: "Funded", color: "green" },
-  { key: "closed", label: "Closed", color: "green" },
-  { key: "declined", label: "Declined", color: "red" },
-  { key: "withdrawn", label: "Withdrawn", color: "slate" },
-];
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface DealStage {
+  id: number;
   key: string;
   label: string;
   color: string;
+  description: string | null;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+const COLOR_OPTIONS = [
+  { value: "gray", label: "Gray" },
+  { value: "yellow", label: "Yellow" },
+  { value: "orange", label: "Orange" },
+  { value: "blue", label: "Blue" },
+  { value: "emerald", label: "Emerald" },
+  { value: "cyan", label: "Cyan" },
+  { value: "indigo", label: "Indigo" },
+  { value: "teal", label: "Teal" },
+  { value: "green", label: "Green" },
+  { value: "red", label: "Red" },
+  { value: "slate", label: "Slate" },
+];
+
+const stageColorMap: Record<string, string> = {
+  gray: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
+  yellow: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+  orange: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+  blue: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  emerald: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
+  cyan: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200",
+  indigo: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
+  teal: "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200",
+  green: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  red: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  slate: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+};
+
+function SortableStageItem({ stage, index, onDelete }: { stage: DealStage; index: number; onDelete: (id: number) => void }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: stage.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-3 p-3 border rounded-lg bg-background"
+      data-testid={`stage-row-${stage.key}`}
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing touch-none"
+        data-testid={`drag-handle-${stage.key}`}
+      >
+        <GripVertical className="h-4 w-4 text-muted-foreground" />
+      </button>
+      <span className="text-sm text-muted-foreground w-6">{index + 1}</span>
+      <Badge className={`${stageColorMap[stage.color] || stageColorMap.gray} min-w-[100px] justify-center`}>
+        {stage.label}
+      </Badge>
+      <code className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">{stage.key}</code>
+      <span className="flex-1" />
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => onDelete(stage.id)}
+        data-testid={`delete-stage-${stage.key}`}
+      >
+        <Trash2 className="h-4 w-4 text-muted-foreground" />
+      </Button>
+    </div>
+  );
 }
 
 interface SystemSetting {
@@ -125,6 +222,112 @@ export default function AdminSettings() {
       toast({ title: "Failed to update setting", variant: "destructive" });
     },
   });
+
+  // Deal stages state and queries
+  const [stages, setStages] = useState<DealStage[]>([]);
+  const [showAddStageDialog, setShowAddStageDialog] = useState(false);
+  const [newStageKey, setNewStageKey] = useState("");
+  const [newStageLabel, setNewStageLabel] = useState("");
+  const [newStageColor, setNewStageColor] = useState("gray");
+
+  const { data: stagesData, isLoading: stagesLoading } = useQuery<{ stages: DealStage[] }>({
+    queryKey: ["/api/admin/deal-stages"],
+  });
+
+  // Update local stages when data changes
+  useEffect(() => {
+    if (stagesData?.stages) {
+      setStages(stagesData.stages);
+    }
+  }, [stagesData?.stages]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const reorderMutation = useMutation({
+    mutationFn: async (stageOrders: { id: number; sortOrder: number }[]) => {
+      return await apiRequest("PUT", "/api/admin/deal-stages/reorder", { stageOrders });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/deal-stages"] });
+      toast({ title: "Stages reordered successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to reorder stages", variant: "destructive" });
+    },
+  });
+
+  const createStageMutation = useMutation({
+    mutationFn: async (data: { key: string; label: string; color: string }) => {
+      return await apiRequest("POST", "/api/admin/deal-stages", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/deal-stages"] });
+      toast({ title: "Stage created successfully" });
+      setShowAddStageDialog(false);
+      setNewStageKey("");
+      setNewStageLabel("");
+      setNewStageColor("gray");
+    },
+    onError: () => {
+      toast({ title: "Failed to create stage", variant: "destructive" });
+    },
+  });
+
+  const deleteStageMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return await apiRequest("DELETE", `/api/admin/deal-stages/${id}`);
+    },
+    onSuccess: (_, deletedId) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/deal-stages"] });
+      setStages((prev) => prev.filter((s) => s.id !== deletedId));
+      toast({ title: "Stage deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete stage. It may be in use.", variant: "destructive" });
+    },
+  });
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    if (over && active.id !== over.id) {
+      const oldIndex = stages.findIndex((s) => s.id === active.id);
+      const newIndex = stages.findIndex((s) => s.id === over.id);
+      
+      const newStages = arrayMove(stages, oldIndex, newIndex);
+      setStages(newStages);
+      
+      // Send reorder request to server
+      const stageOrders = newStages.map((stage, index) => ({
+        id: stage.id,
+        sortOrder: index,
+      }));
+      reorderMutation.mutate(stageOrders);
+    }
+  };
+
+  const handleDeleteStage = (id: number) => {
+    if (window.confirm("Are you sure you want to delete this stage? This cannot be undone.")) {
+      deleteStageMutation.mutate(id);
+    }
+  };
+
+  const handleAddStage = () => {
+    if (!newStageKey || !newStageLabel) {
+      toast({ title: "Key and label are required", variant: "destructive" });
+      return;
+    }
+    createStageMutation.mutate({
+      key: newStageKey.toLowerCase().replace(/\s+/g, "-"),
+      label: newStageLabel,
+      color: newStageColor,
+    });
+  };
 
   const handleSave = (key: string) => {
     const currentValue = editedSettings[key];
@@ -475,49 +678,116 @@ export default function AdminSettings() {
             Deal Stages
           </CardTitle>
           <CardDescription>
-            Configure the workflow stages for loan deals. These stages help track the progress of each loan from initial review to closing.
+            Configure the workflow stages for loan deals. Drag to reorder stages. These stages help track the progress of each loan from initial review to closing.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {DEFAULT_STAGES.map((stage, index) => {
-              const colorMap: Record<string, string> = {
-                gray: "bg-gray-100 text-gray-800",
-                yellow: "bg-yellow-100 text-yellow-800",
-                orange: "bg-orange-100 text-orange-800",
-                blue: "bg-blue-100 text-blue-800",
-                emerald: "bg-emerald-100 text-emerald-800",
-                cyan: "bg-cyan-100 text-cyan-800",
-                indigo: "bg-indigo-100 text-indigo-800",
-                teal: "bg-teal-100 text-teal-800",
-                green: "bg-green-100 text-green-800",
-                red: "bg-red-100 text-red-800",
-                slate: "bg-slate-100 text-slate-600",
-              };
-              return (
-                <div 
-                  key={stage.key} 
-                  className="flex items-center gap-3 p-3 border rounded-lg"
-                  data-testid={`stage-row-${stage.key}`}
+          {stagesLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : (
+            <>
+              <div className="space-y-3">
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
                 >
-                  <GripVertical className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground w-6">{index + 1}</span>
-                  <Badge className={`${colorMap[stage.color] || "bg-gray-100 text-gray-800"} min-w-[100px] justify-center`}>
-                    {stage.label}
-                  </Badge>
-                  <code className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">{stage.key}</code>
-                  <span className="flex-1" />
-                </div>
-              );
-            })}
-          </div>
-          <div className="mt-4 p-4 bg-muted/50 rounded-lg">
-            <p className="text-sm text-muted-foreground">
-              <strong>Note:</strong> Deal stages are currently pre-configured. The ability to add, remove, or reorder stages will be available in a future update. Contact your administrator for custom stage requirements.
-            </p>
-          </div>
+                  <SortableContext
+                    items={stages.map((s) => s.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {stages.map((stage, index) => (
+                      <SortableStageItem
+                        key={stage.id}
+                        stage={stage}
+                        index={index}
+                        onDelete={handleDeleteStage}
+                      />
+                    ))}
+                  </SortableContext>
+                </DndContext>
+              </div>
+              <div className="mt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowAddStageDialog(true)}
+                  data-testid="button-add-stage"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Stage
+                </Button>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
+
+      <Dialog open={showAddStageDialog} onOpenChange={setShowAddStageDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add New Stage</DialogTitle>
+            <DialogDescription>
+              Create a new deal stage. The key will be used internally and cannot be changed later.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="stage-label">Label</Label>
+              <Input
+                id="stage-label"
+                value={newStageLabel}
+                onChange={(e) => setNewStageLabel(e.target.value)}
+                placeholder="e.g., Pending Approval"
+                data-testid="input-stage-label"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="stage-key">Key (auto-generated from label)</Label>
+              <Input
+                id="stage-key"
+                value={newStageKey || newStageLabel.toLowerCase().replace(/\s+/g, "-")}
+                onChange={(e) => setNewStageKey(e.target.value)}
+                placeholder="e.g., pending-approval"
+                data-testid="input-stage-key"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="stage-color">Color</Label>
+              <Select value={newStageColor} onValueChange={setNewStageColor}>
+                <SelectTrigger data-testid="select-stage-color">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {COLOR_OPTIONS.map((color) => (
+                    <SelectItem key={color.value} value={color.value}>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-4 h-4 rounded ${stageColorMap[color.value]?.split(" ")[0] || "bg-gray-100"}`} />
+                        {color.label}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddStageDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleAddStage} 
+              disabled={createStageMutation.isPending}
+              data-testid="button-confirm-add-stage"
+            >
+              {createStageMutation.isPending ? "Creating..." : "Add Stage"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader>

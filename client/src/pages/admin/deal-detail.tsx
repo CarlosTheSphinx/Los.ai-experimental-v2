@@ -134,42 +134,41 @@ interface DealDetailResponse {
   documents: DealDocument[];
 }
 
-function getStageColor(stage: string): string {
-  const colors: Record<string, string> = {
-    "new": "bg-gray-100 text-gray-800",
-    "initial-review": "bg-yellow-100 text-yellow-800",
-    "under-review": "bg-orange-100 text-orange-800",
-    "term-sheet": "bg-blue-100 text-blue-800",
-    "approved": "bg-emerald-100 text-emerald-800",
-    "onboarding": "bg-purple-100 text-purple-800",
-    "processing": "bg-cyan-100 text-cyan-800",
-    "underwriting": "bg-indigo-100 text-indigo-800",
-    "closing": "bg-teal-100 text-teal-800",
-    "funded": "bg-green-100 text-green-800",
-    "closed": "bg-green-200 text-green-900",
-    "declined": "bg-red-100 text-red-800",
-    "withdrawn": "bg-slate-100 text-slate-600",
-  };
-  return colors[stage] || "bg-gray-100 text-gray-800";
+interface DealStage {
+  id: number;
+  key: string;
+  label: string;
+  color: string;
+  sortOrder: number;
+  isActive: boolean;
 }
 
-function getStageLabel(stage: string): string {
-  const labels: Record<string, string> = {
-    "new": "New",
-    "initial-review": "Initial Review",
-    "under-review": "Under Review",
-    "term-sheet": "Term Sheet",
-    "approved": "Approved",
-    "onboarding": "Onboarding",
-    "processing": "Processing",
-    "underwriting": "Underwriting",
-    "closing": "Closing",
-    "funded": "Funded",
-    "closed": "Closed",
-    "declined": "Declined",
-    "withdrawn": "Withdrawn",
-  };
-  return labels[stage] || stage;
+const stageColorMap: Record<string, string> = {
+  gray: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
+  yellow: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+  orange: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+  blue: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  emerald: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
+  cyan: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200",
+  indigo: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
+  teal: "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200",
+  green: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  red: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  slate: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+  purple: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+};
+
+function getStageColorFromStages(stage: string, stages: DealStage[]): string {
+  const stageObj = stages.find(s => s.key === stage);
+  if (stageObj) {
+    return stageColorMap[stageObj.color] || stageColorMap.gray;
+  }
+  return stageColorMap.gray;
+}
+
+function getStageLabelFromStages(stage: string, stages: DealStage[]): string {
+  const stageObj = stages.find(s => s.key === stage);
+  return stageObj?.label || stage;
 }
 
 function formatCurrency(amount: number) {
@@ -328,6 +327,12 @@ export default function AdminDealDetail() {
     queryKey: [`/api/admin/deals/${dealId}/project`],
     enabled: !!dealId,
   });
+
+  const { data: stagesData } = useQuery<{ stages: DealStage[] }>({
+    queryKey: ['/api/admin/deal-stages'],
+  });
+  
+  const stages = stagesData?.stages || [];
 
   const updateDocumentStatus = useMutation({
     mutationFn: async ({ docId, status }: { docId: number; status: string }) => {
@@ -606,24 +611,17 @@ export default function AdminDealDetail() {
               disabled={updateStageMutation.isPending}
             >
               <SelectTrigger 
-                className={cn("w-[160px] text-sm font-medium", getStageColor(deal.stage))}
+                className={cn("w-[160px] text-sm font-medium", getStageColorFromStages(deal.stage, stages))}
                 data-testid="select-deal-stage"
               >
-                <SelectValue>{getStageLabel(deal.stage)}</SelectValue>
+                <SelectValue>{getStageLabelFromStages(deal.stage, stages)}</SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="new">New</SelectItem>
-                <SelectItem value="initial-review">Initial Review</SelectItem>
-                <SelectItem value="under-review">Under Review</SelectItem>
-                <SelectItem value="term-sheet">Term Sheet</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="processing">Processing</SelectItem>
-                <SelectItem value="underwriting">Underwriting</SelectItem>
-                <SelectItem value="closing">Closing</SelectItem>
-                <SelectItem value="funded">Funded</SelectItem>
-                <SelectItem value="closed">Closed</SelectItem>
-                <SelectItem value="declined">Declined</SelectItem>
-                <SelectItem value="withdrawn">Withdrawn</SelectItem>
+                {stages.filter(s => s.isActive !== false).map((stage) => (
+                  <SelectItem key={stage.id} value={stage.key}>
+                    {stage.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
