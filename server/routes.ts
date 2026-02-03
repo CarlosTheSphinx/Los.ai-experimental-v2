@@ -856,14 +856,35 @@ export async function registerRoutes(
     try {
       const quoteData = api.quotes.save.input.parse(req.body);
       
-      // Server-side calculation of commission values
-      const loanAmount = quoteData.loanData?.loanAmount || 0;
-      const tpoPremiumPercent = quoteData.loanData?.tpoPremium ? parseFloat(String(quoteData.loanData.tpoPremium).replace('%', '')) : 0;
+      // Detect if this is an RTL quote
+      const isRTLQuote = quoteData.loanData?.asIsValue || quoteData.loanData?.arv || quoteData.loanData?.rehabBudget !== undefined;
       
-      const tpoPremiumAmount = (loanAmount * tpoPremiumPercent) / 100;
-      const pointsAmount = (loanAmount * quoteData.pointsCharged) / 100;
-      const totalRevenue = pointsAmount + tpoPremiumAmount;
-      const commission = totalRevenue * 0.30;
+      let pointsAmount = 0;
+      let tpoPremiumAmount = 0;
+      let totalRevenue = 0;
+      let commission = 0;
+      
+      if (isRTLQuote) {
+        // RTL quote: commission is the additional points (above 2 minimum) on max loan
+        const asIsValue = quoteData.loanData?.asIsValue || 0;
+        const rehabBudget = quoteData.loanData?.rehabBudget || 0;
+        const totalCost = asIsValue + rehabBudget;
+        const additionalPoints = Math.max(0, quoteData.pointsCharged - 2);
+        
+        // Points amount for RTL is the additional points amount (commission)
+        pointsAmount = (totalCost * additionalPoints) / 100;
+        commission = pointsAmount; // For RTL, commission IS the additional points amount
+        totalRevenue = (totalCost * quoteData.pointsCharged) / 100;
+      } else {
+        // DSCR quote: original calculation
+        const loanAmount = quoteData.loanData?.loanAmount || 0;
+        const tpoPremiumPercent = quoteData.loanData?.tpoPremium ? parseFloat(String(quoteData.loanData.tpoPremium).replace('%', '')) : 0;
+        
+        tpoPremiumAmount = (loanAmount * tpoPremiumPercent) / 100;
+        pointsAmount = (loanAmount * quoteData.pointsCharged) / 100;
+        totalRevenue = pointsAmount + tpoPremiumAmount;
+        commission = totalRevenue * 0.30;
+      }
       
       const saved = await storage.saveQuote({
         ...quoteData,

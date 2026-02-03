@@ -201,6 +201,24 @@ export default function Quotes() {
               const loanData = quote.loanData as Record<string, any>;
               const createdAt = quote.createdAt ? new Date(quote.createdAt).toLocaleDateString() : 'N/A';
               
+              // Detect if this is an RTL quote (has asIsValue or arv in loanData)
+              const isRTLQuote = loanData?.asIsValue || loanData?.arv || loanData?.rehabBudget !== undefined;
+              
+              // Calculate max loan for RTL quotes
+              const asIsValue = loanData?.asIsValue || 0;
+              const arv = loanData?.arv || 0;
+              const rehabBudget = loanData?.rehabBudget || 0;
+              const totalCost = asIsValue + rehabBudget;
+              
+              // For RTL, commission is (points - 2) * maxLoan / 100 (additional points only)
+              const additionalPoints = Math.max(0, (quote.pointsCharged || 0) - 2);
+              
+              // Display loan amount: for RTL use totalCost, for DSCR use loanAmount
+              const displayLoanAmount = isRTLQuote ? totalCost : loanData?.loanAmount;
+              const displayProgram = isRTLQuote 
+                ? loanData?.loanType?.replace(/_/g, ' ').toUpperCase() 
+                : loanData?.loanType;
+              
               return (
                 <Card key={quote.id} className="overflow-hidden" data-testid={`card-quote-${quote.id}`}>
                   <CardHeader className="bg-slate-50 border-b border-slate-100 py-4">
@@ -246,8 +264,8 @@ export default function Quotes() {
                         <div className="text-xl font-bold text-primary">{quote.interestRate}</div>
                       </div>
                       <div>
-                        <div className="text-xs text-slate-400 uppercase tracking-wide">Loan Amount</div>
-                        <div className="font-semibold">${loanData?.loanAmount?.toLocaleString() || 'N/A'}</div>
+                        <div className="text-xs text-slate-400 uppercase tracking-wide">{isRTLQuote ? 'Total Cost' : 'Loan Amount'}</div>
+                        <div className="font-semibold">${displayLoanAmount?.toLocaleString() || 'N/A'}</div>
                       </div>
                       <div>
                         <div className="text-xs text-slate-400 uppercase tracking-wide">Points</div>
@@ -258,36 +276,58 @@ export default function Quotes() {
                       </div>
                       <div>
                         <div className="text-xs text-slate-400 uppercase tracking-wide">Program</div>
-                        <div className="font-semibold">{loanData?.loanType || 'N/A'}</div>
+                        <div className="font-semibold">{displayProgram || 'N/A'}</div>
                       </div>
                     </div>
 
-                    <div className="bg-slate-50 rounded-lg p-4 border border-slate-100">
-                      <div className="grid grid-cols-3 gap-4 text-sm">
-                        <div>
-                          <div className="text-slate-500">Points Amount</div>
-                          <div className="font-medium">
-                            ${(quote.pointsAmount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {isRTLQuote ? (
+                      <div className="bg-slate-50 rounded-lg p-4 border border-slate-100">
+                        <div className="grid grid-cols-3 gap-4 text-sm">
+                          <div>
+                            <div className="text-slate-500">As-Is Value</div>
+                            <div className="font-medium">${asIsValue.toLocaleString()}</div>
+                          </div>
+                          <div>
+                            <div className="text-slate-500">ARV</div>
+                            <div className="font-medium">${arv.toLocaleString()}</div>
+                          </div>
+                          <div>
+                            <div className="text-slate-500">Rehab Budget</div>
+                            <div className="font-medium">${rehabBudget.toLocaleString()}</div>
                           </div>
                         </div>
-                        <div>
-                          <div className="text-slate-500">TPO Premium</div>
-                          <div className="font-medium">${(quote.tpoPremiumAmount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                        </div>
-                        <div>
-                          <div className="text-slate-500">Total Revenue</div>
-                          <div className="font-semibold text-primary">${(quote.totalRevenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                      </div>
+                    ) : (
+                      <div className="bg-slate-50 rounded-lg p-4 border border-slate-100">
+                        <div className="grid grid-cols-3 gap-4 text-sm">
+                          <div>
+                            <div className="text-slate-500">Points Amount</div>
+                            <div className="font-medium">
+                              ${(quote.pointsAmount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-slate-500">TPO Premium</div>
+                            <div className="font-medium">${(quote.tpoPremiumAmount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                          </div>
+                          <div>
+                            <div className="text-slate-500">Total Revenue</div>
+                            <div className="font-semibold text-primary">${(quote.totalRevenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )}
 
                     <div className="mt-4 bg-green-50 rounded-lg p-4 border border-green-200 flex items-center justify-between">
                       <span className="font-semibold text-green-700 flex items-center gap-2">
                         <DollarSign className="w-5 h-5" />
-                        Your Commission (30%)
+                        Your Commission {!isRTLQuote && '(30%)'}
                       </span>
                       <span className="text-2xl font-bold text-green-600" data-testid={`text-commission-${quote.id}`}>
-                        ${quote.commission?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+                        ${isRTLQuote 
+                          ? (quote.pointsAmount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                          : (quote.commission?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00')
+                        }
                       </span>
                     </div>
 
