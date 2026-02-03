@@ -57,8 +57,16 @@ export default function AdminUsers() {
   });
   const { toast } = useToast();
 
-  const { data, isLoading } = useQuery<{ users: AdminUser[] }>({
-    queryKey: ["/api/admin/users", { role: roleFilter !== "all" ? roleFilter : undefined, search: search || undefined }],
+  const buildUsersUrl = () => {
+    const params = new URLSearchParams();
+    if (roleFilter !== "all") params.append("role", roleFilter);
+    if (search) params.append("search", search);
+    const queryString = params.toString();
+    return `/api/admin/users${queryString ? `?${queryString}` : ""}`;
+  };
+
+  const { data, isLoading, refetch } = useQuery<{ users: AdminUser[] }>({
+    queryKey: [buildUsersUrl()],
   });
 
   const createUserMutation = useMutation({
@@ -66,7 +74,7 @@ export default function AdminUsers() {
       return await apiRequest("POST", "/api/admin/users", userData);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      refetch();
       setIsAddDialogOpen(false);
       setNewUser({ email: "", password: "", fullName: "", companyName: "", phone: "", role: "user" });
       toast({ title: "User created successfully" });
@@ -85,7 +93,7 @@ export default function AdminUsers() {
       return await apiRequest("PATCH", `/api/admin/users/${id}`, updates);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      refetch();
       toast({ title: "User updated successfully" });
     },
     onError: () => {
