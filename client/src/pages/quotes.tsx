@@ -283,7 +283,7 @@ export default function Quotes() {
 
                     {isRTLQuote ? (
                       <div className="bg-slate-50 rounded-lg p-4 border border-slate-100">
-                        <div className="grid grid-cols-3 gap-4 text-sm">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                           <div>
                             <div className="text-slate-500">As-Is Value</div>
                             <div className="font-medium">${asIsValue.toLocaleString()}</div>
@@ -295,6 +295,20 @@ export default function Quotes() {
                           <div>
                             <div className="text-slate-500">Rehab Budget</div>
                             <div className="font-medium">${rehabBudget.toLocaleString()}</div>
+                          </div>
+                          <div>
+                            <div className="text-slate-500">Total Loan Amount</div>
+                            <div className="font-semibold text-primary">${totalCost.toLocaleString()}</div>
+                          </div>
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <div className="text-slate-500">Additional Points (above 2 min)</div>
+                            <div className="font-medium">{additionalPoints.toFixed(2)}</div>
+                          </div>
+                          <div>
+                            <div className="text-slate-500">Points Amount</div>
+                            <div className="font-semibold text-green-600">${rtlCommission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                           </div>
                         </div>
                       </div>
