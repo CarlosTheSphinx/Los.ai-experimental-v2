@@ -214,6 +214,11 @@ export default function Quotes() {
               const additionalPoints = Math.max(0, (quote.pointsCharged || 0) - 2);
               const rtlCommission = (totalCost * additionalPoints) / 100;
               
+              // For DSCR, commission is (points - 1) * loanAmount / 100 (additional points above 1 min)
+              const dscrAdditionalPoints = Math.max(0, (quote.pointsCharged || 0) - 1);
+              const dscrLoanAmount = loanData?.loanAmount || 0;
+              const dscrCommission = (dscrLoanAmount * dscrAdditionalPoints) / 100;
+              
               // Display loan amount: for RTL use totalCost, for DSCR use loanAmount
               const displayLoanAmount = isRTLQuote ? totalCost : loanData?.loanAmount;
               const displayProgram = isRTLQuote 
@@ -314,12 +319,14 @@ export default function Quotes() {
                       </div>
                     ) : (
                       <div className="bg-slate-50 rounded-lg p-4 border border-slate-100">
-                        <div className="grid grid-cols-3 gap-4 text-sm">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                           <div>
-                            <div className="text-slate-500">Points Amount</div>
-                            <div className="font-medium">
-                              ${(quote.pointsAmount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </div>
+                            <div className="text-slate-500">Loan Amount</div>
+                            <div className="font-semibold text-primary">${dscrLoanAmount.toLocaleString()}</div>
+                          </div>
+                          <div>
+                            <div className="text-slate-500">Points Charged</div>
+                            <div className="font-medium">{quote.pointsCharged?.toFixed(2) || '0.00'}</div>
                           </div>
                           <div>
                             <div className="text-slate-500">TPO Premium</div>
@@ -327,7 +334,17 @@ export default function Quotes() {
                           </div>
                           <div>
                             <div className="text-slate-500">Total Revenue</div>
-                            <div className="font-semibold text-primary">${(quote.totalRevenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                            <div className="font-medium">${(quote.totalRevenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                          </div>
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <div className="text-slate-500">Additional Points (above 1 min)</div>
+                            <div className="font-medium">{dscrAdditionalPoints.toFixed(2)}</div>
+                          </div>
+                          <div>
+                            <div className="text-slate-500">Your Earnings</div>
+                            <div className="font-semibold text-green-600">${dscrCommission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                           </div>
                         </div>
                       </div>
@@ -336,12 +353,12 @@ export default function Quotes() {
                     <div className="mt-4 bg-green-50 rounded-lg p-4 border border-green-200 flex items-center justify-between">
                       <span className="font-semibold text-green-700 flex items-center gap-2">
                         <DollarSign className="w-5 h-5" />
-                        Your Commission {!isRTLQuote && '(30%)'}
+                        Your Commission
                       </span>
                       <span className="text-2xl font-bold text-green-600" data-testid={`text-commission-${quote.id}`}>
                         ${isRTLQuote 
                           ? rtlCommission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                          : (quote.commission?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00')
+                          : dscrCommission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                         }
                       </span>
                     </div>

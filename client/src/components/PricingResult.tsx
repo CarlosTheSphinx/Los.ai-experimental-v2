@@ -22,14 +22,16 @@ export function PricingResult({ result, formData, onReset }: PricingResultProps)
   const [customerFirstName, setCustomerFirstName] = useState("");
   const [customerLastName, setCustomerLastName] = useState("");
   const [propertyAddress, setPropertyAddress] = useState("");
-  const [pointsCharged, setPointsCharged] = useState(0);
+  const [pointsCharged, setPointsCharged] = useState(1); // Minimum 1 point
 
   const loanAmount = formData?.loanAmount || 0;
   const tpoPremiumPercent = formData?.tpoPremium ? parseFloat(formData.tpoPremium) : 0;
   const tpoPremiumAmount = (loanAmount * tpoPremiumPercent) / 100;
   const pointsAmount = (loanAmount * pointsCharged) / 100;
   const totalRevenue = pointsAmount + tpoPremiumAmount;
-  const commission = totalRevenue * 0.30;
+  // Commission is everything above 1 point minimum
+  const additionalPoints = Math.max(0, pointsCharged - 1);
+  const commission = (loanAmount * additionalPoints) / 100;
 
   const saveQuoteMutation = useMutation({
     mutationFn: async () => {
@@ -215,18 +217,18 @@ export function PricingResult({ result, formData, onReset }: PricingResultProps)
                 <div className="flex items-center justify-between">
                   <Label className="flex items-center gap-1">
                     <Percent className="w-3 h-3" />
-                    Origination Points
+                    Origination Points (1 min + up to 2 additional)
                   </Label>
                   <div className="flex items-center gap-2">
                     <Input
                       type="number"
-                      min={0}
+                      min={1}
                       max={3}
                       step={0.125}
                       value={pointsCharged}
                       onChange={(e) => {
                         const val = parseFloat(e.target.value);
-                        if (!isNaN(val) && val >= 0 && val <= 3) {
+                        if (!isNaN(val) && val >= 1 && val <= 3) {
                           setPointsCharged(val);
                         }
                       }}
@@ -236,20 +238,21 @@ export function PricingResult({ result, formData, onReset }: PricingResultProps)
                     <span className="text-sm text-slate-500">points</span>
                   </div>
                 </div>
-                <p className="text-xs text-slate-500">Drag the slider or type a value above (0 - 3 points)</p>
+                <p className="text-xs text-slate-500">1 point minimum required. Your commission is the additional points above 1.</p>
                 <div className="bg-white rounded-lg p-4 border-2 border-slate-300 shadow-sm">
                   <Slider
                     value={[pointsCharged]}
                     onValueChange={([val]) => setPointsCharged(val)}
+                    min={1}
                     max={3}
                     step={0.125}
                     className="w-full"
                     data-testid="slider-points"
                   />
                   <div className="flex justify-between text-xs text-slate-500 mt-2">
-                    <span>0 points</span>
-                    <span>1.5 points</span>
-                    <span>3 points</span>
+                    <span>1 point (min)</span>
+                    <span>2 points</span>
+                    <span>3 points (max)</span>
                   </div>
                 </div>
               </div>
@@ -277,7 +280,9 @@ export function PricingResult({ result, formData, onReset }: PricingResultProps)
 
                 <div className="bg-green-50 rounded-lg p-3 border border-green-200">
                   <div className="flex justify-between items-center">
-                    <span className="font-semibold text-green-700">Your Commission (30%)</span>
+                    <span className="font-semibold text-green-700">
+                      Your Commission ({additionalPoints.toFixed(2)} pts above 1 min)
+                    </span>
                     <span className="text-2xl font-bold text-green-600" data-testid="text-commission">
                       ${commission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>

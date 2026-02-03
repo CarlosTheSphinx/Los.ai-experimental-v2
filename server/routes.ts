@@ -876,14 +876,15 @@ export async function registerRoutes(
         commission = pointsAmount; // For RTL, commission IS the additional points amount
         totalRevenue = (totalCost * quoteData.pointsCharged) / 100;
       } else {
-        // DSCR quote: original calculation
+        // DSCR quote: commission is everything above 1 point minimum
         const loanAmount = quoteData.loanData?.loanAmount || 0;
         const tpoPremiumPercent = quoteData.loanData?.tpoPremium ? parseFloat(String(quoteData.loanData.tpoPremium).replace('%', '')) : 0;
+        const dscrAdditionalPoints = Math.max(0, quoteData.pointsCharged - 1);
         
         tpoPremiumAmount = (loanAmount * tpoPremiumPercent) / 100;
         pointsAmount = (loanAmount * quoteData.pointsCharged) / 100;
         totalRevenue = pointsAmount + tpoPremiumAmount;
-        commission = totalRevenue * 0.30;
+        commission = (loanAmount * dscrAdditionalPoints) / 100; // Commission = additional points above 1 min
       }
       
       const saved = await storage.saveQuote({
