@@ -210,8 +210,9 @@ export default function Quotes() {
               const rehabBudget = loanData?.rehabBudget || 0;
               const totalCost = asIsValue + rehabBudget;
               
-              // For RTL, commission is (points - 2) * maxLoan / 100 (additional points only)
+              // For RTL, commission is (points - 2) * totalCost / 100 (additional points only)
               const additionalPoints = Math.max(0, (quote.pointsCharged || 0) - 2);
+              const rtlCommission = (totalCost * additionalPoints) / 100;
               
               // Display loan amount: for RTL use totalCost, for DSCR use loanAmount
               const displayLoanAmount = isRTLQuote ? totalCost : loanData?.loanAmount;
@@ -325,7 +326,7 @@ export default function Quotes() {
                       </span>
                       <span className="text-2xl font-bold text-green-600" data-testid={`text-commission-${quote.id}`}>
                         ${isRTLQuote 
-                          ? (quote.pointsAmount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                          ? rtlCommission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                           : (quote.commission?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00')
                         }
                       </span>
