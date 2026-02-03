@@ -26,9 +26,11 @@ import {
 import { registerObjectStorageRoutes, ObjectStorageService } from './replit_integrations/object_storage';
 
 // Initialize Apify client
-// In a real app, this should be an env var. Using the token from the provided code for fidelity.
-const APIFY_TOKEN = process.env.APIFY_TOKEN || 'apify_api_BJJkrn8sbc0geOlnsjTdkgXQNXcbOq0AA0bj';
-const client = new ApifyClient({ token: APIFY_TOKEN });
+const APIFY_TOKEN = process.env.APIFY_TOKEN;
+if (!APIFY_TOKEN) {
+  console.warn('Warning: APIFY_TOKEN environment variable is not set. Pricing scraper will not work.');
+}
+const client = new ApifyClient({ token: APIFY_TOKEN || '' });
 
 export async function registerRoutes(
   httpServer: Server,
