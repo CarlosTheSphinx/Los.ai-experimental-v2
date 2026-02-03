@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +15,8 @@ import {
   Send,
   RefreshCw,
   Clock,
-  CheckCircle
+  CheckCircle,
+  Edit
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -147,6 +149,7 @@ function QuoteDocumentStatus({ quoteId }: { quoteId: number }) {
 
 export default function Quotes() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [signingQuote, setSigningQuote] = useState<SavedQuote | null>(null);
 
   const { data, isLoading } = useQuery<{ success: boolean; quotes: SavedQuote[] }>({
@@ -165,6 +168,24 @@ export default function Quotes() {
       toast({ title: "Error", description: "Failed to delete quote", variant: "destructive" });
     }
   });
+
+  const handleEditQuote = (quote: SavedQuote) => {
+    const loanData = quote.loanData as Record<string, any>;
+    const isRTLQuote = loanData?.asIsValue || loanData?.arv || loanData?.rehabBudget !== undefined;
+    
+    // Store quote data in sessionStorage for the edit page
+    sessionStorage.setItem('editQuote', JSON.stringify({
+      quoteId: quote.id,
+      isRTL: isRTLQuote,
+      loanData: loanData,
+      customerFirstName: quote.customerFirstName,
+      customerLastName: quote.customerLastName,
+      propertyAddress: quote.propertyAddress,
+      pointsCharged: quote.pointsCharged
+    }));
+    
+    navigate('/');
+  };
 
   const quotes = data?.quotes || [];
 
@@ -365,7 +386,16 @@ export default function Quotes() {
 
                     <QuoteDocumentStatus quoteId={quote.id} />
 
-                    <div className="mt-4 pt-4 border-t border-slate-100">
+                    <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => handleEditQuote(quote)}
+                        className="w-full"
+                        data-testid={`button-edit-quote-${quote.id}`}
+                      >
+                        <Edit className="w-4 h-4 mr-2" />
+                        Edit Quote
+                      </Button>
                       <Button
                         onClick={() => setSigningQuote(quote)}
                         className="w-full"

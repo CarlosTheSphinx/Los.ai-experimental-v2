@@ -154,6 +154,35 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [isPending]);
 
+  // Handle edit quote from saved quotes page
+  useEffect(() => {
+    const editQuoteData = sessionStorage.getItem('editQuote');
+    if (editQuoteData) {
+      try {
+        const editData = JSON.parse(editQuoteData);
+        sessionStorage.removeItem('editQuote'); // Clear after reading
+        
+        if (editData.isRTL) {
+          setLoanProductType('rtl');
+          setRtlFormData(editData.loanData);
+          toast({
+            title: "Editing Quote",
+            description: "Make your changes and submit to update pricing.",
+          });
+        } else {
+          setLoanProductType('dscr');
+          setLastFormData(editData.loanData);
+          toast({
+            title: "Editing Quote",
+            description: "Make your changes and submit to update pricing.",
+          });
+        }
+      } catch (e) {
+        console.error('Failed to parse edit quote data:', e);
+      }
+    }
+  }, [toast]);
+
   const handleSubmit = (data: LoanPricingFormData) => {
     setLastFormData(data);
     getPricing(data, {
