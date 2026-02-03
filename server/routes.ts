@@ -3791,10 +3791,30 @@ export async function registerRoutes(
         return sum + (loanData?.loanAmount || 0);
       }, 0);
       const totalRevenue = allQuotes.reduce((sum, q) => sum + (q.totalRevenue || 0), 0);
-      // Total commission = Sphinx's base points (totalRevenue - broker's additional points)
+      // Total commission = Sphinx's revenue from each deal
+      // For DSCR: TPO premium (stored in tpoPremiumAmount) + base 1 point minimum
+      // For RTL: base 2 points minimum on loan amount
       const totalCommission = allQuotes.reduce((sum, q) => {
-        const sphinxRevenue = (q.totalRevenue || 0) - (q.commission || 0);
-        return sum + sphinxRevenue;
+        const loanData = q.loanData as any;
+        // Use explicit loanProductType first, then check for RTL-specific fields
+        const loanProductType = loanData?.loanProductType;
+        const isRTL = loanProductType === 'rtl' || 
+          (loanProductType !== 'dscr' && (loanData?.asIsValue || loanData?.arv || loanData?.rehabBudget !== undefined));
+        
+        // Use loan amount for commission base (consistent for both product types)
+        const loanAmount = loanData?.loanAmount || 0;
+        
+        if (isRTL) {
+          // RTL: Sphinx gets base 2 points on loan amount
+          const sphinxBase = (loanAmount * 2) / 100;
+          return sum + sphinxBase;
+        } else {
+          // DSCR: Sphinx gets TPO premium (stored value) + base 1 point
+          // tpoPremiumAmount is the TPO premium (1% auto, stored separately)
+          const tpoPremium = q.tpoPremiumAmount || 0;
+          const basePoint = (loanAmount * 1) / 100; // 1 point minimum goes to Sphinx
+          return sum + tpoPremium + basePoint;
+        }
       }, 0);
       
       // Calculate pipeline by loan type
@@ -4323,6 +4343,100 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Admin full deal update error:', error);
       res.status(500).json({ error: 'Failed to update deal' });
+    }
+  });
+
+  // Admin - Populate deal documents from loan program templates
+  app.post('/api/admin/deals/:dealId/populate-documents', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      const { loanType, clearExisting } = req.body;
+      
+      // Validate deal exists
+      const [existingDeal] = await db.select()
+        .from(savedQuotes)
+        .where(eq(savedQuotes.id, dealId))
+        .limit(1);
+      
+      if (!existingDeal) {
+        return res.status(404).json({ error: 'Deal not found' });
+      }
+      
+      if (!loanType) {
+        return res.status(400).json({ error: 'Loan type is required' });
+      }
+      
+      // Find loan program matching the loan type
+      const [loanProgram] = await db.select()
+        .from(loanPrograms)
+        .where(and(
+          eq(loanPrograms.loanType, loanType),
+          eq(loanPrograms.isActive, true)
+        ))
+        .limit(1);
+      
+      if (!loanProgram) {
+        return res.status(404).json({ error: `No active loan program found for type: ${loanType}` });
+      }
+      
+      // Get document templates for this loan program
+      const templates = await db.select()
+        .from(programDocumentTemplates)
+        .where(eq(programDocumentTemplates.programId, loanProgram.id))
+        .orderBy(programDocumentTemplates.sortOrder);
+      
+      if (templates.length === 0) {
+        return res.json({ 
+          message: 'No document templates found for this loan program',
+          documentsCreated: 0
+        });
+      }
+      
+      // Optionally clear existing documents that are still in pending status
+      if (clearExisting) {
+        await db.delete(dealDocuments)
+          .where(and(
+            eq(dealDocuments.dealId, dealId),
+            eq(dealDocuments.status, 'pending')
+          ));
+      }
+      
+      // Create deal documents from templates
+      const createdDocs = [];
+      for (const template of templates) {
+        // Check if document with same name already exists
+        const [existing] = await db.select()
+          .from(dealDocuments)
+          .where(and(
+            eq(dealDocuments.dealId, dealId),
+            eq(dealDocuments.documentName, template.documentName)
+          ))
+          .limit(1);
+        
+        if (!existing) {
+          const [doc] = await db.insert(dealDocuments)
+            .values({
+              dealId,
+              documentName: template.documentName,
+              documentCategory: template.documentCategory,
+              documentDescription: template.documentDescription,
+              isRequired: template.isRequired,
+              sortOrder: template.sortOrder,
+              status: 'pending',
+            })
+            .returning();
+          createdDocs.push(doc);
+        }
+      }
+      
+      res.json({ 
+        message: `Successfully populated ${createdDocs.length} documents from ${loanProgram.name} templates`,
+        documentsCreated: createdDocs.length,
+        documents: createdDocs
+      });
+    } catch (error) {
+      console.error('Populate deal documents error:', error);
+      res.status(500).json({ error: 'Failed to populate documents' });
     }
   });
 

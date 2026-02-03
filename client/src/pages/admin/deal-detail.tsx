@@ -350,6 +350,27 @@ export default function AdminDealDetail() {
     },
   });
 
+  const populateDocumentsMutation = useMutation({
+    mutationFn: async ({ loanType, clearExisting }: { loanType: string; clearExisting?: boolean }) => {
+      return apiRequest("POST", `/api/admin/deals/${dealId}/populate-documents`, { loanType, clearExisting });
+    },
+    onSuccess: (data: any) => {
+      // Documents are part of the main deal response, so invalidate the deal query
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
+      toast({
+        title: "Documents populated",
+        description: data.message || `${data.documentsCreated} documents added from templates.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to populate documents",
+        description: error?.message || "Could not load document templates for this loan type.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const openEditDialog = () => {
     if (deal) {
       setEditForm({
@@ -740,15 +761,40 @@ export default function AdminDealDetail() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-2">
                 <CardTitle>Documents</CardTitle>
-                <Button size="sm" onClick={() => setDocumentDialogOpen(true)} data-testid="button-add-document-empty">
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add Document
-                </Button>
+                <div className="flex items-center gap-2">
+                  {deal?.loanData?.loanType && (
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => populateDocumentsMutation.mutate({ 
+                        loanType: deal.loanData?.loanType || 'rtl',
+                        clearExisting: false 
+                      })}
+                      disabled={populateDocumentsMutation.isPending}
+                      data-testid="button-populate-documents-empty"
+                    >
+                      {populateDocumentsMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      ) : (
+                        <FileText className="h-4 w-4 mr-1" />
+                      )}
+                      Load Templates
+                    </Button>
+                  )}
+                  <Button size="sm" onClick={() => setDocumentDialogOpen(true)} data-testid="button-add-document-empty">
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Document
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="py-8 text-center">
                 <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                 <h3 className="text-lg font-medium">No documents yet</h3>
-                <p className="text-muted-foreground">Click "Add Document" to add a document requirement</p>
+                <p className="text-muted-foreground">
+                  {deal?.loanData?.loanType 
+                    ? 'Click "Load Templates" to populate documents from the loan program, or "Add Document" to add individually.'
+                    : 'Set a loan type first to load document templates, or click "Add Document" to add individually.'}
+                </p>
               </CardContent>
             </Card>
           ) : (
@@ -764,10 +810,31 @@ export default function AdminDealDetail() {
                       {getLoanTypeLabel(deal.loanData?.loanType)} Loan Document Checklist
                     </CardDescription>
                   </div>
-                  <Button size="sm" onClick={() => setDocumentDialogOpen(true)} data-testid="button-add-document">
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Document
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {deal?.loanData?.loanType && (
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => populateDocumentsMutation.mutate({ 
+                          loanType: deal.loanData?.loanType || 'rtl',
+                          clearExisting: false 
+                        })}
+                        disabled={populateDocumentsMutation.isPending}
+                        data-testid="button-populate-documents"
+                      >
+                        {populateDocumentsMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        ) : (
+                          <FileText className="h-4 w-4 mr-1" />
+                        )}
+                        Load Templates
+                      </Button>
+                    )}
+                    <Button size="sm" onClick={() => setDocumentDialogOpen(true)} data-testid="button-add-document">
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Document
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="mb-6">
