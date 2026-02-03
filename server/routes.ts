@@ -2878,7 +2878,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'userId is required' });
       }
 
-      // Users can only create threads for themselves
+      // Users can only create threads for themselves, admins can create for anyone
       if (!isAdminRole(requesterRole) && parseInt(targetUserId) !== requesterId) {
         return res.status(403).json({ error: 'Not authorized' });
       }

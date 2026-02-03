@@ -2,6 +2,9 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import type { Request, Response, NextFunction } from 'express';
+import { db } from './db';
+import { users } from '@shared/schema';
+import { eq } from 'drizzle-orm';
 
 const SALT_ROUNDS = 10;
 const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET || 'your-secret-key-change-in-production';
@@ -16,6 +19,7 @@ export interface AuthRequest extends Request {
   user?: {
     id: number;
     email: string;
+    role?: string;
   };
 }
 
@@ -68,9 +72,16 @@ export const authenticateUser = async (
       return;
     }
     
+    // Fetch user's role from database
+    const [user] = await db.select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, decoded.userId))
+      .limit(1);
+    
     req.user = {
       id: decoded.userId,
-      email: decoded.email
+      email: decoded.email,
+      role: user?.role || 'user'
     };
     
     next();
@@ -91,7 +102,12 @@ export const optionalAuth = async (
   if (token) {
     const decoded = verifyToken(token);
     if (decoded) {
-      req.user = { id: decoded.userId, email: decoded.email };
+      // Fetch user's role from database
+      const [user] = await db.select({ role: users.role })
+        .from(users)
+        .where(eq(users.id, decoded.userId))
+        .limit(1);
+      req.user = { id: decoded.userId, email: decoded.email, role: user?.role || 'user' };
     }
   }
   
