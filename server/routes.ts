@@ -6100,6 +6100,29 @@ export async function registerRoutes(
     }
   });
 
+  // Get presigned URL for onboarding file upload (admin)
+  app.post('/api/admin/onboarding/upload-url', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { name, contentType } = req.body;
+      
+      if (!name) {
+        return res.status(400).json({ error: 'File name is required' });
+      }
+      
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      
+      res.json({
+        uploadURL,
+        objectPath,
+        metadata: { name, contentType },
+      });
+    } catch (error) {
+      console.error('Get onboarding upload URL error:', error);
+      res.status(500).json({ error: 'Failed to get upload URL' });
+    }
+  });
+
   // Create onboarding document (admin)
   app.post('/api/admin/onboarding/documents', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {

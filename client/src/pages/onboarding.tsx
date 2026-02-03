@@ -154,18 +154,24 @@ export default function OnboardingPage() {
     });
   };
 
+  const [expandedVideoId, setExpandedVideoId] = useState<number | null>(null);
+
   const handleViewDocument = async (doc: OnboardingDocument) => {
-    if (!doc.progress || doc.progress.status === 'viewed') {
-      // Mark as viewed if not already
-      if (!doc.progress) {
-        await updateProgressMutation.mutateAsync({
-          documentId: doc.id,
-          status: 'viewed'
-        });
-      }
+    // Mark as viewed if not already
+    if (!doc.progress) {
+      await updateProgressMutation.mutateAsync({
+        documentId: doc.id,
+        status: 'viewed'
+      });
     }
     
-    // Open the document
+    // For uploaded videos, show inline player
+    if (doc.type === 'training_video' && doc.fileUrl && !doc.externalUrl) {
+      setExpandedVideoId(expandedVideoId === doc.id ? null : doc.id);
+      return;
+    }
+    
+    // Open the document in new tab
     if (doc.externalUrl) {
       window.open(doc.externalUrl, '_blank');
     } else if (doc.fileUrl) {
@@ -374,68 +380,98 @@ export default function OnboardingPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {trainingDocs.map((doc) => (
-                      <div
-                        key={doc.id}
-                        className="flex items-center gap-4 p-4 border rounded-lg"
-                      >
-                        <div className="flex-shrink-0">
-                          {doc.progress?.status === 'completed' || doc.progress?.status === 'viewed' ? (
-                            <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
-                              <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    {trainingDocs.map((doc) => {
+                      const isUploadedVideo = doc.type === 'training_video' && doc.fileUrl && !doc.externalUrl;
+                      const isExpanded = expandedVideoId === doc.id;
+                      
+                      return (
+                        <div
+                          key={doc.id}
+                          className="border rounded-lg overflow-hidden"
+                        >
+                          <div className="flex items-center gap-4 p-4">
+                            <div className="flex-shrink-0">
+                              {doc.progress?.status === 'completed' || doc.progress?.status === 'viewed' ? (
+                                <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
+                                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                                </div>
+                              ) : (
+                                <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                                  {getDocumentIcon(doc.type)}
+                                </div>
+                              )}
                             </div>
-                          ) : (
-                            <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                              {getDocumentIcon(doc.type)}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium truncate">{doc.title}</p>
+                                {doc.isRequired && (
+                                  <Badge variant="outline" className="text-xs">Required</Badge>
+                                )}
+                              </div>
+                              {doc.description && (
+                                <p className="text-sm text-muted-foreground truncate">{doc.description}</p>
+                              )}
                             </div>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium truncate">{doc.title}</p>
-                            {doc.isRequired && (
-                              <Badge variant="outline" className="text-xs">Required</Badge>
-                            )}
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {doc.progress?.status === 'completed' ? (
+                                <Badge variant="default" className="bg-green-500">
+                                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                                  Completed
+                                </Badge>
+                              ) : doc.progress?.status === 'viewed' ? (
+                                <>
+                                  <Badge variant="secondary">
+                                    <Clock className="h-3 w-3 mr-1" />
+                                    Viewed
+                                  </Badge>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleCompleteTraining(doc)}
+                                    disabled={updateProgressMutation.isPending}
+                                    data-testid={`button-complete-${doc.id}`}
+                                  >
+                                    Mark Complete
+                                  </Button>
+                                </>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleViewDocument(doc)}
+                                  data-testid={`button-view-${doc.id}`}
+                                >
+                                  {doc.type === 'training_video' ? (isExpanded ? 'Hide' : 'Watch') : 'View'}
+                                  {!isUploadedVideo && <ExternalLink className="h-3 w-3 ml-1" />}
+                                </Button>
+                              )}
+                            </div>
                           </div>
-                          {doc.description && (
-                            <p className="text-sm text-muted-foreground truncate">{doc.description}</p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          {doc.progress?.status === 'completed' ? (
-                            <Badge variant="default" className="bg-green-500">
-                              <CheckCircle2 className="h-3 w-3 mr-1" />
-                              Completed
-                            </Badge>
-                          ) : doc.progress?.status === 'viewed' ? (
-                            <>
-                              <Badge variant="secondary">
-                                <Clock className="h-3 w-3 mr-1" />
-                                Viewed
-                              </Badge>
-                              <Button
-                                size="sm"
-                                onClick={() => handleCompleteTraining(doc)}
-                                disabled={updateProgressMutation.isPending}
-                                data-testid={`button-complete-${doc.id}`}
+                          
+                          {isUploadedVideo && isExpanded && (
+                            <div className="px-4 pb-4">
+                              <video
+                                src={doc.fileUrl!}
+                                controls
+                                className="w-full rounded-lg max-h-[400px]"
+                                autoPlay
                               >
-                                Mark Complete
-                              </Button>
-                            </>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleViewDocument(doc)}
-                              data-testid={`button-view-${doc.id}`}
-                            >
-                              {doc.type === 'training_video' ? 'Watch' : 'View'}
-                              <ExternalLink className="h-3 w-3 ml-1" />
-                            </Button>
+                                Your browser does not support the video tag.
+                              </video>
+                              <div className="flex justify-end mt-3">
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleCompleteTraining(doc)}
+                                  disabled={updateProgressMutation.isPending}
+                                  data-testid={`button-complete-video-${doc.id}`}
+                                >
+                                  Mark as Complete
+                                </Button>
+                              </div>
+                            </div>
                           )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>

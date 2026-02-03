@@ -507,6 +507,55 @@ function DocumentForm({
   isPending: boolean;
   submitLabel: string;
 }) {
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    setUploadProgress(10);
+
+    try {
+      const response = await apiRequest('POST', '/api/admin/onboarding/upload-url', {
+        name: file.name,
+        contentType: file.type,
+      });
+      const { uploadURL, objectPath } = await response.json();
+      
+      setUploadProgress(30);
+
+      const uploadResponse = await fetch(uploadURL, {
+        method: 'PUT',
+        body: file,
+        headers: {
+          'Content-Type': file.type,
+        },
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error('Upload failed');
+      }
+
+      setUploadProgress(100);
+      setFormData({ ...formData, fileUrl: objectPath });
+      setUploadedFileName(file.name);
+      toast({ title: 'File uploaded', description: `${file.name} uploaded successfully.` });
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast({ title: 'Upload failed', description: 'Failed to upload file. Please try again.', variant: 'destructive' });
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+    }
+  };
+
+  const showFileUpload = formData.type === 'training_video' || formData.type === 'training_doc' || formData.type === 'partnership_agreement';
+  const showExternalUrl = formData.type === 'training_link' || formData.type === 'training_video';
+
   return (
     <div className="space-y-4">
       <div className="space-y-2">
@@ -546,23 +595,58 @@ function DocumentForm({
         />
       </div>
 
-      <div className="space-y-2">
-        <Label>File URL (for PDFs, videos)</Label>
-        <Input
-          value={formData.fileUrl}
-          onChange={(e) => setFormData({ ...formData, fileUrl: e.target.value })}
-          placeholder="https://..."
-        />
-      </div>
+      {showFileUpload && (
+        <div className="space-y-2">
+          <Label>Upload File</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              type="file"
+              accept={formData.type === 'training_video' ? 'video/*' : '.pdf,.doc,.docx'}
+              onChange={handleFileUpload}
+              disabled={isUploading}
+              className="flex-1"
+              data-testid="input-file-upload"
+            />
+          </div>
+          {isUploading && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Uploading... {uploadProgress}%
+            </div>
+          )}
+          {uploadedFileName && !isUploading && (
+            <p className="text-sm text-green-600 flex items-center gap-1">
+              <CheckCircle2 className="h-4 w-4" />
+              Uploaded: {uploadedFileName}
+            </p>
+          )}
+          {formData.fileUrl && !uploadedFileName && (
+            <p className="text-sm text-muted-foreground">
+              Current file: {formData.fileUrl.split('/').pop()}
+            </p>
+          )}
+          <div className="pt-2">
+            <Label className="text-muted-foreground text-sm">Or paste file URL</Label>
+            <Input
+              value={formData.fileUrl}
+              onChange={(e) => setFormData({ ...formData, fileUrl: e.target.value })}
+              placeholder="https://..."
+              className="mt-1"
+            />
+          </div>
+        </div>
+      )}
 
-      <div className="space-y-2">
-        <Label>External URL (for links)</Label>
-        <Input
-          value={formData.externalUrl}
-          onChange={(e) => setFormData({ ...formData, externalUrl: e.target.value })}
-          placeholder="https://..."
-        />
-      </div>
+      {showExternalUrl && (
+        <div className="space-y-2">
+          <Label>{formData.type === 'training_link' ? 'External URL' : 'Video URL (optional - use if linking to external video)'}</Label>
+          <Input
+            value={formData.externalUrl}
+            onChange={(e) => setFormData({ ...formData, externalUrl: e.target.value })}
+            placeholder="https://..."
+          />
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label>Target Users</Label>
