@@ -269,18 +269,12 @@ export function RTLPricingResult({ result, formData, onReset }: RTLPricingResult
                 </div>
               </div>
               
-              <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">Points Amount ({totalPoints.toFixed(2)}% of ${maxLoanAmount.toLocaleString()})</span>
-                  <span className="font-medium">${pointsAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                </div>
-                <div className="bg-green-50 rounded-lg p-3 border border-green-200">
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold text-green-700">Your Commission (30%)</span>
-                    <span className="text-2xl font-bold text-green-600" data-testid="text-rtl-commission">
-                      ${commission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
+              <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold text-green-700">Your Commission (30%)</span>
+                  <span className="text-2xl font-bold text-green-600" data-testid="text-rtl-commission">
+                    ${commission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
                 </div>
               </div>
             </div>
