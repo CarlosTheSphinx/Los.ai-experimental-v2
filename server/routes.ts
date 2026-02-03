@@ -4479,6 +4479,29 @@ export async function registerRoutes(
     }
   });
   
+  // Calculate RTL pricing (Fix and Flip / Ground Up Construction)
+  app.post('/api/pricing/rtl', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const { calculateRTLPricing } = await import('./pricing/rtl-engine');
+      const { rtlPricingFormSchema } = await import('@shared/schema');
+      
+      const parseResult = rtlPricingFormSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ 
+          error: 'Invalid input', 
+          details: parseResult.error.issues 
+        });
+      }
+      
+      const result = calculateRTLPricing(parseResult.data);
+      
+      res.json(result);
+    } catch (error) {
+      console.error('RTL pricing error:', error);
+      res.status(500).json({ error: 'Failed to calculate RTL pricing' });
+    }
+  });
+
   // Test pricing with a specific ruleset (admin only)
   app.post('/api/admin/rulesets/:rulesetId/test', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {

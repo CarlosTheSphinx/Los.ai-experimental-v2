@@ -1,0 +1,551 @@
+Alright. Let’s make this “partner-proof”: **every field they must enter**, the **exact pricing formula**, and a **full disqualifier library** (machine-ready + human-readable reasons).
+
+I’m going to assume your goal is a clean calculator that outputs:
+
+* **Eligible / Ineligible**
+* **Final Rate**
+* **Points**
+* **Max leverage caps (LTC/LTAIV/LTARV) after overlays**
+* **Flags** (case-by-case, needs IC, needs valuation, needs docs)
+* **Reasons** (disqualifiers + explanations)
+
+---
+
+# 1) Every field a partner must input
+
+## A) Required to price RATE + BASIC eligibility (minimum viable)
+
+These are the “must-have” inputs to return a clean **interest rate** and catch major disqualifiers:
+
+### Loan basics
+
+1. **Loan Type** (enum)
+
+   * `light_rehab | heavy_rehab | bridge_no_rehab | guc`
+2. **Purpose** (enum)
+
+   * `purchase | refi | cash_out`
+3. **Loan Amount** (number)
+4. **Property Units** (number)
+5. **Property Type** (enum)
+
+   * `sfr_1_4 | condo | multifamily | pud | modular | other`
+6. **State** (2-letter)
+7. **Midstream?** (boolean)
+
+### Borrower basics
+
+8. **Experience Tier** (enum)
+
+   * `no_experience | experienced | institutional`
+9. **Completed Projects Count** (number)
+   (Needed because GUC says experienced must be 5+ projects)
+10. **FICO** (number)
+11. **Full Guaranty?** (boolean)
+
+### Cash-out fields (only if purpose = cash_out)
+
+12. **Cash-Out Amount** (number)
+
+✅ With these fields you can price the rate, apply adjusters, and enforce the big hard rules.
+
+---
+
+## B) Required to apply leverage caps + overlays correctly (recommended for a “real” quote)
+
+These are needed because many rules change **LTC/LTAIV/LTARV**:
+
+13. **LTV** (decimal)
+    (needed for “cash-out bridge max” logic and some overlays)
+14. **LTC** (decimal)
+15. **LTARV** (decimal)
+16. **LTAIV** (decimal)
+17. **Is Declining Market?** (boolean)
+    (or you can compute this internally)
+18. **Is Listed in Last 12 Months?** (boolean)
+19. **Days on Market (if listed)** (number)
+
+### Bridge rent test (if exit strategy = rent OR bridge wants DSCR)
+
+20. **Exit Strategy** (enum)
+
+* `sell | rent`
+
+21. **Monthly Gross Potential Rent (GPR)** (number)
+22. **Monthly PITIA** (number)
+
+### GUC draw rules
+
+23. **Initial Draw to Land %** (decimal)
+24. **Issued Building Permits?** (boolean)
+25. **Months since work performed** (number)
+    (for “stalled 3 months” rule)
+
+### Guarantor exposure
+
+26. **Guarantor Exposure (current outstanding)** (number)
+27. **Include non-guarantor owner 20%+ in exposure calc?** (boolean)
+
+---
+
+## C) Required to enforce credit seasoning + mortgage history from the earlier screenshot
+
+If you want credit disqualifiers to be fully deterministic:
+
+28. **30-day lates in last 24 months** (integer)
+29. **60-day lates in last 24 months** (integer)
+30. **Months since BK** (integer or null)
+31. **Months since Foreclosure** (integer or null)
+32. **Months since Short Sale / DIL** (integer or null)
+
+---
+
+## D) Entity rules (from Program Guidelines)
+
+33. **Borrowing Entity Type** (enum)
+
+* Eligible: `llc | llp | lp | corporation | sole_prop | revocable_trust`
+* Ineligible: `natural_person | irrevocable_trust | cooperative | community_land_trust`
+
+34. **Foreign National?** (boolean)
+
+* If yes: (you can make docs-only, not a disqualifier)
+
+  * `passportProvided` (boolean)
+  * `visaProvided` (boolean)
+
+---
+
+### Clean partner UI recommendation
+
+**Don’t show 34 fields at once.**
+Make a wizard:
+
+1. Loan basics
+2. Borrower basics
+3. Property basics
+4. Conditional tabs:
+
+* Cash-out
+* GUC
+* Bridge/DSCR
+* Credit seasoning
+
+---
+
+# 2) Pricing formula to get final “price”
+
+You have two “prices” in this program:
+
+1. **Final Interest Rate**
+2. **Final Leverage Caps (LTC/LTAIV/LTARV)**
+
+I’ll give both formulas.
+
+---
+
+## A) Final Interest Rate formula
+
+### Step 0: Determine eligibility first (if ineligible, stop)
+
+Run disqualifiers (Section 3). If any disqualifier triggers:
+
+* Output: `eligible = false`
+* Output: `reasons = [ ... ]`
+* Do not compute price
+
+### Step 1: Base Rate
+
+From table:
+
+* Light Rehab: **9.25**
+* Heavy Rehab: **9.50**
+* Bridge (No Rehab): **9.25**
+* GUC: **10.00**
+
+So:
+
+```
+rate = baseRate[loanType]
+```
+
+### Step 2: Add all applicable RATE adjusters (stack)
+
+From pricing matrix:
+
+```
+if isMidstream == true: rate += 0.25
+if purpose == cash_out: rate += 0.50
+if propertyType == multifamily: rate += 1.00
+if fico < 700: rate += 0.25
+```
+
+### Step 3: Output final rate
+
+```
+finalRate = round(rate, 3)
+```
+
+✅ That is your interest rate calculator.
+
+---
+
+## B) Points formula (from earlier version)
+
+If your points are constant:
+
+* RTL points default = **2.0** (based on your original table)
+
+Then:
+
+```
+points = 2.0
+```
+
+If you add tiered points later, you can model it the same way as rate adjusters.
+
+---
+
+## C) Final Leverage Caps formula (LTC/LTAIV/LTARV)
+
+This is a separate “pricing track” but the same mechanism.
+
+### Step 1: Start with base caps from the experience + loan type grid
+
+Example (from earlier grid you shared):
+
+* Institutional:
+
+  * Light Rehab: LTAIV/LTC = 90/85, LTC 95/90, LTARV 75
+  * Heavy: 85/85 etc.
+
+So you pick a base cap set:
+
+```
+caps = baseCaps[experienceTier][loanType]
+```
+
+### Step 2: Apply leverage overlays and reductions (stack)
+
+Overlays you’ve provided include:
+
+* MSA reduction: -5% LTC (and/or others)
+* FL bridge no rehab: -5% across leverage
+* FICO < 680: -10% across LTC/LTAIV/LTARV + cash-out not allowed
+* Declining market: -10% LTC and LTARV
+* Bridge listed 120+ days: -5% leverage reduction (and requires 3rd party valuation)
+* > 4 units: cap LTAIV/LTC at 80% + unit cap 20 + GUC not allowed + experienced only
+* 0 experience: cap LTC at 30% budget/AIV
+* GUC development project: cap LTC at 80%
+
+So:
+
+```
+for each overlay that matches inputs:
+  caps.ltc += overlay.deltaLTC
+  caps.ltaiv += overlay.deltaLTAIV
+  caps.ltarv += overlay.deltaLTARV
+  caps.ltc = min(caps.ltc, overlay.capMaxLTC) if present
+  ...
+```
+
+### Step 3: Clamp to sane bounds
+
+```
+caps = clamp(caps, 0, 0.95)
+```
+
+### Step 4: Output final caps
+
+Return caps and list what reduced them.
+
+---
+
+# 3) Disqualifiers library (backend-ready)
+
+This is the “rulebook” your backend runs first.
+Each disqualifier has:
+
+* `id`
+* `condition` (machine)
+* `message` (partner-friendly explanation)
+* `severity` = `"ineligible"`
+
+I’m going to include everything you’ve shown that is a **hard stop**, plus a few that are “flag-only” (not disqualifiers) at the end.
+
+---
+
+## A) Loan amount disqualifiers
+
+### DQ-LOAN-001: Below minimum loan amount
+
+* If `loanAmount < 125000` → ineligible
+  Message: “Minimum loan amount is $125,000.”
+
+### DQ-LOAN-002: Below minimum loan amount for GUC
+
+* If `loanType == guc` AND `loanAmount < 150000` → ineligible
+  Message: “Minimum loan amount for GUC is $150,000.”
+
+### DQ-LOAN-003: Exceeds maximum loan amount
+
+* If `loanAmount > 5000000` → ineligible
+  Message: “Maximum loan amount is $5,000,000.”
+
+---
+
+## B) Credit disqualifiers
+
+### DQ-CREDIT-001: FICO below minimum
+
+* If `fico < 660` → ineligible
+  Message: “Minimum FICO is 660.”
+
+### DQ-CREDIT-002: No full guaranty requires higher FICO
+
+* If `hasFullGuaranty == false` AND `fico < 700` → ineligible
+  Message: “Without a full guaranty, minimum FICO is 700.”
+
+### DQ-CREDIT-003: Mortgage history exceeds allowed lates
+
+* If `mortgageLate60Last24 > 0` → ineligible
+* If `mortgageLate30Last24 > 1` → ineligible
+  Message: “Mortgage history must be 0x60 and no more than 1x30 in the past 24 months.”
+
+### DQ-CREDIT-004: BK seasoning < 60 months
+
+* If `monthsSinceBK != null` AND `monthsSinceBK < 60` → ineligible
+  Message: “Bankruptcy must be seasoned 60+ months.”
+
+### DQ-CREDIT-005: Foreclosure seasoning < 60 months
+
+* If `monthsSinceForeclosure != null` AND `monthsSinceForeclosure < 60` → ineligible
+  Message: “Foreclosure must be seasoned 60+ months.”
+
+### DQ-CREDIT-006: Short sale / DIL seasoning < 60 months
+
+* If `monthsSinceShortSaleOrDIL != null` AND `monthsSinceShortSaleOrDIL < 60` → ineligible
+  Message: “DIL/Short sale must be seasoned 60+ months.”
+
+---
+
+## C) Experience-based disqualifiers
+
+### DQ-EXP-001: No experience cannot do Heavy Rehab
+
+* If `experienceTier == no_experience` AND `loanType == heavy_rehab` → ineligible
+  Message: “Heavy Rehab is not available for no-experience borrowers.”
+
+### DQ-EXP-002: No experience cannot do GUC
+
+* If `experienceTier == no_experience` AND `loanType == guc` → ineligible
+  Message: “Ground-up construction requires experienced or institutional sponsorship.”
+
+### DQ-EXP-003: Cash-out Bridge not allowed for no experience
+
+* If `experienceTier == no_experience` AND `loanType == bridge_no_rehab` AND `purpose == cash_out` → ineligible
+  Message: “Cash-out bridge is not allowed for no-experience borrowers.”
+
+### DQ-EXP-004: GUC requires 5+ completed projects if “Experienced”
+
+* If `loanType == guc` AND `experienceTier == experienced` AND `completedProjects < 5` → ineligible
+  Message: “GUC requires 5+ completed projects for experienced borrowers.”
+
+### DQ-EXP-005: 0 completed projects leverage cap conflict (optional hard-stop)
+
+You stated: “If borrower has 0 experience LTC maxed at 30% budget/AIV.”
+This is technically not a disqualifier, but many deals become impossible.
+
+Two ways:
+
+* **Soft** (recommended): apply cap and keep eligible
+* **Hard**: if requested LTC exceeds 30% you can mark ineligible
+
+Soft logic:
+
+* Not disqualified. Just cap leverage.
+
+---
+
+## D) Property-based disqualifiers
+
+### DQ-PROP-001: Units > 20 not allowed
+
+* If `units > 20` → ineligible
+  Message: “Maximum unit count is 20.”
+
+### DQ-PROP-002: >4 unit property requires experienced/institutional
+
+* If `units >= 5` AND `experienceTier == no_experience` → ineligible
+  Message: “Properties with 5+ units require experienced sponsorship.”
+
+### DQ-PROP-003: >4 unit property cannot be GUC
+
+* If `units >= 5` AND `loanType == guc` → ineligible
+  Message: “GUC is not allowed on 5+ unit properties under this program.”
+
+### DQ-PROP-004: Ineligible property type
+
+* If `propertyType in INELIGIBLE_LIST` → ineligible
+  Message: “Property type is not eligible for this program.”
+
+### DQ-PROP-005: Acreage > 5 acres not allowed
+
+* If `acreage > 5` → ineligible
+  Message: “Acreage greater than 5 acres is not eligible.”
+
+*(If you don’t collect acreage in the partner form, treat this as a UW flag instead.)*
+
+---
+
+## E) Purpose / cash-out disqualifiers
+
+### DQ-CO-001: Cash-out exceeds general maximum
+
+* If `purpose == cash_out` AND `cashOutAmount > 500000` AND NOT bridgeSpecialCase → ineligible
+  Message: “Cash-out is capped at $500,000.”
+
+### DQ-CO-002: Cash-out bridge cap logic
+
+* If `loanType == bridge_no_rehab` AND `purpose == cash_out`:
+
+  * If `ltv <= 0.50` → unlimited
+  * Else if `cashOutAmount > 1500000` → ineligible
+    Message: “Cash-out bridge is capped at $1,500,000 unless LTV is 50% or lower.”
+
+### DQ-CO-003: FICO < 680 cash-out not allowed
+
+* If `fico < 680` AND `purpose == cash_out` → ineligible
+  Message: “Cash-out is not allowed if FICO is below 680.”
+
+---
+
+## F) GUC-specific disqualifiers (project status + draw)
+
+### DQ-GUC-001: Initial draw to land exceeds max
+
+* If `loanType == guc` AND `initialDrawToLandPct > 0.70` → ineligible
+* If `initialDrawToLandPct > 0.60` AND `hasBuildingPermitsIssued == false` → ineligible
+  Message: “Initial draw to land is capped at 60% (up to 70% only with issued permits and case-by-case approval).”
+
+### DQ-GUC-002: Stalled project rule
+
+* If `loanType == guc` AND `monthsSinceWorkPerformed >= 3` → ineligible
+  Message: “GUC is ineligible if no work has been completed in the past 3 months.”
+
+### DQ-GUC-003: GUC Development Project requires institutional + FICO 700
+
+* If `loanType == guc` AND `units >= 10` AND `propertyType in [sfr_1_4, condo]`:
+
+  * If `experienceTier != institutional` → ineligible
+  * If `fico < 700` → ineligible
+    Message: “GUC development projects (10+ units) require institutional experience and 700+ FICO.”
+
+---
+
+## G) Entity disqualifiers
+
+### DQ-ENT-001: Ineligible borrowing entity
+
+* If `borrowingEntityType in [natural_person, irrevocable_trust, cooperative, community_land_trust]` → ineligible
+  Message: “Borrower must be a US-domiciled legal entity (LLC/LP/Corp/Sole Prop/Revocable Trust). Natural persons and certain trusts/entities are not eligible.”
+
+---
+
+# 4) Non-disqualifying rules that should “pop up” as FLAGS
+
+These are not hard denies, but your system should surface them clearly:
+
+### FLAG-001: Multifamily case-by-case
+
+* If `propertyType == multifamily` → flag `case_by_case`
+
+### FLAG-002: Condo case-by-case
+
+* If `propertyType == condo` → flag `case_by_case`
+
+### FLAG-003: >4 units MF loans require case-by-case approval
+
+* If `units >= 5` → flag `case_by_case`
+
+### FLAG-004: Midstream is case-by-case review
+
+* If `isMidstream == true` → flag `case_by_case_review`
+
+### FLAG-005: Loan amount > $3MM requires second valuation
+
+* If `loanAmount > 3000000` → requirement `second_valuation_required`
+
+### FLAG-006: Bridge listed 120+ days requires 3rd party valuation + leverage reduction
+
+* If `loanType == bridge_no_rehab` AND `listedDays >= 120` → requirement + reduction
+
+### FLAG-007: Guarantor exposure > $10MM requires approved Global UW
+
+* If `guarantorExposure > 10000000` → flag `needs_global_uw_approval`
+
+### FLAG-008: Foreign national requires docs
+
+* If `isForeignNational == true` → requirements `passport`, `visa`, `case_by_case`
+
+### FLAG-009: Extensions are IC approval only
+
+* Always show this in outputs as program meta
+
+---
+
+# 5) Final output structure (what the calculator should return)
+
+Here’s the clean backend response shape your UI can render:
+
+```json
+{
+  "eligible": true,
+  "finalRate": 10.75,
+  "baseRate": 10.0,
+  "rateBreakdown": [
+    { "id": "cash_out", "add": 0.5 },
+    { "id": "midstream", "add": 0.25 }
+  ],
+  "points": 2.0,
+  "caps": {
+    "maxLTC": 0.75,
+    "maxLTAIV": 0.80,
+    "maxLTARV": 0.70
+  },
+  "capAdjustments": [
+    { "id": "fico_under_680", "delta": -0.10 },
+    { "id": "declining_market", "delta": -0.10 }
+  ],
+  "disqualifiers": [],
+  "flags": ["case_by_case_review", "second_valuation_required"],
+  "requirements": ["budget_review", "permit_validation", "certificate_of_occupancy"]
+}
+```
+
+If ineligible:
+
+```json
+{
+  "eligible": false,
+  "finalRate": null,
+  "disqualifiers": [
+    {
+      "id": "DQ-EXP-002",
+      "message": "Ground-up construction requires experienced or institutional sponsorship."
+    }
+  ]
+}
+```
+
+---
+
+## If you want, I’ll generate the exact React form schema
+
+Meaning:
+
+* which fields show/hide based on loan type
+* validation messages per disqualifier
+* and the server-side rule execution order
+
+Just tell me: do you want the partner to enter **LTC/LTARV/LTAIV**, or do you want the calculator to compute those from **purchase price, rehab budget, ARV/AIV**? That choice changes the UI a lot, but both are doable.

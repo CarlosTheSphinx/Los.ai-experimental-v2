@@ -2,8 +2,10 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { LoanForm } from "@/components/LoanForm";
 import { PricingResult } from "@/components/PricingResult";
+import { RTLLoanForm } from "@/components/RTLLoanForm";
+import { RTLPricingResult } from "@/components/RTLPricingResult";
 import { usePricing } from "@/hooks/use-pricing";
-import { type LoanPricingFormData, type PricingResponse } from "@shared/schema";
+import { type LoanPricingFormData, type PricingResponse, type RTLPricingFormData, type RTLPricingResponse } from "@shared/schema";
 import { motion, AnimatePresence } from "framer-motion";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -82,6 +84,24 @@ export default function Home() {
   
   const { mutate: getPricing, isPending } = usePricing();
   
+  // RTL pricing state
+  const [rtlResult, setRtlResult] = useState<RTLPricingResponse | null>(null);
+  
+  // RTL pricing mutation
+  const rtlPricingMutation = useMutation({
+    mutationFn: async (data: RTLPricingFormData) => {
+      const res = await apiRequest("POST", "/api/pricing/rtl", data);
+      return res.json();
+    },
+    onSuccess: (data: RTLPricingResponse) => {
+      setRtlResult(data);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to calculate RTL pricing", variant: "destructive" });
+    },
+  });
+  
   // Fetch programs with pricing capability
   const { data: programsData } = useQuery<{ programs: ProgramWithPricing[] }>({
     queryKey: ["/api/programs-with-pricing"],
@@ -144,6 +164,11 @@ export default function Home() {
 
   const handleReset = () => {
     setResult(null);
+    setRtlResult(null);
+  };
+  
+  const handleRTLSubmit = (data: RTLPricingFormData) => {
+    rtlPricingMutation.mutate(data);
   };
 
   return (
@@ -189,6 +214,7 @@ export default function Home() {
               onValueChange={(v: "dscr" | "rtl") => {
                 setLoanProductType(v);
                 setResult(null);
+                setRtlResult(null);
               }}
             >
               <SelectTrigger className="w-full md:w-80" data-testid="select-loan-product-type">
@@ -468,34 +494,16 @@ export default function Home() {
                   isLoading={isPending} 
                   defaultData={lastFormData}
                 />
+              ) : rtlResult ? (
+                <RTLPricingResult 
+                  result={rtlResult} 
+                  onReset={handleReset}
+                />
               ) : (
-                <Card className="w-full bg-white/90 backdrop-blur-sm shadow-xl border-slate-200/60 overflow-hidden">
-                  <CardHeader className="bg-orange-50/50 border-b border-orange-100 pb-6">
-                    <div className="flex items-center gap-3 mb-1">
-                      <div className="p-2 bg-orange-100 rounded-lg">
-                        <Calculator className="h-6 w-6 text-orange-600" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-2xl font-bold text-slate-800">Fix and Flip/Ground Up Construction</CardTitle>
-                      </div>
-                    </div>
-                    <CardDescription className="text-base text-slate-500 mt-2">
-                      Enter the loan details for your Fix and Flip or Ground Up Construction pricing quote.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="pt-8 px-6 pb-8">
-                    <div className="text-center py-12">
-                      <div className="p-4 bg-orange-100 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
-                        <Calculator className="h-10 w-10 text-orange-600" />
-                      </div>
-                      <h3 className="text-xl font-semibold text-slate-700 mb-2">Pricing Coming Soon</h3>
-                      <p className="text-slate-500 max-w-md mx-auto">
-                        The Fix and Flip/Ground Up Construction pricing form is being configured. 
-                        Please check back soon or contact support for manual pricing.
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
+                <RTLLoanForm 
+                  onSubmit={handleRTLSubmit} 
+                  isLoading={rtlPricingMutation.isPending}
+                />
               )}
             </motion.div>
           ) : (

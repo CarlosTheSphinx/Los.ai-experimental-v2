@@ -26,7 +26,11 @@ The application is built with a modern web stack, utilizing React 18 with TypeSc
 The frontend features a left sidebar navigation leading to key sections:
 - **New Quote**: Loan pricing form with loan product type selector supporting two loan types:
   - **DSCR (Debt Service Coverage Ratio)**: Includes gross monthly rent, annual taxes/insurance, calculated DSCR ratio, LTV calculations.
-  - **Fix and Flip / RTL (Residential Transitional Loan)**: Pricing details pending configuration.
+  - **Fix and Flip / Ground Up Construction**: Full pricing system with wizard-style form covering:
+    - **Loan Types**: Light Rehab (9.25%), Heavy Rehab (9.50%), Bridge No Rehab (9.25%), GUC (10.00%)
+    - **Rate Adjusters**: Midstream (+0.25%), Cash-Out (+0.50%), Multifamily (+1.00%), FICO <700 (+0.25%)
+    - **Disqualifiers**: 25+ rules covering loan limits, credit requirements, experience requirements, property rules, GUC-specific rules, entity requirements
+    - **Leverage Caps**: Dynamic LTC/LTAIV/LTARV based on experience tier with overlay reductions
 - **Saved Quotes**: Management of saved pricing quotes with document status.
 - **Agreements**: Comprehensive agreement management including filtering, search, and detailed views with PDF viewer, field overlays, signers panel, and document timeline.
 - **Projects**: Loan closing progress management with project cards, task checklists, activity timelines, document management, and borrower portal link sharing.

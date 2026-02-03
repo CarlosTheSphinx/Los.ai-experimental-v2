@@ -117,6 +117,101 @@ export const pricingResponseSchema = z.object({
 
 export type PricingResponse = z.infer<typeof pricingResponseSchema>;
 
+// RTL (Fix and Flip / Ground Up Construction) Pricing Schema
+export const rtlLoanTypeEnum = z.enum(["light_rehab", "heavy_rehab", "bridge_no_rehab", "guc"]);
+export const rtlPurposeEnum = z.enum(["purchase", "refi", "cash_out"]);
+export const rtlPropertyTypeEnum = z.enum(["sfr_1_4", "condo", "multifamily", "pud", "modular", "other"]);
+export const rtlExperienceTierEnum = z.enum(["no_experience", "experienced", "institutional"]);
+export const rtlExitStrategyEnum = z.enum(["sell", "rent"]);
+export const rtlEntityTypeEnum = z.enum([
+  "llc", "llp", "lp", "corporation", "sole_prop", "revocable_trust",
+  "natural_person", "irrevocable_trust", "cooperative", "community_land_trust"
+]);
+
+export const rtlPricingFormSchema = z.object({
+  // Loan basics (required)
+  loanType: rtlLoanTypeEnum,
+  purpose: rtlPurposeEnum,
+  loanAmount: z.coerce.number().min(1, "Loan amount is required"),
+  propertyUnits: z.coerce.number().min(1, "Property units is required"),
+  propertyType: rtlPropertyTypeEnum,
+  state: z.string().length(2, "State must be 2-letter code"),
+  isMidstream: z.boolean().default(false),
+
+  // Borrower basics (required)
+  experienceTier: rtlExperienceTierEnum,
+  completedProjects: z.coerce.number().min(0).default(0),
+  fico: z.coerce.number().min(300).max(850),
+  hasFullGuaranty: z.boolean().default(true),
+
+  // Cash-out fields (conditional)
+  cashOutAmount: z.coerce.number().optional(),
+
+  // Leverage fields (recommended for real quote)
+  ltv: z.coerce.number().min(0).max(100).optional(),
+  ltc: z.coerce.number().min(0).max(100).optional(),
+  ltarv: z.coerce.number().min(0).max(100).optional(),
+  ltaiv: z.coerce.number().min(0).max(100).optional(),
+  isDecliningMarket: z.boolean().default(false),
+  isListedLast12Months: z.boolean().default(false),
+  daysOnMarket: z.coerce.number().optional(),
+
+  // Bridge rent test (conditional)
+  exitStrategy: rtlExitStrategyEnum.optional(),
+  monthlyGPR: z.coerce.number().optional(),
+  monthlyPITIA: z.coerce.number().optional(),
+
+  // GUC draw rules (conditional)
+  initialDrawToLandPct: z.coerce.number().min(0).max(100).optional(),
+  hasBuildingPermitsIssued: z.boolean().optional(),
+  monthsSinceWorkPerformed: z.coerce.number().optional(),
+
+  // Guarantor exposure
+  guarantorExposure: z.coerce.number().optional(),
+  includeNonGuarantorOwnerInExposure: z.boolean().default(false),
+
+  // Credit seasoning
+  mortgageLate30Last24: z.coerce.number().min(0).default(0),
+  mortgageLate60Last24: z.coerce.number().min(0).default(0),
+  monthsSinceBK: z.coerce.number().nullable().optional(),
+  monthsSinceForeclosure: z.coerce.number().nullable().optional(),
+  monthsSinceShortSaleOrDIL: z.coerce.number().nullable().optional(),
+
+  // Entity rules
+  borrowingEntityType: rtlEntityTypeEnum.optional(),
+  isForeignNational: z.boolean().default(false),
+});
+
+export type RTLPricingFormData = z.infer<typeof rtlPricingFormSchema>;
+
+// RTL Pricing Response
+export const rtlPricingResponseSchema = z.object({
+  eligible: z.boolean(),
+  baseRate: z.number().optional(),
+  finalRate: z.number().optional(),
+  points: z.number().optional(),
+  caps: z.object({
+    maxLTC: z.number().optional(),
+    maxLTAIV: z.number().optional(),
+    maxLTARV: z.number().optional(),
+  }).optional(),
+  appliedAdjusters: z.array(z.object({
+    id: z.string(),
+    label: z.string(),
+    rateAdd: z.number(),
+  })).optional(),
+  disqualifiers: z.array(z.object({
+    id: z.string(),
+    message: z.string(),
+  })).optional(),
+  flags: z.array(z.object({
+    id: z.string(),
+    message: z.string(),
+  })).optional(),
+});
+
+export type RTLPricingResponse = z.infer<typeof rtlPricingResponseSchema>;
+
 // Document signing tables
 export const documents = pgTable("documents", {
   id: serial("id").primaryKey(),
