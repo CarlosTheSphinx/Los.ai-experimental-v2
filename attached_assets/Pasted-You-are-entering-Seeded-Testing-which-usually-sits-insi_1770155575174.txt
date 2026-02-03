@@ -1,0 +1,241 @@
+You are entering Seeded Testing, which usually sits inside:
+
+✅ Internal QA / Pre-Beta Testing
+
+More specifically, this is often called:
+
+Test Data Seeding
+
+Fixture Seeding
+
+Synthetic User Testing
+
+Scenario-Based Testing
+
+Pre-Beta QA
+
+In mature teams, this phase lives between:
+
+“It runs” → “Can real humans break it?”
+
+You’re doing exactly the right thing.
+
+What you want (translated into engineering terms)
+
+You want:
+
+20 synthetic borrowers
+
+With fake emails
+
+At different lifecycle stages (signup only, submitted loan, approved, declined, mid-process, etc.)
+
+So you can test:
+
+Dashboards
+
+Permissions
+
+Edge cases
+
+Admin views
+
+Analytics
+
+Error handling
+
+This is called seeding your database with fixtures.
+
+The clean, professional way to do this
+1️⃣ Decide your “user stages” (this matters more than the code)
+
+Before writing code, define states, not just users.
+
+Example borrower stages (you can adjust):
+
+Registered, never started application
+
+Started application, 20% complete
+
+Application submitted, pending review
+
+Approved, awaiting docs
+
+Declined
+
+Approved, funded
+
+In underwriting
+
+Needs more info
+
+Withdrawn
+
+Duplicate test edge case
+
+You don’t need 20 different types.
+You need coverage.
+
+2️⃣ Add a seed script (Express / Node)
+
+Create a file like:
+
+/server/scripts/seedBorrowers.js
+
+
+This script should:
+
+Only run in development / staging
+
+Never run in production accidentally
+
+3️⃣ Use a fake data generator (Faker)
+
+Install Faker:
+
+npm install @faker-js/faker
+
+4️⃣ Example: seed 20 fake borrower users
+
+This example assumes:
+
+You have a User model
+
+You store role + application status
+
+You hash passwords normally
+
+// server/scripts/seedBorrowers.js
+import { faker } from "@faker-js/faker";
+import bcrypt from "bcrypt";
+import db from "../db"; // adjust to your db import
+
+const BORROWER_STAGES = [
+  "registered",
+  "started_application",
+  "submitted",
+  "under_review",
+  "approved",
+  "declined",
+  "funded",
+  "needs_docs",
+  "withdrawn"
+];
+
+async function seedBorrowers(count = 20) {
+  console.log("🌱 Seeding fake borrowers...");
+
+  for (let i = 0; i < count; i++) {
+    const passwordHash = await bcrypt.hash("password123", 10);
+
+    const borrower = await db.user.create({
+      data: {
+        email: faker.internet.email().toLowerCase(),
+        passwordHash,
+        role: "borrower",
+        firstName: faker.person.firstName(),
+        lastName: faker.person.lastName(),
+        applicationStatus: BORROWER_STAGES[i % BORROWER_STAGES.length],
+        createdAt: faker.date.past(),
+        isTestUser: true
+      }
+    });
+
+    // Optional: create fake loan application
+    if (borrower.applicationStatus !== "registered") {
+      await db.loanApplication.create({
+        data: {
+          userId: borrower.id,
+          loanAmount: faker.number.int({ min: 150000, max: 3000000 }),
+          loanType: faker.helpers.arrayElement([
+            "bridge_no_rehab",
+            "light_rehab",
+            "heavy_rehab"
+          ]),
+          fico: faker.number.int({ min: 660, max: 780 }),
+          status: borrower.applicationStatus
+        }
+      });
+    }
+  }
+
+  console.log("✅ Seed complete");
+}
+
+seedBorrowers()
+  .then(() => process.exit(0))
+  .catch(err => {
+    console.error(err);
+    process.exit(1);
+  });
+
+5️⃣ Add a script command to run it
+
+In package.json:
+
+{
+  "scripts": {
+    "seed:borrowers": "node server/scripts/seedBorrowers.js"
+  }
+}
+
+
+Run it with:
+
+npm run seed:borrowers
+
+6️⃣ Protect yourself (VERY IMPORTANT)
+
+Never let this run in prod accidentally.
+
+Add a guard:
+
+if (process.env.NODE_ENV === "production") {
+  throw new Error("❌ Seeding is disabled in production");
+}
+
+
+Put it at the top of the seed file.
+
+7️⃣ How pros take this further (optional but powerful)
+
+Once this works, teams usually add:
+
+A) Scenario tags
+testScenario: "declined_low_fico"
+
+
+So you can filter in admin UI.
+
+B) Reset button
+
+A dev-only endpoint like:
+
+POST /api/dev/reset-test-data
+
+C) Deterministic seeds
+
+Use faker with a fixed seed:
+
+faker.seed(12345);
+
+
+This makes bugs reproducible.
+
+8️⃣ What this enables next (you’re close)
+
+Once seeded users exist, you can now:
+
+Test admin dashboards with real-looking data
+
+Verify permissions
+
+Simulate edge cases
+
+Record Looms confidently
+
+Prepare for external beta
+
+This is the exact step before:
+
+“Let a few trusted humans touch it.”
