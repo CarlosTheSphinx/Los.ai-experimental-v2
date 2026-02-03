@@ -34,6 +34,7 @@ export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
       purpose: "purchase",
       propertyUnits: 1,
       asIsValue: 0,
+      arv: 0,
       rehabBudget: 0,
       propertyType: "sfr_1_4",
       state: "",
@@ -534,6 +535,29 @@ export function RTLLoanForm({ onSubmit, isLoading }: RTLLoanFormProps) {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <FormField
+                    control={form.control}
+                    name="arv"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-slate-700">ARV - After Repair Value ($)</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                            <Input
+                              type="number"
+                              className="pl-9 h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all"
+                              placeholder="Enter after repair value"
+                              data-testid="input-arv"
+                              {...field}
+                            />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
                   <FormField
                     control={form.control}
                     name="rehabBudget"
