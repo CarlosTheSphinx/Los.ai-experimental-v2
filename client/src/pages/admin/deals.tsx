@@ -478,14 +478,14 @@ export default function AdminDeals() {
                 </div>
                 {partnerInputMode === "select" ? (
                   <Select
-                    value={newDeal.partnerId}
-                    onValueChange={(value) => setNewDeal({ ...newDeal, partnerId: value, partnerName: "" })}
+                    value={newDeal.partnerId || "none"}
+                    onValueChange={(value) => setNewDeal({ ...newDeal, partnerId: value === "none" ? "" : value, partnerName: "" })}
                   >
                     <SelectTrigger data-testid="select-partner">
                       <SelectValue placeholder="Select a partner (optional)" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="none">None</SelectItem>
                       {partnersData?.partners?.map((partner) => (
                         <SelectItem key={partner.id} value={partner.id.toString()}>
                           {partner.name}{partner.companyName ? ` (${partner.companyName})` : ""}
