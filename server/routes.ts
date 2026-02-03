@@ -3889,6 +3889,7 @@ export async function registerRoutes(
   // Admin - Complete document upload (update database after file is uploaded)
   app.post('/api/admin/deals/:dealId/documents/:docId/upload-complete', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
+      const dealId = parseInt(req.params.dealId);
       const docId = parseInt(req.params.docId);
       const { objectPath, fileName, fileSize, mimeType } = req.body;
       
@@ -3911,6 +3912,17 @@ export async function registerRoutes(
       
       if (!updated) {
         return res.status(404).json({ error: 'Document not found' });
+      }
+      
+      // Send notification to deal owner
+      const deal = await db.select({ userId: savedQuotes.userId, borrowerName: savedQuotes.borrowerName })
+        .from(savedQuotes).where(eq(savedQuotes.id, dealId)).limit(1);
+      if (deal[0]?.userId) {
+        await postDealNotification(
+          deal[0].userId, 
+          dealId, 
+          `📄 Document uploaded: ${updated.name || fileName || 'New document'}`
+        );
       }
       
       res.json({ document: updated });
@@ -3960,6 +3972,10 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Invalid stage' });
       }
       
+      // Get current deal to check for stage change
+      const [existingDeal] = await db.select().from(savedQuotes).where(eq(savedQuotes.id, dealId)).limit(1);
+      const previousStage = existingDeal?.stage;
+      
       const [updated] = await db.update(savedQuotes)
         .set({ stage })
         .where(eq(savedQuotes.id, dealId))
@@ -3967,6 +3983,24 @@ export async function registerRoutes(
       
       if (!updated) {
         return res.status(404).json({ error: 'Deal not found' });
+      }
+      
+      // Send notification if stage changed
+      if (stage && previousStage !== stage && updated.userId) {
+        const stageLabels: Record<string, string> = {
+          'initial-review': 'Initial Review',
+          'term-sheet': 'Term Sheet',
+          'onboarding': 'Onboarding',
+          'processing': 'Processing',
+          'underwriting': 'Underwriting',
+          'closing': 'Closing',
+          'closed': 'Closed'
+        };
+        await postDealNotification(
+          updated.userId,
+          dealId,
+          `🔄 Deal status updated to: ${stageLabels[stage] || stage}`
+        );
       }
       
       res.json({ deal: updated });
@@ -4100,8 +4134,13 @@ export async function registerRoutes(
   // Admin - Update deal task
   app.patch('/api/admin/deals/:dealId/tasks/:taskId', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
+      const dealId = parseInt(req.params.dealId);
       const taskId = parseInt(req.params.taskId);
       const { status, taskName, taskDescription, priority, assignedTo, dueDate } = req.body;
+      
+      // Get current task status to detect completion
+      const [existingTask] = await db.select().from(dealTasks).where(eq(dealTasks.id, taskId)).limit(1);
+      const wasCompleted = existingTask?.status === 'completed';
       
       const updateData: Record<string, unknown> = {};
       if (status !== undefined) updateData.status = status;
@@ -4120,6 +4159,19 @@ export async function registerRoutes(
         .set(updateData)
         .where(eq(dealTasks.id, taskId))
         .returning();
+      
+      // Send notification if task was just completed
+      if (status === 'completed' && !wasCompleted) {
+        const deal = await db.select({ userId: savedQuotes.userId })
+          .from(savedQuotes).where(eq(savedQuotes.id, dealId)).limit(1);
+        if (deal[0]?.userId) {
+          await postDealNotification(
+            deal[0].userId,
+            dealId,
+            `✅ Task completed: ${updated.taskName || 'Task'}`
+          );
+        }
+      }
       
       res.json({ task: updated });
     } catch (error) {
