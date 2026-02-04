@@ -6460,6 +6460,50 @@ export async function registerRoutes(
       // Filter configs that are scheduled for the target date
       const scheduledConfigs = configs.filter(c => isScheduledForDate(c, targetDate));
       
+      // AUTO-GENERATE DRAFTS: Create drafts for any configs that don't have one yet
+      for (const config of scheduledConfigs) {
+        // Check if draft already exists
+        const existingDraft = await db.select()
+          .from(scheduledDigestDrafts)
+          .where(and(
+            eq(scheduledDigestDrafts.configId, config.id),
+            gte(scheduledDigestDrafts.scheduledDate, startOfTargetDay),
+            lte(scheduledDigestDrafts.scheduledDate, endOfTargetDay)
+          ))
+          .limit(1);
+        
+        if (existingDraft.length === 0) {
+          // Get recipients count for this config
+          const recipientCount = await db.select({ count: sql<number>`count(*)` })
+            .from(loanDigestRecipients)
+            .where(and(
+              eq(loanDigestRecipients.configId, config.id),
+              eq(loanDigestRecipients.isActive, true)
+            ));
+          
+          if ((recipientCount[0]?.count || 0) > 0) {
+            // Auto-create draft
+            try {
+              await db.insert(scheduledDigestDrafts).values({
+                configId: config.id,
+                projectId: config.projectId || null,
+                scheduledDate: targetDate,
+                timeOfDay: config.timeOfDay || '09:00',
+                emailSubject: config.emailSubject,
+                emailBody: config.emailBody,
+                smsBody: config.smsBody,
+                documentsCount: 0,
+                updatesCount: 0,
+                recipients: '[]',
+                status: 'draft',
+              });
+            } catch (e) {
+              console.log('Draft already exists or could not be created:', (e as Error).message);
+            }
+          }
+        }
+      }
+      
       // For each config, get recipients, drafts, and sent history for the target date
       const digestsWithDetails = await Promise.all(scheduledConfigs.map(async (config) => {
         // Get recipients
@@ -6602,10 +6646,11 @@ export async function registerRoutes(
       const endOfTargetDay = new Date(targetDate);
       endOfTargetDay.setHours(23, 59, 59, 999);
       
-      // Get all enabled digest configs
+      // Get all enabled digest configs (support both project-based and deal-only)
       const configs = await db.select({
         id: loanDigestConfigs.id,
         projectId: loanDigestConfigs.projectId,
+        dealId: loanDigestConfigs.dealId,
         frequency: loanDigestConfigs.frequency,
         customDays: loanDigestConfigs.customDays,
         timeOfDay: loanDigestConfigs.timeOfDay,
@@ -6615,10 +6660,10 @@ export async function registerRoutes(
         createdAt: loanDigestConfigs.createdAt,
       })
         .from(loanDigestConfigs)
-        .innerJoin(projects, eq(loanDigestConfigs.projectId, projects.id))
+        .leftJoin(projects, eq(loanDigestConfigs.projectId, projects.id))
         .where(and(
           eq(loanDigestConfigs.isEnabled, true),
-          eq(projects.status, 'active')
+          or(isNull(projects.id), eq(projects.status, 'active'))
         ));
       
       // Helper: check if scheduled
