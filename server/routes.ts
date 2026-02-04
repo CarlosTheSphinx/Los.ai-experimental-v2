@@ -4453,6 +4453,7 @@ export async function registerRoutes(
         loanType,
         loanPurpose,
         propertyType,
+        stage,
       } = req.body;
       
       // Get current deal to preserve existing loanData
@@ -4491,6 +4492,7 @@ export async function registerRoutes(
           propertyAddress: propertyAddress || existingDeal.propertyAddress,
           interestRate: interestRate || existingDeal.interestRate,
           loanData: updatedLoanData,
+          stage: stage || existingDeal.stage,
         })
         .where(eq(savedQuotes.id, dealId))
         .returning();
