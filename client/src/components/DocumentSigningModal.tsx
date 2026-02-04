@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Users, FileText, Send, Plus, Trash2, X, ChevronRight, ChevronLeft, Check, Mail, ZoomIn, ZoomOut } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Upload, Users, FileText, Send, Plus, Trash2, X, ChevronRight, ChevronLeft, Check, Mail, ZoomIn, ZoomOut, FileStack, Sparkles } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { SavedQuote } from "@shared/schema";
@@ -16,6 +17,33 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+
+interface DocumentTemplate {
+  id: number;
+  name: string;
+  description: string | null;
+  pdfUrl: string;
+  pdfFileName: string;
+  pageCount: number;
+  category: string | null;
+  loanType: string | null;
+}
+
+interface TemplateField {
+  id: number;
+  fieldName: string;
+  fieldKey: string;
+  fieldType: string;
+  pageNumber: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontSize: number;
+  signerRole: string | null;
+  isRequired: boolean;
+  defaultValue: string | null;
+}
 
 interface DocumentSigningModalProps {
   open: boolean;
@@ -285,8 +313,17 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
   const [pdfScale, setPdfScale] = useState(1.0);
   const [pdfDimensions, setPdfDimensions] = useState({ width: 612, height: 792 });
   
+  const [uploadMode, setUploadMode] = useState<"template" | "manual">("template");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [templateFieldsLoaded, setTemplateFieldsLoaded] = useState(false);
+  
   const pdfContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const { data: templatesData, isLoading: templatesLoading, isError: templatesError } = useQuery<{ templates: DocumentTemplate[] }>({
+    queryKey: ["/api/document-templates"],
+    enabled: open,
+  });
 
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setPageCount(numPages);
@@ -314,6 +351,109 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to upload document", variant: "destructive" });
+    }
+  });
+
+  const useTemplateMutation = useMutation({
+    mutationFn: async (templateId: number) => {
+      const templateRes = await fetch(`/api/document-templates/${templateId}`, { credentials: 'include' });
+      if (!templateRes.ok) throw new Error('Failed to load template');
+      const templateData = await templateRes.json();
+      
+      const pdfRes = await fetch(templateData.template.pdfUrl);
+      if (!pdfRes.ok) throw new Error('Failed to load template PDF');
+      const pdfBlob = await pdfRes.blob();
+      const reader = new FileReader();
+      
+      return new Promise<{ template: DocumentTemplate; fields: TemplateField[]; pdfBase64: string }>((resolve, reject) => {
+        reader.onload = () => {
+          resolve({
+            template: templateData.template,
+            fields: templateData.fields,
+            pdfBase64: reader.result as string,
+          });
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(pdfBlob);
+      });
+    },
+    onSuccess: async (data) => {
+      try {
+        setPdfData(data.pdfBase64);
+        setFileName(data.template.pdfFileName);
+        setPageCount(data.template.pageCount);
+        
+        const docRes = await apiRequest('POST', '/api/documents', {
+          quoteId: quote.id,
+          name: `${data.template.name} - ${quote.customerFirstName} ${quote.customerLastName}`,
+          fileName: data.template.pdfFileName,
+          fileData: data.pdfBase64,
+          pageCount: data.template.pageCount,
+        });
+        const docData = await docRes.json();
+        
+        if (!docData.success || !docData.document) {
+          throw new Error(docData.error || 'Failed to create document');
+        }
+        
+        setDocumentId(docData.document.id);
+        
+        const uniqueSignerRoles = [...new Set(data.fields.filter(f => f.signerRole).map(f => f.signerRole))];
+        const defaultSigners: { name: string; email: string; color: string }[] = [];
+        
+        if (uniqueSignerRoles.includes('borrower') || uniqueSignerRoles.length === 0) {
+          defaultSigners.push({
+            name: `${quote.customerFirstName} ${quote.customerLastName}`.trim() || 'Borrower',
+            email: quote.customerEmail || '',
+            color: SIGNER_COLORS[0],
+          });
+        }
+        
+        const createdSigners: Array<{ id: number; name: string; email: string; color: string }> = [];
+        for (const signer of defaultSigners) {
+          if (signer.email) {
+            try {
+              const signerRes = await apiRequest('POST', `/api/documents/${docData.document.id}/signers`, signer);
+              const signerData = await signerRes.json();
+              if (signerData.success && signerData.signer) {
+                createdSigners.push(signerData.signer);
+              }
+            } catch (signerError) {
+              console.error('Failed to create signer:', signerError);
+            }
+          }
+        }
+        setSigners(createdSigners);
+        
+        if (data.fields && data.fields.length > 0) {
+          const templateFields: FieldData[] = data.fields.map((tf, index) => {
+            const signerIndex = tf.signerRole === 'borrower' ? 0 : (tf.signerRole === 'lender' ? 1 : 0);
+            const signer = createdSigners[signerIndex] || createdSigners[0];
+            
+            return {
+              type: tf.fieldType as FieldData['type'],
+              signerId: signer?.id || 0,
+              signerColor: signer?.color || SIGNER_COLORS[0],
+              pageNumber: tf.pageNumber,
+              x: tf.x,
+              y: tf.y,
+              width: tf.width,
+              height: tf.height,
+              value: tf.defaultValue || '',
+            };
+          });
+          setFields(templateFields);
+          setTemplateFieldsLoaded(true);
+        }
+        
+        toast({ title: "Template Loaded", description: "Template and fields loaded. Add signers and review." });
+        setStep("signers");
+      } catch (error: any) {
+        toast({ title: "Error", description: error.message || "Failed to set up document", variant: "destructive" });
+      }
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to load template", variant: "destructive" });
     }
   });
 
@@ -504,44 +644,144 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
           <TabsContent value="upload" className="flex-1 overflow-auto p-4">
             <Card>
               <CardContent className="pt-6">
-                <div className="text-center space-y-4">
-                  <div 
-                    className="border-2 border-dashed rounded-lg p-8 hover:bg-muted/50 cursor-pointer transition-colors"
-                    onClick={() => fileInputRef.current?.click()}
-                    data-testid="upload-area"
-                  >
-                    <Upload className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-lg font-medium">Click to upload PDF</p>
-                    <p className="text-sm text-muted-foreground">or drag and drop</p>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".pdf"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                      data-testid="file-input"
-                    />
+                <div className="space-y-6">
+                  <div className="flex justify-center gap-4 mb-6">
+                    <Button
+                      variant={uploadMode === "template" ? "default" : "outline"}
+                      onClick={() => setUploadMode("template")}
+                      className="flex items-center gap-2"
+                      data-testid="button-use-template"
+                    >
+                      <FileStack className="w-4 h-4" />
+                      Use Template
+                    </Button>
+                    <Button
+                      variant={uploadMode === "manual" ? "default" : "outline"}
+                      onClick={() => setUploadMode("manual")}
+                      className="flex items-center gap-2"
+                      data-testid="button-upload-manual"
+                    >
+                      <Upload className="w-4 h-4" />
+                      Upload PDF
+                    </Button>
                   </div>
-                  
-                  {pdfData && (
+
+                  {uploadMode === "template" && (
                     <div className="space-y-4">
-                      <div className="flex items-center justify-center gap-2 text-green-600">
-                        <Check className="w-5 h-5" />
-                        <span>{fileName}</span>
+                      <div className="text-center mb-4">
+                        <Sparkles className="w-10 h-10 mx-auto text-blue-500 mb-2" />
+                        <h3 className="text-lg font-semibold">Choose a Template</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Templates have pre-configured fields that auto-populate with loan data
+                        </p>
                       </div>
-                      <div className="border rounded-lg overflow-hidden max-h-[300px]">
-                        <PDFDocument file={pdfData} onLoadSuccess={onDocumentLoadSuccess}>
-                          <PDFPage pageNumber={1} width={400} />
-                        </PDFDocument>
-                      </div>
-                      <Button 
-                        onClick={handleUploadSubmit} 
-                        disabled={createDocumentMutation.isPending}
-                        data-testid="button-upload-continue"
+                      
+                      {templatesLoading ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4" />
+                          <p>Loading templates...</p>
+                        </div>
+                      ) : templatesError ? (
+                        <div className="text-center py-8 text-destructive">
+                          <FileStack className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                          <p>Failed to load templates</p>
+                          <p className="text-sm">Please try again or upload a PDF manually</p>
+                        </div>
+                      ) : templatesData?.templates && templatesData.templates.length > 0 ? (
+                        <div className="max-w-md mx-auto space-y-4">
+                          <Select
+                            value={selectedTemplateId}
+                            onValueChange={setSelectedTemplateId}
+                          >
+                            <SelectTrigger data-testid="select-template">
+                              <SelectValue placeholder="Select a document template" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {templatesData.templates.map((template) => (
+                                <SelectItem key={template.id} value={template.id.toString()}>
+                                  <div className="flex items-center gap-2">
+                                    <FileStack className="w-4 h-4 text-blue-500" />
+                                    <span>{template.name}</span>
+                                    {template.category && (
+                                      <Badge variant="outline" className="ml-2 text-xs">
+                                        {template.category}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          
+                          {selectedTemplateId && (
+                            <Button
+                              onClick={() => useTemplateMutation.mutate(parseInt(selectedTemplateId))}
+                              disabled={useTemplateMutation.isPending}
+                              className="w-full"
+                              data-testid="button-load-template"
+                            >
+                              {useTemplateMutation.isPending ? (
+                                <>Loading Template...</>
+                              ) : (
+                                <>
+                                  <Sparkles className="w-4 h-4 mr-2" />
+                                  Use This Template
+                                </>
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <FileStack className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                          <p>No templates available</p>
+                          <p className="text-sm">Upload a PDF manually or ask an admin to create templates</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {uploadMode === "manual" && (
+                    <div className="text-center space-y-4">
+                      <div 
+                        className="border-2 border-dashed rounded-lg p-8 hover:bg-muted/50 cursor-pointer transition-colors"
+                        onClick={() => fileInputRef.current?.click()}
+                        data-testid="upload-area"
                       >
-                        {createDocumentMutation.isPending ? "Uploading..." : "Continue"}
-                        <ChevronRight className="w-4 h-4 ml-2" />
-                      </Button>
+                        <Upload className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                        <p className="text-lg font-medium">Click to upload PDF</p>
+                        <p className="text-sm text-muted-foreground">or drag and drop</p>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".pdf"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                          data-testid="file-input"
+                        />
+                      </div>
+                  
+                      {pdfData && (
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-center gap-2 text-green-600">
+                            <Check className="w-5 h-5" />
+                            <span>{fileName}</span>
+                          </div>
+                          <div className="border rounded-lg overflow-hidden max-h-[300px]">
+                            <PDFDocument file={pdfData} onLoadSuccess={onDocumentLoadSuccess}>
+                              <PDFPage pageNumber={1} width={400} />
+                            </PDFDocument>
+                          </div>
+                          <Button 
+                            onClick={handleUploadSubmit} 
+                            disabled={createDocumentMutation.isPending}
+                            data-testid="button-upload-continue"
+                          >
+                            {createDocumentMutation.isPending ? "Uploading..." : "Continue"}
+                            <ChevronRight className="w-4 h-4 ml-2" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
