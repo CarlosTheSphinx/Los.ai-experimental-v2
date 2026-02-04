@@ -99,8 +99,8 @@ export function RTLPricingResult({ result, formData, onReset, onEdit }: RTLPrici
     ? Math.min(maxLoanByLTC, maxLoanByLTAIV, maxLoanByLTARV)
     : Math.min(maxLoanByLTC, maxLoanByLTAIV);
   
-  // Commission is the additional points amount on max loan
-  const additionalPointsAmount = (maxLoanAmount * additionalPoints) / 100;
+  // Commission is the additional points amount on maximum loan amount (maxLoanByLTC)
+  const additionalPointsAmount = (maxLoanByLTC * additionalPoints) / 100;
   if (!result.eligible) {
     return (
       <Card className="w-full bg-white/90 backdrop-blur-sm shadow-xl border-red-200/60 overflow-hidden">
@@ -492,12 +492,22 @@ export function RTLPricingResult({ result, formData, onReset, onEdit }: RTLPrici
               </div>
               <div className="border-t pt-3 mt-3 grid grid-cols-2 gap-3 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Max Loan Amount:</span>
-                  <span className="font-bold text-green-600">${maxLoanAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  <span className="text-slate-500">Maximum Loan Amount:</span>
+                  <span className="font-bold text-green-600">${maxLoanByLTC.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Total Points:</span>
-                  <span className="font-bold text-primary">{totalPoints.toFixed(2)}</span>
+                  <span className="text-slate-500">Initial Loan Amount:</span>
+                  <span className="font-bold text-blue-600">${maxLoanByLTAIV.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                </div>
+              </div>
+              <div className="border-t pt-3 mt-3 grid grid-cols-2 gap-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Down Payment:</span>
+                  <span className="font-bold text-slate-700">${Math.max(0, asIsValue - maxLoanByLTAIV).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Total Points ({totalPoints.toFixed(2)}%):</span>
+                  <span className="font-bold text-slate-700">${((maxLoanByLTC * totalPoints) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                 </div>
               </div>
               <div className="border-t pt-3 mt-3">
