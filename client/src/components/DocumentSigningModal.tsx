@@ -612,21 +612,39 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
     
     try {
       const blob = await fetch(pdfData).then(r => r.blob());
-      const formDataUpload = new FormData();
-      formDataUpload.append("file", blob, fileName || "template.pdf");
-      formDataUpload.append("directory", "templates");
+      const pdfFileName = fileName || "template.pdf";
       
-      const uploadRes = await fetch("/api/upload", {
+      // Step 1: Request presigned upload URL from object storage
+      const urlRes = await fetch("/api/uploads/request-url", {
         method: "POST",
-        body: formDataUpload,
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
+        body: JSON.stringify({
+          name: pdfFileName,
+          size: blob.size,
+          contentType: "application/pdf"
+        })
+      });
+      
+      if (!urlRes.ok) {
+        throw new Error("Failed to get upload URL");
+      }
+      
+      const { uploadURL, objectPath } = await urlRes.json();
+      
+      // Step 2: Upload directly to the presigned URL
+      const uploadRes = await fetch(uploadURL, {
+        method: "PUT",
+        body: blob,
+        headers: { "Content-Type": "application/pdf" }
       });
       
       if (!uploadRes.ok) {
         throw new Error("Failed to upload PDF");
       }
       
-      const uploadData = await uploadRes.json();
+      // Use the objectPath as the URL for the template
+      const uploadData = { url: objectPath };
       
       const templateRes = await apiRequest("POST", "/api/admin/document-templates", {
         name: templateName,
