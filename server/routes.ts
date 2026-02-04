@@ -6400,10 +6400,11 @@ export async function registerRoutes(
       const endOfTargetDay = new Date(targetDate);
       endOfTargetDay.setHours(23, 59, 59, 999);
       
-      // Get all enabled digest configs with their projects and recipients
+      // Get all enabled digest configs - support both project-based and deal-only configs
       const configs = await db.select({
         id: loanDigestConfigs.id,
         projectId: loanDigestConfigs.projectId,
+        dealId: loanDigestConfigs.dealId,
         frequency: loanDigestConfigs.frequency,
         customDays: loanDigestConfigs.customDays,
         timeOfDay: loanDigestConfigs.timeOfDay,
@@ -6418,12 +6419,16 @@ export async function registerRoutes(
         isEnabled: loanDigestConfigs.isEnabled,
         createdAt: loanDigestConfigs.createdAt,
         projectName: projects.projectName,
+        projectStatus: projects.status,
         borrowerName: savedQuotes.customerFirstName,
         propertyAddress: savedQuotes.propertyAddress,
       })
         .from(loanDigestConfigs)
-        .innerJoin(projects, eq(loanDigestConfigs.projectId, projects.id))
-        .leftJoin(savedQuotes, eq(projects.quoteId, savedQuotes.id))
+        .leftJoin(projects, eq(loanDigestConfigs.projectId, projects.id))
+        .leftJoin(savedQuotes, or(
+          eq(projects.quoteId, savedQuotes.id),
+          eq(loanDigestConfigs.dealId, savedQuotes.id)
+        ))
         .where(eq(loanDigestConfigs.isEnabled, true));
       
       // Helper: check if a digest is scheduled for a given date based on frequency
@@ -7546,6 +7551,13 @@ export async function registerRoutes(
         validatedCustomDays = Math.max(1, Math.min(30, parseInt(customDays) || 2));
       }
       
+      // Find the project associated with this deal (required for admin digests page)
+      const projectForDeal = await db.select({ id: projects.id })
+        .from(projects)
+        .where(eq(projects.quoteId, dealId))
+        .limit(1);
+      const projectId = projectForDeal[0]?.id || null;
+      
       // Check if config exists for this deal
       const existing = await db
         .select()
@@ -7555,10 +7567,11 @@ export async function registerRoutes(
       let configId: number;
       
       if (existing[0]) {
-        // Update existing
+        // Update existing - also set projectId if it was missing
         await db
           .update(loanDigestConfigs)
           .set({
+            projectId: existing[0].projectId || projectId,
             frequency: frequency || existing[0].frequency,
             customDays: validatedCustomDays !== undefined ? validatedCustomDays : existing[0].customDays,
             timeOfDay: timeOfDay || existing[0].timeOfDay,
@@ -7577,11 +7590,12 @@ export async function registerRoutes(
         
         configId = existing[0].id;
       } else {
-        // Create new for this deal
+        // Create new for this deal - include projectId for admin digests
         const result = await db
           .insert(loanDigestConfigs)
           .values({
             dealId,
+            projectId,
             frequency: frequency || 'daily',
             customDays: validatedCustomDays,
             timeOfDay: timeOfDay || '09:00',
