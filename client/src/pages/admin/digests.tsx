@@ -131,6 +131,8 @@ export default function AdminDigests() {
   });
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [showSaveTemplateDialog, setShowSaveTemplateDialog] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState("");
 
   const dateStr = format(selectedDate, "yyyy-MM-dd");
 
@@ -232,6 +234,31 @@ export default function AdminDigests() {
     },
   });
 
+  const saveTemplateMutation = useMutation({
+    mutationFn: async (data: { name: string; emailSubject: string; emailBody: string; smsBody: string }) => {
+      return apiRequest('/api/admin/digest-templates', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: data.name,
+          emailSubject: data.emailSubject,
+          emailBody: data.emailBody,
+          smsBody: data.smsBody,
+          isDefault: false,
+        }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Template Saved", description: "Your message has been saved as a template" });
+      setShowSaveTemplateDialog(false);
+      setNewTemplateName("");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/digest-templates"] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to save template", variant: "destructive" });
+    },
+  });
+
   const digests = data?.digests || [];
 
   const stats = useMemo(() => {
@@ -252,11 +279,32 @@ export default function AdminDigests() {
 
   const openEditDialog = (digest: ScheduledDigest) => {
     setEditingDigest(digest);
-    setEditForm({
-      emailSubject: digest.draft?.emailSubject || digest.defaultContent.emailSubject || "",
-      emailBody: digest.draft?.emailBody || digest.defaultContent.emailBody || "",
-      smsBody: digest.draft?.smsBody || digest.defaultContent.smsBody || "",
-    });
+    
+    // Use the draft content if it exists, otherwise use the default template
+    const defaultTemplate = templates.find(t => t.isDefault);
+    
+    if (digest.draft?.emailSubject || digest.draft?.emailBody) {
+      // Use existing draft content
+      setEditForm({
+        emailSubject: digest.draft.emailSubject || "",
+        emailBody: digest.draft.emailBody || "",
+        smsBody: digest.draft.smsBody || "",
+      });
+    } else if (defaultTemplate) {
+      // Use default template
+      setEditForm({
+        emailSubject: defaultTemplate.emailSubject,
+        emailBody: defaultTemplate.emailBody,
+        smsBody: defaultTemplate.smsBody || "",
+      });
+    } else {
+      // Fallback to config defaults
+      setEditForm({
+        emailSubject: digest.defaultContent.emailSubject || "",
+        emailBody: digest.defaultContent.emailBody || "",
+        smsBody: digest.defaultContent.smsBody || "",
+      });
+    }
     setPreviewData(null);
   };
 
@@ -364,27 +412,15 @@ export default function AdminDigests() {
           <CalendarDays className="h-6 w-6 text-muted-foreground" />
           <h1 className="text-2xl font-semibold" data-testid="text-admin-digests-title">Daily Digests</h1>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="default"
-            size="sm"
-            onClick={() => generateDraftsMutation.mutate()}
-            disabled={generateDraftsMutation.isPending}
-            data-testid="button-generate-drafts"
-          >
-            <Sparkles className="h-4 w-4 mr-2" />
-            {generateDraftsMutation.isPending ? "Generating..." : "Generate Drafts"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => refetch()}
-            data-testid="button-refresh-digests"
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => refetch()}
+          data-testid="button-refresh-digests"
+        >
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Refresh
+        </Button>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
@@ -756,15 +792,64 @@ export default function AdminDigests() {
             )}
           </div>
           
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingDigest(null)}>
-              Cancel
-            </Button>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button variant="outline" onClick={() => setEditingDigest(null)}>
+                Cancel
+              </Button>
+              <Button 
+                variant="secondary"
+                onClick={() => setShowSaveTemplateDialog(true)}
+                data-testid="button-save-as-template"
+              >
+                <Copy className="h-4 w-4 mr-2" />
+                Save as Template
+              </Button>
+            </div>
             <Button 
               onClick={handleSaveEdit}
               disabled={updateDraftMutation.isPending}
             >
               {updateDraftMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showSaveTemplateDialog} onOpenChange={setShowSaveTemplateDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Save as Template</DialogTitle>
+            <DialogDescription>
+              Save this message as a reusable template
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="templateName">Template Name</Label>
+            <Input
+              id="templateName"
+              value={newTemplateName}
+              onChange={(e) => setNewTemplateName(e.target.value)}
+              placeholder="e.g., Weekly Update, Document Reminder..."
+              className="mt-2"
+              data-testid="input-template-name"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSaveTemplateDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => saveTemplateMutation.mutate({
+                name: newTemplateName,
+                emailSubject: editForm.emailSubject,
+                emailBody: editForm.emailBody,
+                smsBody: editForm.smsBody,
+              })}
+              disabled={!newTemplateName.trim() || saveTemplateMutation.isPending}
+              data-testid="button-confirm-save-template"
+            >
+              {saveTemplateMutation.isPending ? "Saving..." : "Save Template"}
             </Button>
           </DialogFooter>
         </DialogContent>
