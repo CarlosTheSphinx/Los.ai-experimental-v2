@@ -160,11 +160,7 @@ export default function AdminDigests() {
 
   const generateDraftsMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest('/api/admin/digests/generate-drafts', {
-        method: 'POST',
-        body: JSON.stringify({ date: dateStr }),
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return apiRequest('POST', '/api/admin/digests/generate-drafts', { date: dateStr });
     },
     onSuccess: (data: any) => {
       toast({ title: "Drafts Generated", description: data.message });
@@ -177,11 +173,7 @@ export default function AdminDigests() {
 
   const updateDraftMutation = useMutation({
     mutationFn: async ({ draftId, data }: { draftId: number; data: any }) => {
-      return apiRequest(`/api/admin/digests/drafts/${draftId}`, {
-        method: 'PUT',
-        body: JSON.stringify(data),
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return apiRequest('PUT', `/api/admin/digests/drafts/${draftId}`, data);
     },
     onSuccess: () => {
       toast({ title: "Draft Updated" });
@@ -195,9 +187,7 @@ export default function AdminDigests() {
 
   const approveDraftMutation = useMutation({
     mutationFn: async (draftId: number) => {
-      return apiRequest(`/api/admin/digests/drafts/${draftId}/approve`, {
-        method: 'POST',
-      });
+      return apiRequest('POST', `/api/admin/digests/drafts/${draftId}/approve`);
     },
     onSuccess: () => {
       toast({ title: "Draft Approved", description: "Ready to send" });
@@ -210,9 +200,7 @@ export default function AdminDigests() {
 
   const skipDraftMutation = useMutation({
     mutationFn: async (draftId: number) => {
-      return apiRequest(`/api/admin/digests/drafts/${draftId}/skip`, {
-        method: 'POST',
-      });
+      return apiRequest('POST', `/api/admin/digests/drafts/${draftId}/skip`);
     },
     onSuccess: () => {
       toast({ title: "Draft Skipped" });
@@ -225,9 +213,7 @@ export default function AdminDigests() {
 
   const sendDraftMutation = useMutation({
     mutationFn: async (draftId: number) => {
-      return apiRequest(`/api/admin/digests/drafts/${draftId}/send`, {
-        method: 'POST',
-      });
+      return apiRequest('POST', `/api/admin/digests/drafts/${draftId}/send`);
     },
     onSuccess: (data: any) => {
       toast({ title: "Digest Sent", description: data.message });
@@ -240,16 +226,12 @@ export default function AdminDigests() {
 
   const saveTemplateMutation = useMutation({
     mutationFn: async (data: { name: string; emailSubject: string; emailBody: string; smsBody: string }) => {
-      return apiRequest('/api/admin/digest-templates', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: data.name,
-          emailSubject: data.emailSubject,
-          emailBody: data.emailBody,
-          smsBody: data.smsBody,
-          isDefault: false,
-        }),
-        headers: { 'Content-Type': 'application/json' },
+      return apiRequest('POST', '/api/admin/digest-templates', {
+        name: data.name,
+        emailSubject: data.emailSubject,
+        emailBody: data.emailBody,
+        smsBody: data.smsBody,
+        isDefault: false,
       });
     },
     onSuccess: () => {
