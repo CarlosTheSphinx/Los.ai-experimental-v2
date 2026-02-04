@@ -6581,7 +6581,7 @@ export async function registerRoutes(
         return {
           configId: config.id,
           projectId: config.projectId,
-          projectName: config.projectName || `Project #${config.projectId}`,
+          projectName: config.projectName || (config.borrowerName ? `${config.borrowerName} - ${config.propertyAddress?.split(',')[0] || 'Deal'}` : `Deal #${config.dealId || config.projectId}`),
           borrowerName: config.borrowerName,
           propertyAddress: config.propertyAddress,
           frequency: config.frequency,

@@ -1099,7 +1099,7 @@ export type InsertDigestState = z.infer<typeof insertDigestStateSchema>;
 export const scheduledDigestDrafts = pgTable("scheduled_digest_drafts", {
   id: serial("id").primaryKey(),
   configId: integer("config_id").references(() => loanDigestConfigs.id, { onDelete: 'cascade' }).notNull(),
-  projectId: integer("project_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: 'cascade' }), // Nullable for deal-only digests
   
   // Scheduled date for this digest
   scheduledDate: timestamp("scheduled_date").notNull(),
