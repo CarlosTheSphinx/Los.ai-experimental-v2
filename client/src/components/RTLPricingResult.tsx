@@ -225,47 +225,6 @@ export function RTLPricingResult({ result, formData, onReset, onEdit }: RTLPrici
           </div>
         )}
 
-        {formData && result.caps && (
-          <div className="mb-6">
-            <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
-              <Calculator className="h-4 w-4" />
-              Maximum Loan Amounts
-            </h3>
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 text-center">
-                <span className="text-xs text-blue-600 font-medium">Max by LTC</span>
-                <div className="text-lg font-bold text-blue-800" data-testid="text-max-loan-ltc">
-                  ${maxLoanByLTC.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                </div>
-                <span className="text-xs text-blue-500">{maxLTC}% of ${totalCost.toLocaleString()}</span>
-              </div>
-              <div className="p-3 bg-purple-50 rounded-lg border border-purple-100 text-center">
-                <span className="text-xs text-purple-600 font-medium">Max by LTAIV</span>
-                <div className="text-lg font-bold text-purple-800" data-testid="text-max-loan-ltaiv">
-                  ${maxLoanByLTAIV.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                </div>
-                <span className="text-xs text-purple-500">{effectiveLTAIV.toFixed(1)}% of ${asIsValue.toLocaleString()}</span>
-              </div>
-              <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-100 text-center">
-                <span className="text-xs text-indigo-600 font-medium">Max by LTARV</span>
-                <div className="text-lg font-bold text-indigo-800" data-testid="text-max-loan-ltarv">
-                  {isLTARVApplicable 
-                    ? `$${maxLoanByLTARV.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-                    : "N/A"}
-                </div>
-                <span className="text-xs text-indigo-500">
-                  {isLTARVApplicable ? `${maxLTARV}% of $${arv.toLocaleString()}` : "Not applicable for this loan type"}
-                </span>
-              </div>
-            </div>
-            <div className="p-4 bg-green-50 rounded-lg border border-green-200 text-center">
-              <span className="text-sm text-green-600 font-medium">Maximum Loan Amount (Limiting Factor)</span>
-              <div className="text-2xl font-bold text-green-800" data-testid="text-max-loan-amount">
-                ${maxLoanAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-              </div>
-            </div>
-          </div>
-        )}
 
         {formData && result.caps && maxLoanAmount > 0 && (
           <div className="mb-6 bg-slate-50 rounded-lg p-5 border border-slate-200">
@@ -370,6 +329,55 @@ export function RTLPricingResult({ result, formData, onReset, onEdit }: RTLPrici
                   <p className="text-sm text-slate-700">{flag.message}</p>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {formData && result.caps && maxLoanAmount > 0 && (
+          <div className="mb-6 bg-white rounded-lg p-5 border border-slate-200">
+            <h3 className="font-semibold text-slate-700 mb-4 flex items-center gap-2">
+              <Calculator className="h-4 w-4" />
+              Loan Summary
+            </h3>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                <span className="text-slate-600 font-medium">Maximum Loan Amount</span>
+                <span className="text-xl font-bold text-green-600" data-testid="text-max-loan-amount">
+                  ${maxLoanByLTC.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                <span className="text-slate-600 font-medium">Initial Loan Amount</span>
+                <span className="text-xl font-bold text-blue-600" data-testid="text-initial-loan-amount">
+                  ${maxLoanByLTAIV.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                <span className="text-slate-600">
+                  Budget <span className="text-slate-400">(100% held back)</span>
+                </span>
+                <span className="text-lg font-semibold text-slate-700" data-testid="text-budget-held-back">
+                  ${rehabBudget.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                <span className="text-slate-600">Down Payment</span>
+                <span className="text-lg font-semibold text-slate-700" data-testid="text-down-payment">
+                  ${Math.max(0, asIsValue - maxLoanByLTAIV).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                <span className="text-slate-600">Total Points ({totalPoints.toFixed(2)}%)</span>
+                <span className="text-lg font-semibold text-slate-700" data-testid="text-total-points-dollars">
+                  ${((maxLoanByLTAIV * totalPoints) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-3 bg-primary/5 rounded-lg px-3 -mx-3">
+                <span className="text-slate-700 font-semibold">Estimated Total Cash to Close</span>
+                <span className="text-2xl font-bold text-primary" data-testid="text-cash-to-close">
+                  ${(Math.max(0, asIsValue - maxLoanByLTAIV) + ((maxLoanByLTAIV * totalPoints) / 100)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </span>
+              </div>
             </div>
           </div>
         )}
