@@ -35,8 +35,8 @@ import ResourcesPage from "@/pages/resources";
 import { AppLayout } from "@/components/AppLayout";
 import { Loader2 } from "lucide-react";
 
-function ProtectedRoute({ component: Component, skipOnboardingCheck = false }: { component: React.ComponentType; skipOnboardingCheck?: boolean }) {
-  const { isAuthenticated, isLoading, user } = useAuth();
+function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+  const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -48,12 +48,6 @@ function ProtectedRoute({ component: Component, skipOnboardingCheck = false }: {
 
   if (!isAuthenticated) {
     return <Redirect to="/login" />;
-  }
-
-  // Check if broker needs to complete onboarding (skip for admins)
-  const isAdmin = user?.role && ['admin', 'staff', 'super_admin'].includes(user.role);
-  if (!skipOnboardingCheck && !isAdmin && user?.userType === 'broker' && user?.onboardingCompleted === false) {
-    return <Redirect to="/onboarding" />;
   }
 
   return <Component />;
@@ -175,7 +169,7 @@ function AppContent() {
   if (isOnboardingPage) {
     return (
       <Switch>
-        <Route path="/onboarding" component={() => <ProtectedRoute component={OnboardingPage} skipOnboardingCheck />} />
+        <Route path="/onboarding" component={() => <ProtectedRoute component={OnboardingPage} />} />
       </Switch>
     );
   }
