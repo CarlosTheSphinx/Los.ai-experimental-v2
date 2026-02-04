@@ -200,9 +200,12 @@ export function AppLayout({ children }: AppLayoutProps) {
           </SidebarFooter>
         </Sidebar>
 
-        <div className="flex flex-col flex-1 overflow-hidden">
-          <header className="flex items-center gap-2 p-2 border-b border-slate-200 bg-white/80 backdrop-blur-md">
-            <SidebarTrigger data-testid="button-toggle-sidebar" />
+        <div className="flex flex-col flex-1 overflow-hidden min-w-0">
+          <header className="flex items-center gap-2 p-2 md:p-3 border-b border-slate-200 bg-white/80 backdrop-blur-md shrink-0">
+            <SidebarTrigger data-testid="button-toggle-sidebar" className="shrink-0" />
+            <span className="text-sm font-medium text-slate-600 truncate md:hidden">
+              {user?.firstName ? `Hi, ${user.firstName}` : 'Sphinx Capital'}
+            </span>
           </header>
           <main className="flex-1 overflow-auto">
             {children}

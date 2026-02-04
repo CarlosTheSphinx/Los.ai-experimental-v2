@@ -193,18 +193,18 @@ export default function Quotes() {
   return (
     <div className="min-h-screen">
       <header className="bg-white/80 backdrop-blur-md border-b border-primary/10 sticky top-0 z-40">
-        <div className="px-6 py-4">
-          <div className="flex items-center gap-3">
-            <FileText className="w-6 h-6 text-primary" />
-            <div>
-              <h1 className="text-xl font-bold text-primary">Saved Quotes</h1>
-              <p className="text-sm text-slate-500">View your commission details</p>
+        <div className="px-4 md:px-6 py-3 md:py-4">
+          <div className="flex items-center gap-2 md:gap-3">
+            <FileText className="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" />
+            <div className="min-w-0">
+              <h1 className="text-lg md:text-xl font-bold text-primary truncate">Saved Quotes</h1>
+              <p className="text-xs md:text-sm text-slate-500 hidden sm:block">View your commission details</p>
             </div>
           </div>
         </div>
       </header>
 
-      <div className="p-6">
+      <div className="p-4 md:p-6">
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -249,24 +249,24 @@ export default function Quotes() {
               
               return (
                 <Card key={quote.id} className="overflow-hidden" data-testid={`card-quote-${quote.id}`}>
-                  <CardHeader className="bg-slate-50 border-b border-slate-100 py-4">
-                    <div className="flex items-center justify-between gap-4 flex-wrap">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <User className="w-5 h-5 text-primary" />
+                  <CardHeader className="bg-slate-50 border-b border-slate-100 py-3 md:py-4 px-4 md:px-6">
+                    <div className="flex items-start md:items-center justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
+                        <div className="h-8 w-8 md:h-10 md:w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                          <User className="w-4 h-4 md:w-5 md:h-5 text-primary" />
                         </div>
-                        <div>
-                          <CardTitle className="text-lg">
+                        <div className="min-w-0">
+                          <CardTitle className="text-base md:text-lg truncate">
                             {quote.customerFirstName} {quote.customerLastName}
                           </CardTitle>
-                          <div className="flex items-center gap-1 text-sm text-slate-500">
-                            <MapPin className="w-3 h-3" />
-                            {quote.propertyAddress}
+                          <div className="flex items-center gap-1 text-xs md:text-sm text-slate-500 truncate">
+                            <MapPin className="w-3 h-3 shrink-0" />
+                            <span className="truncate">{quote.propertyAddress}</span>
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="text-right mr-4">
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="text-right">
                           <div className="text-xs text-slate-400 flex items-center gap-1">
                             <Calendar className="w-3 h-3" />
                             {createdAt}
@@ -277,7 +277,7 @@ export default function Quotes() {
                           size="icon"
                           onClick={() => deleteMutation.mutate(quote.id)}
                           disabled={deleteMutation.isPending}
-                          className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                          className="text-red-500 hover:text-red-600 hover:bg-red-50 h-8 w-8"
                           data-testid={`button-delete-quote-${quote.id}`}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -285,8 +285,8 @@ export default function Quotes() {
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="p-5">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <CardContent className="p-4 md:p-5">
+                    <div className="grid grid-cols-2 gap-3 md:gap-4 mb-4">
                       <div>
                         <div className="text-xs text-slate-400 uppercase tracking-wide">Interest Rate</div>
                         <div className="text-xl font-bold text-primary">{quote.interestRate}</div>

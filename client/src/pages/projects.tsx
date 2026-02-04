@@ -110,26 +110,26 @@ export default function Projects() {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
-            <FolderKanban className="h-6 w-6 text-primary" />
-            Projects
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4 md:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 md:gap-4">
+        <div className="min-w-0">
+          <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
+            <FolderKanban className="h-5 w-5 md:h-6 md:w-6 text-primary shrink-0" />
+            <span className="truncate">Projects</span>
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-sm md:text-base text-muted-foreground mt-1 hidden sm:block">
             Track loan closings and borrower progress
           </p>
         </div>
         <Link href="/projects/new">
-          <Button data-testid="button-new-project">
+          <Button data-testid="button-new-project" size="sm" className="w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-2" />
             New Project
           </Button>
         </Link>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4">
+      <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -140,12 +140,12 @@ export default function Projects() {
             data-testid="input-search"
           />
         </div>
-        <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full sm:w-auto">
-          <TabsList>
-            <TabsTrigger value="all" data-testid="tab-all">All</TabsTrigger>
-            <TabsTrigger value="active" data-testid="tab-active">Active</TabsTrigger>
-            <TabsTrigger value="on_hold" data-testid="tab-on-hold">On Hold</TabsTrigger>
-            <TabsTrigger value="completed" data-testid="tab-completed">Completed</TabsTrigger>
+        <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full sm:w-auto overflow-x-auto">
+          <TabsList className="w-full sm:w-auto">
+            <TabsTrigger value="all" data-testid="tab-all" className="text-xs sm:text-sm">All</TabsTrigger>
+            <TabsTrigger value="active" data-testid="tab-active" className="text-xs sm:text-sm">Active</TabsTrigger>
+            <TabsTrigger value="on_hold" data-testid="tab-on-hold" className="text-xs sm:text-sm">Hold</TabsTrigger>
+            <TabsTrigger value="completed" data-testid="tab-completed" className="text-xs sm:text-sm">Done</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>

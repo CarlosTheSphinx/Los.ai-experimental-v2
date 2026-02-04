@@ -327,21 +327,21 @@ export default function AdminPartners() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">Partners</h1>
-          <p className="text-muted-foreground">Manage your partner relationships and communications</p>
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-3 md:gap-4">
+        <div className="flex flex-col gap-1 md:gap-2 min-w-0">
+          <h1 className="text-xl md:text-2xl font-bold truncate" data-testid="text-page-title">Partners</h1>
+          <p className="text-sm md:text-base text-muted-foreground hidden sm:block">Manage partner relationships</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <Dialog open={isBroadcastDialogOpen} onOpenChange={setIsBroadcastDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" data-testid="button-broadcast">
-                <Send className="h-4 w-4 mr-2" />
-                Broadcast Message
+              <Button variant="outline" size="sm" data-testid="button-broadcast">
+                <Send className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Broadcast</span>
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto w-[95vw] md:w-full">
               <DialogHeader>
                 <DialogTitle>Broadcast to All Partners</DialogTitle>
                 <DialogDescription>
@@ -577,24 +577,24 @@ export default function AdminPartners() {
       </div>
 
       <Card>
-        <CardHeader className="pb-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="relative w-full max-w-sm">
+        <CardHeader className="pb-3 md:pb-4 p-4 md:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 md:gap-4">
+            <div className="relative w-full sm:max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name, email, phone, or company..."
+                placeholder="Search partners..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-9"
                 data-testid="input-search-partners"
               />
             </div>
-            <span className="text-sm text-muted-foreground">
+            <span className="text-xs md:text-sm text-muted-foreground shrink-0">
               {partners.length} partner{partners.length !== 1 ? "s" : ""}
             </span>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4 md:p-6 pt-0 md:pt-0">
           {partners.length === 0 ? (
             <div className="text-center py-12">
               <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -606,87 +606,136 @@ export default function AdminPartners() {
               </Button>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="min-w-[200px]">Name</TableHead>
-                    <TableHead className="min-w-[180px]">Contact</TableHead>
-                    <TableHead>Entity</TableHead>
-                    <TableHead>Experience</TableHead>
-                    <TableHead className="text-center">Loans In Process</TableHead>
-                    <TableHead className="text-center">All-Time Loans</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {partners.map((partner) => (
-                    <TableRow key={partner.id} data-testid={`row-partner-${partner.id}`}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-10 w-10">
-                            <AvatarFallback className="bg-primary/10 text-primary font-medium text-sm">
-                              {getInitials(partner.name)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <div className="font-medium" data-testid={`text-partner-name-${partner.id}`}>
-                              {partner.name}
-                            </div>
-                            {partner.companyName && (
-                              <div className="text-sm text-muted-foreground">
-                                {partner.companyName}
+            <>
+              {/* Mobile card view */}
+              <div className="md:hidden space-y-3">
+                {partners.map((partner) => (
+                  <div key={partner.id} className="border rounded-lg p-3" data-testid={`card-partner-${partner.id}`}>
+                    <div className="flex items-start gap-3">
+                      <Avatar className="h-10 w-10 shrink-0">
+                        <AvatarFallback className="bg-primary/10 text-primary font-medium text-sm">
+                          {getInitials(partner.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate" data-testid={`text-partner-name-${partner.id}`}>
+                          {partner.name}
+                        </div>
+                        {partner.companyName && (
+                          <div className="text-sm text-muted-foreground truncate">{partner.companyName}</div>
+                        )}
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          <Badge variant={getExperienceBadgeVariant(partner.experienceLevel)} className="text-xs">
+                            {partner.experienceLevel || "beginner"}
+                          </Badge>
+                          {partner.loansInProcess > 0 && (
+                            <Badge variant="outline" className="text-xs">{partner.loansInProcess} active</Badge>
+                          )}
+                        </div>
+                        {(partner.email || partner.phone) && (
+                          <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                            {partner.email && (
+                              <div className="flex items-center gap-1 truncate">
+                                <Mail className="h-3 w-3 shrink-0" />
+                                <span className="truncate">{partner.email}</span>
+                              </div>
+                            )}
+                            {partner.phone && (
+                              <div className="flex items-center gap-1">
+                                <Phone className="h-3 w-3 shrink-0" />
+                                <span>{partner.phone}</span>
                               </div>
                             )}
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          {partner.email && (
-                            <div className="flex items-center text-sm">
-                              <Mail className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-                              <span>{partner.email}</span>
-                            </div>
-                          )}
-                          {partner.phone && (
-                            <div className="flex items-center text-sm text-muted-foreground">
-                              <Phone className="h-3.5 w-3.5 mr-1.5" />
-                              <span>{partner.phone}</span>
-                            </div>
-                          )}
-                          {!partner.email && !partner.phone && (
-                            <span className="text-sm text-muted-foreground">—</span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {partner.entityType ? (
-                          <div className="flex items-center text-sm">
-                            {getEntityIcon(partner.entityType)}
-                            <span>{partner.entityType}</span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={getExperienceBadgeVariant(partner.experienceLevel)}>
-                          {partner.experienceLevel || "beginner"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className={partner.loansInProcess > 0 ? "text-primary font-medium" : "text-muted-foreground"}>
-                          {partner.loansInProcess}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {partner.allTimeLoans}
-                      </TableCell>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Desktop table view */}
+              <div className="overflow-x-auto hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="min-w-[200px]">Name</TableHead>
+                      <TableHead className="min-w-[180px]">Contact</TableHead>
+                      <TableHead>Entity</TableHead>
+                      <TableHead>Experience</TableHead>
+                      <TableHead className="text-center">In Process</TableHead>
+                      <TableHead className="text-center">All-Time</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {partners.map((partner) => (
+                      <TableRow key={partner.id} data-testid={`row-partner-${partner.id}`}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-10 w-10">
+                              <AvatarFallback className="bg-primary/10 text-primary font-medium text-sm">
+                                {getInitials(partner.name)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <div className="font-medium" data-testid={`text-partner-name-desktop-${partner.id}`}>
+                                {partner.name}
+                              </div>
+                              {partner.companyName && (
+                                <div className="text-sm text-muted-foreground">
+                                  {partner.companyName}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            {partner.email && (
+                              <div className="flex items-center text-sm">
+                                <Mail className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+                                <span>{partner.email}</span>
+                              </div>
+                            )}
+                            {partner.phone && (
+                              <div className="flex items-center text-sm text-muted-foreground">
+                                <Phone className="h-3.5 w-3.5 mr-1.5" />
+                                <span>{partner.phone}</span>
+                              </div>
+                            )}
+                            {!partner.email && !partner.phone && (
+                              <span className="text-sm text-muted-foreground">—</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {partner.entityType ? (
+                            <div className="flex items-center text-sm">
+                              {getEntityIcon(partner.entityType)}
+                              <span>{partner.entityType}</span>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={getExperienceBadgeVariant(partner.experienceLevel)}>
+                            {partner.experienceLevel || "beginner"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className={partner.loansInProcess > 0 ? "text-primary font-medium" : "text-muted-foreground"}>
+                            {partner.loansInProcess}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {partner.allTimeLoans}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

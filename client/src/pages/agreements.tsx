@@ -255,43 +255,56 @@ export default function Agreements() {
   return (
     <div className="min-h-screen">
       <header className="bg-white/80 backdrop-blur-md border-b border-primary/10 sticky top-0 z-40">
-        <div className="px-6 py-4">
-          <div className="flex items-center gap-3">
-            <ClipboardList className="w-6 h-6 text-primary" />
-            <div>
-              <h1 className="text-xl font-bold text-primary">Agreements</h1>
-              <p className="text-sm text-slate-500">Manage and track all your e-signature documents</p>
+        <div className="px-4 md:px-6 py-3 md:py-4">
+          <div className="flex items-center gap-2 md:gap-3">
+            <ClipboardList className="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" />
+            <div className="min-w-0">
+              <h1 className="text-lg md:text-xl font-bold text-primary truncate">Agreements</h1>
+              <p className="text-xs md:text-sm text-slate-500 hidden sm:block">Manage and track all your e-signature documents</p>
             </div>
           </div>
         </div>
       </header>
 
-      <div className="p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          <div className="flex gap-1 flex-wrap">
-            {filterTabs.map(tab => (
-              <Button
-                key={tab.value}
-                variant={activeFilter === tab.value ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setActiveFilter(tab.value)}
-                data-testid={`tab-filter-${tab.value}`}
-              >
-                {tab.label}
-                <span className="ml-1.5 text-xs opacity-70">({getFilterCount(tab.value)})</span>
-              </Button>
-            ))}
-          </div>
-          
-          <div className="relative w-full sm:w-64">
+      <div className="p-4 md:p-6 space-y-3 md:space-y-4">
+        <div className="flex flex-col gap-3 md:gap-4">
+          <div className="relative w-full sm:hidden">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input
               placeholder="Search agreements..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"
-              data-testid="input-search-agreements"
+              data-testid="input-search-agreements-mobile"
             />
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+            <div className="flex gap-1 flex-wrap overflow-x-auto w-full sm:w-auto">
+              {filterTabs.map(tab => (
+                <Button
+                  key={tab.value}
+                  variant={activeFilter === tab.value ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setActiveFilter(tab.value)}
+                  data-testid={`tab-filter-${tab.value}`}
+                  className="text-xs sm:text-sm shrink-0"
+                >
+                  {tab.label}
+                  <span className="ml-1 text-xs opacity-70">({getFilterCount(tab.value)})</span>
+                </Button>
+              ))}
+            </div>
+            
+            <div className="relative w-64 hidden sm:block">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                placeholder="Search agreements..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+                data-testid="input-search-agreements"
+              />
+            </div>
           </div>
         </div>
 

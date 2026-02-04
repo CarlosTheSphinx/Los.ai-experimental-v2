@@ -404,24 +404,25 @@ export default function AdminDigests() {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-3">
-          <CalendarDays className="h-6 w-6 text-muted-foreground" />
-          <h1 className="text-2xl font-semibold" data-testid="text-admin-digests-title">Daily Digests</h1>
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+      <div className="flex items-center justify-between gap-2 md:gap-3 flex-wrap">
+        <div className="flex items-center gap-2 md:gap-3 min-w-0">
+          <CalendarDays className="h-5 w-5 md:h-6 md:w-6 text-muted-foreground shrink-0" />
+          <h1 className="text-xl md:text-2xl font-semibold truncate" data-testid="text-admin-digests-title">Daily Digests</h1>
         </div>
         <Button
           variant="outline"
           size="sm"
           onClick={() => refetch()}
           data-testid="button-refresh-digests"
+          className="shrink-0"
         >
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh
+          <RefreshCw className="h-4 w-4 md:mr-2" />
+          <span className="hidden md:inline">Refresh</span>
         </Button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
+      <div className="grid gap-4 md:gap-6 lg:grid-cols-[280px_1fr]">
         <div className="space-y-4">
           <Card>
             <CardHeader className="pb-2">
@@ -485,15 +486,15 @@ export default function AdminDigests() {
         </div>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Digests for {format(selectedDate, "EEEE, MMMM d, yyyy")}
+          <CardHeader className="p-4 md:p-6">
+            <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+              <FileText className="h-4 w-4 md:h-5 md:w-5 shrink-0" />
+              <span className="truncate">Digests for {format(selectedDate, "MMM d, yyyy")}</span>
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs md:text-sm">
               {digests.length === 0 
                 ? "No digests scheduled for this day"
-                : `${digests.length} digest${digests.length === 1 ? '' : 's'} scheduled - Review and approve before sending`
+                : `${digests.length} digest${digests.length === 1 ? '' : 's'} scheduled`
               }
             </CardDescription>
           </CardHeader>
@@ -511,29 +512,29 @@ export default function AdminDigests() {
                 <p className="text-sm mt-2">Digests are configured on individual project pages</p>
               </div>
             ) : (
-              <ScrollArea className="h-[600px] pr-4">
-                <div className="space-y-4">
+              <ScrollArea className="h-[500px] md:h-[600px] pr-2 md:pr-4">
+                <div className="space-y-3 md:space-y-4">
                   {digests.map((digest) => (
                     <div
                       key={digest.configId}
-                      className="border rounded-lg p-4 space-y-3"
+                      className="border rounded-lg p-3 md:p-4 space-y-2 md:space-y-3"
                       data-testid={`digest-card-${digest.configId}`}
                     >
-                      <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start justify-between gap-2 md:gap-4">
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-medium truncate">{digest.projectName}</h3>
+                          <h3 className="font-medium text-sm md:text-base truncate">{digest.projectName}</h3>
                           {digest.borrowerName && (
-                            <p className="text-sm text-muted-foreground truncate">
-                              Borrower: {digest.borrowerName}
+                            <p className="text-xs md:text-sm text-muted-foreground truncate">
+                              {digest.borrowerName}
                             </p>
                           )}
                           {digest.propertyAddress && (
-                            <p className="text-sm text-muted-foreground truncate">
+                            <p className="text-xs md:text-sm text-muted-foreground truncate hidden sm:block">
                               {digest.propertyAddress}
                             </p>
                           )}
                         </div>
-                        <div className="flex flex-col items-end gap-1">
+                        <div className="flex flex-col items-end gap-1 shrink-0">
                           {getStatusBadge(digest)}
                         </div>
                       </div>

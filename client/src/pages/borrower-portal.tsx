@@ -141,45 +141,45 @@ export default function BorrowerPortal() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
       <header className="bg-white border-b">
-        <div className="max-w-4xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm text-muted-foreground font-mono">{project.projectNumber}</div>
-              <h1 className="text-xl font-semibold">{project.projectName}</h1>
+        <div className="max-w-4xl mx-auto px-4 md:px-6 py-3 md:py-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="text-xs md:text-sm text-muted-foreground font-mono truncate">{project.projectNumber}</div>
+              <h1 className="text-lg md:text-xl font-semibold truncate">{project.projectName}</h1>
             </div>
-            <Badge variant={project.status === 'active' ? 'default' : 'secondary'}>
+            <Badge variant={project.status === 'active' ? 'default' : 'secondary'} className="shrink-0">
               {project.status}
             </Badge>
           </div>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-6 py-8 space-y-6">
+      <main className="max-w-4xl mx-auto px-4 md:px-6 py-4 md:py-8 space-y-4 md:space-y-6">
         <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-lg">Welcome, {project.borrowerName}</CardTitle>
-                <CardDescription>Track your loan progress and stay updated</CardDescription>
+          <CardHeader className="pb-3 p-4 md:p-6 md:pb-3">
+            <div className="flex items-start md:items-center justify-between gap-3 flex-wrap">
+              <div className="min-w-0">
+                <CardTitle className="text-base md:text-lg truncate">Welcome, {project.borrowerName}</CardTitle>
+                <CardDescription className="text-xs md:text-sm">Track your loan progress</CardDescription>
               </div>
-              <div className="text-right">
-                <div className="text-3xl font-bold text-primary">{project.progressPercentage}%</div>
+              <div className="text-right shrink-0">
+                <div className="text-2xl md:text-3xl font-bold text-primary">{project.progressPercentage}%</div>
                 <div className="text-xs text-muted-foreground">Complete</div>
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <Progress value={project.progressPercentage} className="h-3" />
+          <CardContent className="space-y-4 p-4 md:p-6 pt-0 md:pt-0">
+            <Progress value={project.progressPercentage} className="h-2 md:h-3" />
             
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-1 overflow-x-auto">
               {stages.map((stage, i) => (
                 <div key={stage.id} className="flex items-center gap-1">
                   {getStageIcon(stage.status)}
-                  <span className={`text-xs ${stage.status === 'in_progress' ? 'font-medium text-blue-600' : stage.status === 'completed' ? 'text-green-600' : 'text-muted-foreground'}`}>
+                  <span className={`text-[10px] md:text-xs whitespace-nowrap ${stage.status === 'in_progress' ? 'font-medium text-blue-600' : stage.status === 'completed' ? 'text-green-600' : 'text-muted-foreground'}`}>
                     {stage.stageName}
                   </span>
                   {i < stages.length - 1 && (
-                    <div className={`h-px w-4 ${stage.status === 'completed' ? 'bg-green-300' : 'bg-muted'}`} />
+                    <div className={`h-px w-2 md:w-4 ${stage.status === 'completed' ? 'bg-green-300' : 'bg-muted'}`} />
                   )}
                 </div>
               ))}
@@ -187,37 +187,37 @@ export default function BorrowerPortal() {
           </CardContent>
         </Card>
 
-        <div className="grid sm:grid-cols-3 gap-4">
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-green-100 flex items-center justify-center">
-                <DollarSign className="h-5 w-5 text-green-600" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 md:gap-4">
+          <Card className="p-3 md:p-4">
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg bg-green-100 flex items-center justify-center shrink-0">
+                <DollarSign className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
               </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Loan Amount</div>
-                <div className="font-semibold">{formatCurrency(project.loanAmount)}</div>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                <span className="text-blue-600 font-semibold text-sm">%</span>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Interest Rate</div>
-                <div className="font-semibold">{project.interestRate ? `${project.interestRate}%` : '—'}</div>
+              <div className="min-w-0">
+                <div className="text-[10px] md:text-xs text-muted-foreground">Loan Amount</div>
+                <div className="font-semibold text-sm md:text-base truncate">{formatCurrency(project.loanAmount)}</div>
               </div>
             </div>
           </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                <Calendar className="h-5 w-5 text-purple-600" />
+          <Card className="p-3 md:p-4">
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+                <span className="text-blue-600 font-semibold text-xs md:text-sm">%</span>
               </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Target Close</div>
-                <div className="font-semibold">{formatDate(project.targetCloseDate)}</div>
+              <div className="min-w-0">
+                <div className="text-[10px] md:text-xs text-muted-foreground">Interest Rate</div>
+                <div className="font-semibold text-sm md:text-base">{project.interestRate ? `${project.interestRate}%` : '—'}</div>
+              </div>
+            </div>
+          </Card>
+          <Card className="p-3 md:p-4 col-span-2 sm:col-span-1">
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg bg-purple-100 flex items-center justify-center shrink-0">
+                <Calendar className="h-4 w-4 md:h-5 md:w-5 text-purple-600" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] md:text-xs text-muted-foreground">Target Close</div>
+                <div className="font-semibold text-sm md:text-base">{formatDate(project.targetCloseDate)}</div>
               </div>
             </div>
           </Card>
