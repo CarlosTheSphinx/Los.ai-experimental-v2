@@ -1095,6 +1095,52 @@ export const insertDigestStateSchema = createInsertSchema(digestState).omit({ id
 export type DigestState = typeof digestState.$inferSelect;
 export type InsertDigestState = z.infer<typeof insertDigestStateSchema>;
 
+// Scheduled digest drafts - pre-generated digests that need approval before sending
+export const scheduledDigestDrafts = pgTable("scheduled_digest_drafts", {
+  id: serial("id").primaryKey(),
+  configId: integer("config_id").references(() => loanDigestConfigs.id, { onDelete: 'cascade' }).notNull(),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  
+  // Scheduled date for this digest
+  scheduledDate: timestamp("scheduled_date").notNull(),
+  timeOfDay: varchar("time_of_day", { length: 10 }).notNull(),
+  
+  // Pre-rendered content (editable before approval)
+  emailSubject: varchar("email_subject", { length: 255 }),
+  emailBody: text("email_body"),
+  smsBody: text("sms_body"),
+  
+  // Content summary
+  documentsCount: integer("documents_count").default(0).notNull(),
+  updatesCount: integer("updates_count").default(0).notNull(),
+  
+  // Recipient snapshot (JSON array of recipient info at time of draft creation)
+  recipients: jsonb("recipients").default('[]'),
+  
+  // Status: draft, approved, sent, skipped
+  status: varchar("status", { length: 50 }).default("draft").notNull(),
+  
+  // Approval tracking
+  approvedBy: integer("approved_by").references(() => users.id, { onDelete: 'set null' }),
+  approvedAt: timestamp("approved_at"),
+  
+  // Sent tracking
+  sentAt: timestamp("sent_at"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertScheduledDigestDraftSchema = createInsertSchema(scheduledDigestDrafts).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true,
+  approvedAt: true,
+  sentAt: true
+});
+export type ScheduledDigestDraft = typeof scheduledDigestDrafts.$inferSelect;
+export type InsertScheduledDigestDraft = z.infer<typeof insertScheduledDigestDraftSchema>;
+
 // ==================== PARTNER BROADCASTS ====================
 
 // Partner broadcasts - stores mass communications sent to all partners
