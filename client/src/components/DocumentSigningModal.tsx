@@ -317,6 +317,12 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [templateFieldsLoaded, setTemplateFieldsLoaded] = useState(false);
   
+  const [showSaveAsTemplate, setShowSaveAsTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [templateDescription, setTemplateDescription] = useState("");
+  const [templateCategory, setTemplateCategory] = useState("");
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  
   const pdfContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -431,9 +437,8 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
             const signer = createdSigners[signerIndex] || createdSigners[0];
             
             return {
-              type: tf.fieldType as FieldData['type'],
+              fieldType: tf.fieldType,
               signerId: signer?.id || 0,
-              signerColor: signer?.color || SIGNER_COLORS[0],
               pageNumber: tf.pageNumber,
               x: tf.x,
               y: tf.y,
@@ -525,6 +530,90 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
       toast({ title: "Error", description: error.message || "Failed to send document", variant: "destructive" });
     }
   });
+
+  const handleSaveAsTemplate = async () => {
+    if (!templateName.trim()) {
+      toast({ title: "Error", description: "Template name is required", variant: "destructive" });
+      return;
+    }
+    
+    if (!pdfData || fields.length === 0) {
+      toast({ title: "Error", description: "Please ensure you have a PDF and at least one field placed", variant: "destructive" });
+      return;
+    }
+    
+    setIsSavingTemplate(true);
+    
+    try {
+      const blob = await fetch(pdfData).then(r => r.blob());
+      const formDataUpload = new FormData();
+      formDataUpload.append("file", blob, fileName || "template.pdf");
+      formDataUpload.append("directory", "templates");
+      
+      const uploadRes = await fetch("/api/upload", {
+        method: "POST",
+        body: formDataUpload,
+        credentials: "include",
+      });
+      
+      if (!uploadRes.ok) {
+        throw new Error("Failed to upload PDF");
+      }
+      
+      const uploadData = await uploadRes.json();
+      
+      const templateRes = await apiRequest("POST", "/api/admin/document-templates", {
+        name: templateName,
+        description: templateDescription || null,
+        category: templateCategory || null,
+        loanType: quote.loanType || null,
+        pdfUrl: uploadData.url,
+        pdfFileName: fileName || "template.pdf",
+        pageCount: pageCount,
+        pageDimensions: [],
+      });
+      
+      const templateData = await templateRes.json();
+      
+      if (!templateData.template?.id) {
+        throw new Error("Failed to create template");
+      }
+      
+      const templateFields = fields.map((field, index) => ({
+        fieldName: `Field ${index + 1}`,
+        fieldKey: `field_${index + 1}`,
+        fieldType: field.fieldType,
+        pageNumber: field.pageNumber,
+        x: field.x,
+        y: field.y,
+        width: field.width,
+        height: field.height,
+        fontSize: 12,
+        signerRole: signers.find(s => s.id === field.signerId) ? 'borrower' : null,
+        isRequired: true,
+        defaultValue: field.value || null,
+      }));
+      
+      if (templateFields.length > 0) {
+        await apiRequest("POST", `/api/admin/document-templates/${templateData.template.id}/fields`, {
+          fields: templateFields,
+        });
+      }
+      
+      queryClient.invalidateQueries({ queryKey: ["/api/document-templates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/document-templates"] });
+      
+      toast({ title: "Template Saved!", description: `"${templateName}" saved with ${fields.length} field(s)` });
+      setShowSaveAsTemplate(false);
+      setTemplateName("");
+      setTemplateDescription("");
+      setTemplateCategory("");
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to save template", variant: "destructive" });
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  };
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -939,15 +1028,28 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                   <Badge variant="secondary">{fields.length} field(s) placed</Badge>
                 </div>
                 
-                <Button 
-                  onClick={() => saveFieldsMutation.mutate()} 
-                  disabled={fields.length === 0 || saveFieldsMutation.isPending}
-                  className="w-full"
-                  data-testid="button-save-fields"
-                >
-                  {saveFieldsMutation.isPending ? "Saving..." : "Save & Continue"}
-                  <ChevronRight className="w-4 h-4 ml-2" />
-                </Button>
+                <div className="space-y-2">
+                  <Button 
+                    onClick={() => saveFieldsMutation.mutate()} 
+                    disabled={fields.length === 0 || saveFieldsMutation.isPending}
+                    className="w-full"
+                    data-testid="button-save-fields"
+                  >
+                    {saveFieldsMutation.isPending ? "Saving..." : "Save & Continue"}
+                    <ChevronRight className="w-4 h-4 ml-2" />
+                  </Button>
+                  
+                  <Button 
+                    variant="outline"
+                    onClick={() => setShowSaveAsTemplate(true)}
+                    disabled={fields.length === 0}
+                    className="w-full"
+                    data-testid="button-save-as-template"
+                  >
+                    <FileStack className="w-4 h-4 mr-2" />
+                    Save as Template
+                  </Button>
+                </div>
               </div>
               
               <div 
@@ -1094,6 +1196,75 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
           </TabsContent>
         </Tabs>
       </DialogContent>
+      
+      <Dialog open={showSaveAsTemplate} onOpenChange={setShowSaveAsTemplate}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileStack className="w-5 h-5 text-primary" />
+              Save as Template
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Save this document and field layout as a reusable template for future quotes.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="template-name">Template Name *</Label>
+              <Input
+                id="template-name"
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                placeholder="e.g., Standard Loan Agreement"
+                data-testid="input-save-template-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="template-desc">Description (optional)</Label>
+              <Input
+                id="template-desc"
+                value={templateDescription}
+                onChange={(e) => setTemplateDescription(e.target.value)}
+                placeholder="Brief description..."
+                data-testid="input-save-template-desc"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Category</Label>
+              <Select value={templateCategory} onValueChange={setTemplateCategory}>
+                <SelectTrigger data-testid="select-save-template-category">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="agreement">Agreement</SelectItem>
+                  <SelectItem value="disclosure">Disclosure</SelectItem>
+                  <SelectItem value="contract">Contract</SelectItem>
+                  <SelectItem value="addendum">Addendum</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="bg-muted/50 rounded-lg p-3">
+              <p className="text-sm font-medium">Template will include:</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                • {pageCount} page(s) from "{fileName}"<br />
+                • {fields.length} positioned field(s)
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowSaveAsTemplate(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSaveAsTemplate}
+              disabled={isSavingTemplate || !templateName.trim()}
+              data-testid="button-confirm-save-template"
+            >
+              {isSavingTemplate ? "Saving..." : "Save Template"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

@@ -46,11 +46,16 @@ import {
   Hash,
   PenTool,
 } from "lucide-react";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
+import { Document as PDFDocument, Page as PDFPage, pdfjs } from "react-pdf";
+import "react-pdf/dist/Page/AnnotationLayer.css";
+import "react-pdf/dist/Page/TextLayer.css";
+
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface DocumentTemplate {
   id: number;
@@ -106,6 +111,12 @@ export default function DocumentTemplatesPage() {
     category: "",
     loanType: "",
   });
+  
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfPreview, setPdfPreview] = useState<string | null>(null);
+  const [pdfPageCount, setPdfPageCount] = useState(1);
+  const [isUploadingPdf, setIsUploadingPdf] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data, isLoading } = useQuery<TemplatesResponse>({
     queryKey: ["/api/admin/document-templates"],
@@ -115,13 +126,14 @@ export default function DocumentTemplatesPage() {
     mutationFn: async (templateData: any) => {
       return apiRequest("POST", "/api/admin/document-templates", templateData);
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/document-templates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/document-templates"] });
       setShowCreateDialog(false);
-      setFormData({ name: "", description: "", category: "", loanType: "" });
+      resetForm();
       toast({
         title: "Template Created",
-        description: "Document template has been created. Now upload a PDF and configure fields.",
+        description: "Document template created. You can now edit it to configure field positions.",
       });
     },
     onError: (error: any) => {
@@ -132,6 +144,93 @@ export default function DocumentTemplatesPage() {
       });
     },
   });
+  
+  const resetForm = () => {
+    setFormData({ name: "", description: "", category: "", loanType: "" });
+    setPdfFile(null);
+    setPdfPreview(null);
+    setPdfPageCount(1);
+  };
+
+  const handlePdfSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (file.type !== "application/pdf") {
+      toast({
+        title: "Invalid File",
+        description: "Please select a PDF file",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setPdfFile(file);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPdfPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleCreateTemplate = async () => {
+    if (!formData.name.trim()) {
+      toast({
+        title: "Error",
+        description: "Template name is required",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!pdfFile || !pdfPreview) {
+      toast({
+        title: "Error",
+        description: "Please upload a PDF file",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsUploadingPdf(true);
+    
+    try {
+      const formDataUpload = new FormData();
+      formDataUpload.append("file", pdfFile);
+      formDataUpload.append("directory", "templates");
+      
+      const uploadRes = await fetch("/api/upload", {
+        method: "POST",
+        body: formDataUpload,
+        credentials: "include",
+      });
+      
+      if (!uploadRes.ok) {
+        throw new Error("Failed to upload PDF");
+      }
+      
+      const uploadData = await uploadRes.json();
+      
+      createMutation.mutate({
+        name: formData.name,
+        description: formData.description || null,
+        category: formData.category || null,
+        loanType: formData.loanType === "all" ? null : formData.loanType || null,
+        pdfUrl: uploadData.url,
+        pdfFileName: pdfFile.name,
+        pageCount: pdfPageCount,
+        pageDimensions: [],
+      });
+    } catch (error: any) {
+      toast({
+        title: "Upload Error",
+        description: error.message || "Failed to upload PDF",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingPdf(false);
+    }
+  };
 
   const deleteMutation = useMutation({
     mutationFn: async (templateId: number) => {
@@ -334,17 +433,56 @@ export default function DocumentTemplatesPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="max-w-lg">
+      <Dialog open={showCreateDialog} onOpenChange={(open) => { if (!open) resetForm(); setShowCreateDialog(open); }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Document Template</DialogTitle>
             <DialogDescription>
-              Create a new template. After creation, you'll upload a PDF and configure field positions.
+              Upload a PDF and configure the template details.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <Label htmlFor="name">Template Name</Label>
+              <Label>PDF Document *</Label>
+              <div 
+                className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf"
+                  onChange={handlePdfSelect}
+                  className="hidden"
+                  data-testid="input-pdf-file"
+                />
+                {pdfPreview ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-center gap-2 text-green-600">
+                      <FileText className="h-5 w-5" />
+                      <span className="font-medium">{pdfFile?.name}</span>
+                    </div>
+                    <div className="border rounded overflow-hidden max-h-[200px] mx-auto inline-block">
+                      <PDFDocument 
+                        file={pdfPreview} 
+                        onLoadSuccess={({ numPages }) => setPdfPageCount(numPages)}
+                      >
+                        <PDFPage pageNumber={1} width={200} />
+                      </PDFDocument>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{pdfPageCount} page(s) - Click to replace</p>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                    <p className="font-medium">Click to upload PDF</p>
+                    <p className="text-xs text-muted-foreground">PDF files only</p>
+                  </>
+                )}
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="name">Template Name *</Label>
               <Input
                 id="name"
                 value={formData.name}
@@ -360,7 +498,7 @@ export default function DocumentTemplatesPage() {
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="Brief description of this template..."
-                rows={3}
+                rows={2}
                 data-testid="input-template-description"
               />
             </div>
@@ -404,37 +542,18 @@ export default function DocumentTemplatesPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+            <Button variant="outline" onClick={() => { resetForm(); setShowCreateDialog(false); }}>
               Cancel
             </Button>
             <Button
-              onClick={() => {
-                if (!formData.name.trim()) {
-                  toast({
-                    title: "Error",
-                    description: "Template name is required",
-                    variant: "destructive",
-                  });
-                  return;
-                }
-                createMutation.mutate({
-                  name: formData.name,
-                  description: formData.description || null,
-                  category: formData.category || null,
-                  loanType: formData.loanType === "all" ? null : formData.loanType || null,
-                  pdfUrl: "", // Placeholder - will be set when PDF is uploaded
-                  pdfFileName: "pending-upload.pdf",
-                  pageCount: 1,
-                  pageDimensions: [],
-                });
-              }}
-              disabled={createMutation.isPending}
+              onClick={handleCreateTemplate}
+              disabled={createMutation.isPending || isUploadingPdf || !pdfFile}
               data-testid="button-submit-template"
             >
-              {createMutation.isPending ? (
+              {(createMutation.isPending || isUploadingPdf) ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Creating...
+                  {isUploadingPdf ? "Uploading PDF..." : "Creating..."}
                 </>
               ) : (
                 "Create Template"

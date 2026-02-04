@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Save, Settings as SettingsIcon, RefreshCw, HardDrive, Phone, Mail, Brain, MapPin, Bot, CheckCircle2, XCircle, AlertCircle, Layers, Plus, Trash2, GripVertical } from "lucide-react";
+import { Save, Settings as SettingsIcon, RefreshCw, HardDrive, Phone, Mail, Brain, MapPin, Bot, CheckCircle2, XCircle, AlertCircle, Layers, Plus, Trash2, GripVertical, FileStack, ChevronRight } from "lucide-react";
+import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -792,6 +793,27 @@ export default function AdminSettings() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Card className="hover-elevate cursor-pointer">
+        <Link href="/admin/document-templates">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900">
+                  <FileStack className="h-5 w-5 text-blue-600 dark:text-blue-300" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">Document Templates</CardTitle>
+                  <CardDescription>
+                    Create and manage reusable document templates with pre-positioned fields
+                  </CardDescription>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </CardHeader>
+        </Link>
+      </Card>
 
       <Card>
         <CardHeader>
