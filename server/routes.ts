@@ -31,7 +31,8 @@ import {
   getOutstandingDocuments, 
   getRecentUpdates 
 } from './digestService';
-import { loanDigestConfigs, loanDigestRecipients, loanUpdates, digestHistory, digestState } from '@shared/schema';
+import { loanDigestConfigs, loanDigestRecipients, loanUpdates, digestHistory, digestState, partnerBroadcasts, partnerBroadcastRecipients, inboundSmsMessages } from '@shared/schema';
+import { sendPartnerBroadcast, handleIncomingSms, getInboundMessages, markMessageRead, getBroadcastHistory } from './broadcastService';
 import { registerObjectStorageRoutes, ObjectStorageService } from './replit_integrations/object_storage';
 
 // Initialize Apify client
@@ -4949,6 +4950,163 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Delete partner error:', error);
       res.status(500).json({ error: 'Failed to delete partner' });
+    }
+  });
+
+  // ==================== PARTNER BROADCAST ROUTES ====================
+  
+  // Send a broadcast to all partners
+  app.post('/api/admin/broadcasts', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { subject, emailBody, smsBody, sendEmail, sendSms: sendSmsFlag } = req.body;
+      
+      // Validate based on what's being sent
+      const willSendEmail = sendEmail !== false;
+      const willSendSms = sendSmsFlag === true;
+      
+      if (!subject) {
+        return res.status(400).json({ error: 'Subject is required' });
+      }
+      
+      if (willSendEmail && !emailBody) {
+        return res.status(400).json({ error: 'Email body is required when sending email' });
+      }
+      
+      if (willSendSms && !smsBody) {
+        return res.status(400).json({ error: 'SMS body is required when sending SMS' });
+      }
+      
+      if (!willSendEmail && !willSendSms) {
+        return res.status(400).json({ error: 'At least one delivery method (email or SMS) must be selected' });
+      }
+      
+      // Create the broadcast record
+      const [broadcast] = await db.insert(partnerBroadcasts).values({
+        sentBy: req.user!.id,
+        subject,
+        emailBody,
+        smsBody: smsBody || null,
+        sendEmail: sendEmail !== false,
+        sendSms: sendSmsFlag || false,
+      }).returning();
+      
+      // Send the broadcast asynchronously
+      sendPartnerBroadcast(
+        broadcast.id,
+        subject,
+        emailBody,
+        smsBody || null,
+        sendEmail !== false,
+        sendSmsFlag || false,
+        req.user!.id
+      ).then(result => {
+        console.log('Broadcast completed:', result);
+      }).catch(error => {
+        console.error('Broadcast failed:', error);
+      });
+      
+      res.json({ 
+        success: true, 
+        broadcast: { id: broadcast.id },
+        message: 'Broadcast started. Messages are being sent in the background.'
+      });
+    } catch (error) {
+      console.error('Create broadcast error:', error);
+      res.status(500).json({ error: 'Failed to create broadcast' });
+    }
+  });
+  
+  // Get broadcast history
+  app.get('/api/admin/broadcasts', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const broadcasts = await getBroadcastHistory(50);
+      res.json({ broadcasts });
+    } catch (error) {
+      console.error('Get broadcasts error:', error);
+      res.status(500).json({ error: 'Failed to load broadcasts' });
+    }
+  });
+  
+  // Get single broadcast with recipients
+  app.get('/api/admin/broadcasts/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      const [broadcast] = await db.select().from(partnerBroadcasts).where(eq(partnerBroadcasts.id, parseInt(id)));
+      if (!broadcast) {
+        return res.status(404).json({ error: 'Broadcast not found' });
+      }
+      
+      const recipients = await db.select().from(partnerBroadcastRecipients)
+        .where(eq(partnerBroadcastRecipients.broadcastId, parseInt(id)));
+      
+      res.json({ broadcast, recipients });
+    } catch (error) {
+      console.error('Get broadcast error:', error);
+      res.status(500).json({ error: 'Failed to load broadcast' });
+    }
+  });
+  
+  // Get inbound SMS messages (for admin inbox)
+  app.get('/api/admin/sms-inbox', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { unreadOnly, partnerId } = req.query;
+      
+      const messages = await getInboundMessages({
+        unreadOnly: unreadOnly === 'true',
+        partnerId: partnerId ? parseInt(partnerId as string) : undefined,
+        limit: 100
+      });
+      
+      res.json({ messages });
+    } catch (error) {
+      console.error('Get inbox error:', error);
+      res.status(500).json({ error: 'Failed to load inbox' });
+    }
+  });
+  
+  // Get unread SMS count for notifications
+  app.get('/api/admin/sms-inbox/unread-count', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const result = await db.select({ count: sql<number>`count(*)::int` })
+        .from(inboundSmsMessages)
+        .where(eq(inboundSmsMessages.isRead, false));
+      
+      res.json({ unreadCount: result[0]?.count || 0 });
+    } catch (error) {
+      console.error('Get unread count error:', error);
+      res.status(500).json({ error: 'Failed to get unread count' });
+    }
+  });
+  
+  // Mark SMS message as read
+  app.post('/api/admin/sms-inbox/:id/read', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      await markMessageRead(parseInt(id));
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Mark read error:', error);
+      res.status(500).json({ error: 'Failed to mark as read' });
+    }
+  });
+  
+  // Twilio webhook for incoming SMS
+  app.post('/api/webhooks/twilio/sms', async (req: Request, res: Response) => {
+    try {
+      const { From, To, Body, MessageSid } = req.body;
+      
+      if (!From || !Body) {
+        return res.status(400).send('Missing required fields');
+      }
+      
+      await handleIncomingSms(From, To || '', Body, MessageSid || '');
+      
+      // Return TwiML response (empty to not send a reply)
+      res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+    } catch (error) {
+      console.error('Twilio webhook error:', error);
+      res.status(500).send('Webhook processing failed');
     }
   });
 

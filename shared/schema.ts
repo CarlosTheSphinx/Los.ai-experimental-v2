@@ -1094,3 +1094,82 @@ export const digestState = pgTable("digest_state", {
 export const insertDigestStateSchema = createInsertSchema(digestState).omit({ id: true, updatedAt: true });
 export type DigestState = typeof digestState.$inferSelect;
 export type InsertDigestState = z.infer<typeof insertDigestStateSchema>;
+
+// ==================== PARTNER BROADCASTS ====================
+
+// Partner broadcasts - stores mass communications sent to all partners
+export const partnerBroadcasts = pgTable("partner_broadcasts", {
+  id: serial("id").primaryKey(),
+  sentBy: integer("sent_by").references(() => users.id, { onDelete: 'set null' }),
+  subject: varchar("subject", { length: 255 }).notNull(),
+  emailBody: text("email_body").notNull(),
+  smsBody: text("sms_body"),
+  sendEmail: boolean("send_email").default(true).notNull(),
+  sendSms: boolean("send_sms").default(false).notNull(),
+  recipientCount: integer("recipient_count").default(0).notNull(),
+  emailsSent: integer("emails_sent").default(0).notNull(),
+  smsSent: integer("sms_sent").default(0).notNull(),
+  emailsFailed: integer("emails_failed").default(0).notNull(),
+  smsFailed: integer("sms_failed").default(0).notNull(),
+  status: varchar("status", { length: 50 }).default("pending").notNull(), // pending, sending, completed, failed
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertPartnerBroadcastSchema = createInsertSchema(partnerBroadcasts).omit({ 
+  id: true, 
+  createdAt: true, 
+  completedAt: true,
+  emailsSent: true,
+  smsSent: true,
+  emailsFailed: true,
+  smsFailed: true,
+  recipientCount: true,
+  status: true
+});
+export type PartnerBroadcast = typeof partnerBroadcasts.$inferSelect;
+export type InsertPartnerBroadcast = z.infer<typeof insertPartnerBroadcastSchema>;
+
+// Partner broadcast recipients - individual delivery tracking
+export const partnerBroadcastRecipients = pgTable("partner_broadcast_recipients", {
+  id: serial("id").primaryKey(),
+  broadcastId: integer("broadcast_id").references(() => partnerBroadcasts.id, { onDelete: 'cascade' }).notNull(),
+  partnerId: integer("partner_id").references(() => partners.id, { onDelete: 'set null' }),
+  partnerName: varchar("partner_name", { length: 255 }),
+  email: varchar("email", { length: 255 }),
+  phone: varchar("phone", { length: 50 }),
+  emailStatus: varchar("email_status", { length: 50 }).default("pending"), // pending, sent, failed
+  smsStatus: varchar("sms_status", { length: 50 }).default("pending"), // pending, sent, failed
+  emailError: text("email_error"),
+  smsError: text("sms_error"),
+  personalizedEmailBody: text("personalized_email_body"),
+  personalizedSmsBody: text("personalized_sms_body"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertPartnerBroadcastRecipientSchema = createInsertSchema(partnerBroadcastRecipients).omit({ 
+  id: true, 
+  createdAt: true 
+});
+export type PartnerBroadcastRecipient = typeof partnerBroadcastRecipients.$inferSelect;
+export type InsertPartnerBroadcastRecipient = z.infer<typeof insertPartnerBroadcastRecipientSchema>;
+
+// Inbound SMS messages - stores replies from partners
+export const inboundSmsMessages = pgTable("inbound_sms_messages", {
+  id: serial("id").primaryKey(),
+  fromPhone: varchar("from_phone", { length: 50 }).notNull(),
+  toPhone: varchar("to_phone", { length: 50 }).notNull(),
+  body: text("body").notNull(),
+  twilioMessageSid: varchar("twilio_message_sid", { length: 255 }),
+  partnerId: integer("partner_id").references(() => partners.id, { onDelete: 'set null' }),
+  broadcastId: integer("broadcast_id").references(() => partnerBroadcasts.id, { onDelete: 'set null' }),
+  isRead: boolean("is_read").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertInboundSmsMessageSchema = createInsertSchema(inboundSmsMessages).omit({ 
+  id: true, 
+  createdAt: true 
+});
+export type InboundSmsMessage = typeof inboundSmsMessages.$inferSelect;
+export type InsertInboundSmsMessage = z.infer<typeof insertInboundSmsMessageSchema>;

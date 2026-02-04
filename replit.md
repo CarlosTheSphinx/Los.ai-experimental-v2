@@ -105,8 +105,19 @@ An automated notification system that sends periodic updates to borrowers and pa
 - The `loan_updates` table serves as an event ledger - admin actions (stage changes, task completions, document requests) are logged here and included in the next digest
 - Cron endpoint: POST `/api/cron/digests` (requires X-Cron-Key header)
 
+**Partner Broadcast System:**
+A mass communication feature allowing admins to send personalized emails and SMS to all active partners at once. Key features:
+- **Broadcast composer**: Create messages with personalization placeholders ({{firstName}}, {{lastName}}, {{name}}, {{companyName}})
+- **Dual delivery**: Send via email (Resend) and/or SMS (Twilio) simultaneously
+- **Personalization**: Each message is customized with the partner's actual name and company
+- **Delivery tracking**: Track emails sent, SMS sent, and failures per broadcast
+- **Broadcast history**: View all past broadcasts with delivery statistics
+- **SMS Inbox**: Receive and view SMS replies from partners with unread count badge
+- **Twilio webhook**: Incoming SMS replies are captured at POST `/api/webhooks/twilio/sms`
+- Key tables: `partner_broadcasts`, `partner_broadcast_recipients`, `inbound_sms_messages`
+
 **Database Schema Highlights:**
-Key tables include `users`, `pricing_requests`, `saved_quotes`, `documents`, `signers`, `document_fields`, `audit_logs`, `projects`, `project_stages`, `project_tasks`, `project_activity`, `project_documents`, `project_webhooks`, `system_settings`, `admin_tasks`, `admin_activity`, `partners`, `loanPrograms`, `programDocumentTemplates`, `programTaskTemplates`, `message_threads`, `messages`, `message_reads`, `onboardingDocuments`, `userOnboardingProgress`, `loan_digest_configs`, `loan_digest_recipients`, `loan_updates`, `digest_history`, and `digest_state`. Foreign keys with CASCADE delete ensure data integrity and isolation.
+Key tables include `users`, `pricing_requests`, `saved_quotes`, `documents`, `signers`, `document_fields`, `audit_logs`, `projects`, `project_stages`, `project_tasks`, `project_activity`, `project_documents`, `project_webhooks`, `system_settings`, `admin_tasks`, `admin_activity`, `partners`, `loanPrograms`, `programDocumentTemplates`, `programTaskTemplates`, `message_threads`, `messages`, `message_reads`, `onboardingDocuments`, `userOnboardingProgress`, `loan_digest_configs`, `loan_digest_recipients`, `loan_updates`, `digest_history`, `digest_state`, `partner_broadcasts`, `partner_broadcast_recipients`, and `inbound_sms_messages`. Foreign keys with CASCADE delete ensure data integrity and isolation.
 
 ## External Dependencies
 
