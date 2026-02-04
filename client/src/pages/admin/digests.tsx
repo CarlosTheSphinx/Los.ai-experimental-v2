@@ -1,11 +1,14 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { 
   CalendarDays, 
   Mail, 
@@ -17,7 +20,13 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
-  AlertCircle
+  AlertCircle,
+  Send,
+  Edit3,
+  Check,
+  X,
+  Sparkles,
+  Ban
 } from "lucide-react";
 import { format, addDays, subDays } from "date-fns";
 import {
@@ -26,13 +35,30 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+
+interface Draft {
+  id: number;
+  status: string;
+  emailSubject: string | null;
+  emailBody: string | null;
+  smsBody: string | null;
+  documentsCount: number;
+  updatesCount: number;
+  approvedBy: number | null;
+  approvedAt: string | null;
+  sentAt: string | null;
+}
 
 interface ScheduledDigest {
   configId: number;
   projectId: number;
   projectName: string;
   borrowerName: string | null;
+  propertyAddress: string | null;
   frequency: string;
   timeOfDay: string;
   timezone: string;
@@ -50,6 +76,12 @@ interface ScheduledDigest {
     includeMessages: boolean;
     includeGeneralUpdates: boolean;
   };
+  defaultContent: {
+    emailSubject: string | null;
+    emailBody: string | null;
+    smsBody: string | null;
+  };
+  draft: Draft | null;
   sentDigests: Array<{
     id: number;
     recipientAddress: string;
@@ -68,8 +100,14 @@ interface DigestsResponse {
 }
 
 export default function AdminDigests() {
+  const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [detailDigest, setDetailDigest] = useState<ScheduledDigest | null>(null);
+  const [editingDigest, setEditingDigest] = useState<ScheduledDigest | null>(null);
+  const [editForm, setEditForm] = useState({
+    emailSubject: "",
+    emailBody: "",
+    smsBody: "",
+  });
 
   const dateStr = format(selectedDate, "yyyy-MM-dd");
 
@@ -86,42 +124,193 @@ export default function AdminDigests() {
     },
   });
 
+  const generateDraftsMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest('/api/admin/digests/generate-drafts', {
+        method: 'POST',
+        body: JSON.stringify({ date: dateStr }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+    onSuccess: (data: any) => {
+      toast({ title: "Drafts Generated", description: data.message });
+      refetch();
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to generate drafts", variant: "destructive" });
+    },
+  });
+
+  const updateDraftMutation = useMutation({
+    mutationFn: async ({ draftId, data }: { draftId: number; data: any }) => {
+      return apiRequest(`/api/admin/digests/drafts/${draftId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Draft Updated" });
+      setEditingDigest(null);
+      refetch();
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update draft", variant: "destructive" });
+    },
+  });
+
+  const approveDraftMutation = useMutation({
+    mutationFn: async (draftId: number) => {
+      return apiRequest(`/api/admin/digests/drafts/${draftId}/approve`, {
+        method: 'POST',
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Draft Approved", description: "Ready to send" });
+      refetch();
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to approve draft", variant: "destructive" });
+    },
+  });
+
+  const skipDraftMutation = useMutation({
+    mutationFn: async (draftId: number) => {
+      return apiRequest(`/api/admin/digests/drafts/${draftId}/skip`, {
+        method: 'POST',
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Draft Skipped" });
+      refetch();
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to skip draft", variant: "destructive" });
+    },
+  });
+
+  const sendDraftMutation = useMutation({
+    mutationFn: async (draftId: number) => {
+      return apiRequest(`/api/admin/digests/drafts/${draftId}/send`, {
+        method: 'POST',
+      });
+    },
+    onSuccess: (data: any) => {
+      toast({ title: "Digest Sent", description: data.message });
+      refetch();
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to send digest", variant: "destructive" });
+    },
+  });
+
   const digests = data?.digests || [];
 
-  const sentCount = useMemo(() => {
-    return digests.reduce((acc, d) => acc + d.sentDigests.length, 0);
+  const stats = useMemo(() => {
+    let drafts = 0, approved = 0, sent = 0, skipped = 0, noDraft = 0;
+    digests.forEach(d => {
+      if (!d.draft) noDraft++;
+      else if (d.draft.status === 'draft') drafts++;
+      else if (d.draft.status === 'approved') approved++;
+      else if (d.draft.status === 'sent') sent++;
+      else if (d.draft.status === 'skipped') skipped++;
+    });
+    return { drafts, approved, sent, skipped, noDraft, total: digests.length };
   }, [digests]);
-
-  const pendingCount = useMemo(() => {
-    const now = new Date();
-    return digests.filter(d => {
-      const [hours, minutes] = d.timeOfDay.split(':').map(Number);
-      const scheduledTime = new Date(selectedDate);
-      scheduledTime.setHours(hours, minutes, 0, 0);
-      return scheduledTime > now && d.sentDigests.length === 0;
-    }).length;
-  }, [digests, selectedDate]);
 
   const goToPreviousDay = () => setSelectedDate(prev => subDays(prev, 1));
   const goToNextDay = () => setSelectedDate(prev => addDays(prev, 1));
   const goToToday = () => setSelectedDate(new Date());
 
+  const openEditDialog = (digest: ScheduledDigest) => {
+    setEditingDigest(digest);
+    setEditForm({
+      emailSubject: digest.draft?.emailSubject || digest.defaultContent.emailSubject || "",
+      emailBody: digest.draft?.emailBody || digest.defaultContent.emailBody || "",
+      smsBody: digest.draft?.smsBody || digest.defaultContent.smsBody || "",
+    });
+  };
+
+  const handleSaveEdit = () => {
+    if (editingDigest?.draft) {
+      updateDraftMutation.mutate({
+        draftId: editingDigest.draft.id,
+        data: editForm,
+      });
+    }
+  };
+
+  const getStatusBadge = (digest: ScheduledDigest) => {
+    if (!digest.draft) {
+      return (
+        <Badge variant="outline" className="text-muted-foreground">
+          <AlertCircle className="h-3 w-3 mr-1" />
+          No Draft
+        </Badge>
+      );
+    }
+    switch (digest.draft.status) {
+      case 'draft':
+        return (
+          <Badge variant="secondary">
+            <Edit3 className="h-3 w-3 mr-1" />
+            Draft
+          </Badge>
+        );
+      case 'approved':
+        return (
+          <Badge className="bg-green-600">
+            <Check className="h-3 w-3 mr-1" />
+            Approved
+          </Badge>
+        );
+      case 'sent':
+        return (
+          <Badge variant="default">
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Sent
+          </Badge>
+        );
+      case 'skipped':
+        return (
+          <Badge variant="outline" className="text-muted-foreground">
+            <Ban className="h-3 w-3 mr-1" />
+            Skipped
+          </Badge>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
           <CalendarDays className="h-6 w-6 text-muted-foreground" />
           <h1 className="text-2xl font-semibold" data-testid="text-admin-digests-title">Daily Digests</h1>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => refetch()}
-          data-testid="button-refresh-digests"
-        >
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => generateDraftsMutation.mutate()}
+            disabled={generateDraftsMutation.isPending}
+            data-testid="button-generate-drafts"
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            {generateDraftsMutation.isPending ? "Generating..." : "Generate Drafts"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+            data-testid="button-refresh-digests"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
@@ -159,16 +348,30 @@ export default function AdminDigests() {
             <CardContent className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Total Scheduled</span>
-                <Badge variant="outline">{digests.length}</Badge>
+                <Badge variant="outline">{stats.total}</Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Drafts</span>
+                <Badge variant="secondary">{stats.drafts}</Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Approved</span>
+                <Badge className="bg-green-600">{stats.approved}</Badge>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Sent</span>
-                <Badge variant="default">{sentCount}</Badge>
+                <Badge variant="default">{stats.sent}</Badge>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Pending</span>
-                <Badge variant="secondary">{pendingCount}</Badge>
+                <span className="text-sm text-muted-foreground">Skipped</span>
+                <Badge variant="outline">{stats.skipped}</Badge>
               </div>
+              {stats.noDraft > 0 && (
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <span className="text-sm text-muted-foreground">Need Drafts</span>
+                  <Badge variant="outline" className="text-orange-600">{stats.noDraft}</Badge>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -182,7 +385,7 @@ export default function AdminDigests() {
             <CardDescription>
               {digests.length === 0 
                 ? "No digests scheduled for this day"
-                : `${digests.length} digest${digests.length === 1 ? '' : 's'} scheduled`
+                : `${digests.length} digest${digests.length === 1 ? '' : 's'} scheduled - Review and approve before sending`
               }
             </CardDescription>
           </CardHeader>
@@ -190,7 +393,7 @@ export default function AdminDigests() {
             {isLoading ? (
               <div className="space-y-4">
                 {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-24" />
+                  <Skeleton key={i} className="h-32" />
                 ))}
               </div>
             ) : digests.length === 0 ? (
@@ -200,100 +403,116 @@ export default function AdminDigests() {
                 <p className="text-sm mt-2">Digests are configured on individual project pages</p>
               </div>
             ) : (
-              <ScrollArea className="h-[500px] pr-4">
+              <ScrollArea className="h-[600px] pr-4">
                 <div className="space-y-4">
-                  {digests.map((digest) => {
-                    const hasSent = digest.sentDigests.length > 0;
-                    const allFailed = hasSent && digest.sentDigests.every(d => d.status === 'failed');
-                    const [hours, minutes] = digest.timeOfDay.split(':').map(Number);
-                    const scheduledTime = new Date(selectedDate);
-                    scheduledTime.setHours(hours, minutes, 0, 0);
-                    const isPending = scheduledTime > new Date() && !hasSent;
-
-                    return (
-                      <div
-                        key={digest.configId}
-                        className="border rounded-lg p-4 space-y-3 hover-elevate cursor-pointer"
-                        onClick={() => setDetailDigest(digest)}
-                        data-testid={`digest-card-${digest.configId}`}
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-medium truncate">{digest.projectName}</h3>
-                            {digest.borrowerName && (
-                              <p className="text-sm text-muted-foreground truncate">
-                                Borrower: {digest.borrowerName}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex flex-col items-end gap-1">
-                            {hasSent ? (
-                              allFailed ? (
-                                <Badge variant="destructive">
-                                  <XCircle className="h-3 w-3 mr-1" />
-                                  Failed
-                                </Badge>
-                              ) : (
-                                <Badge variant="default">
-                                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                                  Sent
-                                </Badge>
-                              )
-                            ) : isPending ? (
-                              <Badge variant="secondary">
-                                <Clock className="h-3 w-3 mr-1" />
-                                Pending
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline">
-                                <AlertCircle className="h-3 w-3 mr-1" />
-                                Not Sent
-                              </Badge>
-                            )}
-                          </div>
+                  {digests.map((digest) => (
+                    <div
+                      key={digest.configId}
+                      className="border rounded-lg p-4 space-y-3"
+                      data-testid={`digest-card-${digest.configId}`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-medium truncate">{digest.projectName}</h3>
+                          {digest.borrowerName && (
+                            <p className="text-sm text-muted-foreground truncate">
+                              Borrower: {digest.borrowerName}
+                            </p>
+                          )}
+                          {digest.propertyAddress && (
+                            <p className="text-sm text-muted-foreground truncate">
+                              {digest.propertyAddress}
+                            </p>
+                          )}
                         </div>
-
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-4 w-4" />
-                            {digest.timeOfDay} {digest.timezone.split('/')[1] || digest.timezone}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {digest.recipients.some(r => r.deliveryMethod === 'email' || r.deliveryMethod === 'both') && (
-                              <Mail className="h-4 w-4" />
-                            )}
-                            {digest.recipients.some(r => r.deliveryMethod === 'sms' || r.deliveryMethod === 'both') && (
-                              <Phone className="h-4 w-4" />
-                            )}
-                            <span>{digest.recipientCount} recipient{digest.recipientCount === 1 ? '' : 's'}</span>
-                          </div>
+                        <div className="flex flex-col items-end gap-1">
+                          {getStatusBadge(digest)}
                         </div>
+                      </div>
 
-                        {hasSent && (
-                          <div className="flex flex-wrap gap-2 pt-2 border-t">
-                            {digest.sentDigests.map((sent, idx) => (
-                              <Badge 
-                                key={idx} 
-                                variant={sent.status === 'sent' ? 'outline' : 'destructive'}
-                                className="text-xs"
-                              >
-                                {sent.deliveryMethod === 'email' ? <Mail className="h-3 w-3 mr-1" /> : <Phone className="h-3 w-3 mr-1" />}
-                                {sent.recipientAddress.length > 20 
-                                  ? sent.recipientAddress.substring(0, 20) + '...' 
-                                  : sent.recipientAddress
-                                }
-                                {sent.status === 'sent' ? (
-                                  <CheckCircle2 className="h-3 w-3 ml-1" />
-                                ) : (
-                                  <XCircle className="h-3 w-3 ml-1" />
-                                )}
-                              </Badge>
-                            ))}
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+                        <div className="flex items-center gap-1">
+                          <Clock className="h-4 w-4" />
+                          {digest.timeOfDay}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {digest.recipients.some(r => r.deliveryMethod === 'email' || r.deliveryMethod === 'both') && (
+                            <Mail className="h-4 w-4" />
+                          )}
+                          {digest.recipients.some(r => r.deliveryMethod === 'sms' || r.deliveryMethod === 'both') && (
+                            <Phone className="h-4 w-4" />
+                          )}
+                          <span>{digest.recipientCount} recipient{digest.recipientCount === 1 ? '' : 's'}</span>
+                        </div>
+                        {digest.draft && (
+                          <div className="flex items-center gap-1">
+                            <FileText className="h-4 w-4" />
+                            <span>{digest.draft.documentsCount} docs, {digest.draft.updatesCount} updates</span>
                           </div>
                         )}
                       </div>
-                    );
-                  })}
+
+                      {digest.draft && (
+                        <div className="flex flex-wrap gap-2 pt-2 border-t">
+                          {digest.draft.status === 'draft' && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openEditDialog(digest)}
+                                data-testid={`button-edit-draft-${digest.configId}`}
+                              >
+                                <Edit3 className="h-4 w-4 mr-1" />
+                                Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => approveDraftMutation.mutate(digest.draft!.id)}
+                                disabled={approveDraftMutation.isPending}
+                                data-testid={`button-approve-draft-${digest.configId}`}
+                              >
+                                <Check className="h-4 w-4 mr-1" />
+                                Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => skipDraftMutation.mutate(digest.draft!.id)}
+                                disabled={skipDraftMutation.isPending}
+                                data-testid={`button-skip-draft-${digest.configId}`}
+                              >
+                                <X className="h-4 w-4 mr-1" />
+                                Skip
+                              </Button>
+                            </>
+                          )}
+                          {digest.draft.status === 'approved' && (
+                            <Button
+                              size="sm"
+                              onClick={() => sendDraftMutation.mutate(digest.draft!.id)}
+                              disabled={sendDraftMutation.isPending}
+                              data-testid={`button-send-draft-${digest.configId}`}
+                            >
+                              <Send className="h-4 w-4 mr-1" />
+                              {sendDraftMutation.isPending ? "Sending..." : "Send Now"}
+                            </Button>
+                          )}
+                          {digest.draft.status === 'sent' && digest.draft.sentAt && (
+                            <span className="text-sm text-muted-foreground">
+                              Sent at {format(new Date(digest.draft.sentAt), "h:mm a")}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {!digest.draft && (
+                        <div className="flex items-center gap-2 pt-2 border-t text-sm text-muted-foreground">
+                          <AlertCircle className="h-4 w-4" />
+                          <span>Click "Generate Drafts" to create a draft for this digest</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </ScrollArea>
             )}
@@ -301,107 +520,82 @@ export default function AdminDigests() {
         </Card>
       </div>
 
-      <Dialog open={!!detailDigest} onOpenChange={() => setDetailDigest(null)}>
-        <DialogContent className="max-w-2xl">
+      <Dialog open={!!editingDigest} onOpenChange={() => setEditingDigest(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{detailDigest?.projectName}</DialogTitle>
+            <DialogTitle>Edit Digest Draft</DialogTitle>
             <DialogDescription>
-              Digest details for {format(selectedDate, "MMMM d, yyyy")}
+              {editingDigest?.projectName} - {format(selectedDate, "MMMM d, yyyy")}
             </DialogDescription>
           </DialogHeader>
           
-          {detailDigest && (
-            <div className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <h4 className="font-medium text-sm">Schedule</h4>
-                  <div className="text-sm text-muted-foreground space-y-1">
-                    <p>Time: {detailDigest.timeOfDay} ({detailDigest.timezone})</p>
-                    <p>Frequency: {detailDigest.frequency.replace('_', ' ')}</p>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <h4 className="font-medium text-sm">Content Settings</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {detailDigest.contentSettings.includeDocumentsNeeded && (
-                      <Badge variant="outline">Documents Needed</Badge>
-                    )}
-                    {detailDigest.contentSettings.includeGeneralUpdates && (
-                      <Badge variant="outline">General Updates</Badge>
-                    )}
-                    {detailDigest.contentSettings.includeNotes && (
-                      <Badge variant="outline">Notes</Badge>
-                    )}
-                    {detailDigest.contentSettings.includeMessages && (
-                      <Badge variant="outline">Messages</Badge>
-                    )}
-                  </div>
-                </div>
-              </div>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="emailSubject">Email Subject</Label>
+              <Input
+                id="emailSubject"
+                value={editForm.emailSubject}
+                onChange={(e) => setEditForm({ ...editForm, emailSubject: e.target.value })}
+                placeholder="Enter email subject..."
+                data-testid="input-draft-email-subject"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="emailBody">Email Body</Label>
+              <Textarea
+                id="emailBody"
+                value={editForm.emailBody}
+                onChange={(e) => setEditForm({ ...editForm, emailBody: e.target.value })}
+                placeholder="Enter email body..."
+                rows={10}
+                data-testid="input-draft-email-body"
+              />
+              <p className="text-xs text-muted-foreground">
+                Available placeholders: {"{{recipientName}}"}, {"{{documentsCount}}"}, {"{{propertyAddress}}"}
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="smsBody">SMS Message</Label>
+              <Textarea
+                id="smsBody"
+                value={editForm.smsBody}
+                onChange={(e) => setEditForm({ ...editForm, smsBody: e.target.value })}
+                placeholder="Enter SMS message..."
+                rows={3}
+                data-testid="input-draft-sms-body"
+              />
+            </div>
 
-              <div className="space-y-2">
-                <h4 className="font-medium text-sm">Recipients ({detailDigest.recipients.length})</h4>
-                <div className="border rounded-lg divide-y">
-                  {detailDigest.recipients.map((recipient) => (
-                    <div key={recipient.id} className="p-3 flex items-center justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">{recipient.name || 'Unnamed recipient'}</p>
-                        <p className="text-sm text-muted-foreground truncate">
-                          {recipient.email || recipient.phone || 'No contact info'}
-                        </p>
-                      </div>
-                      <Badge variant="outline">
-                        {recipient.deliveryMethod === 'both' ? (
-                          <><Mail className="h-3 w-3 mr-1" /><Phone className="h-3 w-3" /></>
-                        ) : recipient.deliveryMethod === 'email' ? (
-                          <><Mail className="h-3 w-3 mr-1" />Email</>
-                        ) : (
-                          <><Phone className="h-3 w-3 mr-1" />SMS</>
-                        )}
-                      </Badge>
+            {editingDigest && (
+              <div className="border rounded-lg p-3 bg-muted/50">
+                <h4 className="font-medium text-sm mb-2">Recipients ({editingDigest.recipients.length})</h4>
+                <div className="space-y-1">
+                  {editingDigest.recipients.map((r) => (
+                    <div key={r.id} className="text-sm flex items-center gap-2">
+                      {r.deliveryMethod === 'email' || r.deliveryMethod === 'both' ? <Mail className="h-3 w-3" /> : null}
+                      {r.deliveryMethod === 'sms' || r.deliveryMethod === 'both' ? <Phone className="h-3 w-3" /> : null}
+                      <span>{r.name || 'Unknown'}</span>
+                      <span className="text-muted-foreground">({r.email || r.phone})</span>
                     </div>
                   ))}
                 </div>
               </div>
-
-              {detailDigest.sentDigests.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="font-medium text-sm">Delivery History</h4>
-                  <div className="border rounded-lg divide-y">
-                    {detailDigest.sentDigests.map((sent, idx) => (
-                      <div key={idx} className="p-3 space-y-2">
-                        <div className="flex items-center justify-between gap-4">
-                          <div className="flex items-center gap-2">
-                            {sent.deliveryMethod === 'email' ? (
-                              <Mail className="h-4 w-4" />
-                            ) : (
-                              <Phone className="h-4 w-4" />
-                            )}
-                            <span className="font-medium">{sent.recipientAddress}</span>
-                          </div>
-                          <Badge variant={sent.status === 'sent' ? 'default' : 'destructive'}>
-                            {sent.status === 'sent' ? (
-                              <><CheckCircle2 className="h-3 w-3 mr-1" />Sent</>
-                            ) : (
-                              <><XCircle className="h-3 w-3 mr-1" />Failed</>
-                            )}
-                          </Badge>
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          <p>Sent at: {format(new Date(sent.sentAt), "h:mm a")}</p>
-                          <p>Content: {sent.documentsCount} documents, {sent.updatesCount} updates</p>
-                          {sent.errorMessage && (
-                            <p className="text-destructive">Error: {sent.errorMessage}</p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingDigest(null)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSaveEdit}
+              disabled={updateDraftMutation.isPending}
+            >
+              {updateDraftMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -31,7 +31,7 @@ import {
   getOutstandingDocuments, 
   getRecentUpdates 
 } from './digestService';
-import { loanDigestConfigs, loanDigestRecipients, loanUpdates, digestHistory, digestState, partnerBroadcasts, partnerBroadcastRecipients, inboundSmsMessages } from '@shared/schema';
+import { loanDigestConfigs, loanDigestRecipients, loanUpdates, digestHistory, digestState, partnerBroadcasts, partnerBroadcastRecipients, inboundSmsMessages, scheduledDigestDrafts } from '@shared/schema';
 import { sendPartnerBroadcast, handleIncomingSms, getInboundMessages, markMessageRead, getBroadcastHistory } from './broadcastService';
 import { registerObjectStorageRoutes, ObjectStorageService } from './replit_integrations/object_storage';
 
@@ -6395,6 +6395,10 @@ export async function registerRoutes(
     try {
       const dateStr = req.query.date as string || format(new Date(), 'yyyy-MM-dd');
       const targetDate = new Date(dateStr + 'T00:00:00');
+      const startOfTargetDay = new Date(targetDate);
+      startOfTargetDay.setHours(0, 0, 0, 0);
+      const endOfTargetDay = new Date(targetDate);
+      endOfTargetDay.setHours(23, 59, 59, 999);
       
       // Get all enabled digest configs with their projects and recipients
       const configs = await db.select({
@@ -6408,17 +6412,51 @@ export async function registerRoutes(
         includeNotes: loanDigestConfigs.includeNotes,
         includeMessages: loanDigestConfigs.includeMessages,
         includeGeneralUpdates: loanDigestConfigs.includeGeneralUpdates,
+        emailSubject: loanDigestConfigs.emailSubject,
+        emailBody: loanDigestConfigs.emailBody,
+        smsBody: loanDigestConfigs.smsBody,
         isEnabled: loanDigestConfigs.isEnabled,
+        createdAt: loanDigestConfigs.createdAt,
         projectName: projects.projectName,
         borrowerName: savedQuotes.customerFirstName,
+        propertyAddress: savedQuotes.propertyAddress,
       })
         .from(loanDigestConfigs)
         .innerJoin(projects, eq(loanDigestConfigs.projectId, projects.id))
         .leftJoin(savedQuotes, eq(projects.quoteId, savedQuotes.id))
         .where(eq(loanDigestConfigs.isEnabled, true));
       
-      // For each config, get recipients and sent history for the target date
-      const digestsWithDetails = await Promise.all(configs.map(async (config) => {
+      // Helper: check if a digest is scheduled for a given date based on frequency
+      const isScheduledForDate = (config: typeof configs[0], date: Date): boolean => {
+        const configCreatedDate = new Date(config.createdAt);
+        configCreatedDate.setHours(0, 0, 0, 0);
+        const targetDateNormalized = new Date(date);
+        targetDateNormalized.setHours(0, 0, 0, 0);
+        
+        // Calculate days since config was created
+        const daysSinceCreated = Math.floor((targetDateNormalized.getTime() - configCreatedDate.getTime()) / (1000 * 60 * 60 * 24));
+        
+        if (daysSinceCreated < 0) return false; // Target date is before config was created
+        
+        let interval = 1;
+        switch (config.frequency) {
+          case 'daily': interval = 1; break;
+          case 'every_2_days': interval = 2; break;
+          case 'every_3_days': interval = 3; break;
+          case 'weekly': interval = 7; break;
+          case 'custom': interval = Math.max(1, Math.min(30, config.customDays || 2)); break;
+          default: interval = 1;
+        }
+        
+        // Check if this date falls on a scheduled interval
+        return daysSinceCreated % interval === 0;
+      };
+      
+      // Filter configs that are scheduled for the target date
+      const scheduledConfigs = configs.filter(c => isScheduledForDate(c, targetDate));
+      
+      // For each config, get recipients, drafts, and sent history for the target date
+      const digestsWithDetails = await Promise.all(scheduledConfigs.map(async (config) => {
         // Get recipients
         const recipients = await db.select({
           id: loanDigestRecipients.id,
@@ -6438,28 +6476,41 @@ export async function registerRoutes(
         // Get user names for linked recipients
         const recipientsWithNames = await Promise.all(recipients.map(async (r) => {
           let name = r.recipientName;
-          if (r.userId && !name) {
-            const user = await db.select({ fullName: users.fullName })
+          let email = r.recipientEmail;
+          let phone = r.recipientPhone;
+          if (r.userId) {
+            const user = await db.select({ fullName: users.fullName, email: users.email, phone: users.phone })
               .from(users)
               .where(eq(users.id, r.userId))
               .limit(1);
-            name = user[0]?.fullName || null;
+            if (user[0]) {
+              name = name || user[0].fullName || null;
+              email = email || user[0].email || null;
+              phone = phone || user[0].phone || null;
+            }
           }
           return {
             id: r.id,
             name,
-            email: r.recipientEmail,
-            phone: r.recipientPhone,
+            email,
+            phone,
             deliveryMethod: r.deliveryMethod,
           };
         }));
         
-        // Get sent digests for this date
-        const startOfTargetDay = new Date(targetDate);
-        startOfTargetDay.setHours(0, 0, 0, 0);
-        const endOfTargetDay = new Date(targetDate);
-        endOfTargetDay.setHours(23, 59, 59, 999);
+        // Check if a draft exists for this config on this date
+        const existingDrafts = await db.select()
+          .from(scheduledDigestDrafts)
+          .where(and(
+            eq(scheduledDigestDrafts.configId, config.id),
+            gte(scheduledDigestDrafts.scheduledDate, startOfTargetDay),
+            lte(scheduledDigestDrafts.scheduledDate, endOfTargetDay)
+          ))
+          .limit(1);
         
+        const draft = existingDrafts[0] || null;
+        
+        // Get sent digests for this date
         const sentDigests = await db.select({
           id: digestHistory.id,
           recipientAddress: digestHistory.recipientAddress,
@@ -6483,6 +6534,7 @@ export async function registerRoutes(
           projectId: config.projectId,
           projectName: config.projectName || `Project #${config.projectId}`,
           borrowerName: config.borrowerName,
+          propertyAddress: config.propertyAddress,
           frequency: config.frequency,
           timeOfDay: config.timeOfDay,
           timezone: config.timezone,
@@ -6494,6 +6546,23 @@ export async function registerRoutes(
             includeMessages: config.includeMessages,
             includeGeneralUpdates: config.includeGeneralUpdates,
           },
+          defaultContent: {
+            emailSubject: config.emailSubject,
+            emailBody: config.emailBody,
+            smsBody: config.smsBody,
+          },
+          draft: draft ? {
+            id: draft.id,
+            status: draft.status,
+            emailSubject: draft.emailSubject,
+            emailBody: draft.emailBody,
+            smsBody: draft.smsBody,
+            documentsCount: draft.documentsCount,
+            updatesCount: draft.updatesCount,
+            approvedBy: draft.approvedBy,
+            approvedAt: draft.approvedAt?.toISOString() || null,
+            sentAt: draft.sentAt?.toISOString() || null,
+          } : null,
           sentDigests: sentDigests.map(s => ({
             ...s,
             sentAt: s.sentAt?.toISOString() || new Date().toISOString(),
@@ -6501,8 +6570,7 @@ export async function registerRoutes(
         };
       }));
       
-      // Filter to only show digests scheduled for this day based on frequency
-      // For now, show all enabled digests - frequency filtering would require tracking state
+      // Filter to only show digests with recipients
       const filteredDigests = digestsWithDetails.filter(d => d.recipientCount > 0);
       
       // Sort by time of day
@@ -6518,6 +6586,327 @@ export async function registerRoutes(
     }
   });
 
+  // Admin - Generate drafts for a specific date
+  app.post('/api/admin/digests/generate-drafts', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { date } = req.body;
+      const dateStr = date || format(new Date(), 'yyyy-MM-dd');
+      const targetDate = new Date(dateStr + 'T12:00:00'); // noon to avoid timezone issues
+      const startOfTargetDay = new Date(targetDate);
+      startOfTargetDay.setHours(0, 0, 0, 0);
+      const endOfTargetDay = new Date(targetDate);
+      endOfTargetDay.setHours(23, 59, 59, 999);
+      
+      // Get all enabled digest configs
+      const configs = await db.select({
+        id: loanDigestConfigs.id,
+        projectId: loanDigestConfigs.projectId,
+        frequency: loanDigestConfigs.frequency,
+        customDays: loanDigestConfigs.customDays,
+        timeOfDay: loanDigestConfigs.timeOfDay,
+        emailSubject: loanDigestConfigs.emailSubject,
+        emailBody: loanDigestConfigs.emailBody,
+        smsBody: loanDigestConfigs.smsBody,
+        createdAt: loanDigestConfigs.createdAt,
+      })
+        .from(loanDigestConfigs)
+        .innerJoin(projects, eq(loanDigestConfigs.projectId, projects.id))
+        .where(and(
+          eq(loanDigestConfigs.isEnabled, true),
+          eq(projects.status, 'active')
+        ));
+      
+      // Helper: check if scheduled
+      const isScheduledForDate = (config: typeof configs[0], date: Date): boolean => {
+        const configCreatedDate = new Date(config.createdAt);
+        configCreatedDate.setHours(0, 0, 0, 0);
+        const targetDateNormalized = new Date(date);
+        targetDateNormalized.setHours(0, 0, 0, 0);
+        const daysSinceCreated = Math.floor((targetDateNormalized.getTime() - configCreatedDate.getTime()) / (1000 * 60 * 60 * 24));
+        if (daysSinceCreated < 0) return false;
+        let interval = 1;
+        switch (config.frequency) {
+          case 'daily': interval = 1; break;
+          case 'every_2_days': interval = 2; break;
+          case 'every_3_days': interval = 3; break;
+          case 'weekly': interval = 7; break;
+          case 'custom': interval = Math.max(1, Math.min(30, config.customDays || 2)); break;
+          default: interval = 1;
+        }
+        return daysSinceCreated % interval === 0;
+      };
+      
+      const scheduledConfigs = configs.filter(c => isScheduledForDate(c, targetDate));
+      let draftsCreated = 0;
+      
+      for (const config of scheduledConfigs) {
+        // Check if draft already exists
+        const existingDraft = await db.select()
+          .from(scheduledDigestDrafts)
+          .where(and(
+            eq(scheduledDigestDrafts.configId, config.id),
+            gte(scheduledDigestDrafts.scheduledDate, startOfTargetDay),
+            lte(scheduledDigestDrafts.scheduledDate, endOfTargetDay)
+          ))
+          .limit(1);
+        
+        if (existingDraft.length > 0) continue; // Already exists
+        
+        // Get recipients for snapshot
+        const recipients = await db.select({
+          id: loanDigestRecipients.id,
+          recipientName: loanDigestRecipients.recipientName,
+          recipientEmail: loanDigestRecipients.recipientEmail,
+          recipientPhone: loanDigestRecipients.recipientPhone,
+          deliveryMethod: loanDigestRecipients.deliveryMethod,
+          userId: loanDigestRecipients.userId,
+        })
+          .from(loanDigestRecipients)
+          .where(and(
+            eq(loanDigestRecipients.configId, config.id),
+            eq(loanDigestRecipients.isActive, true)
+          ));
+        
+        if (recipients.length === 0) continue;
+        
+        // Get content counts
+        const outstandingDocs = await getOutstandingDocuments(config.projectId!);
+        const recentUpdates = await getRecentUpdates(config.projectId!);
+        
+        // Create draft
+        await db.insert(scheduledDigestDrafts).values({
+          configId: config.id,
+          projectId: config.projectId!,
+          scheduledDate: targetDate,
+          timeOfDay: config.timeOfDay,
+          emailSubject: config.emailSubject,
+          emailBody: config.emailBody,
+          smsBody: config.smsBody,
+          documentsCount: outstandingDocs.length,
+          updatesCount: recentUpdates.length,
+          recipients: JSON.stringify(recipients),
+          status: 'draft',
+        });
+        
+        draftsCreated++;
+      }
+      
+      res.json({ 
+        success: true, 
+        draftsCreated,
+        message: `Generated ${draftsCreated} draft(s) for ${dateStr}`
+      });
+    } catch (error) {
+      console.error('Error generating drafts:', error);
+      res.status(500).json({ error: 'Failed to generate drafts' });
+    }
+  });
+
+  // Admin - Update a draft
+  app.put('/api/admin/digests/drafts/:draftId', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const draftId = parseInt(req.params.draftId);
+      const { emailSubject, emailBody, smsBody } = req.body;
+      
+      const [updated] = await db.update(scheduledDigestDrafts)
+        .set({
+          emailSubject,
+          emailBody,
+          smsBody,
+          updatedAt: new Date(),
+        })
+        .where(eq(scheduledDigestDrafts.id, draftId))
+        .returning();
+      
+      if (!updated) {
+        return res.status(404).json({ error: 'Draft not found' });
+      }
+      
+      res.json({ success: true, draft: updated });
+    } catch (error) {
+      console.error('Error updating draft:', error);
+      res.status(500).json({ error: 'Failed to update draft' });
+    }
+  });
+
+  // Admin - Approve a draft
+  app.post('/api/admin/digests/drafts/:draftId/approve', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const draftId = parseInt(req.params.draftId);
+      
+      const [updated] = await db.update(scheduledDigestDrafts)
+        .set({
+          status: 'approved',
+          approvedBy: req.user!.id,
+          approvedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(scheduledDigestDrafts.id, draftId))
+        .returning();
+      
+      if (!updated) {
+        return res.status(404).json({ error: 'Draft not found' });
+      }
+      
+      res.json({ success: true, draft: updated });
+    } catch (error) {
+      console.error('Error approving draft:', error);
+      res.status(500).json({ error: 'Failed to approve draft' });
+    }
+  });
+
+  // Admin - Skip a draft (don't send)
+  app.post('/api/admin/digests/drafts/:draftId/skip', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const draftId = parseInt(req.params.draftId);
+      
+      const [updated] = await db.update(scheduledDigestDrafts)
+        .set({
+          status: 'skipped',
+          updatedAt: new Date(),
+        })
+        .where(eq(scheduledDigestDrafts.id, draftId))
+        .returning();
+      
+      if (!updated) {
+        return res.status(404).json({ error: 'Draft not found' });
+      }
+      
+      res.json({ success: true, draft: updated });
+    } catch (error) {
+      console.error('Error skipping draft:', error);
+      res.status(500).json({ error: 'Failed to skip draft' });
+    }
+  });
+
+  // Admin - Send an approved draft now
+  app.post('/api/admin/digests/drafts/:draftId/send', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const draftId = parseInt(req.params.draftId);
+      
+      // Get the draft
+      const [draft] = await db.select()
+        .from(scheduledDigestDrafts)
+        .where(eq(scheduledDigestDrafts.id, draftId))
+        .limit(1);
+      
+      if (!draft) {
+        return res.status(404).json({ error: 'Draft not found' });
+      }
+      
+      if (draft.status !== 'approved') {
+        return res.status(400).json({ error: 'Draft must be approved before sending' });
+      }
+      
+      // Get project info
+      const [project] = await db.select()
+        .from(projects)
+        .where(eq(projects.id, draft.projectId))
+        .limit(1);
+      
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+      
+      // Parse recipients
+      const recipients = JSON.parse(draft.recipients as string || '[]');
+      let emailsSent = 0;
+      let smsSent = 0;
+      
+      // Send to each recipient
+      for (const recipient of recipients) {
+        const recipientName = recipient.recipientName || 'Borrower';
+        const email = recipient.recipientEmail;
+        const phone = recipient.recipientPhone;
+        
+        // Replace placeholders in content
+        const emailSubject = (draft.emailSubject || 'Loan Update').replace(/\{\{recipientName\}\}/g, recipientName);
+        const emailBody = (draft.emailBody || '')
+          .replace(/\{\{recipientName\}\}/g, recipientName)
+          .replace(/\{\{documentsCount\}\}/g, String(draft.documentsCount));
+        const smsBody = (draft.smsBody || '')
+          .replace(/\{\{recipientName\}\}/g, recipientName)
+          .replace(/\{\{documentsCount\}\}/g, String(draft.documentsCount));
+        
+        // Send email
+        if (email && (recipient.deliveryMethod === 'email' || recipient.deliveryMethod === 'both')) {
+          try {
+            const { Resend } = await import('resend');
+            const resend = new Resend(process.env.RESEND_API_KEY);
+            await resend.emails.send({
+              from: 'Sphinx Capital <no-reply@sphinxcap.com>',
+              to: email,
+              subject: emailSubject,
+              html: emailBody.replace(/\n/g, '<br>'),
+            });
+            emailsSent++;
+            
+            // Log to history
+            await db.insert(digestHistory).values({
+              configId: draft.configId,
+              recipientId: recipient.id,
+              projectId: draft.projectId,
+              deliveryMethod: 'email',
+              recipientAddress: email,
+              documentsCount: draft.documentsCount,
+              updatesCount: draft.updatesCount,
+              status: 'sent',
+            });
+          } catch (err) {
+            console.error('Email send error:', err);
+          }
+        }
+        
+        // Send SMS
+        if (phone && (recipient.deliveryMethod === 'sms' || recipient.deliveryMethod === 'both')) {
+          try {
+            const twilio = await import('twilio');
+            const client = twilio.default(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+            await client.messages.create({
+              body: smsBody,
+              from: process.env.TWILIO_PHONE_NUMBER,
+              to: phone,
+            });
+            smsSent++;
+            
+            // Log to history
+            await db.insert(digestHistory).values({
+              configId: draft.configId,
+              recipientId: recipient.id,
+              projectId: draft.projectId,
+              deliveryMethod: 'sms',
+              recipientAddress: phone,
+              documentsCount: draft.documentsCount,
+              updatesCount: draft.updatesCount,
+              status: 'sent',
+            });
+          } catch (err) {
+            console.error('SMS send error:', err);
+          }
+        }
+      }
+      
+      // Mark draft as sent
+      await db.update(scheduledDigestDrafts)
+        .set({
+          status: 'sent',
+          sentAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(scheduledDigestDrafts.id, draftId));
+      
+      res.json({ 
+        success: true, 
+        emailsSent, 
+        smsSent,
+        message: `Sent ${emailsSent} email(s) and ${smsSent} SMS message(s)`
+      });
+    } catch (error) {
+      console.error('Error sending draft:', error);
+      res.status(500).json({ error: 'Failed to send draft' });
+    }
+  });
+
   // Cron endpoint - runs digest job (should be called by external scheduler)
   app.post('/api/cron/digests', async (req: Request, res: Response) => {
     try {
@@ -6529,8 +6918,240 @@ export async function registerRoutes(
         return res.status(401).json({ error: 'Unauthorized' });
       }
       
-      const result = await runDigestJob();
-      res.json({ success: true, ...result });
+      // NEW: Only send approved drafts for today - no auto-sending
+      const today = new Date();
+      const startOfDay = new Date(today);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(today);
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      // STEP 1: Auto-generate drafts for today if they don't exist
+      // Get all enabled configs that are scheduled for today
+      const allConfigs = await db.select({
+        id: loanDigestConfigs.id,
+        projectId: loanDigestConfigs.projectId,
+        frequency: loanDigestConfigs.frequency,
+        customDays: loanDigestConfigs.customDays,
+        timeOfDay: loanDigestConfigs.timeOfDay,
+        emailSubject: loanDigestConfigs.emailSubject,
+        emailBody: loanDigestConfigs.emailBody,
+        smsBody: loanDigestConfigs.smsBody,
+        createdAt: loanDigestConfigs.createdAt,
+      })
+        .from(loanDigestConfigs)
+        .innerJoin(projects, eq(loanDigestConfigs.projectId, projects.id))
+        .where(and(
+          eq(loanDigestConfigs.isEnabled, true),
+          eq(projects.status, 'active')
+        ));
+      
+      // Helper: check if scheduled for today
+      const isScheduledForToday = (config: typeof allConfigs[0]): boolean => {
+        const configCreatedDate = new Date(config.createdAt);
+        configCreatedDate.setHours(0, 0, 0, 0);
+        const todayNormalized = new Date(today);
+        todayNormalized.setHours(0, 0, 0, 0);
+        const daysSinceCreated = Math.floor((todayNormalized.getTime() - configCreatedDate.getTime()) / (1000 * 60 * 60 * 24));
+        if (daysSinceCreated < 0) return false;
+        let interval = 1;
+        switch (config.frequency) {
+          case 'daily': interval = 1; break;
+          case 'every_2_days': interval = 2; break;
+          case 'every_3_days': interval = 3; break;
+          case 'weekly': interval = 7; break;
+          case 'custom': interval = Math.max(1, Math.min(30, config.customDays || 2)); break;
+          default: interval = 1;
+        }
+        return daysSinceCreated % interval === 0;
+      };
+      
+      const scheduledConfigs = allConfigs.filter(isScheduledForToday);
+      let draftsGenerated = 0;
+      
+      for (const config of scheduledConfigs) {
+        // Check if draft already exists for today
+        const existingDraft = await db.select()
+          .from(scheduledDigestDrafts)
+          .where(and(
+            eq(scheduledDigestDrafts.configId, config.id),
+            gte(scheduledDigestDrafts.scheduledDate, startOfDay),
+            lte(scheduledDigestDrafts.scheduledDate, endOfDay)
+          ))
+          .limit(1);
+        
+        if (existingDraft.length > 0) continue;
+        
+        // Get recipients for snapshot
+        const recipients = await db.select({
+          id: loanDigestRecipients.id,
+          recipientName: loanDigestRecipients.recipientName,
+          recipientEmail: loanDigestRecipients.recipientEmail,
+          recipientPhone: loanDigestRecipients.recipientPhone,
+          deliveryMethod: loanDigestRecipients.deliveryMethod,
+          userId: loanDigestRecipients.userId,
+        })
+          .from(loanDigestRecipients)
+          .where(and(
+            eq(loanDigestRecipients.configId, config.id),
+            eq(loanDigestRecipients.isActive, true)
+          ));
+        
+        if (recipients.length === 0) continue;
+        
+        // Get content counts
+        const outstandingDocs = await getOutstandingDocuments(config.projectId!);
+        const recentUpdates = await getRecentUpdates(config.projectId!);
+        
+        // Create draft
+        await db.insert(scheduledDigestDrafts).values({
+          configId: config.id,
+          projectId: config.projectId!,
+          scheduledDate: today,
+          timeOfDay: config.timeOfDay,
+          emailSubject: config.emailSubject,
+          emailBody: config.emailBody,
+          smsBody: config.smsBody,
+          documentsCount: outstandingDocs.length,
+          updatesCount: recentUpdates.length,
+          recipients: JSON.stringify(recipients),
+          status: 'draft',
+        });
+        
+        draftsGenerated++;
+      }
+      
+      console.log(`Auto-generated ${draftsGenerated} draft(s) for today`);
+      
+      // STEP 2: Find approved drafts for today that haven't been sent
+      const approvedDrafts = await db.select()
+        .from(scheduledDigestDrafts)
+        .where(and(
+          eq(scheduledDigestDrafts.status, 'approved'),
+          gte(scheduledDigestDrafts.scheduledDate, startOfDay),
+          lte(scheduledDigestDrafts.scheduledDate, endOfDay)
+        ));
+      
+      let processed = 0;
+      let skipped = 0;
+      let errors: string[] = [];
+      const now = new Date();
+      
+      for (const draft of approvedDrafts) {
+        // Check if scheduled time has passed (only send at or after scheduled time)
+        const [hours, minutes] = draft.timeOfDay.split(':').map(Number);
+        const scheduledTime = new Date(today);
+        scheduledTime.setHours(hours || 9, minutes || 0, 0, 0);
+        
+        if (now < scheduledTime) {
+          skipped++; // Not yet time to send
+          continue;
+        }
+        try {
+          // Get project info
+          const [project] = await db.select()
+            .from(projects)
+            .where(eq(projects.id, draft.projectId))
+            .limit(1);
+          
+          if (!project) continue;
+          
+          // Parse recipients
+          const recipients = JSON.parse(draft.recipients as string || '[]');
+          
+          // Send to each recipient
+          for (const recipient of recipients) {
+            const recipientName = recipient.recipientName || 'Borrower';
+            const email = recipient.recipientEmail;
+            const phone = recipient.recipientPhone;
+            
+            // Replace placeholders in content
+            const emailSubject = (draft.emailSubject || 'Loan Update').replace(/\{\{recipientName\}\}/g, recipientName);
+            const emailBody = (draft.emailBody || '')
+              .replace(/\{\{recipientName\}\}/g, recipientName)
+              .replace(/\{\{documentsCount\}\}/g, String(draft.documentsCount));
+            const smsBody = (draft.smsBody || '')
+              .replace(/\{\{recipientName\}\}/g, recipientName)
+              .replace(/\{\{documentsCount\}\}/g, String(draft.documentsCount));
+            
+            // Send email
+            if (email && (recipient.deliveryMethod === 'email' || recipient.deliveryMethod === 'both')) {
+              try {
+                const { Resend } = await import('resend');
+                const resend = new Resend(process.env.RESEND_API_KEY);
+                await resend.emails.send({
+                  from: 'Sphinx Capital <no-reply@sphinxcap.com>',
+                  to: email,
+                  subject: emailSubject,
+                  html: emailBody.replace(/\n/g, '<br>'),
+                });
+                
+                // Log to history
+                await db.insert(digestHistory).values({
+                  configId: draft.configId,
+                  recipientId: recipient.id,
+                  projectId: draft.projectId,
+                  deliveryMethod: 'email',
+                  recipientAddress: email,
+                  documentsCount: draft.documentsCount,
+                  updatesCount: draft.updatesCount,
+                  status: 'sent',
+                });
+              } catch (err) {
+                console.error('Cron email error:', err);
+              }
+            }
+            
+            // Send SMS
+            if (phone && (recipient.deliveryMethod === 'sms' || recipient.deliveryMethod === 'both')) {
+              try {
+                const twilio = await import('twilio');
+                const client = twilio.default(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+                await client.messages.create({
+                  body: smsBody,
+                  from: process.env.TWILIO_PHONE_NUMBER,
+                  to: phone,
+                });
+                
+                // Log to history
+                await db.insert(digestHistory).values({
+                  configId: draft.configId,
+                  recipientId: recipient.id,
+                  projectId: draft.projectId,
+                  deliveryMethod: 'sms',
+                  recipientAddress: phone,
+                  documentsCount: draft.documentsCount,
+                  updatesCount: draft.updatesCount,
+                  status: 'sent',
+                });
+              } catch (err) {
+                console.error('Cron SMS error:', err);
+              }
+            }
+          }
+          
+          // Mark draft as sent
+          await db.update(scheduledDigestDrafts)
+            .set({
+              status: 'sent',
+              sentAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(eq(scheduledDigestDrafts.id, draft.id));
+          
+          processed++;
+        } catch (err: any) {
+          errors.push(`Draft ${draft.id}: ${err.message}`);
+        }
+      }
+      
+      res.json({ 
+        success: true, 
+        draftsGenerated,
+        processed,
+        skipped,
+        errors,
+        message: `Generated ${draftsGenerated} draft(s), sent ${processed} approved digest(s), ${skipped} scheduled for later` 
+      });
     } catch (error: any) {
       console.error('Cron digest error:', error);
       res.status(500).json({ error: error.message });
