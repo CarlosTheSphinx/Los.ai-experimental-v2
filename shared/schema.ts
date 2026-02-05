@@ -11,6 +11,7 @@ export const users = pgTable("users", {
   fullName: varchar("full_name", { length: 255 }),
   companyName: varchar("company_name", { length: 255 }),
   phone: varchar("phone", { length: 50 }),
+  title: varchar("title", { length: 255 }),
   role: varchar("role", { length: 50 }).default("user").notNull(), // user, admin, staff, super_admin
   userType: varchar("user_type", { length: 50 }).default("broker").notNull(), // broker, borrower
   createdAt: timestamp("created_at").defaultNow(),
@@ -1504,3 +1505,135 @@ export const fieldBindingKeys = [
 ] as const;
 
 export type FieldBindingKey = typeof fieldBindingKeys[number];
+
+// Team Permissions - role-based permission configuration
+export const teamPermissions = pgTable("team_permissions", {
+  id: serial("id").primaryKey(),
+  role: varchar("role", { length: 50 }).notNull(), // staff, admin
+  permissionKey: varchar("permission_key", { length: 100 }).notNull(),
+  enabled: boolean("enabled").default(false).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  updatedBy: integer("updated_by").references(() => users.id),
+});
+
+export const insertTeamPermissionSchema = createInsertSchema(teamPermissions).omit({
+  id: true,
+  updatedAt: true,
+});
+export type TeamPermission = typeof teamPermissions.$inferSelect;
+export type InsertTeamPermission = z.infer<typeof insertTeamPermissionSchema>;
+
+// All available permission keys for the team permission system
+export const PERMISSION_KEYS = [
+  "quotes.view",
+  "quotes.create",
+  "agreements.view",
+  "agreements.create",
+  "agreements.send_for_signing",
+  "projects.view",
+  "projects.create",
+  "projects.edit",
+  "pipeline.view",
+  "pipeline.manage",
+  "messages.view",
+  "messages.send",
+  "partners.view",
+  "partners.manage",
+  "partners.broadcast",
+  "users.view",
+  "users.manage",
+  "programs.view",
+  "programs.manage",
+  "settings.view",
+  "settings.manage",
+  "digests.view",
+  "digests.manage",
+  "onboarding.view",
+  "onboarding.manage",
+] as const;
+
+export type PermissionKey = typeof PERMISSION_KEYS[number];
+
+// Permission display metadata
+export const PERMISSION_CATEGORIES: Record<string, { label: string; permissions: { key: PermissionKey; label: string }[] }> = {
+  quotes: {
+    label: "Quotes",
+    permissions: [
+      { key: "quotes.view", label: "View quotes" },
+      { key: "quotes.create", label: "Create & edit quotes" },
+    ],
+  },
+  agreements: {
+    label: "Agreements",
+    permissions: [
+      { key: "agreements.view", label: "View agreements" },
+      { key: "agreements.create", label: "Create agreements" },
+      { key: "agreements.send_for_signing", label: "Send for signing" },
+    ],
+  },
+  projects: {
+    label: "Projects",
+    permissions: [
+      { key: "projects.view", label: "View projects" },
+      { key: "projects.create", label: "Create projects" },
+      { key: "projects.edit", label: "Edit projects" },
+    ],
+  },
+  pipeline: {
+    label: "Pipeline",
+    permissions: [
+      { key: "pipeline.view", label: "View pipeline" },
+      { key: "pipeline.manage", label: "Manage deals in pipeline" },
+    ],
+  },
+  messages: {
+    label: "Messages",
+    permissions: [
+      { key: "messages.view", label: "View messages" },
+      { key: "messages.send", label: "Send messages" },
+    ],
+  },
+  partners: {
+    label: "Partners",
+    permissions: [
+      { key: "partners.view", label: "View partners" },
+      { key: "partners.manage", label: "Manage partners" },
+      { key: "partners.broadcast", label: "Send broadcasts" },
+    ],
+  },
+  users: {
+    label: "Users",
+    permissions: [
+      { key: "users.view", label: "View users" },
+      { key: "users.manage", label: "Manage users" },
+    ],
+  },
+  programs: {
+    label: "Programs",
+    permissions: [
+      { key: "programs.view", label: "View programs" },
+      { key: "programs.manage", label: "Manage programs" },
+    ],
+  },
+  settings: {
+    label: "Settings",
+    permissions: [
+      { key: "settings.view", label: "View settings" },
+      { key: "settings.manage", label: "Manage settings" },
+    ],
+  },
+  digests: {
+    label: "Loan Digests",
+    permissions: [
+      { key: "digests.view", label: "View digests" },
+      { key: "digests.manage", label: "Manage digests" },
+    ],
+  },
+  onboarding: {
+    label: "Onboarding",
+    permissions: [
+      { key: "onboarding.view", label: "View onboarding" },
+      { key: "onboarding.manage", label: "Manage onboarding" },
+    ],
+  },
+};
