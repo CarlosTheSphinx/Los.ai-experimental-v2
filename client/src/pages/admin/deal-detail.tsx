@@ -28,6 +28,7 @@ import {
   ArrowLeft,
   DollarSign,
   Building,
+  Building2,
   User,
   Calendar,
   CalendarDays,
@@ -49,7 +50,19 @@ import {
   Plus,
   Circle,
   CheckCircle2,
+  Copy,
+  MoreHorizontal,
+  Send,
+  ExternalLink,
+  Activity,
+  MapPin,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -132,6 +145,62 @@ interface TeamMember {
 interface DealDetailResponse {
   deal: Deal;
   documents: DealDocument[];
+}
+
+interface ProjectTask {
+  id: number;
+  taskTitle: string;
+  taskType: string;
+  priority: string;
+  status: string;
+  completedAt: string | null;
+  completedBy: string | null;
+  visibleToBorrower: boolean;
+  borrowerActionRequired: boolean;
+}
+
+interface ProjectStage {
+  id: number;
+  stageName: string;
+  stageKey: string;
+  stageOrder: number;
+  stageDescription: string;
+  status: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  tasks: ProjectTask[];
+}
+
+interface ProjectActivityItem {
+  id: number;
+  activityType: string;
+  activityDescription: string;
+  createdAt: string;
+  visibleToBorrower: boolean;
+}
+
+interface ProjectDetailResponse {
+  project: {
+    id: number;
+    projectNumber: string;
+    projectName: string;
+    status: string;
+    currentStage: string;
+    progressPercentage: number;
+    borrowerName: string;
+    borrowerEmail: string;
+    borrowerPhone: string | null;
+    loanAmount: number | null;
+    interestRate: number | null;
+    loanTermMonths: number | null;
+    loanType: string | null;
+    propertyAddress: string | null;
+    propertyType: string | null;
+    borrowerPortalToken: string | null;
+  };
+  stages: ProjectStage[];
+  tasks: ProjectTask[];
+  activity: ProjectActivityItem[];
 }
 
 interface DealStage {
@@ -328,11 +397,21 @@ export default function AdminDealDetail() {
     enabled: !!dealId,
   });
 
+  const linkedProjectId = linkedProjectData?.project?.id;
+
+  const { data: projectDetailData, isLoading: projectLoading } = useQuery<ProjectDetailResponse>({
+    queryKey: ['/api/admin/projects', linkedProjectId],
+    enabled: !!linkedProjectId,
+  });
+
   const { data: stagesData } = useQuery<{ stages: DealStage[] }>({
     queryKey: ['/api/admin/deal-stages'],
   });
   
   const stages = stagesData?.stages || [];
+  const projectStages = projectDetailData?.stages || [];
+  const projectActivity = projectDetailData?.activity || [];
+  const project = projectDetailData?.project;
 
   const updateDocumentStatus = useMutation({
     mutationFn: async ({ docId, status }: { docId: number; status: string }) => {
@@ -451,6 +530,54 @@ export default function AdminDealDetail() {
       toast({ title: "Task updated" });
     },
   });
+
+  const updateProjectTaskMutation = useMutation({
+    mutationFn: async ({ projectId, taskId, status }: { projectId: number; taskId: number; status: string }) => {
+      return apiRequest('PATCH', `/api/admin/projects/${projectId}/tasks/${taskId}`, { status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/projects', linkedProjectId] });
+      toast({ title: "Task updated" });
+    },
+  });
+
+  const copyBorrowerPortalLink = async () => {
+    if (!linkedProjectId) {
+      toast({ title: "No project linked", description: "Create a loan project first to generate a borrower portal link.", variant: "destructive" });
+      return;
+    }
+    try {
+      const res = await fetch(`/api/projects/${linkedProjectId}/borrower-link`, { credentials: 'include' });
+      const { borrowerLink } = await res.json();
+      await navigator.clipboard.writeText(borrowerLink);
+      toast({ title: "Borrower portal link copied" });
+    } catch (e) {
+      toast({ title: "Failed to copy link", variant: "destructive" });
+    }
+  };
+
+  const formatDateTime = (dateStr: string) => {
+    return new Date(dateStr).toLocaleString('en-US', { 
+      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' 
+    });
+  };
+
+  const getStageIcon = (status: string) => {
+    switch (status) {
+      case 'completed': return <CheckCircle2 className="h-5 w-5 text-green-500" />;
+      case 'in_progress': return <Clock className="h-5 w-5 text-blue-500" />;
+      default: return <Circle className="h-5 w-5 text-muted-foreground" />;
+    }
+  };
+
+  const getPriorityBadge = (priority: string) => {
+    switch (priority) {
+      case 'critical': return <Badge variant="destructive" className="text-xs">Critical</Badge>;
+      case 'high': return <Badge variant="secondary" className="bg-orange-100 text-orange-700 text-xs">High</Badge>;
+      case 'medium': return <Badge variant="secondary" className="text-xs">Medium</Badge>;
+      default: return null;
+    }
+  };
 
   const createDocumentMutation = useMutation({
     mutationFn: async (formData: typeof documentForm) => {
@@ -609,28 +736,28 @@ export default function AdminDealDetail() {
 
   const address = parseAddress(deal.propertyAddress);
   const borrowerName = `${deal.customerFirstName} ${deal.customerLastName}`;
-  const borrowerEmail = `${deal.customerFirstName.toLowerCase()}.${deal.customerLastName.toLowerCase()}@email.com`;
+  const borrowerEmail = deal.customerEmail || `${deal.customerFirstName.toLowerCase()}.${deal.customerLastName.toLowerCase()}@email.com`;
+  const progressPercentage = project?.progressPercentage || 0;
 
   return (
-    <div className="p-6 space-y-6">
-      <Link href="/admin/deals">
-        <Button variant="ghost" size="sm" className="text-muted-foreground" data-testid="button-back">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Dashboard
-        </Button>
-      </Link>
-
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold" data-testid="text-borrower-name">{borrowerName}</h1>
+    <div className="p-6 max-w-6xl mx-auto space-y-6">
+      {/* Header matching Loans page */}
+      <div className="flex items-center gap-4">
+        <Link href="/admin/deals">
+          <Button variant="ghost" size="icon" data-testid="button-back">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        </Link>
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground font-mono">DEAL-{deal.id}</span>
             <Select 
               value={deal.stage} 
               onValueChange={(value) => updateStageMutation.mutate(value)}
               disabled={updateStageMutation.isPending}
             >
               <SelectTrigger 
-                className={cn("w-[160px] text-sm font-medium", getStageColorFromStages(deal.stage, stages))}
+                className={cn("w-auto h-6 text-xs font-medium px-2", getStageColorFromStages(deal.stage, stages))}
                 data-testid="select-deal-stage"
               >
                 <SelectValue>{getStageLabelFromStages(deal.stage, stages)}</SelectValue>
@@ -644,38 +771,172 @@ export default function AdminDealDetail() {
               </SelectContent>
             </Select>
           </div>
-          <p className="text-muted-foreground flex items-center gap-1 mt-1" data-testid="text-property-address">
-            <Building className="h-4 w-4" />
-            {deal.propertyAddress}
-          </p>
+          <h1 className="text-xl font-semibold" data-testid="text-borrower-name">{borrowerName}</h1>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={openEditDialog} data-testid="button-edit-loan">
-            <Pencil className="h-4 w-4 mr-2" />
-            Edit Loan
+          <Button variant="outline" size="sm" onClick={copyBorrowerPortalLink} data-testid="button-copy-portal-link">
+            <Copy className="h-4 w-4 mr-2" />
+            Borrower Link
           </Button>
-          <Button onClick={handleContactBorrower} data-testid="button-contact-borrower">
-            <Mail className="h-4 w-4 mr-2" />
-            Contact Borrower
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" data-testid="button-more-actions">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={openEditDialog}>
+                <Pencil className="h-4 w-4 mr-2" />
+                Edit Loan Details
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleContactBorrower}>
+                <Mail className="h-4 w-4 mr-2" />
+                Contact Borrower
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <ExternalLink className="h-4 w-4 mr-2" />
+                View Borrower Portal
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
-      <Tabs defaultValue="overview" className="w-full" data-testid="tabs-deal-detail">
+      {/* Two-column top section: Loan Progress + Borrower */}
+      <div className="grid md:grid-cols-3 gap-6">
+        <Card className="md:col-span-2">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Loan Progress</CardTitle>
+              <span className="text-2xl font-bold">{progressPercentage}%</span>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Progress value={progressPercentage} className="h-3" />
+            
+            {projectStages.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {projectStages.map((stage, i) => (
+                  <div 
+                    key={stage.id} 
+                    className="flex items-center gap-1"
+                  >
+                    {getStageIcon(stage.status)}
+                    <span className={`text-xs ${stage.status === 'in_progress' ? 'font-medium text-blue-600' : stage.status === 'completed' ? 'text-green-600' : 'text-muted-foreground'}`}>
+                      {stage.stageName}
+                    </span>
+                    {i < projectStages.length - 1 && (
+                      <div className={`h-px w-4 ${stage.status === 'completed' ? 'bg-green-300' : 'bg-muted'}`} />
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                No loan project linked. Create a project to track stages.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <User className="h-4 w-4" />
+              Borrower
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div>
+              <span className="font-medium">{borrowerName}</span>
+            </div>
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Mail className="h-3.5 w-3.5" />
+              <span>{borrowerEmail}</span>
+            </div>
+            {deal.customerPhone && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Phone className="h-3.5 w-3.5" />
+                <span>{deal.customerPhone}</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 4-column metrics row */}
+      <div className="grid md:grid-cols-4 gap-4">
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-green-100 flex items-center justify-center">
+              <DollarSign className="h-5 w-5 text-green-600" />
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Loan Amount</div>
+              <div className="font-semibold" data-testid="text-loan-amount">{formatCurrency(deal.loanData?.loanAmount || 0)}</div>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
+              <span className="text-blue-600 font-semibold text-sm">%</span>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Interest Rate</div>
+              <div className="font-semibold" data-testid="text-interest-rate">{deal.interestRate || '—'}</div>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-purple-100 flex items-center justify-center">
+              <Calendar className="h-5 w-5 text-purple-600" />
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Term</div>
+              <div className="font-semibold" data-testid="text-loan-term">{deal.loanData?.loanTerm || '12 months'}</div>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-orange-100 flex items-center justify-center">
+              <Building2 className="h-5 w-5 text-orange-600" />
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Property</div>
+              <div className="font-semibold truncate" data-testid="text-property-type">{deal.loanData?.propertyType || '—'}</div>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Property Address card */}
+      {deal.propertyAddress && (
+        <Card className="p-4">
+          <div className="flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium">Property Address:</span>
+            <span className="text-sm text-muted-foreground" data-testid="text-property-address">{deal.propertyAddress}</span>
+          </div>
+        </Card>
+      )}
+
+      {/* Tabs matching Loans page: Tasks, Activity, Documents, Digests */}
+      <Tabs defaultValue="tasks" className="space-y-4" data-testid="tabs-deal-detail">
         <TabsList data-testid="tabs-list">
-          <TabsTrigger value="overview" className="flex items-center gap-2" data-testid="tab-overview">
-            <DollarSign className="h-4 w-4" />
-            Overview
+          <TabsTrigger value="tasks" className="flex items-center gap-2" data-testid="tab-tasks">
+            <CheckSquare className="h-4 w-4" />
+            Tasks
+          </TabsTrigger>
+          <TabsTrigger value="activity" className="flex items-center gap-2" data-testid="tab-activity">
+            <Activity className="h-4 w-4" />
+            Activity
           </TabsTrigger>
           <TabsTrigger value="documents" className="flex items-center gap-2" data-testid="tab-documents">
             <FileText className="h-4 w-4" />
             Documents
-            <Badge variant="secondary" className="ml-1 text-xs" data-testid="badge-documents-count">{documents.length}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="tasks" className="flex items-center gap-2" data-testid="tab-tasks">
-            <CheckSquare className="h-4 w-4" />
-            Tasks
-            <Badge variant="secondary" className="ml-1 text-xs" data-testid="badge-tasks-count">0</Badge>
           </TabsTrigger>
           <TabsTrigger value="digests" className="flex items-center gap-2" data-testid="tab-digests">
             <CalendarDays className="h-4 w-4" />
@@ -683,151 +944,114 @@ export default function AdminDealDetail() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="mt-6">
-          <div className="grid gap-6 md:grid-cols-3">
-            <div className="md:col-span-2 space-y-6">
-              <Card>
-                <CardHeader className="pb-4">
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <DollarSign className="h-5 w-5" />
-                    Loan Details
-                  </CardTitle>
+        {/* Tasks Tab - Stage cards with tasks matching Loans page */}
+        <TabsContent value="tasks" className="space-y-4">
+          {projectStages.length > 0 ? (
+            projectStages.map((stage) => (
+              <Card key={stage.id}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {getStageIcon(stage.status)}
+                      <div>
+                        <CardTitle className="text-base">{stage.stageName}</CardTitle>
+                        <CardDescription>{stage.stageDescription}</CardDescription>
+                      </div>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {stage.tasks.filter(t => t.status === 'completed').length}/{stage.tasks.length} complete
+                    </div>
+                  </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-6">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Loan Amount</p>
-                      <p className="text-xl font-bold" data-testid="text-loan-amount">{formatCurrency(deal.loanData?.loanAmount || 0)}</p>
+                {stage.tasks.length > 0 && (
+                  <CardContent>
+                    <div className="space-y-2">
+                      {stage.tasks.map((task) => (
+                        <div 
+                          key={task.id} 
+                          className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50"
+                        >
+                          <Checkbox
+                            checked={task.status === 'completed'}
+                            onCheckedChange={(checked) => {
+                              if (linkedProjectId) {
+                                updateProjectTaskMutation.mutate({
+                                  projectId: linkedProjectId,
+                                  taskId: task.id,
+                                  status: checked ? 'completed' : 'pending'
+                                });
+                              }
+                            }}
+                            data-testid={`checkbox-task-${task.id}`}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className={`text-sm ${task.status === 'completed' ? 'line-through text-muted-foreground' : ''}`}>
+                                {task.taskTitle}
+                              </span>
+                              {getPriorityBadge(task.priority)}
+                              {task.borrowerActionRequired && (
+                                <Badge variant="outline" className="text-xs">Borrower Action</Badge>
+                              )}
+                            </div>
+                            {task.completedAt && (
+                              <div className="text-xs text-muted-foreground mt-0.5">
+                                Completed {formatDateTime(task.completedAt)}
+                                {task.completedBy && ` by ${task.completedBy}`}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Interest Rate</p>
-                      <p className="text-xl font-bold" data-testid="text-interest-rate">{deal.interestRate}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Property Value</p>
-                      <p className="text-xl font-bold" data-testid="text-property-value">{formatCurrency(deal.loanData?.propertyValue || 0)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Loan Term</p>
-                      <p className="text-xl font-bold" data-testid="text-loan-term">{deal.loanData?.loanTerm || "12 months"}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Loan-to-Value (LTV)</p>
-                      <p className="text-xl font-bold" data-testid="text-ltv">{deal.loanData?.ltv || "N/A"}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Loan Type</p>
-                      <p className="text-xl font-bold" data-testid="text-loan-type">{getLoanTypeLabel(deal.loanData?.loanType)}</p>
-                    </div>
-                  </div>
-                </CardContent>
+                  </CardContent>
+                )}
               </Card>
-
-              <Card>
-                <CardHeader className="pb-4">
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <Building className="h-5 w-5" />
-                    Property Details
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Address</p>
-                      <p className="font-medium">{address.street}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">City</p>
-                      <p className="font-medium">{address.city}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">State</p>
-                      <p className="font-medium">{address.state}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">ZIP Code</p>
-                      <p className="font-medium">{address.zip}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Property Type</p>
-                      <p className="font-medium">{deal.loanData?.propertyType || "N/A"}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Appraised Value</p>
-                      <p className="font-medium">{formatCurrency(deal.loanData?.propertyValue || 0)}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-4">
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <Calendar className="h-5 w-5" />
-                    Timeline
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-6">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Created</p>
-                      <p className="font-medium">
-                        {deal.createdAt
-                          ? new Date(deal.createdAt).toLocaleDateString("en-US", {
-                              year: "numeric",
-                              month: "long",
-                              day: "numeric",
-                            })
-                          : "N/A"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Last Updated</p>
-                      <p className="font-medium">
-                        {deal.createdAt
-                          ? new Date(deal.createdAt).toLocaleDateString("en-US", {
-                              year: "numeric",
-                              month: "long",
-                              day: "numeric",
-                            })
-                          : "N/A"}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div>
-              <Card>
-                <CardHeader className="pb-4">
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <User className="h-5 w-5" />
-                    Borrower
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Name</p>
-                    <p className="font-medium">{borrowerName}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Email</p>
-                    <p className="font-medium flex items-center gap-1">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      {borrowerEmail}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Broker</p>
-                    <p className="font-medium">{deal.userName || "N/A"}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
+            ))
+          ) : (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <Activity className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium">No stages configured</h3>
+                <p className="text-muted-foreground">
+                  Create a loan project from this deal to track stages and tasks.
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
+        {/* Activity Tab */}
+        <TabsContent value="activity">
+          <Card>
+            <CardContent className="pt-6">
+              {projectActivity.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No activity yet
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {projectActivity.map((item, i) => (
+                    <div key={item.id} className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        <div className="h-2 w-2 rounded-full bg-primary" />
+                        {i < projectActivity.length - 1 && <div className="flex-1 w-px bg-border" />}
+                      </div>
+                      <div className="flex-1 pb-4">
+                        <div className="text-sm">{item.activityDescription}</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {formatDateTime(item.createdAt)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Documents Tab */}
         <TabsContent value="documents" className="mt-6">
           {documents.length === 0 ? (
             <Card>
@@ -1105,87 +1329,6 @@ export default function AdminDealDetail() {
               </Card>
             </div>
           )}
-        </TabsContent>
-
-        <TabsContent value="tasks" className="mt-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-2">
-              <CardTitle>Tasks</CardTitle>
-              <Button size="sm" onClick={() => setTaskDialogOpen(true)} data-testid="button-add-task">
-                <Plus className="h-4 w-4 mr-1" />
-                Add Task
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {(!tasksData?.tasks || tasksData.tasks.length === 0) ? (
-                <div className="py-8 text-center">
-                  <CheckSquare className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-medium">No tasks yet</h3>
-                  <p className="text-muted-foreground">Click "Add Task" to create a new task</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {tasksData.tasks.map((task) => (
-                    <div
-                      key={task.id}
-                      className={cn(
-                        "flex items-start gap-3 p-3 rounded-lg border",
-                        task.status === "completed" && "bg-muted/50"
-                      )}
-                      data-testid={`task-item-${task.id}`}
-                    >
-                      <button
-                        onClick={() => updateTaskMutation.mutate({
-                          taskId: task.id,
-                          status: task.status === "completed" ? "pending" : "completed"
-                        })}
-                        className="mt-0.5"
-                        data-testid={`button-toggle-task-${task.id}`}
-                      >
-                        {task.status === "completed" ? (
-                          <CheckCircle2 className="h-5 w-5 text-green-600" />
-                        ) : (
-                          <Circle className="h-5 w-5 text-muted-foreground" />
-                        )}
-                      </button>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={cn(
-                            "font-medium",
-                            task.status === "completed" && "line-through text-muted-foreground"
-                          )}>
-                            {task.taskName}
-                          </span>
-                          {task.priority && task.priority !== "medium" && (
-                            <Badge variant={task.priority === "high" || task.priority === "critical" ? "destructive" : "secondary"} className="text-xs">
-                              {task.priority}
-                            </Badge>
-                          )}
-                        </div>
-                        {task.taskDescription && (
-                          <p className="text-sm text-muted-foreground mt-1">{task.taskDescription}</p>
-                        )}
-                        <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground flex-wrap">
-                          {task.assigneeName && (
-                            <span className="flex items-center gap-1">
-                              <User className="h-3 w-3" />
-                              {task.assigneeName}
-                            </span>
-                          )}
-                          {task.dueDate && (
-                            <span className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              Due {new Date(task.dueDate).toLocaleDateString()}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </TabsContent>
 
         <TabsContent value="digests" className="mt-6" data-testid="tabcontent-digests">
