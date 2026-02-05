@@ -1263,7 +1263,7 @@ export async function registerRoutes(
     try {
       const documentId = parseInt(req.params.id);
       const userId = req.user!.id;
-      const { signerId, pageNumber, fieldType, x, y, width, height, required, label } = req.body;
+      const { signerId, pageNumber, fieldType, x, y, width, height, required, label, value } = req.body;
 
       // Verify user owns this document
       const doc = await storage.getDocumentById(documentId, userId);
@@ -1281,7 +1281,8 @@ export async function registerRoutes(
         width,
         height,
         required: required !== false,
-        label
+        label,
+        value: value || null // Save pre-populated field value
       });
 
       res.json({ success: true, field });
@@ -1372,7 +1373,8 @@ export async function registerRoutes(
           width: field.width,
           height: field.height,
           required: field.required !== false,
-          label: field.label
+          label: field.label,
+          value: field.value || null // Save pre-populated field values from quote data
         });
         createdFields.push(created);
       }
