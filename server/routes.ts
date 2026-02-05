@@ -8662,6 +8662,41 @@ export async function registerRoutes(
       const pandadoc = await import('./esign/pandadoc');
       const { mapQuoteToPandaTokens } = await import('./esign/field-mapping');
       
+      // Validate recipient roles against template roles
+      try {
+        const templateDetails = await pandadoc.getTemplateDetails(pandadocTemplateId);
+        const validRoles = templateDetails.roles?.map((r: any) => r.name?.trim()) || [];
+        
+        if (validRoles.length === 0) {
+          return res.status(400).json({ 
+            error: 'Template has no roles defined. Please configure roles in your PandaDoc template.' 
+          });
+        }
+        
+        // Normalize recipient roles (trim whitespace) before validation
+        const normalizedRecipients = recipients.map((r: any) => ({
+          ...r,
+          role: r.role?.trim() || '',
+        }));
+        
+        const invalidRoles = normalizedRecipients.filter((r: any) => !validRoles.includes(r.role));
+        if (invalidRoles.length > 0) {
+          return res.status(400).json({ 
+            error: `Invalid recipient roles: ${invalidRoles.map((r: any) => r.role).join(', ')}. Valid roles are: ${validRoles.join(', ')}` 
+          });
+        }
+        
+        // Use normalized recipients for document creation
+        recipients.forEach((r: any, i: number) => {
+          r.role = normalizedRecipients[i].role;
+        });
+      } catch (err: any) {
+        console.error('Failed to validate template roles:', err);
+        return res.status(400).json({ 
+          error: `Failed to validate template: ${err.message}` 
+        });
+      }
+      
       // Map quote data to PandaDoc tokens
       const tokens = mapQuoteToPandaTokens(quote);
       
@@ -8670,7 +8705,7 @@ export async function registerRoutes(
         email: r.email,
         first_name: r.firstName || r.name?.split(' ')[0] || '',
         last_name: r.lastName || r.name?.split(' ').slice(1).join(' ') || '',
-        role: r.role || 'signer',
+        role: r.role,
       }));
       
       // Create document from template
@@ -8847,6 +8882,32 @@ export async function registerRoutes(
       res.json({ templates });
     } catch (error: any) {
       console.error('PandaDoc list templates error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get PandaDoc template details (including roles)
+  app.get('/api/esign/pandadoc/templates/:templateId/details', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const { templateId } = req.params;
+      const pandadoc = await import('./esign/pandadoc');
+      const details = await pandadoc.getTemplateDetails(templateId);
+      
+      // Extract roles from template details
+      const roles = details.roles?.map((r: any) => ({
+        name: r.name,
+        preassigned_person: r.preassigned_person,
+      })) || [];
+      
+      res.json({ 
+        id: details.id,
+        name: details.name,
+        roles,
+        tokens: details.tokens || [],
+        fields: details.fields || [],
+      });
+    } catch (error: any) {
+      console.error('PandaDoc get template details error:', error);
       res.status(500).json({ error: error.message });
     }
   });

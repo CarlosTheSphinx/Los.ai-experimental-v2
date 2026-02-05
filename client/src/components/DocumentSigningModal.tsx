@@ -394,11 +394,14 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
   // PandaDoc state
   const [pandadocTemplateId, setPandadocTemplateId] = useState<string>("");
   const [pandadocRecipients, setPandadocRecipients] = useState<Array<{ name: string; email: string; role: string }>>([
-    { name: `${quote.customerFirstName || ''} ${quote.customerLastName || ''}`.trim(), email: quote.customerEmail || '', role: 'signer' }
+    { name: `${quote.customerFirstName || ''} ${quote.customerLastName || ''}`.trim(), email: quote.customerEmail || '', role: '' }
   ]);
   const [pandadocSendMethod, setPandadocSendMethod] = useState<"email" | "embedded">("email");
   const [pandadocSending, setPandadocSending] = useState(false);
   const [pandadocResult, setPandadocResult] = useState<{ success: boolean; signingUrl?: string; envelopeId?: number } | null>(null);
+  const [templateRoles, setTemplateRoles] = useState<Array<{ name: string }>>([]);
+  const [templateRolesLoading, setTemplateRolesLoading] = useState(false);
+  const [templateRolesError, setTemplateRolesError] = useState<string | null>(null);
   
   const pdfContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -457,6 +460,49 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
       toast({ title: "Error", description: error.message || "Failed to send PandaDoc document", variant: "destructive" });
     },
   });
+
+  // Fetch template roles when template ID changes
+  useEffect(() => {
+    if (!pandadocTemplateId) {
+      setTemplateRoles([]);
+      setTemplateRolesError(null);
+      return;
+    }
+
+    const fetchTemplateDetails = async () => {
+      setTemplateRolesLoading(true);
+      setTemplateRolesError(null);
+      try {
+        const res = await fetch(`/api/esign/pandadoc/templates/${pandadocTemplateId}/details`, {
+          credentials: 'include',
+        });
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(errorData.error || 'Failed to fetch template details');
+        }
+        const data = await res.json();
+        const roles = data.roles || [];
+        setTemplateRoles(roles);
+        
+        // Update recipient roles to first available role if they're empty
+        if (roles.length > 0) {
+          setPandadocRecipients(prev => prev.map(r => ({
+            ...r,
+            role: r.role || roles[0].name,
+          })));
+        }
+      } catch (error: any) {
+        console.error('Error fetching template details:', error);
+        setTemplateRolesError(error.message);
+        setTemplateRoles([]);
+      } finally {
+        setTemplateRolesLoading(false);
+      }
+    };
+
+    const debounceTimer = setTimeout(fetchTemplateDetails, 500);
+    return () => clearTimeout(debounceTimer);
+  }, [pandadocTemplateId]);
 
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setPageCount(numPages);
@@ -1168,17 +1214,39 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                                   className="flex-1"
                                   data-testid={`input-recipient-email-${idx}`}
                                 />
-                                <Input
-                                  placeholder="Role"
-                                  value={recipient.role}
-                                  onChange={(e) => {
-                                    const updated = [...pandadocRecipients];
-                                    updated[idx].role = e.target.value;
-                                    setPandadocRecipients(updated);
-                                  }}
-                                  className="w-24"
-                                  data-testid={`input-recipient-role-${idx}`}
-                                />
+                                {templateRoles.length > 0 ? (
+                                  <Select
+                                    value={recipient.role}
+                                    onValueChange={(value) => {
+                                      const updated = [...pandadocRecipients];
+                                      updated[idx].role = value;
+                                      setPandadocRecipients(updated);
+                                    }}
+                                  >
+                                    <SelectTrigger className="w-32" data-testid={`select-recipient-role-${idx}`}>
+                                      <SelectValue placeholder="Select role" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {templateRoles.map((role) => (
+                                        <SelectItem key={role.name} value={role.name}>
+                                          {role.name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <Input
+                                    placeholder="Role"
+                                    value={recipient.role}
+                                    onChange={(e) => {
+                                      const updated = [...pandadocRecipients];
+                                      updated[idx].role = e.target.value;
+                                      setPandadocRecipients(updated);
+                                    }}
+                                    className="w-32"
+                                    data-testid={`input-recipient-role-${idx}`}
+                                  />
+                                )}
                                 {pandadocRecipients.length > 1 && (
                                   <Button
                                     variant="ghost"
@@ -1194,12 +1262,28 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => setPandadocRecipients(prev => [...prev, { name: '', email: '', role: 'signer' }])}
+                              onClick={() => setPandadocRecipients(prev => [...prev, { 
+                                name: '', 
+                                email: '', 
+                                role: templateRoles.length > 0 ? templateRoles[0].name : '' 
+                              }])}
                               data-testid="button-add-recipient"
                             >
                               <Plus className="w-4 h-4 mr-2" />
                               Add Recipient
                             </Button>
+                            
+                            {templateRolesLoading && (
+                              <p className="text-sm text-muted-foreground mt-2">Loading template roles...</p>
+                            )}
+                            {templateRolesError && (
+                              <p className="text-sm text-destructive mt-2">Error: {templateRolesError}</p>
+                            )}
+                            {templateRoles.length > 0 && !templateRolesLoading && (
+                              <p className="text-xs text-muted-foreground mt-2">
+                                Available roles: {templateRoles.map(r => r.name).join(', ')}
+                              </p>
+                            )}
                           </div>
 
                           <div className="border-t pt-4">
@@ -1214,9 +1298,40 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                             </div>
                           </div>
 
+                          {/* Validation warnings */}
+                          {pandadocTemplateId && templateRolesError && (
+                            <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 mb-4" data-testid="error-template-fetch">
+                              <p className="text-sm text-destructive">
+                                Could not fetch template roles. Please verify your Template ID is correct.
+                              </p>
+                            </div>
+                          )}
+                          {pandadocTemplateId && !templateRolesLoading && templateRoles.length === 0 && !templateRolesError && (
+                            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 mb-4" data-testid="warning-no-roles">
+                              <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                                No roles found in this template. Please ensure your PandaDoc template has roles defined, or check the Template ID.
+                              </p>
+                            </div>
+                          )}
+                          {templateRoles.length > 0 && pandadocRecipients.some(r => r.role && !templateRoles.some(tr => tr.name === r.role)) && (
+                            <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 mb-4" data-testid="error-role-mismatch">
+                              <p className="text-sm text-destructive">
+                                Some recipient roles don't match template roles. Please select a valid role for each recipient.
+                              </p>
+                            </div>
+                          )}
+
                           <Button
                             onClick={() => sendPandadocMutation.mutate()}
-                            disabled={!pandadocTemplateId || pandadocRecipients.some(r => !r.email) || sendPandadocMutation.isPending}
+                            disabled={
+                              !pandadocTemplateId || 
+                              pandadocRecipients.some(r => !r.email || !r.role.trim()) || 
+                              templateRolesLoading ||
+                              !!templateRolesError ||
+                              (pandadocTemplateId && templateRoles.length === 0 && !templateRolesLoading) ||
+                              (templateRoles.length > 0 && pandadocRecipients.some(r => !templateRoles.some(tr => tr.name === r.role.trim()))) ||
+                              sendPandadocMutation.isPending
+                            }
                             className="w-full"
                             data-testid="button-send-pandadoc"
                           >
