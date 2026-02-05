@@ -124,6 +124,7 @@ interface PreviewData {
 export default function AdminDigests() {
   const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [displayMonth, setDisplayMonth] = useState<Date>(new Date());
   const [editingDigest, setEditingDigest] = useState<ScheduledDigest | null>(null);
   const [editForm, setEditForm] = useState({
     emailSubject: "",
@@ -259,9 +260,21 @@ export default function AdminDigests() {
     return { drafts, approved, sent, skipped, noDraft, total: digests.length };
   }, [digests]);
 
-  const goToPreviousDay = () => setSelectedDate(prev => subDays(prev, 1));
-  const goToNextDay = () => setSelectedDate(prev => addDays(prev, 1));
-  const goToToday = () => setSelectedDate(new Date());
+  const goToPreviousDay = () => {
+    const newDate = subDays(selectedDate, 1);
+    setSelectedDate(newDate);
+    setDisplayMonth(newDate);
+  };
+  const goToNextDay = () => {
+    const newDate = addDays(selectedDate, 1);
+    setSelectedDate(newDate);
+    setDisplayMonth(newDate);
+  };
+  const goToToday = () => {
+    const today = new Date();
+    setSelectedDate(today);
+    setDisplayMonth(today);
+  };
 
   const openEditDialog = (digest: ScheduledDigest) => {
     setEditingDigest(digest);
@@ -433,6 +446,8 @@ export default function AdminDigests() {
                 mode="single"
                 selected={selectedDate}
                 onSelect={(date) => date && setSelectedDate(date)}
+                month={displayMonth}
+                onMonthChange={setDisplayMonth}
                 className="rounded-md border"
                 data-testid="calendar-digest-date"
               />
