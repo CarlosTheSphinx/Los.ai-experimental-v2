@@ -33,14 +33,24 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
+import { usePermissions } from "@/hooks/use-permissions";
 import { InboxBadge } from "@/components/InboxBadge";
 import sphinxLogo from "@assets/Sphinx_Capital_Logo_-_Blue_-_No_Background_(1)_1769811166428.jpeg";
+import type { PermissionKey } from "@shared/schema";
 
 interface AppLayoutProps {
   children: React.ReactNode;
 }
 
-const brokerNavItems = [
+interface NavItem {
+  href: string;
+  label: string;
+  icon: any;
+  showBadge?: boolean;
+  requiredPermission?: PermissionKey;
+}
+
+const brokerNavItems: NavItem[] = [
   { href: "/", label: "New Quote", icon: Calculator },
   { href: "/quotes", label: "Saved Quotes", icon: FileText },
   { href: "/agreements", label: "Term Sheets", icon: ClipboardList },
@@ -49,34 +59,40 @@ const brokerNavItems = [
   { href: "/resources", label: "Resources", icon: BookOpen },
 ];
 
-const borrowerNavItems = [
+const borrowerNavItems: NavItem[] = [
   { href: "/", label: "My Loans", icon: FolderKanban },
   { href: "/messages", label: "Messages", icon: MessageSquare, showBadge: true },
   { href: "/resources", label: "Resources", icon: BookOpen },
 ];
 
-const adminNavItems = [
+const adminNavItems: NavItem[] = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/admin/deals", label: "Pipeline", icon: FileText },
-  { href: "/admin/partners", label: "Partners", icon: Handshake },
-  { href: "/admin/programs", label: "Programs", icon: Settings2 },
-  { href: "/admin/onboarding", label: "Onboarding", icon: BookOpen },
-  { href: "/admin/digests", label: "Digests", icon: CalendarDays },
-  { href: "/admin/users", label: "Users", icon: Users },
-  { href: "/messages", label: "Messages", icon: MessageSquare, showBadge: true },
-  { href: "/admin/settings", label: "Settings", icon: Settings },
+  { href: "/admin/deals", label: "Pipeline", icon: FileText, requiredPermission: "pipeline.view" },
+  { href: "/admin/partners", label: "Partners", icon: Handshake, requiredPermission: "partners.view" },
+  { href: "/admin/programs", label: "Programs", icon: Settings2, requiredPermission: "programs.view" },
+  { href: "/admin/onboarding", label: "Onboarding", icon: BookOpen, requiredPermission: "onboarding.view" },
+  { href: "/admin/digests", label: "Digests", icon: CalendarDays, requiredPermission: "digests.view" },
+  { href: "/admin/users", label: "Users", icon: Users, requiredPermission: "users.view" },
+  { href: "/messages", label: "Messages", icon: MessageSquare, showBadge: true, requiredPermission: "messages.view" },
+  { href: "/admin/settings", label: "Settings", icon: Settings, requiredPermission: "settings.view" },
 ];
 
 function AppLayoutContent({ children }: AppLayoutProps) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
   const { setOpenMobile, isMobile } = useSidebar();
+  const { hasPermission, isSuperAdmin } = usePermissions();
   
   const isAdmin = user?.role && ['admin', 'staff', 'super_admin'].includes(user.role);
   const isBorrower = user?.userType === 'borrower';
   
-  // Select navigation items based on user type
   const navItems = isBorrower ? borrowerNavItems : brokerNavItems;
+
+  const filteredAdminItems = adminNavItems.filter(item => {
+    if (!item.requiredPermission) return true;
+    if (isSuperAdmin) return true;
+    return hasPermission(item.requiredPermission);
+  });
 
   const handleLogout = async () => {
     await logout();
@@ -143,7 +159,7 @@ function AppLayoutContent({ children }: AppLayoutProps) {
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {adminNavItems.map((item) => {
+                  {filteredAdminItems.map((item) => {
                     const isActive = location === item.href || 
                       (item.href !== "/admin" && location.startsWith(item.href));
                     const Icon = item.icon;

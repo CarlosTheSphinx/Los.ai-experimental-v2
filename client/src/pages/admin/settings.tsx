@@ -7,11 +7,15 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Save, Settings as SettingsIcon, RefreshCw, HardDrive, Phone, Mail, Brain, MapPin, Bot, CheckCircle2, XCircle, AlertCircle, Layers, Plus, Trash2, GripVertical, FileStack, ChevronRight } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Save, Settings as SettingsIcon, RefreshCw, HardDrive, Phone, Mail, Brain, MapPin, Bot, CheckCircle2, XCircle, AlertCircle, Layers, Plus, Trash2, GripVertical, FileStack, ChevronRight, Shield } from "lucide-react";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { PERMISSION_CATEGORIES, type PermissionKey } from "@shared/schema";
+import { useAuth } from "@/hooks/use-auth";
 import {
   DndContext,
   closestCenter,
@@ -194,9 +198,138 @@ const settingLabels: Record<string, { label: string; description: string; type: 
   },
 };
 
+interface TeamPermission {
+  id: number;
+  role: string;
+  permissionKey: string;
+  enabled: boolean;
+  updatedAt: string;
+  updatedBy: number | null;
+}
+
+function TeamPermissionsCard() {
+  const { toast } = useToast();
+  const [selectedRole, setSelectedRole] = useState<string>("admin");
+  const [localPerms, setLocalPerms] = useState<Record<string, boolean>>({});
+  const [hasChanges, setHasChanges] = useState(false);
+
+  const { data, isLoading } = useQuery<{ permissions: TeamPermission[] }>({
+    queryKey: ["/api/admin/permissions"],
+  });
+
+  useEffect(() => {
+    if (data?.permissions) {
+      const rolePerms = data.permissions.filter(p => p.role === selectedRole);
+      const permMap: Record<string, boolean> = {};
+      for (const p of rolePerms) {
+        permMap[p.permissionKey] = p.enabled;
+      }
+      setLocalPerms(permMap);
+      setHasChanges(false);
+    }
+  }, [data, selectedRole]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const permissions = Object.entries(localPerms).map(([key, enabled]) => ({ key, enabled }));
+      return await apiRequest("PUT", `/api/admin/permissions/${selectedRole}`, { permissions });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/permissions"] });
+      setHasChanges(false);
+      toast({ title: `${selectedRole === "admin" ? "Admin" : "Staff"} permissions saved` });
+    },
+    onError: () => {
+      toast({ title: "Failed to save permissions", variant: "destructive" });
+    },
+  });
+
+  const handleToggle = (key: string, enabled: boolean) => {
+    setLocalPerms(prev => ({ ...prev, [key]: enabled }));
+    setHasChanges(true);
+  };
+
+  const handleToggleAll = (enabled: boolean) => {
+    const newPerms: Record<string, boolean> = {};
+    for (const cat of Object.values(PERMISSION_CATEGORIES)) {
+      for (const p of cat.permissions) {
+        newPerms[p.key] = enabled;
+      }
+    }
+    setLocalPerms(newPerms);
+    setHasChanges(true);
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Shield className="h-5 w-5" />
+          Team Permissions
+        </CardTitle>
+        <CardDescription>
+          Configure what each team role can access. Super Admins always have full access.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <Tabs value={selectedRole} onValueChange={setSelectedRole}>
+            <TabsList data-testid="tabs-permissions-role">
+              <TabsTrigger value="admin" data-testid="tab-perm-admin">Admin</TabsTrigger>
+              <TabsTrigger value="staff" data-testid="tab-perm-staff">Staff</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="outline" size="sm" onClick={() => handleToggleAll(true)} data-testid="button-enable-all">
+              Enable All
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => handleToggleAll(false)} data-testid="button-disable-all">
+              Disable All
+            </Button>
+            {hasChanges && (
+              <Button size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} data-testid="button-save-permissions">
+                <Save className="h-4 w-4 mr-2" />
+                {saveMutation.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full" />)}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {Object.entries(PERMISSION_CATEGORIES).map(([catKey, category]) => (
+              <div key={catKey} className="border rounded-md p-4 space-y-3" data-testid={`perm-category-${catKey}`}>
+                <h4 className="font-medium text-sm">{category.label}</h4>
+                <div className="space-y-2">
+                  {category.permissions.map(perm => (
+                    <div key={perm.key} className="flex items-center justify-between gap-4" data-testid={`perm-row-${perm.key}`}>
+                      <span className="text-sm text-muted-foreground">{perm.label}</span>
+                      <Switch
+                        checked={localPerms[perm.key] ?? false}
+                        onCheckedChange={(checked) => handleToggle(perm.key, checked)}
+                        data-testid={`switch-perm-${perm.key}`}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminSettings() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [editedSettings, setEditedSettings] = useState<Record<string, string>>({});
+  const isSuperAdmin = user?.role === 'super_admin';
 
   const { data, isLoading } = useQuery<{ settings: SystemSetting[] }>({
     queryKey: ["/api/admin/settings"],
@@ -814,6 +947,8 @@ export default function AdminSettings() {
           </CardHeader>
         </Link>
       </Card>
+
+      {isSuperAdmin && <TeamPermissionsCard />}
 
       <Card>
         <CardHeader>

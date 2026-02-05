@@ -327,6 +327,57 @@ export async function registerRoutes(
     }
   };
 
+  const requireSuperAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+      
+      const user = await storage.getUserById(req.user.id);
+      if (!user || user.role !== 'super_admin') {
+        return res.status(403).json({ error: 'Super admin access required' });
+      }
+      
+      next();
+    } catch (error) {
+      console.error('Super admin auth error:', error);
+      res.status(500).json({ error: 'Authorization failed' });
+    }
+  };
+
+  const requirePermission = (permissionKey: string) => {
+    return async (req: AuthRequest, res: Response, next: NextFunction) => {
+      try {
+        if (!req.user) {
+          return res.status(401).json({ error: 'Authentication required' });
+        }
+        
+        const user = await storage.getUserById(req.user.id);
+        if (!user) {
+          return res.status(404).json({ error: 'User not found' });
+        }
+
+        if (user.role === 'super_admin') {
+          return next();
+        }
+
+        if (!['admin', 'staff'].includes(user.role)) {
+          return res.status(403).json({ error: 'Admin access required' });
+        }
+
+        const allowed = await storage.hasPermission(user.role, permissionKey);
+        if (!allowed) {
+          return res.status(403).json({ error: `Permission denied: ${permissionKey}` });
+        }
+        
+        next();
+      } catch (error) {
+        console.error('Permission check error:', error);
+        res.status(500).json({ error: 'Authorization failed' });
+      }
+    };
+  };
+
   // Onboarding enforcement middleware - blocks brokers who haven't completed onboarding
   // Admins and borrowers are exempt
   const requireOnboarding = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -3252,7 +3303,9 @@ export async function registerRoutes(
         fullName: u.fullName,
         companyName: u.companyName,
         phone: u.phone,
+        title: u.title,
         role: u.role,
+        userType: u.userType,
         createdAt: u.createdAt,
         lastLoginAt: u.lastLoginAt,
         emailVerified: u.emailVerified,
@@ -3269,7 +3322,7 @@ export async function registerRoutes(
   // Admin - Create user manually
   app.post('/api/admin/users', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
-      const { email, password, fullName, companyName, phone, role } = req.body;
+      const { email, password, fullName, companyName, phone, role, title, userType } = req.body;
       
       if (!email || !password) {
         return res.status(400).json({ error: 'Email and password are required' });
@@ -3289,7 +3342,9 @@ export async function registerRoutes(
         fullName: fullName || null,
         companyName: companyName || null,
         phone: phone || null,
+        title: title || null,
         role: role || 'user',
+        userType: userType || 'broker',
         isActive: true,
         emailVerified: true,
       });
@@ -3323,14 +3378,26 @@ export async function registerRoutes(
   app.patch('/api/admin/users/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const userId = parseInt(req.params.id);
-      const { role, isActive } = req.body;
+      const { role, isActive, title, fullName, phone, companyName } = req.body;
       
-      const updates: { role?: string; isActive?: boolean } = {};
+      const updates: { role?: string; isActive?: boolean; title?: string | null; fullName?: string | null; phone?: string | null; companyName?: string | null } = {};
       if (role !== undefined && ['user', 'admin', 'staff', 'super_admin'].includes(role)) {
         updates.role = role;
       }
       if (isActive !== undefined) {
         updates.isActive = isActive;
+      }
+      if (title !== undefined) {
+        updates.title = title || null;
+      }
+      if (fullName !== undefined) {
+        updates.fullName = fullName || null;
+      }
+      if (phone !== undefined) {
+        updates.phone = phone || null;
+      }
+      if (companyName !== undefined) {
+        updates.companyName = companyName || null;
       }
       
       const updated = await storage.updateUser(userId, updates);
@@ -3359,6 +3426,81 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Admin update user error:', error);
       res.status(500).json({ error: 'Failed to update user' });
+    }
+  });
+
+  // Team Permissions - Get all permissions (super_admin only)
+  app.get('/api/admin/permissions', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      await storage.initializeDefaultPermissions();
+      const permissions = await storage.getAllPermissions();
+      res.json({ permissions });
+    } catch (error) {
+      console.error('Get permissions error:', error);
+      res.status(500).json({ error: 'Failed to load permissions' });
+    }
+  });
+
+  // Team Permissions - Get permissions for current user
+  app.get('/api/permissions/me', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+      const user = await storage.getUserById(req.user.id);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
+      if (user.role === 'super_admin') {
+        const { PERMISSION_KEYS } = await import('@shared/schema');
+        const allPerms: Record<string, boolean> = {};
+        for (const key of PERMISSION_KEYS) {
+          allPerms[key] = true;
+        }
+        return res.json({ permissions: allPerms, role: user.role });
+      }
+
+      if (user.role === 'user') {
+        return res.json({ permissions: {}, role: user.role });
+      }
+
+      await storage.initializeDefaultPermissions();
+      const perms = await storage.getPermissionsByRole(user.role);
+      const permMap: Record<string, boolean> = {};
+      for (const p of perms) {
+        permMap[p.permissionKey] = p.enabled;
+      }
+      res.json({ permissions: permMap, role: user.role });
+    } catch (error) {
+      console.error('Get my permissions error:', error);
+      res.status(500).json({ error: 'Failed to load permissions' });
+    }
+  });
+
+  // Team Permissions - Update permissions for a role (super_admin only)
+  app.put('/api/admin/permissions/:role', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { role } = req.params;
+      const { permissions } = req.body;
+
+      if (!['staff', 'admin'].includes(role)) {
+        return res.status(400).json({ error: 'Can only configure permissions for staff and admin roles' });
+      }
+
+      if (!Array.isArray(permissions)) {
+        return res.status(400).json({ error: 'Permissions must be an array of { key, enabled }' });
+      }
+
+      await storage.bulkUpsertPermissions(role, permissions, req.user!.id);
+
+      await storage.createAdminActivity({
+        userId: req.user!.id,
+        actionType: 'permissions_updated',
+        actionDescription: `Updated permissions for role: ${role}`,
+        metadata: { role, permissionCount: permissions.length }
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Update permissions error:', error);
+      res.status(500).json({ error: 'Failed to update permissions' });
     }
   });
 
@@ -3856,7 +3998,7 @@ export async function registerRoutes(
   });
 
   // Admin - Deals dashboard with all quotes across users
-  app.get('/api/admin/deals', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+  app.get('/api/admin/deals', authenticateUser, requireAdmin, requirePermission('pipeline.view'), async (req: AuthRequest, res: Response) => {
     try {
       const { search, status } = req.query;
       
@@ -4864,7 +5006,7 @@ export async function registerRoutes(
   // ==================== PARTNERS ROUTES ====================
   
   // Get all partners
-  app.get('/api/admin/partners', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+  app.get('/api/admin/partners', authenticateUser, requireAdmin, requirePermission('partners.view'), async (req: AuthRequest, res: Response) => {
     try {
       const search = req.query.search as string | undefined;
       
@@ -5150,7 +5292,7 @@ export async function registerRoutes(
   // ==================== LOAN PROGRAMS ROUTES ====================
   
   // Get all loan programs with their document and task templates
-  app.get('/api/admin/programs', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+  app.get('/api/admin/programs', authenticateUser, requireAdmin, requirePermission('programs.view'), async (req: AuthRequest, res: Response) => {
     try {
       const programs = await db.select().from(loanPrograms).orderBy(loanPrograms.sortOrder);
       
@@ -6620,7 +6762,7 @@ export async function registerRoutes(
   // ==================== ADMIN ONBOARDING MANAGEMENT ====================
 
   // Get all onboarding documents (admin)
-  app.get('/api/admin/onboarding/documents', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+  app.get('/api/admin/onboarding/documents', authenticateUser, requireAdmin, requirePermission('onboarding.view'), async (req: AuthRequest, res: Response) => {
     try {
       const documents = await db.select()
         .from(onboardingDocuments)
@@ -6764,7 +6906,7 @@ export async function registerRoutes(
   // ==================== LOAN DIGEST NOTIFICATION ROUTES ====================
 
   // Admin - Get scheduled digests for a specific date
-  app.get('/api/admin/digests/scheduled', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+  app.get('/api/admin/digests/scheduled', authenticateUser, requireAdmin, requirePermission('digests.view'), async (req: AuthRequest, res: Response) => {
     try {
       const dateStr = req.query.date as string || format(new Date(), 'yyyy-MM-dd');
       const targetDate = new Date(dateStr + 'T00:00:00');

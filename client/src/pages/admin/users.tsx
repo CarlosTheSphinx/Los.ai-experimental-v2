@@ -7,11 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Search, MoreHorizontal, UserCog, Shield, User as UserIcon, Plus } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Search, MoreHorizontal, UserCog, Shield, User as UserIcon, Plus, Users, Briefcase, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -22,7 +23,9 @@ interface AdminUser {
   fullName: string | null;
   companyName: string | null;
   phone: string | null;
+  title: string | null;
   role: string;
+  userType: string;
   createdAt: string;
   lastLoginAt: string | null;
   emailVerified: boolean;
@@ -30,10 +33,10 @@ interface AdminUser {
 }
 
 const roleColors: Record<string, string> = {
-  user: "bg-slate-100 text-slate-700",
-  staff: "bg-blue-100 text-blue-700",
-  admin: "bg-purple-100 text-purple-700",
-  super_admin: "bg-red-100 text-red-700",
+  user: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+  staff: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
+  admin: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
+  super_admin: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
 };
 
 const roleIcons: Record<string, typeof UserIcon> = {
@@ -43,7 +46,7 @@ const roleIcons: Record<string, typeof UserIcon> = {
   super_admin: Shield,
 };
 
-export default function AdminUsers() {
+function UsersTab() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -57,16 +60,8 @@ export default function AdminUsers() {
   });
   const { toast } = useToast();
 
-  const buildUsersUrl = () => {
-    const params = new URLSearchParams();
-    if (roleFilter !== "all") params.append("role", roleFilter);
-    if (search) params.append("search", search);
-    const queryString = params.toString();
-    return `/api/admin/users${queryString ? `?${queryString}` : ""}`;
-  };
-
   const { data, isLoading, refetch } = useQuery<{ users: AdminUser[] }>({
-    queryKey: [buildUsersUrl()],
+    queryKey: ["/api/admin/users"],
   });
 
   const createUserMutation = useMutation({
@@ -80,16 +75,16 @@ export default function AdminUsers() {
       toast({ title: "User created successfully" });
     },
     onError: (error: any) => {
-      toast({ 
-        title: "Failed to create user", 
+      toast({
+        title: "Failed to create user",
         description: error?.message || "Please check the form and try again",
-        variant: "destructive" 
+        variant: "destructive"
       });
     },
   });
 
   const updateUserMutation = useMutation({
-    mutationFn: async ({ id, updates }: { id: number; updates: { role?: string; isActive?: boolean } }) => {
+    mutationFn: async ({ id, updates }: { id: number; updates: Record<string, any> }) => {
       return await apiRequest("PATCH", `/api/admin/users/${id}`, updates);
     },
     onSuccess: () => {
@@ -109,7 +104,17 @@ export default function AdminUsers() {
     updateUserMutation.mutate({ id: userId, updates: { isActive } });
   };
 
-  const users = data?.users || [];
+  const allUsers = data?.users || [];
+  const externalUsers = allUsers.filter(u => u.role === "user" || u.userType === "borrower");
+
+  const filteredUsers = externalUsers.filter(u => {
+    if (roleFilter !== "all" && u.role !== roleFilter) return false;
+    if (search) {
+      const s = search.toLowerCase();
+      return (u.email?.toLowerCase().includes(s) || u.fullName?.toLowerCase().includes(s));
+    }
+    return true;
+  });
 
   const handleCreateUser = () => {
     if (!newUser.email || !newUser.password) {
@@ -120,9 +125,9 @@ export default function AdminUsers() {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold" data-testid="text-admin-users-title">User Management</h1>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div />
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <Button data-testid="button-add-user">
@@ -134,14 +139,14 @@ export default function AdminUsers() {
             <DialogHeader>
               <DialogTitle>Create New User</DialogTitle>
               <DialogDescription>
-                Add a new user account to the system.
+                Add a new broker or borrower account.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="email">Email *</Label>
+                <Label htmlFor="user-email">Email *</Label>
                 <Input
-                  id="email"
+                  id="user-email"
                   type="email"
                   placeholder="user@example.com"
                   value={newUser.email}
@@ -150,9 +155,9 @@ export default function AdminUsers() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="password">Password *</Label>
+                <Label htmlFor="user-password">Password *</Label>
                 <Input
-                  id="password"
+                  id="user-password"
                   type="password"
                   placeholder="Enter password"
                   value={newUser.password}
@@ -161,9 +166,9 @@ export default function AdminUsers() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="fullName">Full Name</Label>
+                <Label htmlFor="user-fullName">Full Name</Label>
                 <Input
-                  id="fullName"
+                  id="user-fullName"
                   placeholder="John Doe"
                   value={newUser.fullName}
                   onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
@@ -171,9 +176,9 @@ export default function AdminUsers() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="companyName">Company Name</Label>
+                <Label htmlFor="user-companyName">Company Name</Label>
                 <Input
-                  id="companyName"
+                  id="user-companyName"
                   placeholder="Acme Corp"
                   value={newUser.companyName}
                   onChange={(e) => setNewUser({ ...newUser, companyName: e.target.value })}
@@ -181,39 +186,25 @@ export default function AdminUsers() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="phone">Phone</Label>
+                <Label htmlFor="user-phone">Phone</Label>
                 <Input
-                  id="phone"
+                  id="user-phone"
                   placeholder="(555) 123-4567"
                   value={newUser.phone}
                   onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })}
                   data-testid="input-new-user-phone"
                 />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="role">Role</Label>
-                <Select value={newUser.role} onValueChange={(value) => setNewUser({ ...newUser, role: value })}>
-                  <SelectTrigger data-testid="select-new-user-role">
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="user">User</SelectItem>
-                    <SelectItem value="staff">Staff</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="super_admin">Super Admin</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
             <DialogFooter>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => setIsAddDialogOpen(false)}
                 data-testid="button-cancel-add-user"
               >
                 Cancel
               </Button>
-              <Button 
+              <Button
                 onClick={handleCreateUser}
                 disabled={createUserMutation.isPending}
                 data-testid="button-submit-add-user"
@@ -227,8 +218,8 @@ export default function AdminUsers() {
 
       <Card>
         <CardHeader>
-          <CardTitle>All Users</CardTitle>
-          <CardDescription>Manage user accounts, roles, and access</CardDescription>
+          <CardTitle>Brokers & Borrowers</CardTitle>
+          <CardDescription>Manage external user accounts and access</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-col sm:flex-row gap-4">
@@ -242,18 +233,6 @@ export default function AdminUsers() {
                 data-testid="input-search-users"
               />
             </div>
-            <Select value={roleFilter} onValueChange={setRoleFilter}>
-              <SelectTrigger className="w-[180px]" data-testid="select-role-filter">
-                <SelectValue placeholder="Filter by role" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Roles</SelectItem>
-                <SelectItem value="user">User</SelectItem>
-                <SelectItem value="staff">Staff</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="super_admin">Super Admin</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
 
           {isLoading ? (
@@ -262,15 +241,15 @@ export default function AdminUsers() {
                 <Skeleton key={i} className="h-16 w-full" />
               ))}
             </div>
-          ) : users.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No users found</p>
+          ) : filteredUsers.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8" data-testid="text-no-users">No users found</p>
           ) : (
-            <div className="border rounded-lg overflow-hidden">
+            <div className="border rounded-md overflow-hidden">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>User</TableHead>
-                    <TableHead>Role</TableHead>
+                    <TableHead>Type</TableHead>
                     <TableHead>Company</TableHead>
                     <TableHead>Joined</TableHead>
                     <TableHead>Last Login</TableHead>
@@ -279,54 +258,368 @@ export default function AdminUsers() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users.map((user) => {
-                    const RoleIcon = roleIcons[user.role] || UserIcon;
+                  {filteredUsers.map((user) => (
+                    <TableRow key={user.id} data-testid={`row-user-${user.id}`}>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{user.fullName || "No name"}</p>
+                          <p className="text-sm text-muted-foreground">{user.email}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="capitalize">
+                          {user.userType || "broker"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{user.companyName || "-"}</TableCell>
+                      <TableCell>
+                        {user.createdAt ? format(new Date(user.createdAt), "MMM d, yyyy") : "-"}
+                      </TableCell>
+                      <TableCell>
+                        {user.lastLoginAt ? format(new Date(user.lastLoginAt), "MMM d, yyyy") : "Never"}
+                      </TableCell>
+                      <TableCell>
+                        <Switch
+                          checked={user.isActive}
+                          onCheckedChange={(checked) => handleActiveToggle(user.id, checked)}
+                          data-testid={`switch-active-${user.id}`}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" data-testid={`button-user-actions-${user.id}`}>
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleRoleChange(user.id, "user")}>
+                              Set as User
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleRoleChange(user.id, "staff")}>
+                              Promote to Staff
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleRoleChange(user.id, "admin")}>
+                              Promote to Admin
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function TeamTab() {
+  const [search, setSearch] = useState("");
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [editingMember, setEditingMember] = useState<AdminUser | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [newMember, setNewMember] = useState({
+    email: "",
+    password: "",
+    fullName: "",
+    phone: "",
+    title: "",
+    role: "staff",
+  });
+  const { toast } = useToast();
+
+  const { data, isLoading, refetch } = useQuery<{ users: AdminUser[] }>({
+    queryKey: ["/api/admin/users"],
+  });
+
+  const createMemberMutation = useMutation({
+    mutationFn: async (memberData: typeof newMember) => {
+      return await apiRequest("POST", "/api/admin/users", {
+        ...memberData,
+        userType: "broker",
+      });
+    },
+    onSuccess: () => {
+      refetch();
+      setIsAddDialogOpen(false);
+      setNewMember({ email: "", password: "", fullName: "", phone: "", title: "", role: "staff" });
+      toast({ title: "Team member added successfully" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to add team member",
+        description: error?.message || "Please check the form and try again",
+        variant: "destructive"
+      });
+    },
+  });
+
+  const updateMemberMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: number; updates: Record<string, any> }) => {
+      return await apiRequest("PATCH", `/api/admin/users/${id}`, updates);
+    },
+    onSuccess: () => {
+      refetch();
+      setIsEditDialogOpen(false);
+      setEditingMember(null);
+      toast({ title: "Team member updated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update team member", variant: "destructive" });
+    },
+  });
+
+  const handleActiveToggle = (userId: number, isActive: boolean) => {
+    updateMemberMutation.mutate({ id: userId, updates: { isActive } });
+  };
+
+  const allUsers = data?.users || [];
+  const teamMembers = allUsers.filter(u => ["staff", "admin", "super_admin"].includes(u.role));
+
+  const filteredMembers = teamMembers.filter(u => {
+    if (search) {
+      const s = search.toLowerCase();
+      return (u.email?.toLowerCase().includes(s) || u.fullName?.toLowerCase().includes(s) || u.title?.toLowerCase().includes(s));
+    }
+    return true;
+  });
+
+  const handleCreateMember = () => {
+    if (!newMember.email || !newMember.password) {
+      toast({ title: "Email and password are required", variant: "destructive" });
+      return;
+    }
+    if (!newMember.fullName) {
+      toast({ title: "Full name is required for team members", variant: "destructive" });
+      return;
+    }
+    createMemberMutation.mutate(newMember);
+  };
+
+  const handleEditMember = () => {
+    if (!editingMember) return;
+    updateMemberMutation.mutate({
+      id: editingMember.id,
+      updates: {
+        fullName: editingMember.fullName,
+        phone: editingMember.phone,
+        title: editingMember.title,
+        role: editingMember.role,
+      }
+    });
+  };
+
+  const openEditDialog = (member: AdminUser) => {
+    setEditingMember({ ...member });
+    setIsEditDialogOpen(true);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div />
+        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+          <DialogTrigger asChild>
+            <Button data-testid="button-add-team-member">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Team Member
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Add Team Member</DialogTitle>
+              <DialogDescription>
+                Add a new staff member, admin, or super admin to your team.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="team-email">Email *</Label>
+                <Input
+                  id="team-email"
+                  type="email"
+                  placeholder="team@sphinxcap.com"
+                  value={newMember.email}
+                  onChange={(e) => setNewMember({ ...newMember, email: e.target.value })}
+                  data-testid="input-team-email"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="team-password">Password *</Label>
+                <Input
+                  id="team-password"
+                  type="password"
+                  placeholder="Enter password"
+                  value={newMember.password}
+                  onChange={(e) => setNewMember({ ...newMember, password: e.target.value })}
+                  data-testid="input-team-password"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="team-fullName">Full Name *</Label>
+                <Input
+                  id="team-fullName"
+                  placeholder="Jane Smith"
+                  value={newMember.fullName}
+                  onChange={(e) => setNewMember({ ...newMember, fullName: e.target.value })}
+                  data-testid="input-team-fullname"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="team-title">Title / Position</Label>
+                <Input
+                  id="team-title"
+                  placeholder="e.g. Loan Processor, Underwriter"
+                  value={newMember.title}
+                  onChange={(e) => setNewMember({ ...newMember, title: e.target.value })}
+                  data-testid="input-team-title"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="team-phone">Phone</Label>
+                <Input
+                  id="team-phone"
+                  placeholder="(555) 123-4567"
+                  value={newMember.phone}
+                  onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })}
+                  data-testid="input-team-phone"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="team-role">Role *</Label>
+                <Select value={newMember.role} onValueChange={(value) => setNewMember({ ...newMember, role: value })}>
+                  <SelectTrigger data-testid="select-team-role">
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="staff">Staff</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="super_admin">Super Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {newMember.role === "staff" && "Limited access based on configured permissions"}
+                  {newMember.role === "admin" && "Full access to most features, configurable permissions"}
+                  {newMember.role === "super_admin" && "Full unrestricted access to all features"}
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsAddDialogOpen(false)}
+                data-testid="button-cancel-add-team"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreateMember}
+                disabled={createMemberMutation.isPending}
+                data-testid="button-submit-add-team"
+              >
+                {createMemberMutation.isPending ? "Adding..." : "Add Member"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Your Team</CardTitle>
+          <CardDescription>Internal team members with administrative access</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search team members..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10"
+              data-testid="input-search-team"
+            />
+          </div>
+
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          ) : filteredMembers.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8" data-testid="text-no-team">No team members found</p>
+          ) : (
+            <div className="border rounded-md overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Contact</TableHead>
+                    <TableHead>Last Login</TableHead>
+                    <TableHead>Active</TableHead>
+                    <TableHead className="w-[50px]"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredMembers.map((member) => {
+                    const RoleIcon = roleIcons[member.role] || UserIcon;
                     return (
-                      <TableRow key={user.id} data-testid={`row-user-${user.id}`}>
+                      <TableRow key={member.id} data-testid={`row-team-${member.id}`}>
                         <TableCell>
                           <div>
-                            <p className="font-medium">{user.fullName || "No name"}</p>
-                            <p className="text-sm text-muted-foreground">{user.email}</p>
+                            <p className="font-medium">{member.fullName || "No name"}</p>
+                            <p className="text-sm text-muted-foreground">{member.email}</p>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge className={roleColors[user.role] || ""}>
+                          <span className="text-sm text-muted-foreground">{member.title || "-"}</span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={roleColors[member.role] || ""}>
                             <RoleIcon className="h-3 w-3 mr-1" />
-                            {user.role.replace("_", " ")}
+                            {member.role === "super_admin" ? "Super Admin" : member.role.charAt(0).toUpperCase() + member.role.slice(1)}
                           </Badge>
                         </TableCell>
-                        <TableCell>{user.companyName || "-"}</TableCell>
                         <TableCell>
-                          {user.createdAt ? format(new Date(user.createdAt), "MMM d, yyyy") : "-"}
+                          <span className="text-sm">{member.phone || "-"}</span>
                         </TableCell>
                         <TableCell>
-                          {user.lastLoginAt ? format(new Date(user.lastLoginAt), "MMM d, yyyy") : "Never"}
+                          {member.lastLoginAt ? format(new Date(member.lastLoginAt), "MMM d, yyyy") : "Never"}
                         </TableCell>
                         <TableCell>
                           <Switch
-                            checked={user.isActive}
-                            onCheckedChange={(checked) => handleActiveToggle(user.id, checked)}
-                            data-testid={`switch-active-${user.id}`}
+                            checked={member.isActive}
+                            onCheckedChange={(checked) => handleActiveToggle(member.id, checked)}
+                            data-testid={`switch-team-active-${member.id}`}
                           />
                         </TableCell>
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" data-testid={`button-user-actions-${user.id}`}>
+                              <Button variant="ghost" size="icon" data-testid={`button-team-actions-${member.id}`}>
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleRoleChange(user.id, "user")}>
-                                Set as User
+                              <DropdownMenuItem onClick={() => openEditDialog(member)} data-testid={`button-edit-member-${member.id}`}>
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Edit Details
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleRoleChange(user.id, "staff")}>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => updateMemberMutation.mutate({ id: member.id, updates: { role: "staff" } })}>
                                 Set as Staff
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleRoleChange(user.id, "admin")}>
+                              <DropdownMenuItem onClick={() => updateMemberMutation.mutate({ id: member.id, updates: { role: "admin" } })}>
                                 Set as Admin
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleRoleChange(user.id, "super_admin")}>
+                              <DropdownMenuItem onClick={() => updateMemberMutation.mutate({ id: member.id, updates: { role: "super_admin" } })}>
                                 Set as Super Admin
                               </DropdownMenuItem>
                             </DropdownMenuContent>
@@ -341,6 +634,108 @@ export default function AdminUsers() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Team Member</DialogTitle>
+            <DialogDescription>
+              Update team member details and role.
+            </DialogDescription>
+          </DialogHeader>
+          {editingMember && (
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label>Email</Label>
+                <Input value={editingMember.email} disabled className="bg-muted" data-testid="input-edit-email" />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-fullName">Full Name</Label>
+                <Input
+                  id="edit-fullName"
+                  value={editingMember.fullName || ""}
+                  onChange={(e) => setEditingMember({ ...editingMember, fullName: e.target.value })}
+                  data-testid="input-edit-fullname"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-title">Title / Position</Label>
+                <Input
+                  id="edit-title"
+                  placeholder="e.g. Loan Processor"
+                  value={editingMember.title || ""}
+                  onChange={(e) => setEditingMember({ ...editingMember, title: e.target.value })}
+                  data-testid="input-edit-title"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-phone">Phone</Label>
+                <Input
+                  id="edit-phone"
+                  placeholder="(555) 123-4567"
+                  value={editingMember.phone || ""}
+                  onChange={(e) => setEditingMember({ ...editingMember, phone: e.target.value })}
+                  data-testid="input-edit-phone"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-role">Role</Label>
+                <Select value={editingMember.role} onValueChange={(value) => setEditingMember({ ...editingMember, role: value })}>
+                  <SelectTrigger data-testid="select-edit-role">
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="staff">Staff</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="super_admin">Super Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} data-testid="button-cancel-edit">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleEditMember}
+              disabled={updateMemberMutation.isPending}
+              data-testid="button-submit-edit"
+            >
+              {updateMemberMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+export default function AdminUsers() {
+  return (
+    <div className="p-6 space-y-6">
+      <h1 className="text-2xl font-semibold" data-testid="text-admin-users-title">User Management</h1>
+
+      <Tabs defaultValue="team" className="w-full">
+        <TabsList data-testid="tabs-user-management">
+          <TabsTrigger value="team" data-testid="tab-team">
+            <Users className="h-4 w-4 mr-2" />
+            Team
+          </TabsTrigger>
+          <TabsTrigger value="users" data-testid="tab-users">
+            <Briefcase className="h-4 w-4 mr-2" />
+            Users
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="team" className="mt-4">
+          <TeamTab />
+        </TabsContent>
+
+        <TabsContent value="users" className="mt-4">
+          <UsersTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

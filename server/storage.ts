@@ -3,7 +3,7 @@ import { db } from "./db";
 import { 
   pricingRequests, savedQuotes, documents, signers, documentFields, documentAuditLog, users,
   projects, projectStages, projectTasks, projectActivity, projectDocuments, projectWebhooks,
-  systemSettings, adminTasks, adminActivity, dealStages,
+  systemSettings, adminTasks, adminActivity, dealStages, teamPermissions,
   type InsertPricingRequest, type PricingRequest, type InsertSavedQuote, type SavedQuote,
   type Document, type InsertDocument, type Signer, type InsertSigner,
   type DocumentField, type InsertDocumentField, type DocumentAuditLog, type InsertDocumentAuditLog,
@@ -13,7 +13,8 @@ import {
   type ProjectDocument, type InsertProjectDocument, type ProjectWebhook, type InsertProjectWebhook,
   type SystemSetting, type InsertSystemSetting, type AdminTask, type InsertAdminTask,
   type AdminActivity, type InsertAdminActivity,
-  type DealStage, type InsertDealStage
+  type DealStage, type InsertDealStage,
+  type TeamPermission, PERMISSION_KEYS,
 } from "@shared/schema";
 import { desc, eq, and, gt, like, sql, asc, or, isNull, count } from "drizzle-orm";
 
@@ -655,6 +656,70 @@ export class DatabaseStorage implements IStorage {
     for (const stage of defaultStages) {
       await db.insert(dealStages).values(stage);
     }
+  }
+
+  // Team Permissions methods
+  async getPermissionsByRole(role: string): Promise<TeamPermission[]> {
+    return await db.select().from(teamPermissions).where(eq(teamPermissions.role, role));
+  }
+
+  async getAllPermissions(): Promise<TeamPermission[]> {
+    return await db.select().from(teamPermissions);
+  }
+
+  async upsertPermission(role: string, permissionKey: string, enabled: boolean, updatedBy: number): Promise<TeamPermission> {
+    const existing = await db.select().from(teamPermissions)
+      .where(and(eq(teamPermissions.role, role), eq(teamPermissions.permissionKey, permissionKey)));
+    
+    if (existing.length > 0) {
+      const [updated] = await db.update(teamPermissions)
+        .set({ enabled, updatedBy, updatedAt: new Date() })
+        .where(and(eq(teamPermissions.role, role), eq(teamPermissions.permissionKey, permissionKey)))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(teamPermissions)
+        .values({ role, permissionKey, enabled, updatedBy })
+        .returning();
+      return created;
+    }
+  }
+
+  async bulkUpsertPermissions(role: string, permissions: { key: string; enabled: boolean }[], updatedBy: number): Promise<void> {
+    for (const perm of permissions) {
+      await this.upsertPermission(role, perm.key, perm.enabled, updatedBy);
+    }
+  }
+
+  async initializeDefaultPermissions(): Promise<void> {
+    const existing = await db.select().from(teamPermissions).limit(1);
+    if (existing.length > 0) return;
+
+    const adminDefaults = PERMISSION_KEYS.map(key => ({
+      role: "admin",
+      permissionKey: key,
+      enabled: true,
+    }));
+
+    const staffDefaults = PERMISSION_KEYS.map(key => ({
+      role: "staff",
+      permissionKey: key,
+      enabled: key.endsWith(".view") || key === "messages.send" || key === "quotes.create",
+    }));
+
+    for (const perm of [...adminDefaults, ...staffDefaults]) {
+      await db.insert(teamPermissions).values(perm);
+    }
+  }
+
+  async hasPermission(role: string, permissionKey: string): Promise<boolean> {
+    if (role === "super_admin") return true;
+    if (role === "user") return false;
+
+    const [perm] = await db.select().from(teamPermissions)
+      .where(and(eq(teamPermissions.role, role), eq(teamPermissions.permissionKey, permissionKey)));
+    
+    return perm?.enabled ?? false;
   }
 }
 
