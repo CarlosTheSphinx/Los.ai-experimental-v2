@@ -660,9 +660,9 @@ function DocumentsTab({ programId }: { programId: number }) {
 
   return (
     <div className="space-y-4 mt-2">
-      <div className="flex flex-wrap gap-3">
+      <div className="flex gap-3 overflow-x-auto pb-2">
         <div
-          className={`flex-1 min-w-[140px] rounded-md border-2 border-dashed p-3 transition-colors ${
+          className={`min-w-[180px] w-[180px] shrink-0 rounded-md border-2 border-dashed p-3 transition-colors ${
             dragOverStepId === "unassigned"
               ? "border-blue-500 bg-blue-50 dark:bg-blue-950"
               : "border-border"
@@ -698,7 +698,7 @@ function DocumentsTab({ programId }: { programId: number }) {
             return (
               <div
                 key={ws.id}
-                className={`flex-1 min-w-[140px] rounded-md border-2 border-dashed p-3 transition-colors ${
+                className={`min-w-[180px] w-[180px] shrink-0 rounded-md border-2 border-dashed p-3 transition-colors ${
                   dragOverStepId === ws.id
                     ? "border-blue-500 bg-blue-50 dark:bg-blue-950"
                     : "border-border"
@@ -713,7 +713,7 @@ function DocumentsTab({ programId }: { programId: number }) {
               >
                 <div className="flex items-center gap-1 mb-2">
                   <StepColorDot color={ws.definition.color} />
-                  <p className="text-xs font-semibold text-muted-foreground truncate">
+                  <p className="text-xs font-semibold text-muted-foreground">
                     {ws.definition.name}
                   </p>
                 </div>
@@ -866,27 +866,31 @@ function DocumentCard({
       className="cursor-grab active:cursor-grabbing"
       data-testid={`card-document-${doc.id}`}
     >
-      <CardContent className="p-2 flex items-center gap-2 flex-wrap">
-        <FileText className="w-3 h-3 text-muted-foreground shrink-0" />
-        <span className="text-xs font-medium flex-1 truncate" data-testid={`text-doc-name-${doc.id}`}>
-          {doc.documentName}
-        </span>
-        <Badge variant="secondary" className="text-[10px] no-default-hover-elevate no-default-active-elevate">
-          {getCategoryLabel(doc.documentCategory, DOCUMENT_CATEGORIES)}
-        </Badge>
-        {doc.isRequired && (
-          <Badge variant="outline" className="text-[10px] no-default-hover-elevate no-default-active-elevate">
-            Required
+      <CardContent className="p-2 space-y-1">
+        <div className="flex items-start gap-1.5">
+          <FileText className="w-3 h-3 text-muted-foreground shrink-0 mt-0.5" />
+          <span className="text-xs font-medium leading-tight break-words" data-testid={`text-doc-name-${doc.id}`}>
+            {doc.documentName}
+          </span>
+        </div>
+        <div className="flex items-center gap-1 flex-wrap">
+          <Badge variant="secondary" className="text-[10px] no-default-hover-elevate no-default-active-elevate">
+            {getCategoryLabel(doc.documentCategory, DOCUMENT_CATEGORIES)}
           </Badge>
-        )}
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={() => onDelete(doc.id)}
-          data-testid={`button-delete-doc-${doc.id}`}
-        >
-          <Trash2 className="w-3 h-3" />
-        </Button>
+          {doc.isRequired && (
+            <Badge variant="outline" className="text-[10px] no-default-hover-elevate no-default-active-elevate">
+              Required
+            </Badge>
+          )}
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={(e) => { e.stopPropagation(); onDelete(doc.id); }}
+            data-testid={`button-delete-doc-${doc.id}`}
+          >
+            <Trash2 className="w-3 h-3" />
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -1032,9 +1036,9 @@ function TasksTab({ programId }: { programId: number }) {
 
   return (
     <div className="space-y-4 mt-2">
-      <div className="flex flex-wrap gap-3">
+      <div className="flex gap-3 overflow-x-auto pb-2">
         <div
-          className={`flex-1 min-w-[140px] rounded-md border-2 border-dashed p-3 transition-colors ${
+          className={`min-w-[180px] w-[180px] shrink-0 rounded-md border-2 border-dashed p-3 transition-colors ${
             dragOverStepId === "unassigned"
               ? "border-blue-500 bg-blue-50 dark:bg-blue-950"
               : "border-border"
@@ -1073,7 +1077,7 @@ function TasksTab({ programId }: { programId: number }) {
             return (
               <div
                 key={ws.id}
-                className={`flex-1 min-w-[140px] rounded-md border-2 border-dashed p-3 transition-colors ${
+                className={`min-w-[180px] w-[180px] shrink-0 rounded-md border-2 border-dashed p-3 transition-colors ${
                   dragOverStepId === ws.id
                     ? "border-blue-500 bg-blue-50 dark:bg-blue-950"
                     : "border-border"
@@ -1088,7 +1092,7 @@ function TasksTab({ programId }: { programId: number }) {
               >
                 <div className="flex items-center gap-1 mb-2">
                   <StepColorDot color={ws.definition.color} />
-                  <p className="text-xs font-semibold text-muted-foreground truncate">
+                  <p className="text-xs font-semibold text-muted-foreground">
                     {ws.definition.name}
                   </p>
                 </div>
@@ -1275,11 +1279,13 @@ function TaskCard({
       data-testid={`card-task-${task.id}`}
     >
       <CardContent className="p-2 space-y-1">
-        <div className="flex items-center gap-2 flex-wrap">
-          <ListChecks className="w-3 h-3 text-muted-foreground shrink-0" />
-          <span className="text-xs font-medium flex-1 truncate" data-testid={`text-task-name-${task.id}`}>
+        <div className="flex items-start gap-1.5">
+          <ListChecks className="w-3 h-3 text-muted-foreground shrink-0 mt-0.5" />
+          <span className="text-xs font-medium leading-tight break-words" data-testid={`text-task-name-${task.id}`}>
             {task.taskName}
           </span>
+        </div>
+        <div className="flex items-center gap-1 flex-wrap">
           <Badge
             variant="secondary"
             className={`text-[10px] no-default-hover-elevate no-default-active-elevate ${getPriorityColor(task.priority)}`}
@@ -1289,7 +1295,7 @@ function TaskCard({
           <Button
             size="icon"
             variant="ghost"
-            onClick={() => onDelete(task.id)}
+            onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
             data-testid={`button-delete-task-${task.id}`}
           >
             <Trash2 className="w-3 h-3" />

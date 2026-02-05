@@ -5404,6 +5404,27 @@ export async function registerRoutes(
     }
   });
   
+  // Batch update document step assignments (MUST be before :docId route)
+  app.put('/api/admin/programs/:programId/documents/batch-step', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { assignments } = req.body;
+      if (!Array.isArray(assignments)) {
+        return res.status(400).json({ error: 'Assignments must be an array' });
+      }
+      await db.transaction(async (tx) => {
+        for (const assignment of assignments) {
+          await tx.update(programDocumentTemplates)
+            .set({ stepId: assignment.stepId ?? null })
+            .where(eq(programDocumentTemplates.id, assignment.documentId));
+        }
+      });
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Batch update document steps error:', error);
+      res.status(500).json({ error: 'Failed to update document assignments' });
+    }
+  });
+
   // Update document template
   app.put('/api/admin/programs/:programId/documents/:docId', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
@@ -5474,6 +5495,29 @@ export async function registerRoutes(
     }
   });
   
+  // Batch update task step assignments (MUST be before :taskId route)
+  app.put('/api/admin/programs/:programId/tasks/batch-step', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { assignments } = req.body;
+      if (!Array.isArray(assignments)) {
+        return res.status(400).json({ error: 'Assignments must be an array' });
+      }
+      await db.transaction(async (tx) => {
+        for (const assignment of assignments) {
+          const updateData: any = { stepId: assignment.stepId ?? null };
+          if (assignment.assignToRole !== undefined) updateData.assignToRole = assignment.assignToRole;
+          await tx.update(programTaskTemplates)
+            .set(updateData)
+            .where(eq(programTaskTemplates.id, assignment.taskId));
+        }
+      });
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Batch update task steps error:', error);
+      res.status(500).json({ error: 'Failed to update task assignments' });
+    }
+  });
+
   // Update task template
   app.put('/api/admin/programs/:programId/tasks/:taskId', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
@@ -5678,49 +5722,6 @@ export async function registerRoutes(
     }
   });
 
-  // Batch update document step assignments
-  app.put('/api/admin/programs/:programId/documents/batch-step', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
-    try {
-      const { assignments } = req.body;
-      if (!Array.isArray(assignments)) {
-        return res.status(400).json({ error: 'Assignments must be an array' });
-      }
-      await db.transaction(async (tx) => {
-        for (const assignment of assignments) {
-          await tx.update(programDocumentTemplates)
-            .set({ stepId: assignment.stepId })
-            .where(eq(programDocumentTemplates.id, assignment.documentId));
-        }
-      });
-      res.json({ success: true });
-    } catch (error) {
-      console.error('Batch update document steps error:', error);
-      res.status(500).json({ error: 'Failed to update document assignments' });
-    }
-  });
-
-  // Batch update task step assignments
-  app.put('/api/admin/programs/:programId/tasks/batch-step', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
-    try {
-      const { assignments } = req.body;
-      if (!Array.isArray(assignments)) {
-        return res.status(400).json({ error: 'Assignments must be an array' });
-      }
-      await db.transaction(async (tx) => {
-        for (const assignment of assignments) {
-          const updateData: any = { stepId: assignment.stepId };
-          if (assignment.assignToRole !== undefined) updateData.assignToRole = assignment.assignToRole;
-          await tx.update(programTaskTemplates)
-            .set(updateData)
-            .where(eq(programTaskTemplates.id, assignment.taskId));
-        }
-      });
-      res.json({ success: true });
-    } catch (error) {
-      console.error('Batch update task steps error:', error);
-      res.status(500).json({ error: 'Failed to update task assignments' });
-    }
-  });
 
   // ==================== DEAL PROCESSORS ROUTES ====================
 
