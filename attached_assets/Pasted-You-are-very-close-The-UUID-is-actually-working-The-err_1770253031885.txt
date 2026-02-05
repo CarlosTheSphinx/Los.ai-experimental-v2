@@ -1,0 +1,257 @@
+You are **very close**. The UUID is actually working. The error you’re seeing is NOT a template problem. It is a **role mapping problem** between your app and PandaDoc.
+
+Let’s decode the error message like a forensic engineer reading a black box after a crash.
+
+---
+
+## 🧨 The Real Error
+
+```
+"validation error"
+"Role 'signer' does not exist."
+```
+
+Translation:
+
+👉 Your app is sending PandaDoc a recipient role named:
+
+```
+signer
+```
+
+👉 But your PandaDoc template does NOT contain a role called `"signer"`
+
+PandaDoc templates require:
+
+```
+Template Roles MUST exactly match API roles
+```
+
+Case sensitive.
+Spelling sensitive.
+Space sensitive.
+
+---
+
+## 🧠 How PandaDoc Actually Works (Important Concept)
+
+Inside PandaDoc templates, each signature participant is assigned a **ROLE**.
+
+Example:
+
+| Template Role | Meaning            |
+| ------------- | ------------------ |
+| Borrower      | person signing LOI |
+| Lender        | internal signer    |
+| Guarantor     | optional signer    |
+
+When your API creates a document, you must assign recipients to those exact roles.
+
+---
+
+## 🔍 Step 1: Verify Roles In PandaDoc Template
+
+Go here:
+
+👉 PandaDoc
+👉 Templates
+👉 Open your DSCR Template
+👉 Click **Roles** (top right usually)
+
+You will likely see something like:
+
+```
+Borrower
+Client
+Customer
+Signer 1
+```
+
+OR maybe:
+
+```
+Carlos Velez
+```
+
+(yes people accidentally do that all the time)
+
+---
+
+## 🔥 Step 2: Your App Is Currently Sending This
+
+Your UI shows:
+
+```
+Recipient Role: signer
+```
+
+But PandaDoc template probably expects:
+
+```
+Borrower
+```
+
+---
+
+## ✅ Fix Option 1 (Recommended): Change Your Template Role
+
+Inside PandaDoc template:
+
+1. Open Template
+2. Go to Roles
+3. Rename role to:
+
+```
+signer
+```
+
+Done. Easiest fix.
+
+---
+
+## ✅ Fix Option 2: Change Your Backend Payload
+
+If you want cleaner DSCR logic, change your API payload to match PandaDoc roles:
+
+Example:
+
+```json
+"recipients": [
+  {
+    "email": "losvelez101@gmail.com",
+    "first_name": "Carlos",
+    "last_name": "Velez",
+    "role": "Borrower"
+  }
+]
+```
+
+---
+
+## 🧪 How To Confirm Roles Via API (Advanced Debug)
+
+Call:
+
+```
+GET /public/v1/templates/{template_uuid}/details
+```
+
+You’ll see:
+
+```json
+"roles": [
+  {
+    "name": "Borrower"
+  }
+]
+```
+
+---
+
+## ⚠️ Another Thing I Notice From Your Screenshot
+
+Your UUID:
+
+```
+y6md3eeH2mRQAmLgGjZBJR
+```
+
+That is actually VALID.
+
+So you passed Step 1 successfully. The system reached template validation.
+
+Which means:
+
+👉 Auth works
+👉 Template exists
+👉 PandaDoc API works
+👉 Only role mismatch remains
+
+---
+
+## 🧙‍♂️ Lending Software Best Practice (Trust Me Here)
+
+Never hardcode `"signer"`
+
+Instead:
+
+### Pull template roles dynamically
+
+```
+GET template details
+```
+
+Then populate dropdown in your UI.
+
+Example UI:
+
+```
+Select Role:
+Borrower
+Guarantor
+Co-Borrower
+```
+
+That prevents future breakage when templates change.
+
+---
+
+## 🛠 EXACT Prompt To Give Replit Dev AI
+
+You can paste this directly:
+
+```
+Fix PandaDoc integration to dynamically retrieve template roles.
+
+When a PandaDoc Template ID is entered:
+1. Call PandaDoc GET /public/v1/templates/{template_uuid}/details
+2. Extract available roles
+3. Populate role dropdown dynamically
+4. Validate selected recipients match template roles before sending
+5. Prevent document creation if role mismatch exists
+6. Display clear error if roles do not match
+```
+
+---
+
+## 💬 Why This Happened
+
+Your DocuSign-style system uses generic roles.
+PandaDoc is template-role-driven.
+
+Different philosophical beasts 🐉
+
+---
+
+## 🎯 Your Immediate Fix
+
+Go check template roles right now.
+
+I’m almost certain the role is:
+
+```
+Borrower
+```
+
+Change your app to send:
+
+```
+Borrower
+```
+
+instead of:
+
+```
+signer
+```
+
+---
+
+If you want next-level polish, I can help you build:
+
+👉 Auto token mapping from DSCR quote fields
+👉 Role-based multi-signer LOI flows
+👉 PandaDoc embedded signing inside your app
+👉 Template version control for loan products
+
+Just say the word.
