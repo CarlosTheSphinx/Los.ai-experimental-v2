@@ -435,7 +435,7 @@ export default function AdminDigests() {
         </Button>
       </div>
 
-      <div className="grid gap-4 md:gap-6 lg:grid-cols-[280px_1fr]">
+      <div className="grid gap-4 md:gap-6 lg:grid-cols-[320px_1fr]">
         <div className="space-y-4">
           <Card>
             <CardHeader className="pb-2">
