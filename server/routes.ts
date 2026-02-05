@@ -8912,6 +8912,49 @@ export async function registerRoutes(
     }
   });
 
+  // Debug endpoint to test PandaDoc connection and list all templates
+  app.get('/api/esign/pandadoc/debug/templates', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const pandadoc = await import('./esign/pandadoc');
+      const result = await pandadoc.listAllTemplates();
+      
+      res.json({
+        success: !result.error,
+        apiBase: result.apiBase,
+        templateCount: result.results.length,
+        templates: result.results.map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          date_created: t.date_created,
+          date_modified: t.date_modified,
+        })),
+        error: result.error || null,
+        help: result.error ? {
+          message: "If you see a 403 error, try these fixes:",
+          suggestions: [
+            "1. Verify your API key was created in the same PandaDoc account that owns the templates",
+            "2. Try setting PANDADOC_API_BASE_URL to 'https://api-eu.pandadoc.com/public/v1' if using EU region",
+            "3. Check if your API key has 'Templates' permission in PandaDoc settings",
+            "4. Regenerate your API key if it was recently created (sometimes takes a few minutes to activate)"
+          ]
+        } : null,
+      });
+    } catch (error: any) {
+      console.error('PandaDoc debug templates error:', error);
+      res.status(500).json({ 
+        success: false,
+        error: error.message,
+        help: {
+          message: "Connection to PandaDoc failed",
+          suggestions: [
+            "Check if PANDADOC_API_KEY is set correctly",
+            "Verify the API key format (should be raw key, not 'API-Key xxx')",
+          ]
+        }
+      });
+    }
+  });
+
   // Get envelopes for a quote
   app.get('/api/esign/envelopes/quote/:quoteId', authenticateUser, async (req: AuthRequest, res: Response) => {
     try {

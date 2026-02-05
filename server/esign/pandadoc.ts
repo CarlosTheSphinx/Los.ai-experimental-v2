@@ -2,7 +2,9 @@ import { db } from "../db";
 import { esignEnvelopes, esignEvents, savedQuotes, documentTemplates, templateFields } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
-const PANDADOC_API_BASE = "https://api.pandadoc.com/public/v1";
+function getApiBase(): string {
+  return process.env.PANDADOC_API_BASE_URL || "https://api.pandadoc.com/public/v1";
+}
 
 interface PandaDocRecipient {
   email: string;
@@ -51,8 +53,12 @@ async function pandaDocRequest(
   options: RequestInit = {}
 ): Promise<Response> {
   const apiKey = getApiKey();
+  const apiBase = getApiBase();
+  const fullUrl = `${apiBase}${endpoint}`;
   
-  const response = await fetch(`${PANDADOC_API_BASE}${endpoint}`, {
+  console.log(`[PandaDoc] ${options.method || 'GET'} ${fullUrl}`);
+  
+  const response = await fetch(fullUrl, {
     ...options,
     headers: {
       "Authorization": `API-Key ${apiKey}`,
@@ -60,6 +66,14 @@ async function pandaDocRequest(
       ...options.headers,
     },
   });
+  
+  if (!response.ok) {
+    console.error(`[PandaDoc] Request failed:`);
+    console.error(`  URL: ${fullUrl}`);
+    console.error(`  Method: ${options.method || 'GET'}`);
+    console.error(`  Status: ${response.status} ${response.statusText}`);
+    console.error(`  Headers:`, Object.fromEntries(response.headers.entries()));
+  }
   
   return response;
 }
@@ -145,8 +159,12 @@ export async function getDocumentStatus(documentId: string): Promise<PandaDocDoc
 
 export async function downloadSignedPdf(documentId: string): Promise<ArrayBuffer> {
   const apiKey = getApiKey();
+  const apiBase = getApiBase();
+  const fullUrl = `${apiBase}/documents/${documentId}/download`;
   
-  const response = await fetch(`${PANDADOC_API_BASE}/documents/${documentId}/download`, {
+  console.log(`[PandaDoc] GET ${fullUrl} (download)`);
+  
+  const response = await fetch(fullUrl, {
     headers: {
       "Authorization": `API-Key ${apiKey}`,
     },
@@ -154,24 +172,56 @@ export async function downloadSignedPdf(documentId: string): Promise<ArrayBuffer
   
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("PandaDoc download error:", errorText);
+    console.error("[PandaDoc] Download error:");
+    console.error(`  URL: ${fullUrl}`);
+    console.error(`  Status: ${response.status} ${response.statusText}`);
+    console.error(`  Body: ${errorText}`);
     throw new Error(`Failed to download PandaDoc document: ${response.status} ${errorText}`);
   }
   
   return response.arrayBuffer();
 }
 
-export async function listTemplates(): Promise<any[]> {
-  const response = await pandaDocRequest("/templates?tag=loan");
+export async function listTemplates(tag?: string): Promise<any[]> {
+  const endpoint = tag ? `/templates?tag=${encodeURIComponent(tag)}` : "/templates";
+  const response = await pandaDocRequest(endpoint);
   
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("PandaDoc list templates error:", errorText);
+    console.error("[PandaDoc] List templates error:");
+    console.error(`  Status: ${response.status} ${response.statusText}`);
+    console.error(`  Body: ${errorText}`);
     throw new Error(`Failed to list PandaDoc templates: ${response.status} ${errorText}`);
   }
   
   const data = await response.json();
   return data.results || [];
+}
+
+export async function listAllTemplates(): Promise<{ results: any[]; apiBase: string; error?: string }> {
+  const apiBase = getApiBase();
+  try {
+    const response = await pandaDocRequest("/templates");
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[PandaDoc] List all templates error:");
+      console.error(`  Status: ${response.status} ${response.statusText}`);
+      console.error(`  Body: ${errorText}`);
+      return { 
+        results: [], 
+        apiBase, 
+        error: `${response.status} ${response.statusText}: ${errorText}` 
+      };
+    }
+    
+    const data = await response.json();
+    console.log(`[PandaDoc] Found ${data.results?.length || 0} templates`);
+    return { results: data.results || [], apiBase };
+  } catch (err: any) {
+    console.error("[PandaDoc] List all templates exception:", err);
+    return { results: [], apiBase, error: err.message };
+  }
 }
 
 export async function getTemplateDetails(templateId: string): Promise<any> {
