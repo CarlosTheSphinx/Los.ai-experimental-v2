@@ -8955,6 +8955,37 @@ export async function registerRoutes(
     }
   });
 
+  // Debug endpoint to get full document details from PandaDoc
+  app.get('/api/esign/pandadoc/debug/document/:documentId', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { documentId } = req.params;
+      const pandadoc = await import('./esign/pandadoc');
+      
+      console.log(`[PandaDoc Debug] Fetching document details for: ${documentId}`);
+      
+      const docStatus = await pandadoc.getDocumentStatus(documentId);
+      
+      res.json({
+        success: true,
+        document: docStatus,
+      });
+    } catch (error: any) {
+      console.error('PandaDoc debug document error:', error);
+      res.status(500).json({ 
+        success: false,
+        error: error.message,
+        help: {
+          message: "Failed to fetch document details",
+          suggestions: [
+            "Verify the document ID is correct",
+            "Check if the document was created with your API key",
+            "Documents from a different PandaDoc account won't be accessible"
+          ]
+        }
+      });
+    }
+  });
+
   // Get envelopes for a quote
   app.get('/api/esign/envelopes/quote/:quoteId', authenticateUser, async (req: AuthRequest, res: Response) => {
     try {
