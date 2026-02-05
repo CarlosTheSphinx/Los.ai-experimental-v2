@@ -110,7 +110,7 @@ export default function AdminProjects() {
               ))}
             </div>
           ) : projects.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No projects found</p>
+            <p className="text-center text-muted-foreground py-8">No loans found</p>
           ) : (
             <div className="border rounded-lg overflow-hidden">
               <Table>

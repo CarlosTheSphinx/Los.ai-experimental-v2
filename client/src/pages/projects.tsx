@@ -115,7 +115,7 @@ export default function Projects() {
         <div className="min-w-0">
           <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
             <FolderKanban className="h-5 w-5 md:h-6 md:w-6 text-primary shrink-0" />
-            <span className="truncate">Projects</span>
+            <span className="truncate">Loans</span>
           </h1>
           <p className="text-sm md:text-base text-muted-foreground mt-1 hidden sm:block">
             Track loan closings and borrower progress
@@ -124,7 +124,7 @@ export default function Projects() {
         <Link href="/projects/new">
           <Button data-testid="button-new-project" size="sm" className="w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-2" />
-            New Project
+            New Loan
           </Button>
         </Link>
       </div>
@@ -133,7 +133,7 @@ export default function Projects() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search projects..."
+            placeholder="Search loans..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
@@ -172,15 +172,15 @@ export default function Projects() {
               <FolderKanban className="h-8 w-8 text-muted-foreground" />
             </div>
             <div>
-              <h3 className="font-semibold text-lg">No projects found</h3>
+              <h3 className="font-semibold text-lg">No loans found</h3>
               <p className="text-muted-foreground mt-1">
-                {searchQuery ? 'Try a different search term' : 'Projects are auto-created when agreements are signed'}
+                {searchQuery ? 'Try a different search term' : 'Loans are auto-created when term sheets are signed'}
               </p>
             </div>
             <Link href="/projects/new">
               <Button variant="outline" data-testid="button-create-first">
                 <Plus className="h-4 w-4 mr-2" />
-                Create Project Manually
+                Create Loan Manually
               </Button>
             </Link>
           </div>
