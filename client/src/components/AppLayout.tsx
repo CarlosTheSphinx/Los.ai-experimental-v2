@@ -43,7 +43,7 @@ interface AppLayoutProps {
 const brokerNavItems = [
   { href: "/", label: "New Quote", icon: Calculator },
   { href: "/quotes", label: "Saved Quotes", icon: FileText },
-  { href: "/agreements", label: "Agreements", icon: ClipboardList },
+  { href: "/agreements", label: "Term Sheets", icon: ClipboardList },
   { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/messages", label: "Messages", icon: MessageSquare, showBadge: true },
   { href: "/resources", label: "Resources", icon: BookOpen },

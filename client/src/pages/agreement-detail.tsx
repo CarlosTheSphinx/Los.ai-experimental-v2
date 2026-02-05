@@ -253,12 +253,12 @@ export default function AgreementDetailPage() {
         <Card className="text-center py-12">
           <CardContent>
             <XCircle className="w-16 h-16 mx-auto text-red-300 mb-4" />
-            <h3 className="text-xl font-semibold text-slate-600 mb-2">Agreement Not Found</h3>
-            <p className="text-slate-400 mb-4">The agreement you're looking for doesn't exist.</p>
+            <h3 className="text-xl font-semibold text-slate-600 mb-2">Term Sheet Not Found</h3>
+            <p className="text-slate-400 mb-4">The term sheet you're looking for doesn't exist.</p>
             <Link href="/agreements">
               <Button variant="outline">
                 <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Agreements
+                Back to Term Sheets
               </Button>
             </Link>
           </CardContent>

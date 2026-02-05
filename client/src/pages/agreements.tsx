@@ -259,7 +259,7 @@ export default function Agreements() {
           <div className="flex items-center gap-2 md:gap-3">
             <ClipboardList className="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" />
             <div className="min-w-0">
-              <h1 className="text-lg md:text-xl font-bold text-primary truncate">Agreements</h1>
+              <h1 className="text-lg md:text-xl font-bold text-primary truncate">Term Sheets</h1>
               <p className="text-xs md:text-sm text-slate-500 hidden sm:block">Manage and track all your e-signature documents</p>
             </div>
           </div>
@@ -271,7 +271,7 @@ export default function Agreements() {
           <div className="relative w-full sm:hidden">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input
-              placeholder="Search agreements..."
+              placeholder="Search term sheets..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"
@@ -298,7 +298,7 @@ export default function Agreements() {
             <div className="relative w-64 hidden sm:block">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input
-                placeholder="Search agreements..."
+                placeholder="Search term sheets..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -316,11 +316,11 @@ export default function Agreements() {
           <Card className="text-center py-12">
             <CardContent>
               <FileText className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-              <h3 className="text-xl font-semibold text-slate-600 mb-2">No Agreements Found</h3>
+              <h3 className="text-xl font-semibold text-slate-600 mb-2">No Term Sheets Found</h3>
               <p className="text-slate-400">
                 {activeFilter === 'all' 
                   ? "Create a quote and send it for signature to get started." 
-                  : `No agreements with status "${activeFilter}".`}
+                  : `No term sheets with status "${activeFilter}".`}
               </p>
             </CardContent>
           </Card>
