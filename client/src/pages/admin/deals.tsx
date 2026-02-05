@@ -291,18 +291,20 @@ function DealExpandedCard({ deal, formatCurrency, getStageColor, getStageLabel, 
 
   return (
     <Card data-testid={`card-deal-${deal.id}`} className="overflow-hidden hover-elevate">
-      <Link href={`/admin/deals/${deal.id}`}>
+      <Link href={`/admin/deals/${deal.id}`} data-testid={`link-deal-${deal.id}`}>
         <div className="p-5">
           {/* Top row: Project number, status badge, arrow */}
           <div className="flex items-center justify-between gap-2 mb-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {deal.projectNumber && (
-                <span className="text-xs text-muted-foreground font-mono">{deal.projectNumber}</span>
+                <span className="text-xs text-muted-foreground font-mono" data-testid={`text-project-number-${deal.id}`}>
+                  {deal.projectNumber}
+                </span>
               )}
-              <Badge className={cn("text-xs", getStageColor(deal.stage))}>
+              <Badge className={cn("text-xs", getStageColor(deal.stage))} data-testid={`badge-status-${deal.id}`}>
                 {getStageLabel(deal.stage)}
               </Badge>
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="outline" className="text-xs" data-testid={`badge-loantype-${deal.id}`}>
                 {getLoanTypeLabel(deal.loanData?.loanType)}
               </Badge>
             </div>
@@ -310,48 +312,44 @@ function DealExpandedCard({ deal, formatCurrency, getStageColor, getStageLabel, 
           </div>
           
           {/* Loan title */}
-          <h3 className="text-base font-semibold mb-3 truncate" data-testid={`link-deal-${deal.id}`}>
+          <h3 className="text-base font-semibold mb-3 truncate" data-testid={`text-deal-title-${deal.id}`}>
             {loanTitle}
           </h3>
           
           {/* Progress bar */}
-          <div className="mb-3">
+          <div className="mb-3" data-testid={`progress-container-${deal.id}`}>
             <div className="flex justify-between text-sm mb-1">
               <span className="text-muted-foreground">Progress</span>
-              <span className="font-medium">{progress}%</span>
+              <span className="font-medium" data-testid={`text-progress-${deal.id}`}>{progress}%</span>
             </div>
             <Progress value={progress} className="h-2" />
           </div>
           
-          {/* Documentation status - horizontal divider */}
-          <div className="flex justify-between text-sm py-2 border-t border-border">
-            <span className="text-muted-foreground">Documentation</span>
-            <span className="font-medium">0/47 tasks</span>
-          </div>
-          
           {/* Borrower and Amount row */}
-          <div className="flex items-center gap-4 text-sm mt-2 mb-2">
+          <div className="flex items-center gap-4 text-sm mt-2 mb-2 border-t border-border pt-3">
             <div className="flex items-center gap-1.5">
               <User className="h-4 w-4 text-muted-foreground" />
-              <span>{deal.customerFirstName} {deal.customerLastName}</span>
+              <span data-testid={`text-borrower-${deal.id}`}>{deal.customerFirstName} {deal.customerLastName}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <DollarSign className="h-4 w-4 text-muted-foreground" />
-              <span>{deal.loanData?.loanAmount ? formatCurrency(deal.loanData.loanAmount) : "—"}</span>
+              <span data-testid={`text-amount-${deal.id}`}>
+                {deal.loanData?.loanAmount ? formatCurrency(deal.loanData.loanAmount) : "—"}
+              </span>
             </div>
           </div>
           
           {/* Property address */}
           <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-2">
             <MapPin className="h-4 w-4 flex-shrink-0" />
-            <span className="truncate">{deal.propertyAddress}</span>
+            <span className="truncate" data-testid={`text-address-${deal.id}`}>{deal.propertyAddress}</span>
           </div>
           
           {/* Target date */}
           {targetDate && (
             <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
               <Calendar className="h-4 w-4" />
-              <span>Target: {targetDate}</span>
+              <span data-testid={`text-target-date-${deal.id}`}>Target: {targetDate}</span>
             </div>
           )}
         </div>
