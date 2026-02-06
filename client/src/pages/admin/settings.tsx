@@ -8,14 +8,20 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Save, Settings as SettingsIcon, RefreshCw, HardDrive, Phone, Mail, Brain, MapPin, Bot, CheckCircle2, XCircle, AlertCircle, Layers, Plus, Trash2, GripVertical, FileStack, ChevronRight, Shield } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Save, Settings as SettingsIcon, RefreshCw, HardDrive, Phone, Mail, Brain,
+  MapPin, Bot, CheckCircle2, XCircle, AlertCircle, Layers, Plus, Trash2,
+  GripVertical, FileStack, ChevronRight, Shield, Palette, Lock, Package,
+  Calculator, GitBranch, Bell, Plug, CreditCard, LayoutList, FileText
+} from "lucide-react";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { PERMISSION_CATEGORIES, type PermissionKey } from "@shared/schema";
 import { useAuth } from "@/hooks/use-auth";
+import { cn } from "@/lib/utils";
 import {
   DndContext,
   closestCenter,
@@ -48,6 +54,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+import BrandingConfig from "@/components/admin/config/BrandingConfig";
+import AuthSecurityConfig from "@/components/admin/config/AuthSecurityConfig";
+import LoanProductsConfig from "@/components/admin/config/LoanProductsConfig";
+import PricingEngineConfig from "@/components/admin/config/PricingEngineConfig";
+import PipelineWorkflowConfig from "@/components/admin/config/PipelineWorkflowConfig";
+import DocumentsEsignConfig from "@/components/admin/config/DocumentsEsignConfig";
+import NotificationsConfig from "@/components/admin/config/NotificationsConfig";
+import CustomFieldsConfig from "@/components/admin/config/CustomFieldsConfig";
+import BillingPlansConfig from "@/components/admin/config/BillingPlansConfig";
 
 interface DealStage {
   id: number;
@@ -86,6 +102,21 @@ const stageColorMap: Record<string, string> = {
   red: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
   slate: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
 };
+
+const CONFIG_TABS = [
+  { id: "general", label: "General", icon: SettingsIcon },
+  { id: "branding", label: "Branding", icon: Palette },
+  { id: "auth", label: "Auth & Security", icon: Lock },
+  { id: "roles", label: "Roles & Permissions", icon: Shield },
+  { id: "products", label: "Loan Products", icon: Package },
+  { id: "pricing", label: "Pricing Engine", icon: Calculator },
+  { id: "pipeline", label: "Pipeline & Workflow", icon: GitBranch },
+  { id: "documents", label: "Documents & eSign", icon: FileText },
+  { id: "notifications", label: "Notifications", icon: Bell },
+  { id: "integrations", label: "Integrations", icon: Plug },
+  { id: "custom-fields", label: "Custom Fields", icon: LayoutList },
+  { id: "billing", label: "Billing & Plans", icon: CreditCard },
+];
 
 function SortableStageItem({ stage, index, onDelete }: { stage: DealStage; index: number; onDelete: (id: number) => void }) {
   const {
@@ -330,6 +361,7 @@ export default function AdminSettings() {
   const { user } = useAuth();
   const [editedSettings, setEditedSettings] = useState<Record<string, string>>({});
   const isSuperAdmin = user?.role === 'super_admin';
+  const [activeTab, setActiveTab] = useState("general");
 
   const { data, isLoading } = useQuery<{ settings: SystemSetting[] }>({
     queryKey: ["/api/admin/settings"],
@@ -357,7 +389,6 @@ export default function AdminSettings() {
     },
   });
 
-  // Deal stages state and queries
   const [stages, setStages] = useState<DealStage[]>([]);
   const [showAddStageDialog, setShowAddStageDialog] = useState(false);
   const [newStageKey, setNewStageKey] = useState("");
@@ -368,7 +399,6 @@ export default function AdminSettings() {
     queryKey: ["/api/admin/deal-stages"],
   });
 
-  // Update local stages when data changes
   useEffect(() => {
     if (stagesData?.stages) {
       setStages(stagesData.stages);
@@ -428,19 +458,14 @@ export default function AdminSettings() {
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    
     if (over && active.id !== over.id) {
       const activeId = Number(active.id);
       const overId = Number(over.id);
       const oldIndex = stages.findIndex((s) => s.id === activeId);
       const newIndex = stages.findIndex((s) => s.id === overId);
-      
       if (oldIndex === -1 || newIndex === -1) return;
-      
       const newStages = arrayMove(stages, oldIndex, newIndex);
       setStages(newStages);
-      
-      // Send reorder request to server
       const stageOrders = newStages.map((stage, index) => ({
         id: stage.id,
         sortOrder: index,
@@ -505,6 +530,61 @@ export default function AdminSettings() {
     );
   }
 
+  const renderSettingField = (key: string, config: typeof settingLabels[string]) => {
+    const setting = settings.find((s) => s.settingKey === key);
+    const value = getSettingValue(key);
+    const changed = hasChanges(key);
+
+    return (
+      <div key={key} className="space-y-2" data-testid={`setting-${key}`}>
+        <div className="flex items-center justify-between">
+          <Label htmlFor={key} className="font-medium">
+            {config.label}
+          </Label>
+          {setting?.updatedAt && (
+            <span className="text-xs text-muted-foreground">
+              Updated {format(new Date(setting.updatedAt), "MMM d, yyyy")}
+            </span>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground">{config.description}</p>
+        <div className="flex gap-2">
+          {config.type === "textarea" ? (
+            <Textarea
+              id={key}
+              value={value}
+              onChange={(e) => setEditedSettings({ ...editedSettings, [key]: e.target.value })}
+              className="flex-1"
+              data-testid={`input-${key}`}
+            />
+          ) : (
+            <Input
+              id={key}
+              type={config.type === "url" ? "url" : "text"}
+              value={value}
+              onChange={(e) => setEditedSettings({ ...editedSettings, [key]: e.target.value })}
+              className="flex-1"
+              data-testid={`input-${key}`}
+            />
+          )}
+          <Button
+            variant={changed ? "default" : "outline"}
+            size="icon"
+            onClick={() => handleSave(key)}
+            disabled={!changed || updateSettingMutation.isPending}
+            data-testid={`button-save-${key}`}
+          >
+            {updateSettingMutation.isPending ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center gap-3">
@@ -512,357 +592,391 @@ export default function AdminSettings() {
         <h1 className="text-2xl font-semibold" data-testid="text-admin-settings-title">System Settings</h1>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Bot className="h-5 w-5" />
-            External Integrations
-          </CardTitle>
-          <CardDescription>
-            Status of connected external services for notifications, AI, and automation
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {integrationsLoading ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <Skeleton key={i} className="h-24" />
-              ))}
-            </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <div className="border rounded-lg p-4 space-y-3" data-testid="integration-twilio">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Phone className="h-5 w-5 text-blue-500" />
-                    <span className="font-medium">Twilio SMS</span>
-                  </div>
-                  {integrationsData?.integrations.twilio?.connected ? (
-                    <Badge variant="default">
-                      <CheckCircle2 className="h-3 w-3 mr-1" />
-                      Connected
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary">
-                      <XCircle className="h-3 w-3 mr-1" />
-                      Not Connected
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Send SMS notifications for loan digests and updates
-                </p>
-                {integrationsData?.integrations.twilio?.details?.phoneNumber && (
-                  <p className="text-xs text-muted-foreground">
-                    From: {integrationsData.integrations.twilio.details.phoneNumber}
-                  </p>
-                )}
-              </div>
-
-              <div className="border rounded-lg p-4 space-y-3" data-testid="integration-resend">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Mail className="h-5 w-5 text-purple-500" />
-                    <span className="font-medium">Resend Email</span>
-                  </div>
-                  {integrationsData?.integrations.resend?.connected ? (
-                    <Badge variant="default">
-                      <CheckCircle2 className="h-3 w-3 mr-1" />
-                      Connected
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary">
-                      <XCircle className="h-3 w-3 mr-1" />
-                      Not Connected
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Send email notifications for loan digests and system alerts
-                </p>
-                {integrationsData?.integrations.resend?.details?.fromEmail && (
-                  <p className="text-xs text-muted-foreground">
-                    From: {integrationsData.integrations.resend.details.fromEmail}
-                  </p>
-                )}
-              </div>
-
-              <div className="border rounded-lg p-4 space-y-3" data-testid="integration-openai">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Brain className="h-5 w-5 text-green-500" />
-                    <span className="font-medium">OpenAI</span>
-                  </div>
-                  {integrationsData?.integrations.openai?.connected ? (
-                    <Badge variant="default">
-                      <CheckCircle2 className="h-3 w-3 mr-1" />
-                      Connected
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary">
-                      <XCircle className="h-3 w-3 mr-1" />
-                      Not Connected
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  AI-powered features for document analysis and automation
-                </p>
-              </div>
-
-              <div className="border rounded-lg p-4 space-y-3" data-testid="integration-apify">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Bot className="h-5 w-5 text-orange-500" />
-                    <span className="font-medium">Apify Scraper</span>
-                  </div>
-                  {integrationsData?.integrations.apify?.connected ? (
-                    <Badge variant="default">
-                      <CheckCircle2 className="h-3 w-3 mr-1" />
-                      Connected
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline">
-                      <AlertCircle className="h-3 w-3 mr-1" />
-                      Not Configured
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Automated quote scraping from external pricing providers
-                </p>
-              </div>
-
-              <div className="border rounded-lg p-4 space-y-3" data-testid="integration-geoapify">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-5 w-5 text-red-500" />
-                    <span className="font-medium">Geoapify</span>
-                  </div>
-                  {integrationsData?.integrations.geoapify?.connected ? (
-                    <Badge variant="default">
-                      <CheckCircle2 className="h-3 w-3 mr-1" />
-                      Connected
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary">
-                      <XCircle className="h-3 w-3 mr-1" />
-                      Not Connected
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Address autocomplete and geocoding for property locations
-                </p>
-              </div>
-            </div>
-          )}
-          <div className="mt-4 flex justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => refetchIntegrations()}
-              data-testid="button-refresh-integrations"
+      <div className="flex gap-6">
+        <nav className="w-52 shrink-0 space-y-1 sticky top-4 self-start" data-testid="nav-settings-tabs">
+          {CONFIG_TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "w-full text-left px-3 py-2 rounded-md text-sm flex items-center gap-2 transition-colors",
+                activeTab === tab.id
+                  ? "bg-muted font-medium"
+                  : "text-muted-foreground hover-elevate"
+              )}
+              data-testid={`tab-${tab.id}`}
             >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh Status
-            </Button>
-          </div>
-          <div className="mt-4 p-4 bg-muted/50 rounded-lg">
-            <p className="text-sm text-muted-foreground">
-              <strong>Note:</strong> Integrations are managed through Replit's connector system. To connect or update an integration, use the Replit Integrations panel or contact your administrator.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+              <tab.icon className="h-4 w-4 shrink-0" />
+              <span className="truncate">{tab.label}</span>
+            </button>
+          ))}
+        </nav>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Application Configuration</CardTitle>
-          <CardDescription>
-            Manage global settings for the loan pricing application
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {Object.entries(settingLabels)
-            .filter(([_, config]) => config.category === "general")
-            .map(([key, config]) => {
-              const setting = settings.find((s) => s.settingKey === key);
-              const value = getSettingValue(key);
-              const changed = hasChanges(key);
+        <div className="flex-1 min-w-0 space-y-4">
 
-              return (
-                <div key={key} className="space-y-2" data-testid={`setting-${key}`}>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor={key} className="font-medium">
-                      {config.label}
-                    </Label>
-                    {setting?.updatedAt && (
-                      <span className="text-xs text-muted-foreground">
-                        Updated {format(new Date(setting.updatedAt), "MMM d, yyyy")}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-muted-foreground">{config.description}</p>
-                  <div className="flex gap-2">
-                    {config.type === "textarea" ? (
-                      <Textarea
-                        id={key}
-                        value={value}
-                        onChange={(e) => setEditedSettings({ ...editedSettings, [key]: e.target.value })}
-                        className="flex-1"
-                        data-testid={`input-${key}`}
-                      />
-                    ) : (
-                      <Input
-                        id={key}
-                        type={config.type === "url" ? "url" : "text"}
-                        value={value}
-                        onChange={(e) => setEditedSettings({ ...editedSettings, [key]: e.target.value })}
-                        className="flex-1"
-                        data-testid={`input-${key}`}
-                      />
-                    )}
-                    <Button
-                      variant={changed ? "default" : "outline"}
-                      size="icon"
-                      onClick={() => handleSave(key)}
-                      disabled={!changed || updateSettingMutation.isPending}
-                      data-testid={`button-save-${key}`}
-                    >
-                      {updateSettingMutation.isPending ? (
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Save className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <HardDrive className="h-5 w-5" />
-            Google Drive Integration
-          </CardTitle>
-          <CardDescription>
-            Configure Google Drive for automatic document sync. When a document is uploaded, a copy will be stored in the loan's Google Drive folder.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {Object.entries(settingLabels)
-            .filter(([_, config]) => config.category === "google_drive")
-            .map(([key, config]) => {
-              const setting = settings.find((s) => s.settingKey === key);
-              const value = getSettingValue(key);
-              const changed = hasChanges(key);
-
-              return (
-                <div key={key} className="space-y-2" data-testid={`setting-${key}`}>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor={key} className="font-medium">
-                      {config.label}
-                    </Label>
-                    {setting?.updatedAt && (
-                      <span className="text-xs text-muted-foreground">
-                        Updated {format(new Date(setting.updatedAt), "MMM d, yyyy")}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-muted-foreground">{config.description}</p>
-                  <div className="flex gap-2">
-                    <Input
-                      id={key}
-                      type="text"
-                      value={value}
-                      onChange={(e) => setEditedSettings({ ...editedSettings, [key]: e.target.value })}
-                      className="flex-1"
-                      placeholder={key === "google_drive_folder_id" ? "1aBcDeFgHiJkLmNoPqRsTuVwXyZ" : "service-account@project.iam.gserviceaccount.com"}
-                      data-testid={`input-${key}`}
-                    />
-                    <Button
-                      variant={changed ? "default" : "outline"}
-                      size="icon"
-                      onClick={() => handleSave(key)}
-                      disabled={!changed || updateSettingMutation.isPending}
-                      data-testid={`button-save-${key}`}
-                    >
-                      {updateSettingMutation.isPending ? (
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Save className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-          <div className="p-4 bg-muted/50 rounded-lg">
-            <p className="text-sm text-muted-foreground">
-              <strong>Setup Instructions:</strong> To enable Google Drive integration, you need to create a Google Cloud service account and share the parent folder with the service account email. The service account credentials (JSON key file) should be stored as a secret named <code className="bg-muted px-1 py-0.5 rounded">GOOGLE_SERVICE_ACCOUNT_KEY</code>.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Layers className="h-5 w-5" />
-            Deal Stages
-          </CardTitle>
-          <CardDescription>
-            Configure the workflow stages for loan deals. Drag to reorder stages. These stages help track the progress of each loan from initial review to closing.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {stagesLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : (
+          {activeTab === "general" && (
             <>
-              <div className="space-y-3">
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleDragEnd}
-                >
-                  <SortableContext
-                    items={stages.map((s) => s.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    {stages.map((stage, index) => (
-                      <SortableStageItem
-                        key={stage.id}
-                        stage={stage}
-                        index={index}
-                        onDelete={handleDeleteStage}
-                      />
-                    ))}
-                  </SortableContext>
-                </DndContext>
-              </div>
-              <div className="mt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowAddStageDialog(true)}
-                  data-testid="button-add-stage"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Stage
-                </Button>
-              </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Application Configuration</CardTitle>
+                  <CardDescription>
+                    Manage global settings for the loan pricing application
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {Object.entries(settingLabels)
+                    .filter(([_, config]) => config.category === "general")
+                    .map(([key, config]) => renderSettingField(key, config))}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <HardDrive className="h-5 w-5" />
+                    Google Drive Integration
+                  </CardTitle>
+                  <CardDescription>
+                    Configure Google Drive for automatic document sync. When a document is uploaded, a copy will be stored in the loan's Google Drive folder.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {Object.entries(settingLabels)
+                    .filter(([_, config]) => config.category === "google_drive")
+                    .map(([key, config]) => renderSettingField(key, config))}
+                  <div className="p-4 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground">
+                      <strong>Setup Instructions:</strong> To enable Google Drive integration, you need to create a Google Cloud service account and share the parent folder with the service account email. The service account credentials (JSON key file) should be stored as a secret named <code className="bg-muted px-1 py-0.5 rounded">GOOGLE_SERVICE_ACCOUNT_KEY</code>.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>All Settings</CardTitle>
+                  <CardDescription>
+                    View all system settings including auto-generated ones
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left p-3 text-sm font-medium">Key</th>
+                          <th className="text-left p-3 text-sm font-medium">Value</th>
+                          <th className="text-left p-3 text-sm font-medium">Description</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {settings.map((setting) => (
+                          <tr key={setting.id} className="border-t" data-testid={`row-setting-${setting.settingKey}`}>
+                            <td className="p-3 font-mono text-sm">{setting.settingKey}</td>
+                            <td className="p-3 text-sm truncate max-w-[200px]">{setting.settingValue}</td>
+                            <td className="p-3 text-sm text-muted-foreground">{setting.settingDescription || "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
             </>
           )}
-        </CardContent>
-      </Card>
+
+          {activeTab === "branding" && <BrandingConfig />}
+
+          {activeTab === "auth" && <AuthSecurityConfig />}
+
+          {activeTab === "roles" && isSuperAdmin && <TeamPermissionsCard />}
+          {activeTab === "roles" && !isSuperAdmin && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  Roles & Permissions
+                </CardTitle>
+                <CardDescription>
+                  Only Super Admins can manage team permissions.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Contact a Super Admin to update role-based permissions for your organization.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {activeTab === "products" && <LoanProductsConfig />}
+
+          {activeTab === "pricing" && <PricingEngineConfig />}
+
+          {activeTab === "pipeline" && (
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Layers className="h-5 w-5" />
+                    Deal Stages
+                  </CardTitle>
+                  <CardDescription>
+                    Configure the workflow stages for loan deals. Drag to reorder stages. These stages help track the progress of each loan from initial review to closing.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {stagesLoading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3, 4, 5].map((i) => (
+                        <Skeleton key={i} className="h-12 w-full" />
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-3">
+                        <DndContext
+                          sensors={sensors}
+                          collisionDetection={closestCenter}
+                          onDragEnd={handleDragEnd}
+                        >
+                          <SortableContext
+                            items={stages.map((s) => s.id)}
+                            strategy={verticalListSortingStrategy}
+                          >
+                            {stages.map((stage, index) => (
+                              <SortableStageItem
+                                key={stage.id}
+                                stage={stage}
+                                index={index}
+                                onDelete={handleDeleteStage}
+                              />
+                            ))}
+                          </SortableContext>
+                        </DndContext>
+                      </div>
+                      <div className="mt-4">
+                        <Button
+                          variant="outline"
+                          onClick={() => setShowAddStageDialog(true)}
+                          data-testid="button-add-stage"
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Stage
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+
+              <PipelineWorkflowConfig />
+            </>
+          )}
+
+          {activeTab === "documents" && (
+            <>
+              <Card className="hover-elevate cursor-pointer">
+                <Link href="/admin/document-templates">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900">
+                          <FileStack className="h-5 w-5 text-blue-600 dark:text-blue-300" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-lg">Document Templates</CardTitle>
+                          <CardDescription>
+                            Create and manage reusable document templates with pre-positioned fields
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                  </CardHeader>
+                </Link>
+              </Card>
+
+              <DocumentsEsignConfig />
+            </>
+          )}
+
+          {activeTab === "notifications" && <NotificationsConfig />}
+
+          {activeTab === "integrations" && (
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Bot className="h-5 w-5" />
+                    External Integrations
+                  </CardTitle>
+                  <CardDescription>
+                    Status of connected external services for notifications, AI, and automation
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {integrationsLoading ? (
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      {[1, 2, 3, 4, 5].map((i) => (
+                        <Skeleton key={i} className="h-24" />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      <div className="border rounded-lg p-4 space-y-3" data-testid="integration-twilio">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Phone className="h-5 w-5 text-blue-500" />
+                            <span className="font-medium">Twilio SMS</span>
+                          </div>
+                          {integrationsData?.integrations.twilio?.connected ? (
+                            <Badge variant="default">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Connected
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Not Connected
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Send SMS notifications for loan digests and updates
+                        </p>
+                        {integrationsData?.integrations.twilio?.details?.phoneNumber && (
+                          <p className="text-xs text-muted-foreground">
+                            From: {integrationsData.integrations.twilio.details.phoneNumber}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="border rounded-lg p-4 space-y-3" data-testid="integration-resend">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Mail className="h-5 w-5 text-purple-500" />
+                            <span className="font-medium">Resend Email</span>
+                          </div>
+                          {integrationsData?.integrations.resend?.connected ? (
+                            <Badge variant="default">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Connected
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Not Connected
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Send email notifications for loan digests and system alerts
+                        </p>
+                        {integrationsData?.integrations.resend?.details?.fromEmail && (
+                          <p className="text-xs text-muted-foreground">
+                            From: {integrationsData.integrations.resend.details.fromEmail}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="border rounded-lg p-4 space-y-3" data-testid="integration-openai">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Brain className="h-5 w-5 text-green-500" />
+                            <span className="font-medium">OpenAI</span>
+                          </div>
+                          {integrationsData?.integrations.openai?.connected ? (
+                            <Badge variant="default">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Connected
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Not Connected
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          AI-powered features for document analysis and automation
+                        </p>
+                      </div>
+
+                      <div className="border rounded-lg p-4 space-y-3" data-testid="integration-apify">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Bot className="h-5 w-5 text-orange-500" />
+                            <span className="font-medium">Apify Scraper</span>
+                          </div>
+                          {integrationsData?.integrations.apify?.connected ? (
+                            <Badge variant="default">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Connected
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline">
+                              <AlertCircle className="h-3 w-3 mr-1" />
+                              Not Configured
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Automated quote scraping from external pricing providers
+                        </p>
+                      </div>
+
+                      <div className="border rounded-lg p-4 space-y-3" data-testid="integration-geoapify">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <MapPin className="h-5 w-5 text-red-500" />
+                            <span className="font-medium">Geoapify</span>
+                          </div>
+                          {integrationsData?.integrations.geoapify?.connected ? (
+                            <Badge variant="default">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Connected
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Not Connected
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Address autocomplete and geocoding for property locations
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  <div className="mt-4 flex justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => refetchIntegrations()}
+                      data-testid="button-refresh-integrations"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Refresh Status
+                    </Button>
+                  </div>
+                  <div className="mt-4 p-4 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground">
+                      <strong>Note:</strong> Integrations are managed through Replit's connector system. To connect or update an integration, use the Replit Integrations panel or contact your administrator.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          {activeTab === "custom-fields" && <CustomFieldsConfig />}
+
+          {activeTab === "billing" && <BillingPlansConfig />}
+
+        </div>
+      </div>
 
       <Dialog open={showAddStageDialog} onOpenChange={setShowAddStageDialog}>
         <DialogContent>
@@ -916,8 +1030,8 @@ export default function AdminSettings() {
             <Button variant="outline" onClick={() => setShowAddStageDialog(false)}>
               Cancel
             </Button>
-            <Button 
-              onClick={handleAddStage} 
+            <Button
+              onClick={handleAddStage}
               disabled={createStageMutation.isPending}
               data-testid="button-confirm-add-stage"
             >
@@ -926,60 +1040,6 @@ export default function AdminSettings() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <Card className="hover-elevate cursor-pointer">
-        <Link href="/admin/document-templates">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900">
-                  <FileStack className="h-5 w-5 text-blue-600 dark:text-blue-300" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg">Document Templates</CardTitle>
-                  <CardDescription>
-                    Create and manage reusable document templates with pre-positioned fields
-                  </CardDescription>
-                </div>
-              </div>
-              <ChevronRight className="h-5 w-5 text-muted-foreground" />
-            </div>
-          </CardHeader>
-        </Link>
-      </Card>
-
-      {isSuperAdmin && <TeamPermissionsCard />}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>All Settings</CardTitle>
-          <CardDescription>
-            View all system settings including auto-generated ones
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="border rounded-lg overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="text-left p-3 text-sm font-medium">Key</th>
-                  <th className="text-left p-3 text-sm font-medium">Value</th>
-                  <th className="text-left p-3 text-sm font-medium">Description</th>
-                </tr>
-              </thead>
-              <tbody>
-                {settings.map((setting) => (
-                  <tr key={setting.id} className="border-t" data-testid={`row-setting-${setting.settingKey}`}>
-                    <td className="p-3 font-mono text-sm">{setting.settingKey}</td>
-                    <td className="p-3 text-sm truncate max-w-[200px]">{setting.settingValue}</td>
-                    <td className="p-3 text-sm text-muted-foreground">{setting.settingDescription || "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
