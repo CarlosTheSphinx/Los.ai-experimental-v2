@@ -389,7 +389,12 @@ export async function registerRoutes(
 
       const token = generateToken(user.id, user.email);
       setAuthCookie(res, token);
-      res.redirect('/');
+
+      if (!user.userType) {
+        res.redirect('/select-role');
+      } else {
+        res.redirect('/');
+      }
     } catch (error) {
       console.error('Google OAuth callback error:', error);
       res.redirect('/login?error=google_auth_failed');
