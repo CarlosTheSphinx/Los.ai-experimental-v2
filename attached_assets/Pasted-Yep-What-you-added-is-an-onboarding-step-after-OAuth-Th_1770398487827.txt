@@ -1,0 +1,134 @@
+Yep. What you added is an onboarding step after OAuth. The mistake most people make is trying to shove “choose borrower vs broker” into the OAuth callback itself, which breaks the “login = done” assumption and often causes loops / missing session.
+
+Here’s the clean way to do it (this pattern is standard in SaaS apps):
+
+The correct flow (2-step auth)
+Step 1: Google OAuth = authenticate + create user record
+
+In your /api/auth/google/callback you should only:
+
+Verify Google
+
+Find-or-create the user
+
+Create your app session (cookie/JWT)
+
+Decide where to send them next
+
+Step 2: If role missing → send to onboarding role picker
+
+If this is a brand new user (or role is null), redirect them to:
+
+/onboarding/choose-role
+
+If they already have a role, redirect to their normal dashboard.
+
+What to store in the DB
+
+Your users table should allow role to be empty at first:
+
+id
+
+email
+
+name
+
+googleId
+
+role (nullable: "borrower" | "broker" | "admin")
+
+onboardingCompleted (boolean) OR just infer it from role present
+
+createdAt
+
+The exact logic you want in the callback
+
+Pseudo:
+
+// after Google login succeeds:
+const user = await upsertUserFromGoogle(profile);
+
+// create session cookie/JWT for your app
+setAuthCookie(res, user);
+
+// IMPORTANT: decide redirect
+if (!user.role) {
+  return res.redirect("/onboarding/choose-role");
+}
+
+return res.redirect("/dashboard");
+
+
+Key point: set the auth cookie BEFORE redirecting.
+Otherwise the onboarding page loads “logged out” and you get a loop.
+
+Onboarding page behavior (role picker)
+
+On /onboarding/choose-role:
+
+call /api/auth/me
+
+if not logged in → send them to /login
+
+if logged in and role already exists → send them to /dashboard
+
+else show role options
+
+When they choose:
+
+POST /api/users/set-role with { role: "borrower" }
+
+server validates allowed roles
+
+server updates user record
+
+redirect them to correct first screen
+
+Example server validation rules:
+
+role must be "borrower" or "broker" (admins should never be set from this UI)
+
+user must be authenticated
+
+role can only be set once (optional, but recommended)
+
+The #1 thing that breaks this
+You accidentally protect the onboarding route with “role required”
+
+A lot of apps have middleware like:
+
+must be logged in ✅
+
+must have role ✅
+
+But onboarding needs to be:
+
+must be logged in ✅
+
+role NOT required ❌ (because that’s what you’re collecting)
+
+So your route guards should be:
+
+Protected pages (dashboard, quotes, etc.)
+
+require auth
+
+require role
+
+Onboarding pages
+
+require auth
+
+do NOT require role
+
+Another common issue: cookie + redirects across domains
+
+If you test in preview vs production, make sure your cookie settings aren’t blocking it:
+
+In prod HTTPS: secure: true
+
+sameSite: "lax" (usually best for OAuth)
+
+domain usually blank (host-only) unless you know what you’re doing
+
+If cookies aren’t sticking, onboarding will act “logged out”.
