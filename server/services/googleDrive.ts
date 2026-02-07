@@ -1,7 +1,7 @@
 import { google, drive_v3 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import { db } from '../db';
-import { users, projects, projectDocuments, systemSettings } from '@shared/schema';
+import { users, projects, projectDocuments, savedQuotes, systemSettings } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { Readable } from 'stream';
 
@@ -73,6 +73,39 @@ export async function isDriveIntegrationEnabled(): Promise<boolean> {
 
   const admin = await getAdminWithDriveTokens();
   return !!admin;
+}
+
+async function createDriveFolder(folderName: string): Promise<{ folderId: string; webViewLink: string }> {
+  const parentFolderId = await getParentFolderId();
+  if (!parentFolderId) {
+    throw new Error('GOOGLE_DRIVE_NOT_CONFIGURED: No parentFolderId configured in system settings');
+  }
+
+  const admin = await getAdminWithDriveTokens();
+  if (!admin) {
+    throw new Error('GOOGLE_DRIVE_NOT_CONNECTED: No admin with Google Drive tokens found. An admin must log in with Google first.');
+  }
+
+  const drive = getDriveClient(admin.googleRefreshToken, admin.googleAccessToken);
+
+  const response = await drive.files.create({
+    requestBody: {
+      name: folderName,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: [parentFolderId],
+    },
+    fields: 'id, webViewLink',
+    supportsAllDrives: true,
+  });
+
+  const folderId = response.data.id;
+  const webViewLink = response.data.webViewLink;
+
+  if (!folderId || !webViewLink) {
+    throw new Error('GOOGLE_DRIVE_ERROR: Failed to create folder - missing id or webViewLink in response');
+  }
+
+  return { folderId, webViewLink };
 }
 
 export async function createProjectFolder({
@@ -166,6 +199,59 @@ export async function ensureProjectFolder(projectId: number): Promise<{
         driveSyncError: error.message || 'Unknown error creating folder',
       })
       .where(eq(projects.id, projectId));
+
+    throw error;
+  }
+}
+
+export async function ensureDealFolder(dealId: number): Promise<{
+  googleDriveFolderId: string;
+  googleDriveFolderUrl: string;
+}> {
+  const [deal] = await db.select()
+    .from(savedQuotes)
+    .where(eq(savedQuotes.id, dealId))
+    .limit(1);
+
+  if (!deal) {
+    throw new Error(`Deal ${dealId} not found`);
+  }
+
+  if (deal.googleDriveFolderId && deal.googleDriveFolderUrl) {
+    return {
+      googleDriveFolderId: deal.googleDriveFolderId,
+      googleDriveFolderUrl: deal.googleDriveFolderUrl,
+    };
+  }
+
+  await db.update(savedQuotes)
+    .set({ driveSyncStatus: 'PENDING', driveSyncError: null })
+    .where(eq(savedQuotes.id, dealId));
+
+  try {
+    const folderName = deal.propertyAddress || `Deal ${dealId}`;
+    const { folderId, webViewLink } = await createDriveFolder(folderName);
+
+    await db.update(savedQuotes)
+      .set({
+        googleDriveFolderId: folderId,
+        googleDriveFolderUrl: webViewLink,
+        driveSyncStatus: 'OK',
+        driveSyncError: null,
+      })
+      .where(eq(savedQuotes.id, dealId));
+
+    return {
+      googleDriveFolderId: folderId,
+      googleDriveFolderUrl: webViewLink,
+    };
+  } catch (error: any) {
+    await db.update(savedQuotes)
+      .set({
+        driveSyncStatus: 'ERROR',
+        driveSyncError: error.message || 'Unknown error creating folder',
+      })
+      .where(eq(savedQuotes.id, dealId));
 
     throw error;
   }

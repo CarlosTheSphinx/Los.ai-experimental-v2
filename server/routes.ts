@@ -4686,6 +4686,18 @@ export async function registerRoutes(
       if (taskEntries.length > 0) {
         await db.insert(dealTasks).values(taskEntries);
       }
+
+      try {
+        const { isDriveIntegrationEnabled, ensureDealFolder } = await import('./services/googleDrive');
+        const driveEnabled = await isDriveIntegrationEnabled();
+        if (driveEnabled) {
+          ensureDealFolder(deal.id).catch((err: any) => {
+            console.error(`Drive folder creation failed for deal ${deal.id}:`, err.message);
+          });
+        }
+      } catch (driveErr: any) {
+        console.error('Drive integration check error:', driveErr.message);
+      }
       
       res.json({ deal });
     } catch (error) {
