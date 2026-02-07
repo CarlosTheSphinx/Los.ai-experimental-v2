@@ -87,10 +87,14 @@ export const savedQuotes = pgTable("saved_quotes", {
   totalRevenue: real("total_revenue").notNull().default(0),
   commission: real("commission").notNull().default(0),
   stage: varchar("stage", { length: 50 }).default("initial-review").notNull(),
+  googleDriveFolderId: varchar("google_drive_folder_id", { length: 255 }),
+  googleDriveFolderUrl: text("google_drive_folder_url"),
+  driveSyncStatus: varchar("drive_sync_status", { length: 50 }).default("NOT_ENABLED"),
+  driveSyncError: text("drive_sync_error"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertSavedQuoteSchema = createInsertSchema(savedQuotes).omit({ id: true, createdAt: true });
+export const insertSavedQuoteSchema = createInsertSchema(savedQuotes).omit({ id: true, createdAt: true, googleDriveFolderId: true, googleDriveFolderUrl: true, driveSyncStatus: true, driveSyncError: true });
 export type SavedQuote = typeof savedQuotes.$inferSelect;
 export type InsertSavedQuote = z.infer<typeof insertSavedQuoteSchema>;
 
