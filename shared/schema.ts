@@ -27,6 +27,9 @@ export const users = pgTable("users", {
   isTestUser: boolean("is_test_user").default(false),
   googleId: varchar("google_id", { length: 255 }).unique(),
   avatarUrl: varchar("avatar_url", { length: 500 }),
+  googleRefreshToken: text("google_refresh_token"),
+  googleAccessToken: text("google_access_token"),
+  googleTokenExpiresAt: timestamp("google_token_expires_at"),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({ 
@@ -342,6 +345,11 @@ export const projects = pgTable("projects", {
   internalNotes: text("internal_notes"),
   isArchived: boolean("is_archived").default(false),
   metadata: jsonb("metadata"),
+
+  googleDriveFolderId: varchar("google_drive_folder_id", { length: 255 }),
+  googleDriveFolderUrl: text("google_drive_folder_url"),
+  driveSyncStatus: varchar("drive_sync_status", { length: 50 }).default("NOT_ENABLED"),
+  driveSyncError: text("drive_sync_error"),
 });
 
 // Project stages/milestones
@@ -432,6 +440,12 @@ export const projectDocuments = pgTable("project_documents", {
   reviewNotes: text("review_notes"),
   
   visibleToBorrower: boolean("visible_to_borrower").default(true),
+
+  googleDriveFileId: varchar("google_drive_file_id", { length: 255 }),
+  googleDriveFileUrl: text("google_drive_file_url"),
+  googleDriveMimeType: varchar("google_drive_mime_type", { length: 255 }),
+  driveUploadStatus: varchar("drive_upload_status", { length: 50 }).default("NOT_ENABLED"),
+  driveUploadError: text("drive_upload_error"),
 });
 
 // Webhook/Integration log

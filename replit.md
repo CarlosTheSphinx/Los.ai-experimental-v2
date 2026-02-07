@@ -35,6 +35,25 @@ The application uses a modern web stack: React 18 with TypeScript for the fronte
 **Database Schema Highlights**:
 Key tables manage users, pricing requests, quotes, documents, e-signatures, audit logs, projects, project tasks and activity, system settings, admin tasks, partners, loan programs, message threads, onboarding progress, loan digest configurations, and commercial loan submissions.
 
+## Google Drive Integration
+
+The application integrates with Google Drive to automatically organize project documents:
+- **Auto-folder creation**: When a new project is created, a Google Drive folder is automatically created (non-blocking).
+- **Document sync**: When documents are uploaded to a project, they are automatically synced to the project's Drive folder.
+- **OAuth-based**: Uses the super_admin's Google OAuth tokens (with `drive.file` scope) to access Drive API. No service account needed.
+- **Status tracking**: `driveSyncStatus` on projects and `driveUploadStatus` on project documents track sync state (NOT_ENABLED, PENDING, OK, ERROR).
+- **Retry support**: Failed Drive operations can be retried via admin endpoints.
+- **Configuration**: Admin must set a parent folder ID in System Settings (Admin > Settings > Google Drive Integration).
+- **Setup requirements**: Enable Google Drive API in Google Cloud Console, add `drive.file` scope to OAuth consent screen, super admin must log in with Google.
+- **Service module**: `server/services/googleDrive.ts` handles all Drive API operations.
+- **Key API endpoints**: 
+  - `POST /api/projects/:id/documents/upload-url` - Get presigned upload URL
+  - `POST /api/projects/:id/documents/upload-complete` - Complete upload + trigger Drive sync
+  - `GET /api/projects/:id/documents` - List project documents
+  - `POST /api/projects/:id/drive/retry` - Retry Drive folder creation (admin only)
+  - `POST /api/documents/:id/drive/retry` - Retry Drive document upload (admin only)
+  - `GET /api/admin/drive/status` - Check Drive integration status (admin only)
+
 ## External Dependencies
 
 - **Apify**: Cloud-based web scraping platform for integrating with external pricing providers.
@@ -42,5 +61,6 @@ Key tables manage users, pricing requests, quotes, documents, e-signatures, audi
 - **PandaDoc**: Optional e-signing service for agreement management.
 - **Resend**: Used for sending emails (e.g., loan digests, partner broadcasts).
 - **Twilio**: Used for sending SMS messages (e.g., loan digests, partner broadcasts).
-- **Google OAuth 2.0**: For user authentication.
+- **Google OAuth 2.0**: For user authentication and Google Drive integration.
+- **Google Drive API**: For automatic project folder creation and document sync (via googleapis npm package).
 - **n8n / External LOS**: Optional webhook integrations for automation and Loan Origination Systems.

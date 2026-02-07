@@ -310,8 +310,13 @@ export async function registerRoutes(
 
     const authorizeUrl = googleOAuth.generateAuthUrl({
       access_type: 'offline',
-      scope: ['openid', 'email', 'profile'],
-      prompt: 'select_account',
+      scope: [
+        'openid',
+        'email',
+        'profile',
+        'https://www.googleapis.com/auth/drive.file',
+      ],
+      prompt: 'consent',
     });
 
     res.redirect(authorizeUrl);
@@ -361,9 +366,22 @@ export async function registerRoutes(
 
       let user = await storage.getUserByEmail(email);
 
+      const tokenUpdates: Record<string, unknown> = {};
+      if (tokens.refresh_token) {
+        tokenUpdates.googleRefreshToken = tokens.refresh_token;
+      }
+      if (tokens.access_token) {
+        tokenUpdates.googleAccessToken = tokens.access_token;
+      }
+      if (tokens.expiry_date) {
+        tokenUpdates.googleTokenExpiresAt = new Date(tokens.expiry_date);
+      }
+
       if (user) {
         if (!user.googleId) {
-          await storage.updateUser(user.id, { googleId, avatarUrl: avatarUrl || user.avatarUrl });
+          await storage.updateUser(user.id, { googleId, avatarUrl: avatarUrl || user.avatarUrl, ...tokenUpdates });
+        } else {
+          await storage.updateUser(user.id, { ...tokenUpdates });
         }
         if (!user.isActive) {
           return res.redirect('/login?error=account_deactivated');
@@ -1928,6 +1946,19 @@ export async function registerRoutes(
           });
           
           console.log(`✓ Project ${projectNumber} auto-created from signed agreement ${doc.id}`);
+
+          // Google Drive folder creation (non-blocking)
+          try {
+            const { isDriveIntegrationEnabled, ensureProjectFolder } = await import('./services/googleDrive');
+            const driveEnabled = await isDriveIntegrationEnabled();
+            if (driveEnabled) {
+              ensureProjectFolder(project.id).catch((err: any) => {
+                console.error(`Drive folder creation failed for project ${project.id}:`, err.message);
+              });
+            }
+          } catch (driveErr: any) {
+            console.error('Drive integration check error:', driveErr.message);
+          }
           
         } catch (projectError) {
           console.error('Error creating project from agreement:', projectError);
@@ -2678,6 +2709,19 @@ export async function registerRoutes(
         project_number: projectNumber,
         created_manually: true,
       });
+
+      // Google Drive folder creation (non-blocking)
+      try {
+        const { isDriveIntegrationEnabled, ensureProjectFolder } = await import('./services/googleDrive');
+        const driveEnabled = await isDriveIntegrationEnabled();
+        if (driveEnabled) {
+          ensureProjectFolder(project.id).catch((err: any) => {
+            console.error(`Drive folder creation failed for project ${project.id}:`, err.message);
+          });
+        }
+      } catch (driveErr: any) {
+        console.error('Drive integration check error:', driveErr.message);
+      }
       
       res.status(201).json({ project });
     } catch (error) {
@@ -2945,6 +2989,150 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Toggle portal error:', error);
       res.status(500).json({ error: 'Failed to toggle portal' });
+    }
+  });
+
+  // Project document upload - get presigned URL
+  app.post('/api/projects/:id/documents/upload-url', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const projectId = parseInt(req.params.id);
+      const { name, size, contentType, documentType, documentCategory } = req.body;
+
+      const project = await storage.getProjectById(projectId, userId);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+
+      if (!name) {
+        return res.status(400).json({ error: 'File name is required' });
+      }
+
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+
+      res.json({
+        uploadURL,
+        objectPath,
+        metadata: { name, size, contentType, documentType, documentCategory },
+      });
+    } catch (error) {
+      console.error('Project doc upload URL error:', error);
+      res.status(500).json({ error: 'Failed to generate upload URL' });
+    }
+  });
+
+  // Project document upload - complete (save record + trigger Drive sync)
+  app.post('/api/projects/:id/documents/upload-complete', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const projectId = parseInt(req.params.id);
+      const { objectPath, fileName, fileSize, mimeType, documentType, documentCategory } = req.body;
+
+      const project = await storage.getProjectById(projectId, userId);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+
+      if (!objectPath) {
+        return res.status(400).json({ error: 'Object path is required' });
+      }
+
+      const doc = await storage.createProjectDocument({
+        projectId,
+        documentName: fileName || 'Untitled',
+        documentType: documentType || null,
+        documentCategory: documentCategory || 'borrower_submitted',
+        filePath: objectPath,
+        fileSize: fileSize || null,
+        uploadedBy: userId,
+        status: 'pending_review',
+        visibleToBorrower: true,
+      });
+
+      await storage.createProjectActivity({
+        projectId,
+        userId,
+        activityType: 'document_uploaded',
+        activityDescription: `Document uploaded: ${fileName || 'New document'}`,
+        visibleToBorrower: true,
+      });
+
+      // Google Drive sync (non-blocking)
+      try {
+        const { isDriveIntegrationEnabled, syncDocumentToDrive } = await import('./services/googleDrive');
+        const driveEnabled = await isDriveIntegrationEnabled();
+        if (driveEnabled) {
+          syncDocumentToDrive(doc.id).catch((err: any) => {
+            console.error(`Drive sync failed for doc ${doc.id}:`, err.message);
+          });
+        }
+      } catch (driveErr: any) {
+        console.error('Drive sync check error:', driveErr.message);
+      }
+
+      res.json({ document: doc });
+    } catch (error) {
+      console.error('Project doc upload complete error:', error);
+      res.status(500).json({ error: 'Failed to save document' });
+    }
+  });
+
+  // Get project documents
+  app.get('/api/projects/:id/documents', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const projectId = parseInt(req.params.id);
+
+      const project = await storage.getProjectById(projectId, userId);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+
+      const documents = await storage.getDocumentsByProjectId(projectId);
+      res.json({ documents });
+    } catch (error) {
+      console.error('Get project documents error:', error);
+      res.status(500).json({ error: 'Failed to load documents' });
+    }
+  });
+
+  // Retry Drive folder sync for a project
+  app.post('/api/projects/:id/drive/retry', authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const projectId = parseInt(req.params.id);
+      const { ensureProjectFolder } = await import('./services/googleDrive');
+      const result = await ensureProjectFolder(projectId);
+      res.json({ success: true, ...result });
+    } catch (error: any) {
+      console.error('Drive folder retry error:', error);
+      res.status(500).json({ error: error.message || 'Failed to create Drive folder' });
+    }
+  });
+
+  // Retry Drive upload for a document
+  app.post('/api/documents/:id/drive/retry', authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const documentId = parseInt(req.params.id);
+      const { syncDocumentToDrive } = await import('./services/googleDrive');
+      await syncDocumentToDrive(documentId);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Drive doc retry error:', error);
+      res.status(500).json({ error: error.message || 'Failed to upload to Drive' });
+    }
+  });
+
+  // Get Drive integration status
+  app.get('/api/admin/drive/status', authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { isDriveIntegrationEnabled, getParentFolderId } = await import('./services/googleDrive');
+      const enabled = await isDriveIntegrationEnabled();
+      const parentFolderId = await getParentFolderId();
+      res.json({ enabled, parentFolderId });
+    } catch (error: any) {
+      console.error('Drive status error:', error);
+      res.status(500).json({ error: 'Failed to check Drive status' });
     }
   });
 

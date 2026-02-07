@@ -215,15 +215,9 @@ const settingLabels: Record<string, { label: string; description: string; type: 
     type: "url",
     category: "general",
   },
-  google_drive_folder_id: {
+  google_drive_parent_folder_id: {
     label: "Google Drive Parent Folder ID",
-    description: "The ID of the parent Google Drive folder where all loan folders will be created (e.g., 1aBcDeFgHiJkLmNoPqRsTuVwXyZ)",
-    type: "text",
-    category: "google_drive",
-  },
-  google_drive_service_account: {
-    label: "Google Drive Service Account Email",
-    description: "The service account email for Google Drive API access (e.g., my-service@my-project.iam.gserviceaccount.com)",
+    description: "The ID of the parent Google Drive folder where all project folders will be created. Find this in your Google Drive folder's URL after /folders/",
     type: "text",
     category: "google_drive",
   },
@@ -644,9 +638,18 @@ export default function AdminSettings() {
                   {Object.entries(settingLabels)
                     .filter(([_, config]) => config.category === "google_drive")
                     .map(([key, config]) => renderSettingField(key, config))}
-                  <div className="p-4 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/50 rounded-lg space-y-2">
                     <p className="text-sm text-muted-foreground">
-                      <strong>Setup Instructions:</strong> To enable Google Drive integration, you need to create a Google Cloud service account and share the parent folder with the service account email. The service account credentials (JSON key file) should be stored as a secret named <code className="bg-muted px-1 py-0.5 rounded">GOOGLE_SERVICE_ACCOUNT_KEY</code>.
+                      <strong>Setup Instructions:</strong>
+                    </p>
+                    <ol className="text-sm text-muted-foreground list-decimal list-inside space-y-1">
+                      <li>Enable the Google Drive API in your Google Cloud Console</li>
+                      <li>Add the Drive file scope to your OAuth consent screen</li>
+                      <li>Log in with Google as a Super Admin to authorize Drive access</li>
+                      <li>Enter the Google Drive Parent Folder ID above</li>
+                    </ol>
+                    <p className="text-sm text-muted-foreground">
+                      When a project is created, a folder will be automatically created inside the parent folder. Uploaded documents will sync to Google Drive.
                     </p>
                   </div>
                 </CardContent>

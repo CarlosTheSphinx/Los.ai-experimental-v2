@@ -1,3 +1,4 @@
+import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
 import { 
@@ -21,7 +22,14 @@ import {
   Activity,
   CheckSquare,
   MapPin,
-  RefreshCw
+  RefreshCw,
+  Upload,
+  FolderOpen,
+  CloudOff,
+  Loader2,
+  HardDrive,
+  Download,
+  Trash2
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -72,6 +80,23 @@ interface ActivityItem {
   visibleToBorrower: boolean;
 }
 
+interface ProjectDocument {
+  id: number;
+  projectId: number;
+  documentName: string;
+  documentType: string | null;
+  documentCategory: string;
+  filePath: string;
+  fileSize: number | null;
+  uploadedBy: number;
+  status: string;
+  uploadedAt: string;
+  googleDriveFileId: string | null;
+  googleDriveFileUrl: string | null;
+  driveUploadStatus: string;
+  driveUploadError: string | null;
+}
+
 interface Project {
   id: number;
   projectNumber: string;
@@ -94,12 +119,17 @@ interface Project {
   borrowerPortalToken: string | null;
   notes: string | null;
   createdAt: string;
+  googleDriveFolderId: string | null;
+  googleDriveFolderUrl: string | null;
+  driveSyncStatus: string;
 }
 
 export default function ProjectDetail() {
   const [, params] = useRoute("/projects/:id");
   const projectId = params?.id;
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
 
   const { data, isLoading, refetch } = useQuery<{ 
     project: Project; 
@@ -115,6 +145,16 @@ export default function ProjectDetail() {
     enabled: !!projectId,
   });
 
+  const { data: docsData, refetch: refetchDocs } = useQuery<{ documents: ProjectDocument[] }>({
+    queryKey: ['/api/projects', projectId, 'documents'],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/documents`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch documents');
+      return res.json();
+    },
+    enabled: !!projectId,
+  });
+
   const updateTaskMutation = useMutation({
     mutationFn: async ({ taskId, status }: { taskId: number; status: string }) => {
       return apiRequest('PATCH', `/api/projects/${projectId}/tasks/${taskId}`, { status });
@@ -124,6 +164,68 @@ export default function ProjectDetail() {
       toast({ title: "Task updated" });
     },
   });
+
+  const retryDriveFolderMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest('POST', `/api/projects/${projectId}/drive/retry`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId] });
+      toast({ title: "Drive folder sync retried" });
+    },
+    onError: () => {
+      toast({ title: "Drive folder sync failed", variant: "destructive" });
+    },
+  });
+
+  const retryDriveDocMutation = useMutation({
+    mutationFn: async (docId: number) => {
+      return apiRequest('POST', `/api/documents/${docId}/drive/retry`, {});
+    },
+    onSuccess: () => {
+      refetchDocs();
+      toast({ title: "Drive upload retried" });
+    },
+    onError: () => {
+      toast({ title: "Drive upload retry failed", variant: "destructive" });
+    },
+  });
+
+  const handleFileUpload = useCallback(async (files: FileList) => {
+    for (const file of Array.from(files)) {
+      const fileName = file.name;
+      setUploadingFiles(prev => [...prev, fileName]);
+      try {
+        const urlRes = await apiRequest('POST', `/api/projects/${projectId}/documents/upload-url`, {
+          name: file.name,
+          size: file.size,
+          contentType: file.type,
+        });
+        const urlData = await urlRes.json();
+
+        await fetch(urlData.uploadURL, {
+          method: 'PUT',
+          body: file,
+          headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        });
+
+        await apiRequest('POST', `/api/projects/${projectId}/documents/upload-complete`, {
+          objectPath: urlData.objectPath,
+          fileName: file.name,
+          fileSize: file.size,
+          mimeType: file.type,
+        });
+
+        toast({ title: `Uploaded: ${file.name}` });
+      } catch (err) {
+        toast({ title: `Failed to upload ${file.name}`, variant: "destructive" });
+      } finally {
+        setUploadingFiles(prev => prev.filter(f => f !== fileName));
+      }
+    }
+    refetchDocs();
+    refetch();
+  }, [projectId, toast, refetchDocs, refetch]);
 
   const copyBorrowerLink = async () => {
     try {
@@ -208,6 +310,31 @@ export default function ProjectDetail() {
             </Badge>
           </div>
           <h1 className="text-xl font-semibold" data-testid="text-project-name">{project.projectName}</h1>
+          {project.driveSyncStatus === 'OK' && project.googleDriveFolderId && (
+            <a 
+              href={`https://drive.google.com/drive/folders/${project.googleDriveFolderId}`} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              data-testid="link-drive-folder"
+            >
+              <HardDrive className="h-3 w-3" />
+              Google Drive Folder
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+          {project.driveSyncStatus === 'PENDING' && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Syncing Drive folder...
+            </span>
+          )}
+          {project.driveSyncStatus === 'ERROR' && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-destructive">
+              <CloudOff className="h-3 w-3" />
+              Drive folder sync failed
+            </span>
+          )}
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={copyBorrowerLink} data-testid="button-copy-portal-link">
@@ -229,6 +356,18 @@ export default function ProjectDetail() {
                 <ExternalLink className="h-4 w-4 mr-2" />
                 View Borrower Portal
               </DropdownMenuItem>
+              {project.googleDriveFolderId && (
+                <DropdownMenuItem onClick={() => window.open(`https://drive.google.com/drive/folders/${project.googleDriveFolderId}`, '_blank')}>
+                  <FolderOpen className="h-4 w-4 mr-2" />
+                  Open Drive Folder
+                </DropdownMenuItem>
+              )}
+              {project.driveSyncStatus === 'ERROR' && (
+                <DropdownMenuItem onClick={() => retryDriveFolderMutation.mutate()} disabled={retryDriveFolderMutation.isPending}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Retry Drive Folder Sync
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -458,10 +597,118 @@ export default function ProjectDetail() {
 
         <TabsContent value="documents">
           <Card>
-            <CardContent className="pt-6">
-              <div className="text-center py-8 text-muted-foreground">
-                No documents uploaded yet
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
+              <CardTitle className="text-base">Project Documents</CardTitle>
+              <div className="flex items-center gap-2">
+                {project.googleDriveFolderId && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(`https://drive.google.com/drive/folders/${project.googleDriveFolderId}`, '_blank')}
+                    data-testid="button-open-drive"
+                  >
+                    <FolderOpen className="h-4 w-4 mr-2" />
+                    Drive Folder
+                  </Button>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      handleFileUpload(e.target.files);
+                      e.target.value = '';
+                    }
+                  }}
+                  data-testid="input-file-upload"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingFiles.length > 0}
+                  data-testid="button-upload-document"
+                >
+                  {uploadingFiles.length > 0 ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-2" />
+                  )}
+                  Upload
+                </Button>
               </div>
+            </CardHeader>
+            <CardContent>
+              {uploadingFiles.length > 0 && (
+                <div className="mb-4 space-y-2">
+                  {uploadingFiles.map((name) => (
+                    <div key={name} className="flex items-center gap-2 text-sm text-muted-foreground p-2 rounded-md bg-muted/50">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Uploading {name}...
+                    </div>
+                  ))}
+                </div>
+              )}
+              {(!docsData?.documents || docsData.documents.length === 0) && uploadingFiles.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>No documents uploaded yet</p>
+                  <p className="text-xs mt-1">Upload files to store them here and sync to Google Drive</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {docsData?.documents.map((doc) => (
+                    <div 
+                      key={doc.id} 
+                      className="flex items-center gap-3 p-3 rounded-md border"
+                      data-testid={`doc-row-${doc.id}`}
+                    >
+                      <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{doc.documentName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {doc.fileSize ? `${(doc.fileSize / 1024).toFixed(1)} KB` : ''} 
+                          {doc.uploadedAt && ` · ${formatDateTime(doc.uploadedAt)}`}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {doc.driveUploadStatus === 'OK' && doc.googleDriveFileUrl && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => window.open(doc.googleDriveFileUrl!, '_blank')}
+                            title="View in Google Drive"
+                            data-testid={`button-drive-view-${doc.id}`}
+                          >
+                            <HardDrive className="h-4 w-4 text-green-600" />
+                          </Button>
+                        )}
+                        {doc.driveUploadStatus === 'PENDING' && (
+                          <span title="Syncing to Drive">
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          </span>
+                        )}
+                        {doc.driveUploadStatus === 'ERROR' && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => retryDriveDocMutation.mutate(doc.id)}
+                            disabled={retryDriveDocMutation.isPending}
+                            title={`Drive upload failed: ${doc.driveUploadError || 'Unknown error'}. Click to retry.`}
+                            data-testid={`button-drive-retry-${doc.id}`}
+                          >
+                            <CloudOff className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
+                        <Badge variant="secondary" className="text-xs">
+                          {doc.status === 'pending_review' ? 'Pending' : doc.status === 'approved' ? 'Approved' : doc.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
