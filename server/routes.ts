@@ -3119,6 +3119,46 @@ export async function registerRoutes(
     }
   });
 
+  app.post('/api/admin/deals/:id/drive/push', authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: 'Invalid deal ID' });
+      }
+
+      const { isDriveIntegrationEnabled, ensureProjectFolder, ensureDealFolder } = await import('./services/googleDrive');
+      const driveEnabled = await isDriveIntegrationEnabled();
+      if (!driveEnabled) {
+        return res.status(400).json({ error: 'Google Drive integration is not configured. Please set the parent folder ID in Admin Settings.' });
+      }
+
+      const [project] = await db.select().from(projects).where(eq(projects.id, id)).limit(1);
+      if (project) {
+        const result = await ensureProjectFolder(id);
+        return res.json({
+          success: true,
+          googleDriveFolderId: result.googleDriveFolderId,
+          googleDriveFolderUrl: result.googleDriveFolderUrl,
+        });
+      }
+
+      const [deal] = await db.select().from(savedQuotes).where(eq(savedQuotes.id, id)).limit(1);
+      if (deal) {
+        const result = await ensureDealFolder(id);
+        return res.json({
+          success: true,
+          googleDriveFolderId: result.googleDriveFolderId,
+          googleDriveFolderUrl: result.googleDriveFolderUrl,
+        });
+      }
+
+      return res.status(404).json({ error: 'Deal not found' });
+    } catch (error: any) {
+      console.error(`Drive push failed for deal ${req.params.id}:`, error.message);
+      res.status(500).json({ error: error.message || 'Failed to create Google Drive folder' });
+    }
+  });
+
   // Get Drive integration status
   app.get('/api/admin/drive/status', authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
     try {
@@ -4446,6 +4486,9 @@ export async function registerRoutes(
         createdAt: projects.createdAt,
         targetCloseDate: projects.targetCloseDate,
         quoteId: projects.quoteId,
+        googleDriveFolderId: projects.googleDriveFolderId,
+        googleDriveFolderUrl: projects.googleDriveFolderUrl,
+        driveSyncStatus: projects.driveSyncStatus,
         userName: users.fullName,
         userEmail: users.email,
       })
@@ -4486,6 +4529,9 @@ export async function registerRoutes(
           userName: p.userName,
           userEmail: p.userEmail,
           quoteId: p.quoteId,
+          googleDriveFolderId: p.googleDriveFolderId || null,
+          googleDriveFolderUrl: p.googleDriveFolderUrl || null,
+          driveSyncStatus: p.driveSyncStatus || 'NOT_ENABLED',
         };
       });
       
@@ -4687,18 +4733,6 @@ export async function registerRoutes(
         await db.insert(dealTasks).values(taskEntries);
       }
 
-      try {
-        const { isDriveIntegrationEnabled, ensureDealFolder } = await import('./services/googleDrive');
-        const driveEnabled = await isDriveIntegrationEnabled();
-        if (driveEnabled) {
-          ensureDealFolder(deal.id).catch((err: any) => {
-            console.error(`Drive folder creation failed for deal ${deal.id}:`, err.message);
-          });
-        }
-      } catch (driveErr: any) {
-        console.error('Drive integration check error:', driveErr.message);
-      }
-      
       res.json({ deal });
     } catch (error) {
       console.error('Admin create deal error:', error);

@@ -174,10 +174,8 @@ export async function ensureProjectFolder(projectId: number): Promise<{
     .where(eq(projects.id, projectId));
 
   try {
-    const { folderId, webViewLink } = await createProjectFolder({
-      projectName: project.projectName,
-      projectId: project.id,
-    });
+    const folderName = project.propertyAddress || project.projectName || `Project ${projectId}`;
+    const { folderId, webViewLink } = await createDriveFolder(folderName);
 
     await db.update(projects)
       .set({

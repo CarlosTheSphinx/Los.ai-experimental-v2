@@ -55,8 +55,17 @@ import {
   Clock,
   LayoutGrid,
   List,
+  FolderUp,
+  ExternalLink,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
 import { useState } from "react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -125,6 +134,9 @@ interface Deal {
   userEmail: string | null;
   partner?: Partner | null;
   quoteId?: number | null;
+  googleDriveFolderId?: string | null;
+  googleDriveFolderUrl?: string | null;
+  driveSyncStatus?: string | null;
 }
 
 interface StageInfo {
@@ -279,6 +291,79 @@ function getLoanTypeLabel(loanType: string): string {
   return labels[loanType?.toLowerCase()] || loanType || "N/A";
 }
 
+function DrivePushButton({ deal }: { deal: Deal }) {
+  const { toast } = useToast();
+  const [pushing, setPushing] = useState(false);
+  const [driveUrl, setDriveUrl] = useState<string | null>(deal.googleDriveFolderUrl || null);
+  const [hasError, setHasError] = useState(deal.driveSyncStatus === 'ERROR');
+
+  if (driveUrl) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <a
+            href={driveUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            data-testid={`button-drive-open-${deal.id}`}
+          >
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs">
+              <ExternalLink className="h-3.5 w-3.5" />
+              Drive
+            </Button>
+          </a>
+        </TooltipTrigger>
+        <TooltipContent>Open Google Drive folder</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          size="sm"
+          variant={hasError ? 'destructive' : 'outline'}
+          className="gap-1.5 text-xs"
+          disabled={pushing}
+          data-testid={`button-drive-push-${deal.id}`}
+          onClick={async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setPushing(true);
+            setHasError(false);
+            try {
+              const res = await apiRequest('POST', `/api/admin/deals/${deal.id}/drive/push`);
+              const data = await res.json();
+              setDriveUrl(data.googleDriveFolderUrl);
+              queryClient.invalidateQueries({ queryKey: ['/api/admin/deals'] });
+              toast({ title: "Drive folder created", description: "Google Drive folder is ready." });
+            } catch (err: any) {
+              setHasError(true);
+              toast({ title: "Drive push failed", description: err.message || "Could not create folder.", variant: "destructive" });
+            } finally {
+              setPushing(false);
+            }
+          }}
+        >
+          {pushing ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : hasError ? (
+            <AlertCircle className="h-3.5 w-3.5" />
+          ) : (
+            <FolderUp className="h-3.5 w-3.5" />
+          )}
+          {pushing ? 'Pushing...' : hasError ? 'Retry' : 'Push to Drive'}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        {hasError ? 'Failed - click to retry' : 'Create a Google Drive folder for this deal'}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 interface DealExpandedCardProps {
   deal: Deal;
   formatCurrency: (amount: number) => string;
@@ -357,6 +442,9 @@ function DealExpandedCard({ deal, formatCurrency, getStageColor, getStageLabel, 
           )}
         </div>
       </Link>
+      <div className="px-5 pb-4 pt-0">
+        <DrivePushButton deal={deal} />
+      </div>
     </Card>
   );
 }
@@ -784,6 +872,7 @@ export default function AdminDeals() {
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Progress</TableHead>
+                  <TableHead>Drive</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -830,6 +919,9 @@ export default function AdminDeals() {
                         <Progress value={deal.progressPercentage || 0} className="h-2 flex-1" />
                         <span className="text-xs text-muted-foreground w-8">{deal.progressPercentage || 0}%</span>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <DrivePushButton deal={deal} />
                     </TableCell>
                   </TableRow>
                 ))}
