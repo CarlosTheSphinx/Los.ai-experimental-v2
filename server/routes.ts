@@ -278,20 +278,16 @@ export async function registerRoutes(
     res.json({ success: true, message: 'Logged out successfully' });
   });
 
-  // Helper to get the base URL for OAuth redirects
-  // Uses the host from the actual request for consistency between initiate and callback
   function getOAuthBaseUrl(req: Request): string {
-    const host = req.headers['x-forwarded-host'] as string || req.get('host') || '';
-    if (host && !host.includes('localhost')) {
-      return `https://${host}`;
+    const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
+    const host = (req.headers['x-forwarded-host'] as string) || req.headers.host || req.get('host') || '';
+    if (host) {
+      return `${proto}://${host}`;
     }
     if (process.env.REPLIT_DEV_DOMAIN) {
       return `https://${process.env.REPLIT_DEV_DOMAIN}`;
     }
-    if (process.env.APP_URL) {
-      return process.env.APP_URL.replace(/\/$/, '');
-    }
-    return `${req.protocol}://${host}`;
+    return `https://${host}`;
   }
 
   // Google OAuth - initiate flow
