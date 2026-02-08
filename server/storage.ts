@@ -347,6 +347,11 @@ export class DatabaseStorage implements IStorage {
       .orderBy(asc(projectStages.stageOrder));
   }
 
+  async getStageById(id: number): Promise<ProjectStage | undefined> {
+    const [stage] = await db.select().from(projectStages).where(eq(projectStages.id, id));
+    return stage;
+  }
+
   async updateStage(id: number, updates: Partial<ProjectStage>): Promise<ProjectStage | undefined> {
     const [updated] = await db.update(projectStages).set(updates).where(eq(projectStages.id, id)).returning();
     return updated;

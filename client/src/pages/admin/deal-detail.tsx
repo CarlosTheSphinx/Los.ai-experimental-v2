@@ -653,6 +653,59 @@ export default function AdminDealDetail() {
     },
   });
 
+  const [addTaskStageId, setAddTaskStageId] = useState<number | null>(null);
+  const [addDocStageId, setAddDocStageId] = useState<number | null>(null);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDescription, setNewTaskDescription] = useState("");
+  const [newTaskPriority, setNewTaskPriority] = useState("medium");
+  const [newDocName, setNewDocName] = useState("");
+  const [newDocCategory, setNewDocCategory] = useState("other");
+  const [newDocRequired, setNewDocRequired] = useState(true);
+
+  const createStageTaskMutation = useMutation({
+    mutationFn: async ({ stageId }: { stageId: number }) => {
+      return apiRequest('POST', `/api/admin/projects/${linkedProjectId}/stages/${stageId}/tasks`, {
+        taskTitle: newTaskTitle,
+        taskDescription: newTaskDescription || undefined,
+        priority: newTaskPriority,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/projects', linkedProjectId] });
+      toast({ title: "Task added" });
+      setAddTaskStageId(null);
+      setNewTaskTitle("");
+      setNewTaskDescription("");
+      setNewTaskPriority("medium");
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to add task", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const createStageDocMutation = useMutation({
+    mutationFn: async ({ stageId }: { stageId: number }) => {
+      return apiRequest('POST', `/api/admin/deals/${dealId}/documents`, {
+        documentName: newDocName,
+        documentCategory: newDocCategory,
+        isRequired: newDocRequired,
+        stageId: String(stageId),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/projects', linkedProjectId] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
+      toast({ title: "Document added" });
+      setAddDocStageId(null);
+      setNewDocName("");
+      setNewDocCategory("other");
+      setNewDocRequired(true);
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to add document", description: error.message, variant: "destructive" });
+    },
+  });
+
   const [pushingDocId, setPushingDocId] = useState<number | null>(null);
 
   const pushToDriveMutation = useMutation({
@@ -1561,6 +1614,33 @@ export default function AdminDealDetail() {
                           No items in this stage yet.
                         </div>
                       )}
+
+                      {linkedProjectId && dealId && (
+                        <div className={cn("flex items-center gap-2 mt-4", (stageTasks.length > 0 || stageDocs.length > 0) && "pt-3 border-t")}>
+                          {showTasks && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={(e) => { e.stopPropagation(); setAddTaskStageId(stage.id); }}
+                              data-testid={`button-add-task-stage-${stage.id}`}
+                            >
+                              <Plus className="h-3.5 w-3.5 mr-1" />
+                              Add Task
+                            </Button>
+                          )}
+                          {showDocs && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={(e) => { e.stopPropagation(); setAddDocStageId(stage.id); }}
+                              data-testid={`button-add-doc-stage-${stage.id}`}
+                            >
+                              <Plus className="h-3.5 w-3.5 mr-1" />
+                              Add Document
+                            </Button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </Card>
@@ -2071,6 +2151,143 @@ export default function AdminDealDetail() {
               data-testid="button-save-document"
             >
               {createDocumentMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                "Add Document"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Stage Task Dialog */}
+      <Dialog open={addTaskStageId !== null} onOpenChange={(open) => { if (!open) { setAddTaskStageId(null); setNewTaskTitle(""); setNewTaskDescription(""); setNewTaskPriority("medium"); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Task to Stage</DialogTitle>
+            <DialogDescription>
+              Add a one-off task to this stage.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="stage-task-title">Task Title</Label>
+              <Input
+                id="stage-task-title"
+                value={newTaskTitle}
+                onChange={(e) => setNewTaskTitle(e.target.value)}
+                placeholder="e.g., Follow up with borrower"
+                data-testid="input-stage-task-title"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="stage-task-description">Description (optional)</Label>
+              <Textarea
+                id="stage-task-description"
+                value={newTaskDescription}
+                onChange={(e) => setNewTaskDescription(e.target.value)}
+                placeholder="Additional details..."
+                data-testid="input-stage-task-description"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="stage-task-priority">Priority</Label>
+              <Select value={newTaskPriority} onValueChange={setNewTaskPriority}>
+                <SelectTrigger data-testid="select-stage-task-priority">
+                  <SelectValue placeholder="Select priority" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="critical">Critical</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setAddTaskStageId(null); setNewTaskTitle(""); setNewTaskDescription(""); setNewTaskPriority("medium"); }} data-testid="button-cancel-stage-task">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => addTaskStageId && createStageTaskMutation.mutate({ stageId: addTaskStageId })}
+              disabled={!newTaskTitle.trim() || createStageTaskMutation.isPending}
+              data-testid="button-save-stage-task"
+            >
+              {createStageTaskMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                "Add Task"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Stage Document Dialog */}
+      <Dialog open={addDocStageId !== null} onOpenChange={(open) => { if (!open) { setAddDocStageId(null); setNewDocName(""); setNewDocCategory("other"); setNewDocRequired(true); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Document to Stage</DialogTitle>
+            <DialogDescription>
+              Add a document requirement to this stage.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="stage-doc-name">Document Name</Label>
+              <Input
+                id="stage-doc-name"
+                value={newDocName}
+                onChange={(e) => setNewDocName(e.target.value)}
+                placeholder="e.g., Proof of Insurance"
+                data-testid="input-stage-doc-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="stage-doc-category">Category</Label>
+              <Select value={newDocCategory} onValueChange={setNewDocCategory}>
+                <SelectTrigger data-testid="select-stage-doc-category">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="borrower_docs">Borrower Documents</SelectItem>
+                  <SelectItem value="entity_docs">Entity Documents</SelectItem>
+                  <SelectItem value="property_docs">Property Documents</SelectItem>
+                  <SelectItem value="financial_docs">Financial Documents</SelectItem>
+                  <SelectItem value="closing_docs">Closing Documents</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="stage-doc-required"
+                checked={newDocRequired}
+                onCheckedChange={(checked) => setNewDocRequired(checked as boolean)}
+                data-testid="checkbox-stage-doc-required"
+              />
+              <Label htmlFor="stage-doc-required" className="font-normal">
+                This document is required
+              </Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setAddDocStageId(null); setNewDocName(""); setNewDocCategory("other"); setNewDocRequired(true); }} data-testid="button-cancel-stage-doc">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => addDocStageId && createStageDocMutation.mutate({ stageId: addDocStageId })}
+              disabled={!newDocName.trim() || createStageDocMutation.isPending}
+              data-testid="button-save-stage-doc"
+            >
+              {createStageDocMutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Adding...

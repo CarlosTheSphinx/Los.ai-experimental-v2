@@ -4342,6 +4342,46 @@ export async function registerRoutes(
     }
   });
 
+  // Admin - Create one-off project task within a specific stage
+  app.post('/api/admin/projects/:projectId/stages/:stageId/tasks', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const stageId = parseInt(req.params.stageId);
+      const { taskTitle, taskDescription, priority } = req.body;
+
+      if (!taskTitle || !taskTitle.trim()) {
+        return res.status(400).json({ error: 'Task title is required' });
+      }
+
+      const stage = await storage.getStageById(stageId);
+      if (!stage || stage.projectId !== projectId) {
+        return res.status(404).json({ error: 'Stage not found for this project' });
+      }
+
+      const task = await storage.createProjectTask({
+        projectId,
+        stageId,
+        taskTitle: taskTitle.trim(),
+        taskDescription: taskDescription?.trim() || null,
+        priority: priority || 'medium',
+        status: 'pending',
+      });
+
+      await storage.createProjectActivity({
+        projectId,
+        userId: req.user!.id,
+        activityType: 'task_added',
+        activityDescription: `Task "${taskTitle.trim()}" added to stage "${stage.stageName}"`,
+        visibleToBorrower: false,
+      });
+
+      res.json({ task });
+    } catch (error) {
+      console.error('Admin create stage task error:', error);
+      res.status(500).json({ error: 'Failed to create task' });
+    }
+  });
+
   // Admin - Update admin task
   app.patch('/api/admin/tasks/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
@@ -5736,7 +5776,16 @@ export async function registerRoutes(
   app.post('/api/admin/deals/:dealId/documents', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const dealId = parseInt(req.params.dealId);
-      const { documentName, documentCategory, documentDescription, isRequired } = req.body;
+      const { documentName, documentCategory, documentDescription, isRequired, stageId } = req.body;
+
+      let validatedStageId: number | undefined;
+      if (stageId) {
+        const stage = await storage.getStageById(parseInt(stageId));
+        if (!stage) {
+          return res.status(400).json({ error: 'Invalid stage' });
+        }
+        validatedStageId = stage.id;
+      }
       
       // Get max sort order
       const existing = await db.select({ maxOrder: dealDocuments.sortOrder })
@@ -5754,6 +5803,7 @@ export async function registerRoutes(
           documentDescription,
           isRequired: isRequired !== false,
           sortOrder: maxOrder + 1,
+          ...(validatedStageId ? { stageId: validatedStageId } : {}),
         })
         .returning();
       
