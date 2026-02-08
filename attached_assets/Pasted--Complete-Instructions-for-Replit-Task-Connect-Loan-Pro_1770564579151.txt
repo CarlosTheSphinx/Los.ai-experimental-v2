@@ -1,0 +1,288 @@
+**Complete Instructions for Replit:**
+
+---
+
+## Task: Connect Loan Programs to Deal Pipeline Auto-Population
+
+### Current State (Problem):
+- Admin "Programs" tab exists and is configured correctly
+- "Loan Type" field on user quote form is disconnected from admin programs
+- No auto-population of deal pipeline stages/tasks/documents based on selected program
+
+### Desired State (Goal):
+Complete loan program template system where:
+1. **Admin programs** (already configured) define stages, tasks, and required documents
+2. **Users select from available programs** when creating quotes (replaces current "Loan Type" dropdown)
+3. **Deal pipelines auto-populate** based on the selected program template when deal is created
+
+---
+
+## Implementation Steps:
+
+### STEP 1: Verify/Update Admin Programs Database Schema
+**Location:** Admin dashboard → "Programs" tab (ALREADY EXISTS - DO NOT RECREATE)
+
+**Verify these tables exist and match this structure:**
+```
+Table: loan_programs (or programs)
+- id (primary key)
+- name (string) // e.g., "Bridge Loan", "Construction Loan"
+- description (text)
+- is_active (boolean)
+- created_at, updated_at
+
+Table: program_stages
+- id (primary key)
+- program_id (foreign key → loan_programs)
+- stage_name (string) // e.g., "Initial Review", "Underwriting"
+- stage_order (integer)
+- created_at
+
+Table: program_tasks
+- id (primary key)
+- stage_id (foreign key → program_stages)
+- task_name (string)
+- task_order (integer)
+- is_required (boolean)
+- created_at
+
+Table: program_documents
+- id (primary key)
+- program_id (foreign key → loan_programs)
+- document_name (string)
+- is_required (boolean)
+- stage_id (foreign key → program_stages) // which stage needs this doc
+- created_at
+```
+
+**Action Required:**
+- If tables exist with different names, note the actual table names
+- If any columns are missing, add them
+- **DO NOT recreate the admin UI - it already exists and is configured correctly**
+
+---
+
+### STEP 2: Update Quote Creation Form (User-Facing)
+**Location:** User-facing quote request form
+
+**CRITICAL: DO NOT CHANGE ANY PRICING MECHANICS OR CALCULATIONS**
+
+**Changes:**
+1. **Replace** the existing "Loan Type" dropdown field
+2. **Add** dynamic "Loan Program" dropdown that:
+   - Fetches all active programs from admin programs tab: `GET /api/loan-programs?active=true` (or whatever the existing endpoint is)
+   - Displays program name + description
+   - Stores selected `program_id` when quote is submitted
+
+**Code Example:**
+```javascript
+// Fetch programs on page load
+const programs = await fetch('/api/loan-programs?active=true').then(r => r.json());
+// OR use existing API endpoint if different
+
+// Replace existing "Loan Type" dropdown with:
+<select name="program_id" required>
+  <option value="">Select Loan Program...</option>
+  {programs.map(p => (
+    <option value={p.id}>{p.name}</option>
+  ))}
+</select>
+```
+
+**Important:**
+- Keep all other form fields unchanged
+- Keep all pricing calculation logic unchanged
+- Only swap out the loan type dropdown for the dynamic program dropdown
+
+---
+
+### STEP 3: Store Program Selection with Quote/Deal
+**Database Changes:**
+```
+Table: quotes (or deals)
+- ADD COLUMN: program_id (foreign key → loan_programs)
+  - If column already exists, skip this step
+```
+
+**When quote is submitted:**
+- Save the `program_id` to the quote/deal record
+- This links the deal to the selected program template
+- **DO NOT modify any existing quote creation logic beyond storing program_id**
+
+---
+
+### STEP 4: Auto-Populate Deal Pipeline on Deal Creation
+**Location:** Deal creation/conversion logic (when quote becomes a deal, or when deal is first created)
+
+**Core Logic to Add:**
+```javascript
+// When a new deal is created:
+async function createDealPipeline(dealId, programId) {
+  // 1. Fetch program template
+  const program = await db.query(`
+    SELECT * FROM loan_programs WHERE id = ?
+  `, [programId]);
+  
+  if (!program) {
+    console.error('Program not found:', programId);
+    return; // Exit gracefully if no program
+  }
+  
+  // 2. Fetch stages for this program
+  const stages = await db.query(`
+    SELECT * FROM program_stages 
+    WHERE program_id = ? 
+    ORDER BY stage_order ASC
+  `, [programId]);
+  
+  // 3. For each stage, create deal stages
+  for (const stage of stages) {
+    const dealStageId = await db.insert('deal_stages', {
+      deal_id: dealId,
+      stage_name: stage.stage_name,
+      stage_order: stage.stage_order,
+      status: 'pending',
+      created_at: new Date()
+    });
+    
+    // 4. Fetch and create tasks for this stage
+    const tasks = await db.query(`
+      SELECT * FROM program_tasks 
+      WHERE stage_id = ? 
+      ORDER BY task_order ASC
+    `, [stage.id]);
+    
+    for (const task of tasks) {
+      await db.insert('deal_tasks', {
+        deal_stage_id: dealStageId,
+        task_name: task.task_name,
+        is_required: task.is_required,
+        status: 'pending',
+        created_at: new Date()
+      });
+    }
+  }
+  
+  // 5. Fetch and create document requirements
+  const documents = await db.query(`
+    SELECT * FROM program_documents 
+    WHERE program_id = ?
+  `, [programId]);
+  
+  for (const doc of documents) {
+    await db.insert('deal_documents', {
+      deal_id: dealId,
+      document_name: doc.document_name,
+      is_required: doc.is_required,
+      stage_id: doc.stage_id,
+      status: 'pending',
+      created_at: new Date()
+    });
+  }
+  
+  console.log(`Deal pipeline created for deal ${dealId} using program ${programId}`);
+}
+
+// Call this function immediately after a deal is created:
+// Example:
+const newDealId = await createDeal(quoteData);
+await createDealPipeline(newDealId, quoteData.program_id);
+```
+
+**Where to Insert This:**
+- Find the existing code that creates deals (likely in a route handler like `POST /api/deals` or similar)
+- After the deal record is inserted, call `createDealPipeline(dealId, programId)`
+- Ensure `program_id` is passed from the quote to the deal creation function
+
+---
+
+### STEP 5: Update Deal Pipeline View (If Needed)
+**Location:** Deal detail page / Pipeline view
+
+**Verify the following already work:**
+- Display stages, tasks, documents that were auto-created from template
+- Show progress through each stage
+- Allow marking tasks/documents as complete
+
+**If not already displayed:**
+- Add a read-only field showing which program template the deal is using
+- Example: "Program: Bridge Loan" at the top of the pipeline view
+
+---
+
+## Database Migration (If Existing Data):
+
+```sql
+-- 1. Add program_id column to existing quotes/deals (if not already exists)
+ALTER TABLE quotes ADD COLUMN program_id INTEGER REFERENCES loan_programs(id);
+ALTER TABLE deals ADD COLUMN program_id INTEGER REFERENCES loan_programs(id);
+
+-- 2. Optional: Create default "Unspecified" program for existing deals without program_id
+INSERT INTO loan_programs (name, description, is_active) 
+VALUES ('Unspecified Program', 'For deals created before program system', true);
+
+-- 3. Optional: Update existing deals to use default program
+UPDATE deals 
+SET program_id = (SELECT id FROM loan_programs WHERE name = 'Unspecified Program')
+WHERE program_id IS NULL;
+```
+
+---
+
+## Testing Checklist:
+
+**Admin Side (Already Configured):**
+- [ ] Verify admin can see/edit programs with stages/tasks/documents
+- [ ] Verify programs have is_active flag that can be toggled
+
+**User Side:**
+- [ ] User quote form shows "Loan Program" dropdown instead of "Loan Type"
+- [ ] Dropdown populates with active programs from admin programs tab
+- [ ] Selecting a program saves `program_id` to quote
+- [ ] **All pricing calculations still work exactly as before**
+- [ ] All other form fields unchanged
+
+**Deal Creation:**
+- [ ] When deal is created from quote, `program_id` is carried over
+- [ ] Deal pipeline auto-populates with:
+  - [ ] Correct stages in correct order
+  - [ ] Correct tasks per stage in correct order
+  - [ ] Correct required documents linked to appropriate stages
+- [ ] All auto-created items have status: 'pending'
+
+**Deal Pipeline View:**
+- [ ] Auto-created stages/tasks/documents display correctly
+- [ ] Users can mark tasks/documents as complete
+- [ ] Pipeline shows which program template is being used
+
+---
+
+## API Endpoints Required:
+
+**For Step 2 (User Quote Form):**
+```
+GET /api/loan-programs?active=true
+// Returns: [{ id, name, description }, ...]
+```
+*Note: If this endpoint doesn't exist yet, create it to fetch active programs*
+
+**For Step 4 (Deal Creation):**
+```
+POST /api/deals
+// Payload must include: program_id
+// After deal creation, call createDealPipeline(dealId, programId)
+```
+
+---
+
+## Important Reminders:
+
+1. **DO NOT recreate or modify the admin Programs tab** - it's already configured
+2. **DO NOT change any pricing mechanics** - only swap the loan type dropdown
+3. **Verify actual table names** in your database - adjust queries if needed
+4. **Test with a single program first** before rolling out to all programs
+5. **Existing deals**: Decide if you want to backfill program_id or leave them as-is
+
+---
+
+**This prompt is ready to paste into Replit. It preserves your existing admin configuration and pricing mechanics while connecting the program system to the deal pipeline.**

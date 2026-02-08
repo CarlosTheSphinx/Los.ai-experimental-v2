@@ -15,9 +15,10 @@ interface PricingResultProps {
   result: PricingResponse;
   formData: LoanPricingFormData | null;
   onReset: () => void;
+  programId?: number | null;
 }
 
-export function PricingResult({ result, formData, onReset }: PricingResultProps) {
+export function PricingResult({ result, formData, onReset, programId }: PricingResultProps) {
   const { toast } = useToast();
   const [showQuoteForm, setShowQuoteForm] = useState(false);
   const [customerFirstName, setCustomerFirstName] = useState("");
@@ -47,7 +48,8 @@ export function PricingResult({ result, formData, onReset }: PricingResultProps)
           propertyAddress,
           loanData: formData,
           interestRate: formattedRate,
-          pointsCharged
+          pointsCharged,
+          programId: programId || null
         });
     },
     onSuccess: () => {

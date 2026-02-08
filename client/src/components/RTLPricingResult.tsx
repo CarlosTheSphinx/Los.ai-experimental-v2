@@ -16,9 +16,10 @@ interface RTLPricingResultProps {
   formData: RTLPricingFormData | null;
   onReset: () => void;
   onEdit: () => void;
+  programId?: number | null;
 }
 
-export function RTLPricingResult({ result, formData, onReset, onEdit }: RTLPricingResultProps) {
+export function RTLPricingResult({ result, formData, onReset, onEdit, programId }: RTLPricingResultProps) {
   const { toast } = useToast();
   const MIN_POINTS = 2.0;
   const MAX_ADDITIONAL_POINTS = 3.0;
@@ -39,7 +40,8 @@ export function RTLPricingResult({ result, formData, onReset, onEdit }: RTLPrici
         propertyAddress: formData?.propertyAddress || "",
         loanData: formData,
         interestRate: formattedRate,
-        pointsCharged: MIN_POINTS + additionalPoints
+        pointsCharged: MIN_POINTS + additionalPoints,
+        programId: programId || null
       });
     },
     onSuccess: () => {

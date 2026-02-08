@@ -74,8 +74,9 @@ export default function Home() {
     return <BorrowerDashboard />;
   }
   
-  // Loan product type selector
+  // Program-driven loan product type
   const [loanProductType, setLoanProductType] = useState<"dscr" | "rtl">("dscr");
+  const [selectedQuoteProgramId, setSelectedQuoteProgramId] = useState<number | null>(null);
   
   // Instant pricing mode state
   const [showInstantPricing, setShowInstantPricing] = useState(false);
@@ -117,7 +118,8 @@ export default function Home() {
     queryKey: ["/api/programs-with-pricing"],
   });
   
-  const programsWithRulesets = programsData?.programs.filter(p => p.hasActiveRuleset) || [];
+  const allActivePrograms = programsData?.programs || [];
+  const programsWithRulesets = allActivePrograms.filter(p => p.hasActiveRuleset);
   const selectedProgram = programsWithRulesets.find(p => p.id === selectedProgramId);
   
   // Instant pricing mutation
@@ -170,6 +172,9 @@ export default function Home() {
         const editData = JSON.parse(editQuoteData);
         sessionStorage.removeItem('editQuote'); // Clear after reading
         
+        if (editData.programId) {
+          setSelectedQuoteProgramId(editData.programId);
+        }
         if (editData.isRTL) {
           setLoanProductType('rtl');
           setRtlFormData(editData.loanData);
@@ -246,29 +251,62 @@ export default function Home() {
       </header>
 
       <div className="p-4 md:p-6">
-        {/* Loan Product Type Selector */}
+        {/* Loan Program Selector */}
         <Card className="mb-6">
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg">Loan Product Type</CardTitle>
-            <CardDescription>Select the type of loan you want to price</CardDescription>
+            <CardTitle className="text-lg">Loan Program</CardTitle>
+            <CardDescription>Select the loan program to price</CardDescription>
           </CardHeader>
           <CardContent>
-            <Select
-              value={loanProductType}
-              onValueChange={(v: "dscr" | "rtl") => {
-                setLoanProductType(v);
-                setResult(null);
-                setRtlResult(null);
-              }}
-            >
-              <SelectTrigger className="w-full md:w-80" data-testid="select-loan-product-type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="dscr">DSCR</SelectItem>
-                <SelectItem value="rtl">Fix and Flip/Ground Up Construction</SelectItem>
-              </SelectContent>
-            </Select>
+            {allActivePrograms.length > 0 ? (
+              <Select
+                value={selectedQuoteProgramId?.toString() || ""}
+                onValueChange={(v) => {
+                  const prog = allActivePrograms.find(p => p.id === parseInt(v));
+                  if (prog) {
+                    setSelectedQuoteProgramId(prog.id);
+                    const derivedType = (prog.loanType === 'dscr' ? 'dscr' : 'rtl') as "dscr" | "rtl";
+                    setLoanProductType(derivedType);
+                    setResult(null);
+                    setRtlResult(null);
+                  }
+                }}
+              >
+                <SelectTrigger className="w-full md:w-96" data-testid="select-loan-program">
+                  <SelectValue placeholder="Select a loan program" />
+                </SelectTrigger>
+                <SelectContent>
+                  {allActivePrograms.map((program) => (
+                    <SelectItem key={program.id} value={program.id.toString()}>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-xs">
+                          {program.loanType.toUpperCase()}
+                        </Badge>
+                        {program.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Select
+                value={loanProductType}
+                onValueChange={(v: "dscr" | "rtl") => {
+                  setLoanProductType(v);
+                  setSelectedQuoteProgramId(null);
+                  setResult(null);
+                  setRtlResult(null);
+                }}
+              >
+                <SelectTrigger className="w-full md:w-80" data-testid="select-loan-product-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="dscr">DSCR</SelectItem>
+                  <SelectItem value="rtl">Fix and Flip/Ground Up Construction</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </CardContent>
         </Card>
 
@@ -544,6 +582,7 @@ export default function Home() {
                   formData={rtlFormData}
                   onReset={handleReset}
                   onEdit={handleRTLEdit}
+                  programId={selectedQuoteProgramId}
                 />
               ) : (
                 <RTLLoanForm 
@@ -563,7 +602,8 @@ export default function Home() {
               <PricingResult 
                 result={result} 
                 formData={lastFormData} 
-                onReset={handleReset} 
+                onReset={handleReset}
+                programId={selectedQuoteProgramId}
               />
             </motion.div>
           )}

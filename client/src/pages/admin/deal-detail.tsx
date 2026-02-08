@@ -100,6 +100,8 @@ interface Deal {
   createdAt: string;
   userName: string | null;
   userEmail: string | null;
+  programId?: number | null;
+  programName?: string | null;
 }
 
 interface DealDocument {
@@ -829,7 +831,14 @@ export default function AdminDealDetail() {
               </SelectContent>
             </Select>
           </div>
-          <h1 className="text-xl font-semibold" data-testid="text-borrower-name">{borrowerName}</h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-xl font-semibold" data-testid="text-borrower-name">{borrowerName}</h1>
+            {deal.programName && (
+              <Badge variant="outline" data-testid="badge-program-name">
+                {deal.programName}
+              </Badge>
+            )}
+          </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={copyBorrowerPortalLink} data-testid="button-copy-portal-link">

@@ -1270,16 +1270,29 @@ export async function registerRoutes(
         commission
       }, req.user!.id);
 
-      // Auto-populate document checklist based on loan type
+      // Auto-populate document checklist based on programId or loan type
       const quoteLoanType = (saved.loanData as any)?.loanType;
-      if (quoteLoanType && saved.id) {
+      if ((saved.programId || quoteLoanType) && saved.id) {
         try {
-          const [activeProgram] = await db.select().from(loanPrograms)
-            .where(and(
-              eq(loanPrograms.loanType, quoteLoanType),
-              eq(loanPrograms.isActive, true)
-            ))
-            .limit(1);
+          let activeProgram: any = null;
+          if (saved.programId) {
+            const [prog] = await db.select().from(loanPrograms)
+              .where(and(
+                eq(loanPrograms.id, saved.programId),
+                eq(loanPrograms.isActive, true)
+              ))
+              .limit(1);
+            activeProgram = prog;
+          }
+          if (!activeProgram && quoteLoanType) {
+            const [prog] = await db.select().from(loanPrograms)
+              .where(and(
+                eq(loanPrograms.loanType, quoteLoanType),
+                eq(loanPrograms.isActive, true)
+              ))
+              .limit(1);
+            activeProgram = prog;
+          }
 
           let documentEntries: any[] = [];
 
@@ -1907,6 +1920,7 @@ export async function registerRoutes(
           
           // Get quote data if linked
           let loanData: Record<string, unknown> = {};
+          let quoteProgramId: number | null = null;
           if (doc.quoteId) {
             const quote = await storage.getQuoteById(doc.quoteId, doc.userId!);
             if (quote) {
@@ -1917,6 +1931,7 @@ export async function registerRoutes(
                 loanType: quote.loanType,
                 propertyAddress: quote.propertyAddress,
               };
+              quoteProgramId = quote.programId || null;
             }
           }
           
@@ -1928,6 +1943,7 @@ export async function registerRoutes(
             interestRate: loanData.interestRate as number || null,
             loanTermMonths: loanData.loanTermMonths as number || null,
             loanType: loanData.loanType as string || null,
+            programId: quoteProgramId,
             propertyAddress: loanData.propertyAddress as string || null,
             borrowerName: borrowerSigner.name,
             borrowerEmail: borrowerSigner.email,
@@ -1941,36 +1957,10 @@ export async function registerRoutes(
             sourceDocumentId: doc.id,
           });
           
-          // Create stages and tasks from template
-          const { LOAN_CLOSING_STAGES } = await import('./config/loanStages');
-          
-          for (const stageTemplate of LOAN_CLOSING_STAGES) {
-            const stage = await storage.createProjectStage({
-              projectId: project.id,
-              stageName: stageTemplate.stage_name,
-              stageKey: stageTemplate.stage_key,
-              stageOrder: stageTemplate.stage_order,
-              stageDescription: stageTemplate.stage_description,
-              estimatedDurationDays: stageTemplate.estimated_duration_days,
-              status: stageTemplate.stage_order === 1 ? 'in_progress' : 'pending',
-              visibleToBorrower: stageTemplate.visible_to_borrower,
-              startedAt: stageTemplate.stage_order === 1 ? new Date() : null,
-            });
-            
-            for (const taskTemplate of stageTemplate.tasks) {
-              await storage.createProjectTask({
-                projectId: project.id,
-                stageId: stage.id,
-                taskTitle: taskTemplate.task_title,
-                taskType: taskTemplate.task_type,
-                priority: taskTemplate.priority,
-                requiresDocument: taskTemplate.requires_document || false,
-                visibleToBorrower: taskTemplate.visible_to_borrower,
-                borrowerActionRequired: taskTemplate.borrower_action_required || false,
-                status: 'pending',
-              });
-            }
-          }
+          // Create stages/tasks/documents from program template (or legacy fallback)
+          const { buildProjectPipelineFromProgram } = await import('./services/projectPipeline');
+          const pipelineResult = await buildProjectPipelineFromProgram(project.id, quoteProgramId, doc.quoteId || undefined);
+          console.log(`Pipeline created: ${pipelineResult.stagesCreated} stages, ${pipelineResult.tasksCreated} tasks, ${pipelineResult.documentsCreated} documents (program: ${pipelineResult.usedProgramTemplate ? pipelineResult.programName : 'legacy'})`);
           
           // Log activity
           await storage.createProjectActivity({
@@ -2669,6 +2659,7 @@ export async function registerRoutes(
         interestRate,
         loanTermMonths,
         loanType,
+        programId: reqProgramId,
         propertyAddress,
         propertyType,
         borrowerName,
@@ -2693,6 +2684,7 @@ export async function registerRoutes(
         interestRate: interestRate ? parseFloat(interestRate) : null,
         loanTermMonths: loanTermMonths ? parseInt(loanTermMonths) : null,
         loanType,
+        programId: reqProgramId ? parseInt(reqProgramId) : null,
         propertyAddress,
         propertyType,
         borrowerName,
@@ -2708,36 +2700,10 @@ export async function registerRoutes(
         notes,
       });
       
-      // Create stages and tasks from template
-      const { LOAN_CLOSING_STAGES } = await import('./config/loanStages');
-      
-      for (const stageTemplate of LOAN_CLOSING_STAGES) {
-        const stage = await storage.createProjectStage({
-          projectId: project.id,
-          stageName: stageTemplate.stage_name,
-          stageKey: stageTemplate.stage_key,
-          stageOrder: stageTemplate.stage_order,
-          stageDescription: stageTemplate.stage_description,
-          estimatedDurationDays: stageTemplate.estimated_duration_days,
-          status: stageTemplate.stage_order === 1 ? 'in_progress' : 'pending',
-          visibleToBorrower: stageTemplate.visible_to_borrower,
-          startedAt: stageTemplate.stage_order === 1 ? new Date() : null,
-        });
-        
-        for (const taskTemplate of stageTemplate.tasks) {
-          await storage.createProjectTask({
-            projectId: project.id,
-            stageId: stage.id,
-            taskTitle: taskTemplate.task_title,
-            taskType: taskTemplate.task_type,
-            priority: taskTemplate.priority,
-            requiresDocument: taskTemplate.requires_document || false,
-            visibleToBorrower: taskTemplate.visible_to_borrower,
-            borrowerActionRequired: taskTemplate.borrower_action_required || false,
-            status: 'pending',
-          });
-        }
-      }
+      // Create stages/tasks/documents from program template (or legacy fallback)
+      const { buildProjectPipelineFromProgram } = await import('./services/projectPipeline');
+      const pipelineResult = await buildProjectPipelineFromProgram(project.id, reqProgramId ? parseInt(reqProgramId) : null);
+      console.log(`Pipeline created: ${pipelineResult.stagesCreated} stages, ${pipelineResult.tasksCreated} tasks, ${pipelineResult.documentsCreated} documents (program: ${pipelineResult.usedProgramTemplate ? pipelineResult.programName : 'legacy'})`);
       
       // Log activity
       await storage.createProjectActivity({
@@ -4808,6 +4774,7 @@ export async function registerRoutes(
         interestRate: projects.interestRate,
         loanTermMonths: projects.loanTermMonths,
         loanType: projects.loanType,
+        programId: projects.programId,
         status: projects.status,
         currentStage: projects.currentStage,
         progressPercentage: projects.progressPercentage,
@@ -4849,6 +4816,15 @@ export async function registerRoutes(
         }
       }
       
+      let programName: string | null = null;
+      if (project.programId) {
+        const [prog] = await db.select({ name: loanPrograms.name })
+          .from(loanPrograms)
+          .where(eq(loanPrograms.id, project.programId))
+          .limit(1);
+        programName = prog?.name || null;
+      }
+
       const deal = {
         id: project.id,
         projectId: project.id,
@@ -4876,6 +4852,8 @@ export async function registerRoutes(
         userEmail: project.userEmail,
         quoteId: project.quoteId,
         borrowerPortalToken: project.borrowerPortalToken,
+        programId: project.programId,
+        programName,
       };
       
       // Get project documents if any
