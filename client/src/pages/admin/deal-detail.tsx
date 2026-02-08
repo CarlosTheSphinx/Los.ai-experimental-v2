@@ -63,6 +63,7 @@ import {
   Paperclip,
   BarChart3,
   RefreshCw,
+  CloudUpload,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -127,6 +128,10 @@ interface DealDocument {
   reviewedBy: number | null;
   reviewNotes: string | null;
   sortOrder: number | null;
+  googleDriveFileId: string | null;
+  googleDriveFileUrl: string | null;
+  driveUploadStatus: string | null;
+  driveUploadError: string | null;
   createdAt: string;
 }
 
@@ -645,6 +650,24 @@ export default function AdminDealDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/projects', linkedProjectId] });
       toast({ title: "Task updated" });
+    },
+  });
+
+  const [pushingDocId, setPushingDocId] = useState<number | null>(null);
+
+  const pushToDriveMutation = useMutation({
+    mutationFn: async ({ docId }: { docId: number }) => {
+      setPushingDocId(docId);
+      return apiRequest('POST', `/api/admin/deals/${dealId}/documents/${docId}/drive/retry`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/projects', linkedProjectId] });
+      toast({ title: "Pushed to Google Drive" });
+      setPushingDocId(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Drive push failed", description: error.message || "Could not upload to Google Drive", variant: "destructive" });
+      setPushingDocId(null);
     },
   });
 
@@ -1473,6 +1496,23 @@ export default function AdminDealDetail() {
                                       <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); handleDownloadDocument(doc.id, doc.fileName); }} data-testid={`button-download-${doc.id}`} title="Download">
                                         <Download className="h-3.5 w-3.5" />
                                       </Button>
+                                      {doc.googleDriveFileUrl ? (
+                                        <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); window.open(doc.googleDriveFileUrl!, '_blank'); }} data-testid={`button-drive-open-${doc.id}`} title="Open in Google Drive">
+                                          <ExternalLink className="h-3.5 w-3.5 text-blue-500" />
+                                        </Button>
+                                      ) : (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={(e) => { e.stopPropagation(); pushToDriveMutation.mutate({ docId: doc.id }); }}
+                                          disabled={pushingDocId === doc.id}
+                                          data-testid={`button-push-drive-${doc.id}`}
+                                          title="Push to Google Drive"
+                                        >
+                                          {pushingDocId === doc.id ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <CloudUpload className="h-3 w-3 mr-1" />}
+                                          Drive
+                                        </Button>
+                                      )}
                                     </>
                                   )}
                                   <input type="file" id={`file-input-${doc.id}`} className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" onChange={handleFileInputChange(doc.id)} data-testid={`input-file-${doc.id}`} />
