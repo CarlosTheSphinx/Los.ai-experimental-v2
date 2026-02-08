@@ -1,0 +1,68 @@
+**Perfect! Here's the exact instruction to paste into Replit:**
+
+---
+
+## Instructions for Replit: Fix Document Upload to Use Deal's Folder
+
+### Problem:
+Documents are uploading to Google Drive root instead of the deal's specific folder.
+
+### Fix Required:
+When a document is uploaded to a deal, it must be placed inside that deal's Google Drive folder (using the `drive_folder_id` stored in the deals table).
+
+### Steps:
+
+1. **Find the document upload function** (the code that handles "Push to Drive" or document upload)
+
+2. **Before uploading the file, fetch the deal's Drive folder ID:**
+```javascript
+// Get the deal's Google Drive folder ID
+const deal = await db.query(`
+  SELECT drive_folder_id 
+  FROM deals 
+  WHERE id = ?
+`, [dealId]);
+
+if (!deal || !deal.drive_folder_id) {
+  throw new Error('Deal does not have a Google Drive folder');
+}
+
+const parentFolderId = deal.drive_folder_id;
+```
+
+3. **When calling the Google Drive API to upload the file, include the `parents` field:**
+```javascript
+// In the Drive API upload request body, add parents field:
+{
+  name: fileName,
+  parents: [parentFolderId]  // ← ADD THIS - tells Drive which folder to put file in
+}
+```
+
+4. **Full example of correct upload:**
+```javascript
+const response = await fetch('https://www.googleapis.com/drive/v3/files', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${accessToken}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    name: fileName,
+    parents: [parentFolderId]  // ← CRITICAL: This puts file in correct folder
+  })
+});
+```
+
+### Key Point:
+The `parents` array in the Google Drive API request specifies which folder the file should be uploaded to. Without it, files go to Drive root. With it, files go to the specified folder.
+
+### Test:
+After making this change:
+1. Upload a document to a deal
+2. Check the deal's folder in Google Drive - the file should appear there
+3. The file URL should still work when clicking "View"
+
+---
+
+**Paste that into Replit and it should fix it!**
