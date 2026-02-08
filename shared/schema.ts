@@ -501,6 +501,7 @@ export type InsertProjectWebhook = z.infer<typeof insertProjectWebhookSchema>;
 export const dealDocuments = pgTable("deal_documents", {
   id: serial("id").primaryKey(),
   dealId: integer("deal_id").references(() => savedQuotes.id, { onDelete: 'cascade' }).notNull(),
+  stageId: integer("stage_id").references(() => projectStages.id, { onDelete: 'set null' }),
   
   documentName: varchar("document_name", { length: 255 }).notNull(),
   documentCategory: varchar("document_category", { length: 100 }), // borrower_docs, entity_docs, property_docs, financial_docs, closing_docs
