@@ -1819,6 +1819,12 @@ export default function AdminDealDetail() {
                 />
               </div>
             </div>
+            <div className="space-y-2">
+              <Label>Loan Program</Label>
+              <div className="flex items-center min-h-9 px-3 py-2 rounded-md border bg-muted/50 text-sm font-medium" data-testid="text-edit-program">
+                {deal?.programName || 'No program assigned'}
+              </div>
+            </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="interestRate">Interest Rate</Label>
@@ -1831,9 +1837,9 @@ export default function AdminDealDetail() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Loan Program</Label>
-                <div className="flex items-center h-9 px-3 rounded-md border bg-muted text-sm" data-testid="text-edit-program">
-                  {deal?.programName || getLoanTypeLabel(editForm.loanType) || 'Not set'}
+                <Label htmlFor="loanType">Loan Type</Label>
+                <div className="flex items-center h-9 px-3 rounded-md border bg-muted/50 text-sm" data-testid="text-edit-loan-type">
+                  {getLoanTypeLabel(editForm.loanType) || 'Not set'}
                 </div>
               </div>
               <div className="space-y-2">

@@ -242,19 +242,23 @@ async function syncSingleProject(
     .where(eq(projectStages.projectId, projectId));
 
   const stageByProgramStepId = new Map<number, typeof existingStages[0]>();
+  const stageByKey = new Map<string, typeof existingStages[0]>();
   for (const s of existingStages) {
     if (s.programStepId) {
       stageByProgramStepId.set(s.programStepId, s);
+    } else if (s.stageKey) {
+      stageByKey.set(s.stageKey, s);
     }
   }
 
   const newStageIdByStepId = new Map<number, number>();
 
   for (const step of workflowSteps) {
-    const existingStage = stageByProgramStepId.get(step.stepId);
+    let existingStage = stageByProgramStepId.get(step.stepId) || stageByKey.get(step.defKey);
     if (existingStage) {
       await db.update(projectStages)
         .set({
+          programStepId: step.stepId,
           stageName: step.defName,
           stageKey: step.defKey,
           stageOrder: step.stepOrder,
@@ -296,9 +300,17 @@ async function syncSingleProject(
     .where(eq(projectTasks.projectId, projectId));
 
   const taskByTemplateId = new Map<number, typeof existingTasks[0]>();
+  const taskByName = new Map<string, typeof existingTasks[0]>();
+  const matchedTaskIds = new Set<number>();
   for (const t of existingTasks) {
     if (t.programTaskTemplateId) {
       taskByTemplateId.set(t.programTaskTemplateId, t);
+      matchedTaskIds.add(t.id);
+    } else {
+      const key = (t.taskTitle || '').trim().toLowerCase();
+      if (key && !taskByName.has(key)) {
+        taskByName.set(key, t);
+      }
     }
   }
 
@@ -306,10 +318,19 @@ async function syncSingleProject(
 
   for (const template of taskTemplates) {
     const stageId = template.stepId ? (newStageIdByStepId.get(template.stepId) || null) : null;
-    const existingTask = taskByTemplateId.get(template.id);
+    let existingTask = taskByTemplateId.get(template.id);
+    if (!existingTask) {
+      const nameKey = (template.taskName || '').trim().toLowerCase();
+      const byName = taskByName.get(nameKey);
+      if (byName && !matchedTaskIds.has(byName.id)) {
+        existingTask = byName;
+        matchedTaskIds.add(byName.id);
+      }
+    }
 
     if (existingTask) {
       const updates: Record<string, any> = {};
+      if (!existingTask.programTaskTemplateId) updates.programTaskTemplateId = template.id;
       if (existingTask.taskTitle !== template.taskName) updates.taskTitle = template.taskName;
       if (existingTask.taskDescription !== template.taskDescription) updates.taskDescription = template.taskDescription;
       if (existingTask.taskType !== (template.taskCategory || 'general')) updates.taskType = template.taskCategory || 'general';
@@ -353,9 +374,17 @@ async function syncSingleProject(
     .where(eq(dealDocuments.dealId, projectId));
 
   const docByTemplateId = new Map<number, typeof existingDocs[0]>();
+  const docByName = new Map<string, typeof existingDocs[0]>();
+  const matchedDocIds = new Set<number>();
   for (const d of existingDocs) {
     if (d.programDocumentTemplateId) {
       docByTemplateId.set(d.programDocumentTemplateId, d);
+      matchedDocIds.add(d.id);
+    } else {
+      const key = (d.documentName || '').trim().toLowerCase();
+      if (key && !docByName.has(key)) {
+        docByName.set(key, d);
+      }
     }
   }
 
@@ -363,10 +392,19 @@ async function syncSingleProject(
 
   for (const template of docTemplates) {
     const stageId = template.stepId ? (newStageIdByStepId.get(template.stepId) || null) : null;
-    const existingDoc = docByTemplateId.get(template.id);
+    let existingDoc = docByTemplateId.get(template.id);
+    if (!existingDoc) {
+      const nameKey = (template.documentName || '').trim().toLowerCase();
+      const byName = docByName.get(nameKey);
+      if (byName && !matchedDocIds.has(byName.id)) {
+        existingDoc = byName;
+        matchedDocIds.add(byName.id);
+      }
+    }
 
     if (existingDoc) {
       const updates: Record<string, any> = {};
+      if (!existingDoc.programDocumentTemplateId) updates.programDocumentTemplateId = template.id;
       if (existingDoc.documentName !== template.documentName) updates.documentName = template.documentName;
       if (existingDoc.documentCategory !== template.documentCategory) updates.documentCategory = template.documentCategory;
       if (existingDoc.documentDescription !== template.documentDescription) updates.documentDescription = template.documentDescription;
