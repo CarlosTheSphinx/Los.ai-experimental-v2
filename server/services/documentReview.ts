@@ -3,7 +3,7 @@ import { objectStorageService } from "../replit_integrations/object_storage/obje
 import { storage } from "../storage";
 import { db } from "../db";
 import { loanPrograms, dealDocuments, projects, savedQuotes, programReviewRules } from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, or } from "drizzle-orm";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -80,9 +80,15 @@ export async function reviewDocument(
       if (program) {
         programId = program.id;
         
+        const ruleConditions = [];
+        ruleConditions.push(eq(programReviewRules.programId, program.id));
+        if (program.creditPolicyId) {
+          ruleConditions.push(eq(programReviewRules.creditPolicyId, program.creditPolicyId));
+        }
+        
         const rules = await db.select().from(programReviewRules)
           .where(and(
-            eq(programReviewRules.programId, program.id),
+            or(...ruleConditions),
             eq(programReviewRules.isActive, true)
           ))
           .orderBy(programReviewRules.sortOrder);
@@ -117,7 +123,7 @@ export async function reviewDocument(
     }
 
     if (!guidelines) {
-      return { success: false, error: 'No review rules configured for this loan program. Please upload a credit policy document or add review rules in the program settings first.' };
+      return { success: false, error: 'No review rules configured for this loan program. Please assign a credit policy to this program in Admin > Programs, or create one in Admin > Credit Policies first.' };
     }
 
     let documentText: string;
