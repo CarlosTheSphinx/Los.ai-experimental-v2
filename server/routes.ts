@@ -1378,6 +1378,125 @@ export async function registerRoutes(
     }
   });
 
+  // Accept a quote (borrower flow) — creates a project/deal on the admin dashboard
+  app.post('/api/quotes/:id/accept', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const quoteId = parseInt(req.params.id);
+      const userId = req.user!.id;
+      const user = await storage.getUserById(userId);
+      if (!user) {
+        res.status(401).json({ success: false, error: 'User not found' });
+        return;
+      }
+
+      const quote = await storage.getQuoteById(quoteId, userId);
+      if (!quote) {
+        res.status(404).json({ success: false, error: 'Quote not found' });
+        return;
+      }
+
+      // Prevent duplicate accepts — check if a project already exists for this quote
+      const existingProjects = await db.select({ id: projects.id })
+        .from(projects)
+        .where(eq(projects.sourceDocumentId, quoteId))
+        .limit(1);
+      if (existingProjects.length > 0) {
+        res.status(409).json({ success: false, error: 'This quote has already been accepted' });
+        return;
+      }
+
+      const loanData = quote.loanData as Record<string, any>;
+      const isRTLQuote = loanData?.asIsValue || loanData?.arv || loanData?.rehabBudget !== undefined;
+      const loanAmount = isRTLQuote
+        ? (loanData?.asIsValue || 0) + (loanData?.rehabBudget || 0)
+        : loanData?.loanAmount || 0;
+
+      const rateStr = quote.interestRate || '';
+      const rateNum = parseFloat(rateStr.replace('%', ''));
+
+      const projectNumber = await storage.generateProjectNumber();
+      const borrowerToken = uuidv4().replace(/-/g, '') + uuidv4().replace(/-/g, '');
+
+      const borrowerName = `${quote.customerFirstName || ''} ${quote.customerLastName || ''}`.trim() || user.fullName || user.email;
+      const borrowerEmail = user.email || '';
+
+      const project = await storage.createProject({
+        userId,
+        projectName: `${borrowerName} — ${quote.propertyAddress || 'New Loan'}`,
+        projectNumber,
+        loanAmount: loanAmount || null,
+        interestRate: !isNaN(rateNum) ? rateNum : null,
+        loanTermMonths: loanData?.loanTermMonths ? parseInt(loanData.loanTermMonths) : null,
+        loanType: loanData?.loanType || (isRTLQuote ? 'fix_and_flip' : 'dscr'),
+        programId: quote.programId || null,
+        propertyAddress: quote.propertyAddress || null,
+        propertyType: loanData?.propertyType || null,
+        borrowerName,
+        borrowerEmail,
+        borrowerPhone: user.phone || null,
+        status: 'active',
+        currentStage: 'documentation',
+        progressPercentage: 0,
+        applicationDate: new Date(),
+        targetCloseDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+        borrowerPortalToken: borrowerToken,
+        borrowerPortalEnabled: true,
+        sourceDocumentId: quoteId,
+        notes: `Accepted from borrower quote #${quoteId}`,
+      });
+
+      // Create stages/tasks/documents from program template
+      const { buildProjectPipelineFromProgram } = await import('./services/projectPipeline');
+      const pipelineResult = await buildProjectPipelineFromProgram(
+        project.id,
+        quote.programId || null
+      );
+      console.log(`Borrower quote accepted → Project ${projectNumber} created: ${pipelineResult.stagesCreated} stages, ${pipelineResult.tasksCreated} tasks, ${pipelineResult.documentsCreated} documents`);
+
+      await storage.createProjectActivity({
+        projectId: project.id,
+        userId,
+        activityType: 'project_created',
+        activityDescription: `Loan application submitted by borrower from quote #${quoteId}`,
+        visibleToBorrower: true,
+      });
+
+      // Trigger webhook
+      const { triggerWebhook } = await import('./utils/webhooks');
+      await triggerWebhook(project.id, 'project_created', {
+        project_number: projectNumber,
+        source: 'borrower_quote_accepted',
+        quote_id: quoteId,
+      });
+
+      // Google Drive folder creation (non-blocking)
+      try {
+        const { isDriveIntegrationEnabled, ensureProjectFolder } = await import('./services/googleDrive');
+        const driveEnabled = await isDriveIntegrationEnabled();
+        if (driveEnabled) {
+          ensureProjectFolder(project.id).catch((err: any) => {
+            console.error(`Drive folder creation failed for project ${project.id}:`, err.message);
+          });
+        }
+      } catch (e) {
+        // Drive integration not critical
+      }
+
+      res.json({
+        success: true,
+        project: {
+          id: project.id,
+          projectNumber: project.projectNumber,
+          projectName: project.projectName,
+        },
+        message: 'Quote accepted and loan application created successfully',
+      });
+    } catch (error) {
+      console.error('Error accepting quote:', error);
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
   // ========== DOCUMENT SIGNING ENDPOINTS (Protected) ==========
 
   // Create a new document (upload PDF)

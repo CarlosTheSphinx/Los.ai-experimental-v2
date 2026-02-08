@@ -37,6 +37,8 @@ import ResourcesPage from "@/pages/resources";
 import SelectRolePage from "@/pages/select-role";
 import CommercialSubmissionPage from "@/pages/commercial-submission";
 import CommercialSubmissionConfirmation from "@/pages/commercial-submission-confirmation";
+import BorrowerQuote from "@/pages/borrower-quote";
+import BorrowerQuotes from "@/pages/borrower-quotes";
 import AdminCommercialSubmissions from "@/pages/admin/commercial-submissions";
 import AdminCommercialSubmissionDetail from "@/pages/admin/commercial-submission-detail";
 import { AppLayout } from "@/components/AppLayout";
@@ -122,6 +124,8 @@ function MainRoutes() {
         <Route path="/projects/:id" component={() => <ProtectedRoute component={ProjectDetail} />} />
         <Route path="/messages" component={() => <ProtectedRoute component={MessagesPage} />} />
         <Route path="/resources" component={() => <ProtectedRoute component={ResourcesPage} />} />
+        <Route path="/borrower-quote" component={() => <ProtectedRoute component={BorrowerQuote} />} />
+        <Route path="/borrower-quotes" component={() => <ProtectedRoute component={BorrowerQuotes} />} />
         <Route path="/commercial-submission/new" component={() => <ProtectedRoute component={CommercialSubmissionPage} />} />
         <Route path="/commercial-submission/:id/confirmation" component={() => <ProtectedRoute component={CommercialSubmissionConfirmation} />} />
         

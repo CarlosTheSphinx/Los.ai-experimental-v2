@@ -63,6 +63,8 @@ const brokerNavItems: NavItem[] = [
 
 const borrowerNavItems: NavItem[] = [
   { href: "/", label: "My Loans", icon: FolderKanban },
+  { href: "/borrower-quote", label: "Get a Quote", icon: Calculator },
+  { href: "/borrower-quotes", label: "My Quotes", icon: FileText },
   { href: "/messages", label: "Messages", icon: MessageSquare, showBadge: true },
   { href: "/resources", label: "Resources", icon: BookOpen },
 ];
