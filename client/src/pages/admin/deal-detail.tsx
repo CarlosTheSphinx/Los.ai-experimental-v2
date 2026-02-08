@@ -164,6 +164,7 @@ interface ProjectTask {
   taskType: string;
   priority: string;
   status: string;
+  assignedTo: string | null;
   completedAt: string | null;
   completedBy: string | null;
   visibleToBorrower: boolean;
@@ -635,8 +636,11 @@ export default function AdminDealDetail() {
   });
 
   const updateProjectTaskMutation = useMutation({
-    mutationFn: async ({ projectId, taskId, status }: { projectId: number; taskId: number; status: string }) => {
-      return apiRequest('PATCH', `/api/admin/projects/${projectId}/tasks/${taskId}`, { status });
+    mutationFn: async ({ projectId, taskId, status, assignedTo }: { projectId: number; taskId: number; status?: string; assignedTo?: string | null }) => {
+      const body: Record<string, unknown> = {};
+      if (status !== undefined) body.status = status;
+      if (assignedTo !== undefined) body.assignedTo = assignedTo;
+      return apiRequest('PATCH', `/api/admin/projects/${projectId}/tasks/${taskId}`, body);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/projects', linkedProjectId] });
@@ -1332,7 +1336,9 @@ export default function AdminDealDetail() {
                             Tasks ({stageTasks.filter(t => t.status === 'completed').length}/{stageTasks.length})
                           </h4>
                           <div className="space-y-2">
-                            {stageTasks.map((task) => (
+                            {stageTasks.map((task) => {
+                              const assignedMember = teamData?.teamMembers?.find(m => String(m.id) === task.assignedTo);
+                              return (
                               <div
                                 key={task.id}
                                 className={cn(
@@ -1372,8 +1378,36 @@ export default function AdminDealDetail() {
                                     </div>
                                   )}
                                 </div>
+                                <Select
+                                  value={task.assignedTo || "unassigned"}
+                                  onValueChange={(value) => {
+                                    if (linkedProjectId) {
+                                      updateProjectTaskMutation.mutate({
+                                        projectId: linkedProjectId,
+                                        taskId: task.id,
+                                        assignedTo: value === "unassigned" ? null : value,
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <SelectTrigger
+                                    className="w-[140px] h-8 text-xs shrink-0"
+                                    data-testid={`select-assign-task-${task.id}`}
+                                  >
+                                    <SelectValue placeholder="Assign to..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                                    {teamData?.teamMembers?.filter(m => m.role === 'admin' || m.role === 'super_admin' || m.role === 'staff').map(member => (
+                                      <SelectItem key={member.id} value={String(member.id)}>
+                                        {member.fullName || member.email}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
                               </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       )}

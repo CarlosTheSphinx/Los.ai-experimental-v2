@@ -4140,7 +4140,7 @@ export async function registerRoutes(
     try {
       const projectId = parseInt(req.params.projectId);
       const taskId = parseInt(req.params.taskId);
-      const { status } = req.body;
+      const { status, assignedTo } = req.body;
       
       const task = await storage.getTaskById(taskId);
       if (!task || task.projectId !== projectId) {
@@ -4157,14 +4157,32 @@ export async function registerRoutes(
         updates.completedAt = null;
         updates.completedBy = null;
       }
+      if (assignedTo !== undefined) {
+        updates.assignedTo = assignedTo || null;
+      }
       
       const updatedTask = await storage.updateTask(taskId, updates);
       
+      let activityDesc = '';
+      if (status) {
+        activityDesc = `Task "${task.taskTitle}" marked as ${status}`;
+      }
+      if (assignedTo !== undefined) {
+        if (assignedTo) {
+          const assignee = await storage.getUserById(parseInt(assignedTo));
+          const assigneeName = assignee?.fullName || assignee?.email || 'someone';
+          activityDesc = activityDesc ? `${activityDesc}, assigned to ${assigneeName}` : `Task "${task.taskTitle}" assigned to ${assigneeName}`;
+        } else {
+          activityDesc = activityDesc ? `${activityDesc}, unassigned` : `Task "${task.taskTitle}" unassigned`;
+        }
+      }
+      if (!activityDesc) activityDesc = `Task "${task.taskTitle}" updated`;
+
       await storage.createProjectActivity({
         projectId,
         userId: req.user!.id,
         activityType: 'task_updated',
-        activityDescription: `Task "${task.taskTitle}" marked as ${status}`,
+        activityDescription: activityDesc,
         visibleToBorrower: task.visibleToBorrower ?? false,
       });
       
