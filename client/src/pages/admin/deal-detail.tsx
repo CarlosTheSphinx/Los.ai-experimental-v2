@@ -1290,11 +1290,64 @@ export default function AdminDealDetail() {
 
                   {isExpanded && (
                     <div className="border-t px-5 pb-5">
-                      {showDocs && stageDocs.length > 0 && (
+                      {showTasks && stageTasks.length > 0 && (
                         <div className="mt-5">
                           <h4 className="text-sm font-semibold flex items-center gap-2 mb-3">
+                            <CheckSquare className="h-4 w-4 text-muted-foreground" />
+                            Tasks ({stageTasks.filter(t => t.status === 'completed').length}/{stageTasks.length})
+                          </h4>
+                          <div className="space-y-2">
+                            {stageTasks.map((task) => (
+                              <div
+                                key={task.id}
+                                className={cn(
+                                  "flex items-center gap-3 p-3 rounded-lg border",
+                                  task.status === 'completed' && "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 opacity-80"
+                                )}
+                                data-testid={`task-row-${task.id}`}
+                              >
+                                <Checkbox
+                                  checked={task.status === 'completed'}
+                                  onCheckedChange={(checked) => {
+                                    if (linkedProjectId) {
+                                      updateProjectTaskMutation.mutate({
+                                        projectId: linkedProjectId,
+                                        taskId: task.id,
+                                        status: checked ? 'completed' : 'pending'
+                                      });
+                                    }
+                                  }}
+                                  data-testid={`checkbox-task-${task.id}`}
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className={cn("text-sm font-medium", task.status === 'completed' && "line-through text-muted-foreground")}>
+                                      {task.taskTitle}
+                                    </span>
+                                    {getPriorityBadge(task.priority)}
+                                    {task.borrowerActionRequired && (
+                                      <Badge variant="outline" className="text-xs">Borrower Action</Badge>
+                                    )}
+                                  </div>
+                                  {task.completedAt && (
+                                    <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                                      <Check className="h-3 w-3 text-emerald-500" />
+                                      {formatDateTime(task.completedAt)}
+                                      {task.completedBy && ` by ${task.completedBy}`}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {showDocs && stageDocs.length > 0 && (
+                        <div className={cn("mt-5", showTasks && stageTasks.length > 0 && "pt-5 border-t")}>
+                          <h4 className="text-sm font-semibold flex items-center gap-2 mb-3">
                             <FileText className="h-4 w-4 text-muted-foreground" />
-                            Required Documents ({stageDocs.filter(d => d.status === 'approved' || d.status === 'uploaded').length}/{stageDocs.length})
+                            Documents ({stageDocs.filter(d => d.status === 'approved' || d.status === 'uploaded').length}/{stageDocs.length})
                           </h4>
                           <div className="space-y-2">
                             {stageDocs.map((doc) => (
@@ -1386,59 +1439,6 @@ export default function AdminDealDetail() {
                                   )}
                                   {doc.status === 'not_applicable' && (
                                     <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); updateDocumentStatus.mutate({ docId: doc.id, status: 'pending' }); }} disabled={updateDocumentStatus.isPending} data-testid={`button-reset-${doc.id}`}>Reset</Button>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {showTasks && stageTasks.length > 0 && (
-                        <div className="mt-5">
-                          <h4 className="text-sm font-semibold flex items-center gap-2 mb-3">
-                            <CheckSquare className="h-4 w-4 text-muted-foreground" />
-                            Tasks ({stageTasks.filter(t => t.status === 'completed').length}/{stageTasks.length})
-                          </h4>
-                          <div className="space-y-2">
-                            {stageTasks.map((task) => (
-                              <div
-                                key={task.id}
-                                className={cn(
-                                  "flex items-center gap-3 p-3 rounded-lg border",
-                                  task.status === 'completed' && "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 opacity-80"
-                                )}
-                                data-testid={`task-row-${task.id}`}
-                              >
-                                <Checkbox
-                                  checked={task.status === 'completed'}
-                                  onCheckedChange={(checked) => {
-                                    if (linkedProjectId) {
-                                      updateProjectTaskMutation.mutate({
-                                        projectId: linkedProjectId,
-                                        taskId: task.id,
-                                        status: checked ? 'completed' : 'pending'
-                                      });
-                                    }
-                                  }}
-                                  data-testid={`checkbox-task-${task.id}`}
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className={cn("text-sm font-medium", task.status === 'completed' && "line-through text-muted-foreground")}>
-                                      {task.taskTitle}
-                                    </span>
-                                    {getPriorityBadge(task.priority)}
-                                    {task.borrowerActionRequired && (
-                                      <Badge variant="outline" className="text-xs">Borrower Action</Badge>
-                                    )}
-                                  </div>
-                                  {task.completedAt && (
-                                    <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                                      <Check className="h-3 w-3 text-emerald-500" />
-                                      {formatDateTime(task.completedAt)}
-                                      {task.completedBy && ` by ${task.completedBy}`}
-                                    </div>
                                   )}
                                 </div>
                               </div>
