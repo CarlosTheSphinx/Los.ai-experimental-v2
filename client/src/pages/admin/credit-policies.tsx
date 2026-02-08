@@ -87,14 +87,11 @@ export default function AdminCreditPolicies() {
   const createPolicy = useMutation({
     mutationFn: async () => {
       const validRules = rules.filter((r) => r.ruleTitle?.trim());
-      return apiRequest("/api/admin/credit-policies", {
-        method: "POST",
-        body: JSON.stringify({
-          name: policyName,
-          description: policyDescription || null,
-          sourceFileName: sourceFileName || null,
-          rules: validRules,
-        }),
+      return apiRequest("POST", "/api/admin/credit-policies", {
+        name: policyName,
+        description: policyDescription || null,
+        sourceFileName: sourceFileName || null,
+        rules: validRules,
       });
     },
     onSuccess: () => {
@@ -112,13 +109,10 @@ export default function AdminCreditPolicies() {
     mutationFn: async () => {
       if (!editingPolicy) return;
       const validRules = rules.filter((r) => r.ruleTitle?.trim());
-      return apiRequest(`/api/admin/credit-policies/${editingPolicy.id}`, {
-        method: "PUT",
-        body: JSON.stringify({
-          name: policyName,
-          description: policyDescription || null,
-          rules: validRules,
-        }),
+      return apiRequest("PUT", `/api/admin/credit-policies/${editingPolicy.id}`, {
+        name: policyName,
+        description: policyDescription || null,
+        rules: validRules,
       });
     },
     onSuccess: () => {
@@ -134,7 +128,7 @@ export default function AdminCreditPolicies() {
 
   const deletePolicyMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest(`/api/admin/credit-policies/${id}`, { method: "DELETE" });
+      return apiRequest("DELETE", `/api/admin/credit-policies/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/credit-policies"] });
@@ -169,10 +163,7 @@ export default function AdminCreditPolicies() {
         reader.readAsDataURL(file);
       });
 
-      const response = await apiRequest("/api/admin/credit-policies/extract-rules", {
-        method: "POST",
-        body: JSON.stringify({ fileContent: base64, fileName: file.name }),
-      });
+      const response = await apiRequest("POST", "/api/admin/credit-policies/extract-rules", { fileContent: base64, fileName: file.name });
 
       const data = await response.json();
       if (data.rules && Array.isArray(data.rules)) {
