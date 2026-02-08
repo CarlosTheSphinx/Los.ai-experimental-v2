@@ -212,6 +212,7 @@ interface ProjectDetailResponse {
   stages: ProjectStage[];
   tasks: ProjectTask[];
   activity: ProjectActivityItem[];
+  documents?: DealDocument[];
 }
 
 interface DealStage {
@@ -540,6 +541,7 @@ export default function AdminDealDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/projects', linkedProjectId] });
       toast({
         title: "Document updated",
         description: "The document status has been updated.",
@@ -712,6 +714,7 @@ export default function AdminDealDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/projects', linkedProjectId] });
       setDocumentDialogOpen(false);
       setDocumentForm({ documentName: "", documentCategory: "other", documentDescription: "", isRequired: true });
       toast({ title: "Document requirement added" });
@@ -788,6 +791,7 @@ export default function AdminDealDetail() {
       setUploadProgress(100);
 
       queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/projects', linkedProjectId] });
       toast({
         title: "Document uploaded",
         description: `${file.name} has been uploaded successfully.`,
@@ -828,7 +832,7 @@ export default function AdminDealDetail() {
   };
 
   const deal = data?.deal;
-  const documents = data?.documents || [];
+  const documents = projectDetailData?.documents || data?.documents || [];
 
   if (isLoading) {
     return (

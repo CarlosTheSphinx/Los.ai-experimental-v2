@@ -4044,7 +4044,12 @@ export async function registerRoutes(
         }
       }
       
-      res.json({ project, stages: stagesWithTasks, tasks, activity, adminTasks, adminActivity: adminActivityList, owner });
+      const dealDocs = await db.select()
+        .from(dealDocuments)
+        .where(eq(dealDocuments.dealId, projectId))
+        .orderBy(dealDocuments.sortOrder);
+      
+      res.json({ project, stages: stagesWithTasks, tasks, activity, adminTasks, adminActivity: adminActivityList, owner, documents: dealDocs });
     } catch (error) {
       console.error('Admin project detail error:', error);
       res.status(500).json({ error: 'Failed to load project' });
@@ -4947,10 +4952,12 @@ export async function registerRoutes(
         programName,
       };
       
-      // Get project documents if any
-      const documents = await storage.getDocumentsByProjectId(projectId);
+      const docs = await db.select()
+        .from(dealDocuments)
+        .where(eq(dealDocuments.dealId, projectId))
+        .orderBy(dealDocuments.sortOrder);
       
-      res.json({ deal, documents, project });
+      res.json({ deal, documents: docs, project });
     } catch (error) {
       console.error('Admin get deal error:', error);
       res.status(500).json({ error: 'Failed to load deal' });
