@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Calculator, CheckCircle2, AlertCircle, Loader2, RotateCcw, Save, MapPin } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import { Calculator, CheckCircle2, AlertCircle, Loader2, RotateCcw, Save, MapPin, DollarSign, Home, TrendingUp, FileText } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -304,6 +305,19 @@ export default function BorrowerQuote() {
   );
 }
 
+function formatCurrency(value: number, decimals = 2) {
+  return `$${value.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+}
+
+function CostLineItem({ label, value, bold, testId }: { label: string; value: string; bold?: boolean; testId?: string }) {
+  return (
+    <div className={`flex items-center justify-between gap-2 py-2 ${bold ? "font-semibold text-foreground" : ""}`}>
+      <span className={bold ? "" : "text-muted-foreground text-sm"}>{label}</span>
+      <span className="tabular-nums" data-testid={testId}>{value}</span>
+    </div>
+  );
+}
+
 function BorrowerDSCRResult({
   result,
   formData,
@@ -338,9 +352,37 @@ function BorrowerDSCRResult({
   }
 
   const rate = result.interestRate;
+  const rateNum = typeof rate === "number" ? rate : parseFloat(rate || "0");
   const formattedRate = typeof rate === "string" ? rate : rate ? `${rate.toFixed(3)}%` : "N/A";
   const loanAmount = formData?.loanAmount || 0;
+  const propertyValue = formData?.propertyValue || 0;
   const originationFee = (loanAmount * 1) / 100;
+  const annualTaxes = formData?.annualTaxes || 0;
+  const annualInsurance = formData?.annualInsurance || 0;
+  const isInterestOnly = formData?.interestOnly === "Yes";
+
+  const hasValidRate = rateNum > 0 && loanAmount > 0;
+  const monthlyRate = rateNum / 100 / 12;
+  let monthlyPI = 0;
+  if (hasValidRate) {
+    if (isInterestOnly) {
+      monthlyPI = loanAmount * monthlyRate;
+    } else {
+      const n = 360;
+      monthlyPI = loanAmount * (monthlyRate * Math.pow(1 + monthlyRate, n)) / (Math.pow(1 + monthlyRate, n) - 1);
+    }
+  }
+  const monthlyTaxes = annualTaxes / 12;
+  const monthlyInsurance = annualInsurance / 12;
+  const monthlyPITI = monthlyPI + monthlyTaxes + monthlyInsurance;
+
+  const prepaidInterest = hasValidRate ? loanAmount * monthlyRate : 0;
+  const titleInsuranceEst = Math.round(loanAmount * 0.005);
+  const appraisalFee = 750;
+  const processingFee = 995;
+  const floodCert = 25;
+
+  const totalClosingCosts = originationFee + titleInsuranceEst + appraisalFee + processingFee + floodCert + prepaidInterest;
 
   return (
     <div className="space-y-4">
@@ -362,37 +404,48 @@ function BorrowerDSCRResult({
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Loan Summary</CardTitle>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Home className="h-5 w-5 text-muted-foreground" />
+            <CardTitle className="text-lg">Loan Details</CardTitle>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3">
             <div>
-              <p className="text-sm text-muted-foreground">Loan Amount</p>
-              <p className="font-medium" data-testid="text-loan-amount">
-                ${Number(formData?.loanAmount || 0).toLocaleString()}
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Loan Amount</p>
+              <p className="font-semibold text-lg" data-testid="text-loan-amount">
+                {formatCurrency(loanAmount, 0)}
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Property Value</p>
-              <p className="font-medium" data-testid="text-property-value">
-                ${Number(formData?.propertyValue || 0).toLocaleString()}
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Property Value</p>
+              <p className="font-semibold text-lg" data-testid="text-property-value">
+                {formatCurrency(propertyValue, 0)}
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">LTV</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">LTV</p>
               <p className="font-medium" data-testid="text-ltv">{formData?.ltv || "—"}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">FICO</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Loan Term</p>
+              <p className="font-medium" data-testid="text-loan-term">30 Year Fixed</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Loan Purpose</p>
+              <p className="font-medium" data-testid="text-loan-purpose">{formData?.loanPurpose || "—"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Payment Type</p>
+              <p className="font-medium" data-testid="text-payment-type">{isInterestOnly ? "Interest Only" : "Principal & Interest"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">FICO Score</p>
               <p className="font-medium" data-testid="text-fico">{formData?.ficoScore || "—"}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Loan Type</p>
-              <p className="font-medium" data-testid="text-loan-type">{formData?.loanType || "—"}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Property Type</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Property Type</p>
               <p className="font-medium" data-testid="text-property-type">{formData?.propertyType || "—"}</p>
             </div>
           </div>
@@ -400,24 +453,43 @@ function BorrowerDSCRResult({
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Total Estimated Fees</CardTitle>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-muted-foreground" />
+            <CardTitle className="text-lg">Estimated Monthly Payment</CardTitle>
+          </div>
         </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between gap-2 py-2 border-b">
-            <span className="text-muted-foreground">Origination Fee (1 point)</span>
-            <span className="font-medium" data-testid="text-origination-fee">
-              ${originationFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-          </div>
-          <div className="flex items-center justify-between gap-2 py-2 font-semibold">
-            <span>Total Estimated Fees</span>
-            <span data-testid="text-total-fees">
-              ${originationFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-          </div>
+        <CardContent className="space-y-0">
+          <CostLineItem label={isInterestOnly ? "Interest Only" : "Principal & Interest"} value={formatCurrency(monthlyPI)} testId="text-monthly-pi" />
+          <CostLineItem label="Property Taxes" value={formatCurrency(monthlyTaxes)} testId="text-monthly-taxes" />
+          <CostLineItem label="Property Insurance" value={formatCurrency(monthlyInsurance)} testId="text-monthly-insurance" />
+          <Separator className="my-1" />
+          <CostLineItem label="Total Monthly (PITI)" value={formatCurrency(monthlyPITI)} bold testId="text-monthly-piti" />
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-muted-foreground" />
+            <CardTitle className="text-lg">Estimated Closing Costs</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-0">
+          <CostLineItem label="Origination Fee (1 point)" value={formatCurrency(originationFee)} testId="text-origination-fee" />
+          <CostLineItem label="Title Insurance (est.)" value={formatCurrency(titleInsuranceEst)} testId="text-title-insurance" />
+          <CostLineItem label="Appraisal Fee" value={formatCurrency(appraisalFee)} testId="text-appraisal-fee" />
+          <CostLineItem label="Processing Fee" value={formatCurrency(processingFee)} testId="text-processing-fee" />
+          <CostLineItem label="Flood Certification" value={formatCurrency(floodCert)} testId="text-flood-cert" />
+          <CostLineItem label="Prepaid Interest (1 mo. est.)" value={formatCurrency(prepaidInterest)} testId="text-prepaid-interest" />
+          <Separator className="my-1" />
+          <CostLineItem label="Total Estimated Closing Costs" value={formatCurrency(totalClosingCosts)} bold testId="text-total-closing-costs" />
+        </CardContent>
+      </Card>
+
+      <p className="text-xs text-muted-foreground text-center px-4">
+        These are estimates only and may vary. Title insurance, recording fees, and other third-party costs depend on your location and provider. Final costs will be detailed in your Loan Estimate.
+      </p>
 
       <Button onClick={onReset} variant="outline" className="w-full" data-testid="button-new-quote">
         <RotateCcw className="h-4 w-4 mr-2" />
@@ -449,7 +521,7 @@ function BorrowerRTLResult({
           {result.disqualifiers && result.disqualifiers.length > 0 && (
             <ul className="text-sm text-red-600 list-disc list-inside space-y-1" data-testid="text-disqualifiers">
               {result.disqualifiers.map((d, i) => (
-                <li key={i}>{d.reason}</li>
+                <li key={i}>{d.message || d.reason}</li>
               ))}
             </ul>
           )}
@@ -465,12 +537,53 @@ function BorrowerRTLResult({
   }
 
   const formattedRate = result.finalRate ? `${result.finalRate.toFixed(3)}%` : "N/A";
+  const rateNum = result.finalRate || 0;
   const asIsValue = formData?.asIsValue || 0;
+  const arv = formData?.arv || 0;
   const rehabBudget = formData?.rehabBudget || 0;
   const totalCost = asIsValue + rehabBudget;
   const maxLTC = result.caps?.maxLTC || 0;
-  const maxLoanByLTC = (totalCost * maxLTC) / 100;
-  const originationFee = (maxLoanByLTC * 2) / 100;
+  const maxLTARV = result.caps?.maxLTARV || 0;
+  const maxLoanByLTC = maxLTC > 0 ? (totalCost * maxLTC) / 100 : 0;
+  const maxLoanByARV = maxLTARV > 0 ? (arv * maxLTARV) / 100 : 0;
+  const estimatedLoan = maxLoanByLTC > 0 && maxLoanByARV > 0
+    ? Math.min(maxLoanByLTC, maxLoanByARV)
+    : maxLoanByLTC > 0 ? maxLoanByLTC
+    : maxLoanByARV > 0 ? maxLoanByARV
+    : formData?.loanAmount || 0;
+  const originationFee = (estimatedLoan * 2) / 100;
+
+  const loanTypeLabels: Record<string, string> = {
+    light_rehab: "Light Rehab",
+    heavy_rehab: "Heavy Rehab",
+    bridge_no_rehab: "Bridge (No Rehab)",
+    guc: "Ground Up Construction",
+  };
+  const purposeLabels: Record<string, string> = {
+    purchase: "Purchase",
+    refi: "Refinance",
+    cash_out: "Cash-Out Refinance",
+  };
+  const propertyTypeLabels: Record<string, string> = {
+    sfr_1_4: "SFR (1-4 Units)",
+    condo: "Condo",
+    multifamily: "Multifamily",
+    pud: "PUD",
+    modular: "Modular",
+    other: "Other",
+  };
+
+  const hasValidRate = rateNum > 0 && estimatedLoan > 0;
+  const monthlyRate = rateNum / 100 / 12;
+  const monthlyInterest = hasValidRate ? estimatedLoan * monthlyRate : 0;
+
+  const titleInsuranceEst = Math.round(estimatedLoan * 0.005);
+  const appraisalFee = 750;
+  const processingFee = 995;
+  const floodCert = 25;
+  const prepaidInterest = monthlyInterest;
+
+  const totalClosingCosts = originationFee + titleInsuranceEst + appraisalFee + processingFee + floodCert + prepaidInterest;
 
   return (
     <div className="space-y-4">
@@ -492,72 +605,126 @@ function BorrowerRTLResult({
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Loan Summary</CardTitle>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Home className="h-5 w-5 text-muted-foreground" />
+            <CardTitle className="text-lg">Property & Loan Details</CardTitle>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3">
             <div>
-              <p className="text-sm text-muted-foreground">As-Is Value</p>
-              <p className="font-medium" data-testid="text-as-is-value">
-                ${asIsValue.toLocaleString()}
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">As-Is Value</p>
+              <p className="font-semibold text-lg" data-testid="text-as-is-value">
+                {formatCurrency(asIsValue, 0)}
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Rehab Budget</p>
-              <p className="font-medium" data-testid="text-rehab-budget">
-                ${rehabBudget.toLocaleString()}
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">After Repair Value</p>
+              <p className="font-semibold text-lg" data-testid="text-arv">
+                {formatCurrency(arv, 0)}
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Max LTC</p>
-              <p className="font-medium" data-testid="text-max-ltc">{maxLTC}%</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Max Loan</p>
-              <p className="font-medium" data-testid="text-max-loan">
-                ${maxLoanByLTC.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Rehab Budget</p>
+              <p className="font-semibold text-lg" data-testid="text-rehab-budget">
+                {formatCurrency(rehabBudget, 0)}
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">FICO</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Project Cost</p>
+              <p className="font-semibold text-lg" data-testid="text-total-cost">
+                {formatCurrency(totalCost, 0)}
+              </p>
+            </div>
+          </div>
+          <Separator className="my-4" />
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Loan Type</p>
+              <p className="font-medium" data-testid="text-loan-type">{loanTypeLabels[formData?.loanType || ""] || formData?.loanType || "—"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Purpose</p>
+              <p className="font-medium" data-testid="text-purpose">{purposeLabels[formData?.purpose || ""] || formData?.purpose || "—"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Property Type</p>
+              <p className="font-medium" data-testid="text-property-type">{propertyTypeLabels[formData?.propertyType || ""] || formData?.propertyType || "—"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">FICO Score</p>
               <p className="font-medium" data-testid="text-fico">{formData?.fico || "—"}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Property Type</p>
-              <p className="font-medium" data-testid="text-property-type">{formData?.propertyType || "—"}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Loan Type</p>
-              <p className="font-medium" data-testid="text-loan-type">{formData?.loanType || "—"}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Purpose</p>
-              <p className="font-medium" data-testid="text-purpose">{formData?.purpose || "—"}</p>
             </div>
           </div>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Total Estimated Fees</CardTitle>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <DollarSign className="h-5 w-5 text-muted-foreground" />
+            <CardTitle className="text-lg">Leverage & Estimated Loan</CardTitle>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-between gap-2 py-2 border-b">
-            <span className="text-muted-foreground">Origination Fee (2 points)</span>
-            <span className="font-medium" data-testid="text-origination-fee">
-              ${originationFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-3">
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Max LTC</p>
+              <p className="font-medium" data-testid="text-max-ltc">{maxLTC}%</p>
+            </div>
+            {maxLTARV > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Max LTARV</p>
+                <p className="font-medium" data-testid="text-max-ltarv">{maxLTARV}%</p>
+              </div>
+            )}
           </div>
-          <div className="flex items-center justify-between gap-2 py-2 font-semibold">
-            <span>Total Estimated Fees</span>
-            <span data-testid="text-total-fees">
-              ${originationFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-          </div>
+          <Separator className="my-3" />
+          <CostLineItem label="Max Loan by LTC" value={formatCurrency(maxLoanByLTC, 0)} testId="text-max-loan-ltc" />
+          {maxLTARV > 0 && (
+            <CostLineItem label="Max Loan by LTARV" value={formatCurrency(maxLoanByARV, 0)} testId="text-max-loan-ltarv" />
+          )}
+          <Separator className="my-1" />
+          <CostLineItem label="Estimated Max Loan" value={formatCurrency(estimatedLoan, 0)} bold testId="text-estimated-loan" />
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-muted-foreground" />
+            <CardTitle className="text-lg">Estimated Monthly Payment</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-0">
+          <CostLineItem label="Interest Only (monthly)" value={formatCurrency(monthlyInterest)} testId="text-monthly-interest" />
+          <p className="text-xs text-muted-foreground mt-1">Fix & Flip loans are typically interest-only during the loan term.</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-muted-foreground" />
+            <CardTitle className="text-lg">Estimated Closing Costs</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-0">
+          <CostLineItem label="Origination Fee (2 points)" value={formatCurrency(originationFee)} testId="text-origination-fee" />
+          <CostLineItem label="Title Insurance (est.)" value={formatCurrency(titleInsuranceEst)} testId="text-title-insurance" />
+          <CostLineItem label="Appraisal Fee" value={formatCurrency(appraisalFee)} testId="text-appraisal-fee" />
+          <CostLineItem label="Processing Fee" value={formatCurrency(processingFee)} testId="text-processing-fee" />
+          <CostLineItem label="Flood Certification" value={formatCurrency(floodCert)} testId="text-flood-cert" />
+          <CostLineItem label="Prepaid Interest (1 mo. est.)" value={formatCurrency(prepaidInterest)} testId="text-prepaid-interest" />
+          <Separator className="my-1" />
+          <CostLineItem label="Total Estimated Closing Costs" value={formatCurrency(totalClosingCosts)} bold testId="text-total-closing-costs" />
+        </CardContent>
+      </Card>
+
+      <p className="text-xs text-muted-foreground text-center px-4">
+        These are estimates only and may vary. Title insurance, recording fees, and other third-party costs depend on your location and provider. Final costs will be detailed in your Loan Estimate.
+      </p>
 
       <Button onClick={onReset} variant="outline" className="w-full" data-testid="button-new-quote">
         <RotateCcw className="h-4 w-4 mr-2" />
