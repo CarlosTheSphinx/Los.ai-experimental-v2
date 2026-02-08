@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -465,16 +465,23 @@ export default function AdminDealDetail() {
   });
 
   const updateDealMutation = useMutation({
-    mutationFn: async (formData: typeof editForm) => {
+    mutationFn: async (formData: typeof editForm & { _isLoanTypeChange?: boolean }) => {
       return apiRequest("PUT", `/api/admin/deals/${dealId}`, formData);
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
-      setEditDialogOpen(false);
-      toast({
-        title: "Deal updated",
-        description: "The loan details have been saved.",
-      });
+      if (variables._isLoanTypeChange) {
+        toast({
+          title: "Loan type updated",
+          description: "Document checklist has been updated to match the new loan type.",
+        });
+      } else {
+        setEditDialogOpen(false);
+        toast({
+          title: "Deal updated",
+          description: "The loan details have been saved.",
+        });
+      }
     },
     onError: () => {
       toast({
@@ -524,6 +531,19 @@ export default function AdminDealDetail() {
       });
     },
   });
+
+  const [autoPopulated, setAutoPopulated] = useState(false);
+  useEffect(() => {
+    if (data && !autoPopulated) {
+      const deal = data.deal;
+      const docs = data.documents || [];
+      const loanType = deal?.loanData?.loanType;
+      if (deal && loanType && docs.length === 0) {
+        setAutoPopulated(true);
+        populateDocumentsMutation.mutate({ loanType, clearExisting: false });
+      }
+    }
+  }, [data, autoPopulated]);
 
   const openEditDialog = () => {
     if (deal) {
@@ -896,7 +916,8 @@ export default function AdminDealDetail() {
                       loanType: value,
                       loanPurpose: deal.loanData?.loanPurpose || "",
                       propertyType: deal.loanData?.propertyType || "",
-                    });
+                      _isLoanTypeChange: true,
+                    } as any);
                   }}
                   disabled={updateDealMutation.isPending}
                 >

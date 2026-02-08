@@ -1269,6 +1269,55 @@ export async function registerRoutes(
         totalRevenue,
         commission
       }, req.user!.id);
+
+      // Auto-populate document checklist based on loan type
+      const quoteLoanType = (saved.loanData as any)?.loanType;
+      if (quoteLoanType && saved.id) {
+        try {
+          const [activeProgram] = await db.select().from(loanPrograms)
+            .where(and(
+              eq(loanPrograms.loanType, quoteLoanType),
+              eq(loanPrograms.isActive, true)
+            ))
+            .limit(1);
+
+          let documentEntries: any[] = [];
+
+          if (activeProgram) {
+            const programDocs = await db.select().from(programDocumentTemplates)
+              .where(eq(programDocumentTemplates.programId, activeProgram.id))
+              .orderBy(programDocumentTemplates.sortOrder);
+
+            documentEntries = programDocs.map((doc, index) => ({
+              dealId: saved.id,
+              documentName: doc.documentName,
+              documentCategory: doc.documentCategory,
+              documentDescription: doc.documentDescription,
+              isRequired: doc.isRequired,
+              sortOrder: doc.sortOrder || index,
+              status: 'pending',
+            }));
+          } else {
+            const fallbackTemplates = getDocumentTemplatesForLoanType(quoteLoanType);
+            documentEntries = fallbackTemplates.map((template, index) => ({
+              dealId: saved.id,
+              documentName: template.name,
+              documentCategory: template.category,
+              documentDescription: template.description || null,
+              isRequired: template.isRequired,
+              sortOrder: index,
+              status: 'pending',
+            }));
+          }
+
+          if (documentEntries.length > 0) {
+            await db.insert(dealDocuments).values(documentEntries);
+          }
+        } catch (docError) {
+          console.error('Non-critical: Failed to auto-populate documents for quote:', docError);
+        }
+      }
+
       res.json({ success: true, quote: saved });
     } catch (error) {
       console.error('Error saving quote:', error);
