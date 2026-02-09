@@ -1706,6 +1706,11 @@ export default function AdminDealDetail() {
                                       <span className="text-sm font-medium">
                                         AI Review: {docReview.overallStatus === 'pass' ? 'Passed' : docReview.overallStatus === 'fail' ? 'Failed' : 'Needs Review'}
                                       </span>
+                                      {docReview.rulesUsed > 0 && (
+                                        <span className="text-[10px] text-muted-foreground">
+                                          ({docReview.rulesPassed || 0}/{docReview.rulesUsed} rules passed)
+                                        </span>
+                                      )}
                                     </div>
                                     <Button size="icon" variant="ghost" onClick={() => setExpandedReviewDocId(null)} data-testid={`button-close-review-${doc.id}`}>
                                       <XCircle className="h-3.5 w-3.5" />
@@ -1732,10 +1737,28 @@ export default function AdminDealDetail() {
                                           </div>
                                           <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-1.5 flex-wrap">
-                                              <span className="font-medium">{finding.title}</span>
-                                              <Badge variant="outline" className="text-[9px] px-1 py-0">{finding.category}</Badge>
+                                              <span className="font-medium">{finding.ruleName || finding.title}</span>
+                                              {finding.severity && (
+                                                <Badge variant={finding.severity === 'fail' ? 'destructive' : finding.severity === 'warn' ? 'secondary' : 'outline'} className="text-[9px] px-1 py-0">
+                                                  {finding.severity === 'fail' ? 'Required' : finding.severity === 'warn' ? 'Warning' : 'Info'}
+                                                </Badge>
+                                              )}
+                                              {finding.ruleType && finding.ruleType !== 'general' && (
+                                                <Badge variant="outline" className="text-[9px] px-1 py-0">{finding.ruleType.replace('_', ' ')}</Badge>
+                                              )}
+                                              {!finding.ruleType && finding.category && (
+                                                <Badge variant="outline" className="text-[9px] px-1 py-0">{finding.category}</Badge>
+                                              )}
                                             </div>
                                             <p className="text-muted-foreground mt-0.5">{finding.detail}</p>
+                                            {finding.evidence && (
+                                              <div className="mt-1 p-1.5 rounded bg-background border text-[11px] italic text-muted-foreground">
+                                                {finding.evidence}
+                                              </div>
+                                            )}
+                                            {finding.pageReference && (
+                                              <span className="text-[10px] text-muted-foreground mt-0.5 inline-block">{finding.pageReference}</span>
+                                            )}
                                           </div>
                                         </div>
                                       ))}

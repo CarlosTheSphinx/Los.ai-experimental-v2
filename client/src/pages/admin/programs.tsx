@@ -39,6 +39,11 @@ import {
   ChevronDown,
   ChevronUp,
   Workflow,
+  Sparkles,
+  GripVertical,
+  ShieldCheck,
+  AlertTriangle,
+  Info,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -1551,6 +1556,191 @@ export default function AdminPrograms() {
 }
 
 // Sub-component for Document List
+interface ReviewRule {
+  id?: number;
+  ruleTitle: string;
+  ruleDescription: string;
+  ruleType: string;
+  severity: string;
+  isActive: boolean;
+}
+
+const ruleTypeOptions = [
+  { value: "presence", label: "Presence Check" },
+  { value: "numeric_threshold", label: "Numeric Threshold" },
+  { value: "format", label: "Format / Structure" },
+  { value: "consistency", label: "Cross-Reference / Consistency" },
+  { value: "red_flag", label: "Red Flag Detection" },
+  { value: "signature_date", label: "Signature / Date Check" },
+  { value: "general", label: "General" },
+];
+
+const severityOptions = [
+  { value: "fail", label: "Fail", icon: AlertTriangle, color: "text-red-600" },
+  { value: "warn", label: "Warning", icon: AlertTriangle, color: "text-amber-600" },
+  { value: "info", label: "Info", icon: Info, color: "text-blue-600" },
+];
+
+function DocumentRulesEditor({ templateId, programId, documentName }: { templateId: number; programId: number; documentName: string }) {
+  const { toast } = useToast();
+  const [rules, setRules] = useState<ReviewRule[]>([]);
+  const [hasChanges, setHasChanges] = useState(false);
+
+  const { data: rulesData, isLoading } = useQuery<{ rules: any[] }>({
+    queryKey: [`/api/admin/document-templates/${templateId}/review-rules`],
+  });
+
+  useEffect(() => {
+    if (rulesData?.rules) {
+      setRules(rulesData.rules.map((r: any) => ({
+        id: r.id,
+        ruleTitle: r.ruleTitle || '',
+        ruleDescription: r.ruleDescription || '',
+        ruleType: r.ruleType || 'general',
+        severity: r.severity || 'fail',
+        isActive: r.isActive !== false,
+      })));
+      setHasChanges(false);
+    }
+  }, [rulesData]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest('POST', `/api/admin/document-templates/${templateId}/review-rules`, {
+        programId,
+        rules: rules.filter(r => r.ruleTitle.trim()).map((r, idx) => ({
+          ruleTitle: r.ruleTitle.trim(),
+          ruleDescription: r.ruleDescription.trim(),
+          ruleType: r.ruleType,
+          severity: r.severity,
+          documentType: documentName,
+          isActive: r.isActive,
+          sortOrder: idx,
+        })),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Rules saved' });
+      setHasChanges(false);
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/document-templates', templateId, 'review-rules'] });
+    },
+    onError: () => {
+      toast({ title: 'Failed to save rules', variant: 'destructive' });
+    },
+  });
+
+  const addRule = () => {
+    setRules([...rules, { ruleTitle: '', ruleDescription: '', ruleType: 'general', severity: 'fail', isActive: true }]);
+    setHasChanges(true);
+  };
+
+  const updateRule = (index: number, field: keyof ReviewRule, value: any) => {
+    const updated = [...rules];
+    (updated[index] as any)[field] = value;
+    setRules(updated);
+    setHasChanges(true);
+  };
+
+  const removeRule = (index: number) => {
+    setRules(rules.filter((_, i) => i !== index));
+    setHasChanges(true);
+  };
+
+  const moveRule = (index: number, direction: 'up' | 'down') => {
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= rules.length) return;
+    const updated = [...rules];
+    [updated[index], updated[newIndex]] = [updated[newIndex], updated[index]];
+    setRules(updated);
+    setHasChanges(true);
+  };
+
+  if (isLoading) return <Skeleton className="h-8 w-full" />;
+
+  return (
+    <div className="space-y-3">
+      {rules.length === 0 ? (
+        <p className="text-xs text-muted-foreground text-center py-3">
+          No review rules configured. Add rules to enable AI document review for this document type.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {rules.map((rule, idx) => (
+            <div key={idx} className="border rounded-md p-3 space-y-2 bg-muted/20" data-testid={`rule-row-${templateId}-${idx}`}>
+              <div className="flex items-start gap-2">
+                <div className="flex flex-col gap-0.5 mt-1">
+                  <button onClick={() => moveRule(idx, 'up')} disabled={idx === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30" data-testid={`button-rule-up-${idx}`}>
+                    <ChevronUp className="h-3 w-3" />
+                  </button>
+                  <button onClick={() => moveRule(idx, 'down')} disabled={idx === rules.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30" data-testid={`button-rule-down-${idx}`}>
+                    <ChevronDown className="h-3 w-3" />
+                  </button>
+                </div>
+                <div className="flex-1 space-y-2">
+                  <Input
+                    placeholder="Rule title (e.g., Verify borrower name matches across all pages)"
+                    value={rule.ruleTitle}
+                    onChange={(e) => updateRule(idx, 'ruleTitle', e.target.value)}
+                    className="text-sm"
+                    data-testid={`input-rule-title-${idx}`}
+                  />
+                  <Textarea
+                    placeholder="Detailed instructions for the AI reviewer..."
+                    value={rule.ruleDescription}
+                    onChange={(e) => updateRule(idx, 'ruleDescription', e.target.value)}
+                    className="text-sm min-h-[60px]"
+                    data-testid={`input-rule-description-${idx}`}
+                  />
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Select value={rule.ruleType} onValueChange={(v) => updateRule(idx, 'ruleType', v)}>
+                      <SelectTrigger className="w-[180px] text-xs h-8" data-testid={`select-rule-type-${idx}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ruleTypeOptions.map(opt => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={rule.severity} onValueChange={(v) => updateRule(idx, 'severity', v)}>
+                      <SelectTrigger className="w-[130px] text-xs h-8" data-testid={`select-rule-severity-${idx}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {severityOptions.map(opt => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            <span className={opt.color}>{opt.label}</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <Button size="icon" variant="ghost" onClick={() => removeRule(idx)} className="text-destructive flex-shrink-0" data-testid={`button-remove-rule-${idx}`}>
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex items-center justify-between gap-2">
+        <Button size="sm" variant="outline" onClick={addRule} data-testid={`button-add-rule-${templateId}`}>
+          <Plus className="h-3 w-3 mr-1" />
+          Add Rule
+        </Button>
+        {hasChanges && (
+          <Button size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} data-testid={`button-save-rules-${templateId}`}>
+            {saveMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <ShieldCheck className="h-3 w-3 mr-1" />}
+            Save Rules
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function DocumentList({
   programId,
   onDelete,
@@ -1558,6 +1748,8 @@ function DocumentList({
   programId: number;
   onDelete: (id: number) => void;
 }) {
+  const [expandedDocId, setExpandedDocId] = useState<number | null>(null);
+
   const { data, isLoading } = useQuery<{
     program: LoanProgram;
     documents: ProgramDocument[];
@@ -1581,33 +1773,55 @@ function DocumentList({
   return (
     <div className="space-y-2">
       {data.documents.map((doc) => (
-        <div
-          key={doc.id}
-          className="flex items-center justify-between p-3 rounded-md border"
-        >
-          <div className="flex items-center gap-3">
-            <FileText className="h-4 w-4 text-muted-foreground" />
-            <div>
-              <div className="font-medium text-sm">{doc.documentName}</div>
-              <div className="text-xs text-muted-foreground">
-                {documentCategories.find((c) => c.value === doc.documentCategory)
-                  ?.label || doc.documentCategory}
-                {doc.isRequired && (
-                  <Badge variant="secondary" className="ml-2 text-xs">
-                    Required
-                  </Badge>
-                )}
+        <div key={doc.id} className="space-y-0">
+          <div
+            className={`flex items-center justify-between p-3 rounded-md border ${expandedDocId === doc.id ? 'rounded-b-none border-b-0' : ''}`}
+          >
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <div className="min-w-0">
+                <div className="font-medium text-sm">{doc.documentName}</div>
+                <div className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
+                  {documentCategories.find((c) => c.value === doc.documentCategory)
+                    ?.label || doc.documentCategory}
+                  {doc.isRequired && (
+                    <Badge variant="secondary" className="ml-1 text-xs">
+                      Required
+                    </Badge>
+                  )}
+                </div>
               </div>
             </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <Button
+                variant={expandedDocId === doc.id ? "default" : "outline"}
+                size="sm"
+                onClick={() => setExpandedDocId(expandedDocId === doc.id ? null : doc.id)}
+                data-testid={`button-rules-${doc.id}`}
+              >
+                <Sparkles className="h-3 w-3 mr-1" />
+                AI Rules
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-destructive"
+                onClick={() => onDelete(doc.id)}
+                data-testid={`button-delete-doc-${doc.id}`}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-destructive hover:text-destructive"
-            onClick={() => onDelete(doc.id)}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          {expandedDocId === doc.id && (
+            <div className="border border-t-0 rounded-b-md p-4 bg-muted/10">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">AI Review Rules for "{doc.documentName}"</span>
+              </div>
+              <DocumentRulesEditor templateId={doc.id} programId={programId} documentName={doc.documentName} />
+            </div>
+          )}
         </div>
       ))}
     </div>

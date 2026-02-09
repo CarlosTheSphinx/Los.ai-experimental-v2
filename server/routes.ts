@@ -7312,6 +7312,50 @@ export async function registerRoutes(
     }
   });
 
+  // Per-document-template review rules
+  app.get('/api/admin/document-templates/:templateId/review-rules', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const templateId = parseInt(req.params.templateId);
+      const rules = await storage.getReviewRulesByDocumentTemplateId(templateId);
+      res.json({ rules });
+    } catch (error: any) {
+      console.error('Get template review rules error:', error);
+      res.status(500).json({ error: 'Failed to fetch review rules' });
+    }
+  });
+
+  app.post('/api/admin/document-templates/:templateId/review-rules', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const templateId = parseInt(req.params.templateId);
+      const { rules, programId } = req.body;
+      if (!Array.isArray(rules)) {
+        return res.status(400).json({ error: 'rules must be an array' });
+      }
+      await storage.deleteReviewRulesByDocumentTemplateId(templateId);
+      if (rules.length === 0) {
+        return res.json({ rules: [] });
+      }
+      const created = await storage.createReviewRules(
+        rules.map((r: any, idx: number) => ({
+          programId: programId || null,
+          documentTemplateId: templateId,
+          documentType: r.documentType || 'General',
+          ruleTitle: r.ruleTitle,
+          ruleDescription: r.ruleDescription || null,
+          ruleType: r.ruleType || 'general',
+          severity: r.severity || 'fail',
+          category: r.category || null,
+          isActive: r.isActive !== false,
+          sortOrder: idx,
+        }))
+      );
+      res.json({ rules: created });
+    } catch (error: any) {
+      console.error('Save template review rules error:', error);
+      res.status(500).json({ error: 'Failed to save review rules' });
+    }
+  });
+
   app.post('/api/admin/programs/:programId/extract-rules', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const programId = parseInt(req.params.programId);

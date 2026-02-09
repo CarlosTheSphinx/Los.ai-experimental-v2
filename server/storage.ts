@@ -88,10 +88,12 @@ export interface IStorage {
   getLatestDocumentReview(documentId: number): Promise<DocumentReviewResult | undefined>;
 
   getReviewRulesByProgramId(programId: number): Promise<ProgramReviewRule[]>;
+  getReviewRulesByDocumentTemplateId(documentTemplateId: number): Promise<ProgramReviewRule[]>;
   createReviewRules(rules: InsertProgramReviewRule[]): Promise<ProgramReviewRule[]>;
   updateReviewRule(id: number, data: Partial<InsertProgramReviewRule>): Promise<ProgramReviewRule>;
   deleteReviewRule(id: number): Promise<void>;
   deleteReviewRulesByProgramId(programId: number): Promise<void>;
+  deleteReviewRulesByDocumentTemplateId(documentTemplateId: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1008,6 +1010,16 @@ export class DatabaseStorage implements IStorage {
 
   async deleteReviewRulesByProgramId(programId: number): Promise<void> {
     await db.delete(programReviewRules).where(eq(programReviewRules.programId, programId));
+  }
+
+  async getReviewRulesByDocumentTemplateId(documentTemplateId: number): Promise<ProgramReviewRule[]> {
+    return db.select().from(programReviewRules)
+      .where(and(eq(programReviewRules.documentTemplateId, documentTemplateId), eq(programReviewRules.isActive, true)))
+      .orderBy(asc(programReviewRules.sortOrder));
+  }
+
+  async deleteReviewRulesByDocumentTemplateId(documentTemplateId: number): Promise<void> {
+    await db.delete(programReviewRules).where(eq(programReviewRules.documentTemplateId, documentTemplateId));
   }
 
   async getCreditPolicies(): Promise<CreditPolicy[]> {
