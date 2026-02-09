@@ -97,7 +97,7 @@ export default function AdminProjects() {
               className="gap-1.5"
             >
               <Icon className="h-4 w-4" />
-              <span className="hidden sm:inline">{label}</span>
+              <span>{label}</span>
             </Button>
           ))}
         </div>
