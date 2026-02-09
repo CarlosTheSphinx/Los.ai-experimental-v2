@@ -15,51 +15,65 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, User, DollarSign, GripVertical } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 
-interface Deal {
+interface PipelineStep {
   id: number;
-  projectId?: number;
-  projectNumber?: string;
-  userId: number;
-  customerFirstName: string;
-  customerLastName: string;
-  propertyAddress: string;
-  loanData: {
-    loanAmount: number;
-    loanType: string;
-    propertyType?: string;
-  };
-  interestRate: string;
-  stage: string;
-  progressPercentage?: number;
-  createdAt: string;
-  userName: string | null;
-  userEmail: string | null;
+  stepOrder: number;
+  stepName: string;
+  stepKey: string;
+  stepColor: string;
 }
 
-interface DealStageConfig {
+interface PipelineProject {
   id: number;
-  key: string;
-  label: string;
-  color: string;
-  sortOrder: number;
-  isActive: boolean;
+  projectNumber: string;
+  projectName: string;
+  borrowerName: string | null;
+  propertyAddress: string | null;
+  loanAmount: number | null;
+  loanType: string | null;
+  status: string;
+  currentStage: string | null;
+  progressPercentage: number;
+  ownerName: string;
+  ownerEmail: string;
+  currentStageName: string;
+  currentStageKey: string;
+  currentStageId: number | null;
+  stages: Array<{
+    id: number;
+    stageKey: string;
+    stageName: string;
+    stageOrder: number;
+    status: string;
+  }>;
 }
 
-interface DealsKanbanViewProps {
-  deals: Deal[];
+interface PipelineProgram {
+  programId: number;
+  programName: string;
+  steps: PipelineStep[];
+  projects: PipelineProject[];
 }
 
-function formatCurrency(amount: number) {
-  if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
-  if (amount >= 1_000) return `$${(amount / 1_000).toFixed(0)}K`;
-  return `$${amount.toFixed(0)}`;
+interface PipelineData {
+  programs: PipelineProgram[];
+  unassigned: PipelineProject[];
 }
 
-function getLoanTypeLabel(loanType: string): string {
+function formatCurrency(value: number | null) {
+  if (!value) return "-";
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
+  return `$${value.toFixed(0)}`;
+}
+
+function getLoanTypeLabel(loanType: string | null): string {
+  if (!loanType) return "N/A";
   const labels: Record<string, string> = {
     rtl: "RTL",
     dscr: "DSCR",
@@ -68,29 +82,25 @@ function getLoanTypeLabel(loanType: string): string {
     "ground-up": "Ground Up",
     rental: "Rental",
   };
-  return labels[loanType?.toLowerCase()] || loanType || "N/A";
+  return labels[loanType.toLowerCase()] || loanType;
 }
 
 function DroppableColumn({
-  stageKey,
-  stageLabel,
-  stageColor,
-  deals,
-  children,
+  step,
+  projects,
+  programId,
 }: {
-  stageKey: string;
-  stageLabel: string;
-  stageColor: string;
-  deals: Deal[];
-  children: React.ReactNode;
+  step: PipelineStep;
+  projects: PipelineProject[];
+  programId: number;
 }) {
   const { setNodeRef, isOver } = useDroppable({
-    id: `stage-${stageKey}`,
-    data: { stageKey },
+    id: `deal-column-${programId}-${step.stepKey}`,
+    data: { stepKey: step.stepKey, programId },
   });
 
-  const totalVolume = deals.reduce(
-    (sum, d) => sum + (d.loanData?.loanAmount || 0),
+  const totalVolume = projects.reduce(
+    (sum, p) => sum + (p.loanAmount || 0),
     0
   );
 
@@ -101,19 +111,19 @@ function DroppableColumn({
         "flex flex-col min-w-[280px] max-w-[320px] rounded-md border transition-colors",
         isOver ? "bg-primary/5 border-primary/30" : "bg-muted/30"
       )}
-      data-testid={`kanban-column-${stageKey}`}
+      data-testid={`kanban-column-${step.stepKey}`}
     >
       <div className="p-3 border-b flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <div
             className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-            style={{ backgroundColor: resolveColor(stageColor) }}
+            style={{ backgroundColor: step.stepColor }}
           />
-          <span className="text-sm font-medium truncate">{stageLabel}</span>
+          <span className="text-sm font-medium truncate">{step.stepName}</span>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <Badge variant="secondary" className="text-[10px]">
-            {deals.length}
+            {projects.length}
           </Badge>
           {totalVolume > 0 && (
             <span className="text-[10px] text-muted-foreground font-mono">
@@ -123,8 +133,10 @@ function DroppableColumn({
         </div>
       </div>
       <div className="p-2 space-y-2 flex-1 overflow-y-auto max-h-[calc(100vh-320px)]">
-        {children}
-        {deals.length === 0 && (
+        {projects.map((project) => (
+          <DraggableDealCard key={project.id} project={project} programId={programId} />
+        ))}
+        {projects.length === 0 && (
           <p className="text-xs text-muted-foreground text-center py-6">
             No deals
           </p>
@@ -134,10 +146,10 @@ function DroppableColumn({
   );
 }
 
-function DraggableDealCard({ deal }: { deal: Deal }) {
+function DraggableDealCard({ project, programId }: { project: PipelineProject; programId: number }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: `deal-${deal.id}`,
-    data: { deal },
+    id: `deal-${programId}-${project.id}`,
+    data: { project, programId },
   });
 
   return (
@@ -146,7 +158,7 @@ function DraggableDealCard({ deal }: { deal: Deal }) {
       className={cn("transition-opacity", isDragging && "opacity-30")}
     >
       <DealCardContent
-        deal={deal}
+        project={project}
         dragHandleProps={{ ...attributes, ...listeners }}
       />
     </div>
@@ -154,40 +166,47 @@ function DraggableDealCard({ deal }: { deal: Deal }) {
 }
 
 function DealCardContent({
-  deal,
+  project,
   dragHandleProps,
+  isDragOverlay,
 }: {
-  deal: Deal;
+  project: PipelineProject;
   dragHandleProps?: Record<string, any>;
+  isDragOverlay?: boolean;
 }) {
+  const nameParts = (project.borrowerName || project.projectName || "").split(" - ");
+  const displayName = project.borrowerName || nameParts[0] || "Unknown";
+
   return (
     <Card
-      className="overflow-visible"
-      data-testid={`kanban-deal-${deal.id}`}
+      className={cn("overflow-visible", isDragOverlay && "shadow-lg opacity-90")}
+      data-testid={`kanban-deal-${project.id}`}
     >
       <CardContent className="p-3 space-y-2">
         <div className="flex items-start justify-between gap-1">
           <Link
-            href={`/admin/deals/${deal.id}`}
-            data-testid={`link-kanban-deal-${deal.id}`}
+            href={`/admin/projects/${project.id}`}
+            data-testid={`link-kanban-deal-${project.id}`}
           >
             <span className="text-sm font-medium hover:underline leading-tight line-clamp-2">
-              {deal.customerFirstName} {deal.customerLastName}
+              {displayName}
             </span>
           </Link>
-          <div
-            {...dragHandleProps}
-            className="cursor-grab active:cursor-grabbing p-0.5 rounded hover-elevate flex-shrink-0"
-            data-testid={`drag-handle-deal-${deal.id}`}
-          >
-            <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
-          </div>
+          {dragHandleProps && (
+            <div
+              {...dragHandleProps}
+              className="cursor-grab active:cursor-grabbing p-0.5 rounded hover-elevate flex-shrink-0"
+              data-testid={`drag-handle-deal-${project.id}`}
+            >
+              <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
+            </div>
+          )}
         </div>
 
-        {deal.propertyAddress && (
+        {project.propertyAddress && (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <MapPin className="h-3 w-3 flex-shrink-0" />
-            <span className="truncate">{deal.propertyAddress}</span>
+            <span className="truncate">{project.propertyAddress}</span>
           </div>
         )}
 
@@ -195,26 +214,32 @@ function DealCardContent({
           <div className="flex items-center gap-1 text-xs">
             <DollarSign className="h-3 w-3 text-muted-foreground" />
             <span className="font-medium">
-              {deal.loanData?.loanAmount
-                ? formatCurrency(deal.loanData.loanAmount)
-                : "--"}
+              {project.loanAmount ? formatCurrency(project.loanAmount) : "--"}
             </span>
           </div>
           <Badge variant="outline" className="text-[10px]">
-            {getLoanTypeLabel(deal.loanData?.loanType)}
+            {getLoanTypeLabel(project.loanType)}
           </Badge>
         </div>
 
-        {deal.userName && (
-          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-            <User className="h-2.5 w-2.5" />
-            <span className="truncate">{deal.userName}</span>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          {project.ownerName && (
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <User className="h-2.5 w-2.5" />
+              <span className="truncate">{project.ownerName}</span>
+            </div>
+          )}
+          <div className="flex items-center gap-1.5">
+            <Progress value={project.progressPercentage} className="w-12 h-1.5" />
+            <span className="text-[10px] text-muted-foreground">
+              {project.progressPercentage}%
+            </span>
           </div>
-        )}
+        </div>
 
-        {deal.projectNumber && (
+        {project.projectNumber && (
           <span className="text-[10px] font-mono text-muted-foreground">
-            {deal.projectNumber}
+            {project.projectNumber}
           </span>
         )}
       </CardContent>
@@ -222,54 +247,48 @@ function DealCardContent({
   );
 }
 
-const COLOR_NAME_TO_HEX: Record<string, string> = {
-  gray: "#6b7280",
-  yellow: "#eab308",
-  orange: "#f97316",
-  blue: "#3b82f6",
-  emerald: "#10b981",
-  cyan: "#06b6d4",
-  indigo: "#6366f1",
-  teal: "#14b8a6",
-  green: "#22c55e",
-  red: "#ef4444",
-  purple: "#a855f7",
-  pink: "#ec4899",
-};
+function ProgramBoard({ program }: { program: PipelineProgram }) {
+  const sortedSteps = [...program.steps].sort(
+    (a, b) => a.stepOrder - b.stepOrder
+  );
 
-function resolveColor(color: string): string {
-  if (color.startsWith("#") || color.startsWith("rgb")) return color;
-  return COLOR_NAME_TO_HEX[color] || "#6b7280";
+  const projectsByStep = new Map<string, PipelineProject[]>();
+  for (const step of sortedSteps) {
+    projectsByStep.set(step.stepKey, []);
+  }
+  for (const project of program.projects) {
+    const existing = projectsByStep.get(project.currentStageKey);
+    if (existing) {
+      existing.push(project);
+    }
+  }
+
+  return (
+    <div className="space-y-3" data-testid={`deals-kanban-program-${program.programId}`}>
+      <h3 className="text-lg font-semibold" data-testid={`text-program-name-${program.programId}`}>
+        {program.programName}
+      </h3>
+      <div className="flex gap-3 overflow-x-auto pb-2">
+        {sortedSteps.map((step) => (
+          <DroppableColumn
+            key={step.stepKey}
+            step={step}
+            projects={projectsByStep.get(step.stepKey) || []}
+            programId={program.programId}
+          />
+        ))}
+      </div>
+    </div>
+  );
 }
 
-const DEFAULT_STAGES: DealStageConfig[] = [
-  { id: 0, key: "new", label: "New", color: "gray", sortOrder: 0, isActive: true },
-  { id: 1, key: "initial-review", label: "Initial Review", color: "yellow", sortOrder: 1, isActive: true },
-  { id: 2, key: "under-review", label: "Under Review", color: "orange", sortOrder: 2, isActive: true },
-  { id: 3, key: "term-sheet", label: "Term Sheet", color: "blue", sortOrder: 3, isActive: true },
-  { id: 4, key: "approved", label: "Approved", color: "emerald", sortOrder: 4, isActive: true },
-  { id: 5, key: "processing", label: "Processing", color: "cyan", sortOrder: 5, isActive: true },
-  { id: 6, key: "underwriting", label: "Underwriting", color: "indigo", sortOrder: 6, isActive: true },
-  { id: 7, key: "closing", label: "Closing", color: "teal", sortOrder: 7, isActive: true },
-  { id: 8, key: "funded", label: "Funded", color: "green", sortOrder: 8, isActive: true },
-  { id: 9, key: "closed", label: "Closed", color: "green", sortOrder: 9, isActive: true },
-];
-
-export default function DealsKanbanView({ deals }: DealsKanbanViewProps) {
+export default function DealsKanbanView() {
   const { toast } = useToast();
-  const [activeDeal, setActiveDeal] = useState<Deal | null>(null);
+  const [activeProject, setActiveProject] = useState<PipelineProject | null>(null);
 
-  const { data: stagesData } = useQuery<{ stages: DealStageConfig[] }>({
-    queryKey: ["/api/admin/deal-stages"],
+  const { data: pipelineData, isLoading } = useQuery<PipelineData>({
+    queryKey: ["/api/admin/pipeline"],
   });
-
-  const stages = stagesData?.stages?.length
-    ? [...stagesData.stages].filter(s => s.isActive).sort((a, b) => a.sortOrder - b.sortOrder)
-    : DEFAULT_STAGES;
-
-  const stageKeys = new Set(stages.map(s => s.key));
-  const unmatchedDeals = deals.filter(d => !stageKeys.has(d.stage));
-  const hasUnmatched = unmatchedDeals.length > 0;
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -278,31 +297,36 @@ export default function DealsKanbanView({ deals }: DealsKanbanViewProps) {
   );
 
   function handleDragStart(event: DragStartEvent) {
-    const deal = event.active.data.current?.deal as Deal | undefined;
-    setActiveDeal(deal || null);
+    const project = event.active.data.current?.project as PipelineProject | undefined;
+    setActiveProject(project || null);
   }
 
   async function handleDragEnd(event: DragEndEvent) {
-    setActiveDeal(null);
+    setActiveProject(null);
     const { active, over } = event;
     if (!over) return;
 
-    const deal = active.data.current?.deal as Deal | undefined;
-    const targetStageKey = over.data.current?.stageKey as string | undefined;
+    const project = active.data.current?.project as PipelineProject | undefined;
+    const sourceProgramId = active.data.current?.programId as number | undefined;
+    const targetStepKey = over.data.current?.stepKey as string | undefined;
+    const targetProgramId = over.data.current?.programId as number | undefined;
 
-    if (!deal || !targetStageKey) return;
-    if (deal.stage === targetStageKey) return;
+    if (!project || !targetStepKey) return;
+    if (project.currentStageKey === targetStepKey) return;
+    if (sourceProgramId !== targetProgramId) return;
 
     try {
-      await apiRequest("PATCH", `/api/admin/deals/${deal.id}`, {
-        stage: targetStageKey,
+      await apiRequest("PATCH", `/api/admin/projects/${project.id}/move-stage`, {
+        targetStageKey,
       });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/deals"] });
-      const targetLabel =
-        stages.find((s) => s.key === targetStageKey)?.label || targetStageKey;
+
+      const program = pipelineData?.programs.find(p => p.programId === targetProgramId);
+      const targetLabel = program?.steps.find(s => s.stepKey === targetStepKey)?.stepName || targetStepKey;
       toast({
         title: "Deal moved",
-        description: `${deal.customerFirstName} ${deal.customerLastName} moved to ${targetLabel}`,
+        description: `${project.borrowerName || project.projectName} moved to ${targetLabel}`,
       });
     } catch {
       toast({
@@ -313,48 +337,61 @@ export default function DealsKanbanView({ deals }: DealsKanbanViewProps) {
     }
   }
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <p className="text-sm text-muted-foreground">Loading pipeline...</p>
+      </div>
+    );
+  }
+
+  if (!pipelineData?.programs?.length && !pipelineData?.unassigned?.length) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-12">
+          <p className="text-sm text-muted-foreground">No deals in the pipeline yet</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <DndContext
       sensors={sensors}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div
-        className="flex gap-3 overflow-x-auto pb-4"
-        data-testid="deals-kanban-view"
-      >
-        {stages.map((stage) => {
-          const stageDeals = deals.filter((d) => d.stage === stage.key);
-          return (
-            <DroppableColumn
-              key={stage.key}
-              stageKey={stage.key}
-              stageLabel={stage.label}
-              stageColor={stage.color}
-              deals={stageDeals}
-            >
-              {stageDeals.map((deal) => (
-                <DraggableDealCard key={deal.id} deal={deal} />
+      <div className="space-y-8" data-testid="deals-kanban-view">
+        {pipelineData?.programs.map((program) => (
+          <ProgramBoard key={program.programId} program={program} />
+        ))}
+
+        {pipelineData?.unassigned && pipelineData.unassigned.length > 0 && (
+          <div className="space-y-3" data-testid="kanban-unassigned">
+            <h3 className="text-lg font-semibold text-muted-foreground">
+              Unassigned
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {pipelineData.unassigned.map((project) => (
+                <Link
+                  key={project.id}
+                  href={`/admin/projects/${project.id}`}
+                  data-testid={`link-unassigned-deal-${project.id}`}
+                >
+                  <DealCardContent project={project} />
+                </Link>
               ))}
-            </DroppableColumn>
-          );
-        })}
-        {hasUnmatched && (
-          <DroppableColumn
-            stageKey="other"
-            stageLabel="Other"
-            stageColor="gray"
-            deals={unmatchedDeals}
-          >
-            {unmatchedDeals.map((deal) => (
-              <DraggableDealCard key={deal.id} deal={deal} />
-            ))}
-          </DroppableColumn>
+            </div>
+          </div>
         )}
       </div>
 
       <DragOverlay>
-        {activeDeal && <DealCardContent deal={activeDeal} />}
+        {activeProject && (
+          <div className="w-[280px]">
+            <DealCardContent project={activeProject} isDragOverlay />
+          </div>
+        )}
       </DragOverlay>
     </DndContext>
   );

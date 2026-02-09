@@ -877,7 +877,7 @@ export default function AdminDeals() {
             </CardContent>
           </Card>
         ) : viewMode === "kanban" ? (
-          <DealsKanbanView deals={deals} />
+          <DealsKanbanView />
         ) : viewMode === "grid" ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {deals.map((deal) => (
