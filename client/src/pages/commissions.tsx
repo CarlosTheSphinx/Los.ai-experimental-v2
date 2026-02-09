@@ -33,12 +33,12 @@ interface CommissionRow {
   borrowerName: string | null;
   createdAt: string;
   fundingDate: string | null;
-  commission: number;
-  pointsCharged: number;
-  pointsAmount: number;
-  tpoPremiumAmount: number;
-  totalRevenue: number;
-  interestRate: string;
+  commission: number | null;
+  pointsCharged: number | null;
+  pointsAmount: number | null;
+  tpoPremiumAmount: number | null;
+  totalRevenue: number | null;
+  interestRate: string | null;
 }
 
 function formatCurrency(val: number | null | undefined): string {
@@ -106,7 +106,7 @@ export default function CommissionsPage() {
       <div>
         <h1 className="text-2xl font-semibold" data-testid="text-page-title">My Commissions</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Commission summary across all your loan projects
+          Commission summary across your active loan projects
         </p>
       </div>
 

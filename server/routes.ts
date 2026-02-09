@@ -6,7 +6,7 @@ import { db } from "./db";
 import { savedQuotes, users, dealDocuments, dealTasks, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies } from "@shared/schema";
 import { priceQuote, validateRuleset, SAMPLE_RTL_RULESET, SAMPLE_DSCR_RULESET, type PricingInputs, analyzeGuidelines, refineProposal } from "./pricing";
 import { getDocumentTemplatesForLoanType } from "./document-templates";
-import { eq, desc, inArray, and, gt, gte, lte, sql, isNull, or } from "drizzle-orm";
+import { eq, desc, asc, inArray, and, gt, gte, lte, sql, isNull, or } from "drizzle-orm";
 import { format } from "date-fns";
 import { api } from "@shared/routes";
 import { ApifyClient } from 'apify-client';
@@ -2762,8 +2762,8 @@ export async function registerRoutes(
           interestRate: savedQuotes.interestRate,
         })
         .from(projects)
-        .innerJoin(savedQuotes, eq(projects.quoteId, savedQuotes.id))
-        .where(eq(projects.userId, userId))
+        .leftJoin(savedQuotes, eq(projects.quoteId, savedQuotes.id))
+        .where(and(eq(projects.userId, userId), eq(projects.status, 'active')))
         .orderBy(projects.createdAt);
 
       res.json({ commissions: rows });
@@ -4148,6 +4148,119 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Update permissions error:', error);
       res.status(500).json({ error: 'Failed to update permissions' });
+    }
+  });
+
+  // Admin - Pipeline grouped by program (for Kanban + pipeline summary views)
+  app.get('/api/admin/pipeline', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const allProjects = await storage.getAllProjects({ status: 'active' });
+
+      const projectsWithStages = await Promise.all(allProjects.map(async (p) => {
+        const stages = await storage.getStagesByProjectId(p.id);
+        let ownerName = 'Unknown';
+        let ownerEmail = '';
+        if (p.userId) {
+          const owner = await storage.getUserById(p.userId);
+          if (owner) {
+            ownerName = owner.fullName || owner.email;
+            ownerEmail = owner.email;
+          }
+        }
+        const currentStageObj = stages.find(s => s.status === 'in_progress') || stages.find(s => s.status === 'pending');
+        return {
+          ...p,
+          ownerName,
+          ownerEmail,
+          currentStageName: currentStageObj?.stageName || p.currentStage || 'Unknown',
+          currentStageKey: currentStageObj?.stageKey || '',
+          currentStageId: currentStageObj?.id || null,
+          stages,
+        };
+      }));
+
+      const programIds = [...new Set(allProjects.map(p => p.programId).filter(Boolean))] as number[];
+
+      const programsData = await Promise.all(programIds.map(async (programId) => {
+        const steps = await db.select({
+          id: programWorkflowSteps.id,
+          stepOrder: programWorkflowSteps.stepOrder,
+          stepName: workflowStepDefinitions.name,
+          stepKey: workflowStepDefinitions.key,
+          stepColor: workflowStepDefinitions.color,
+        })
+        .from(programWorkflowSteps)
+        .innerJoin(workflowStepDefinitions, eq(programWorkflowSteps.stepDefinitionId, workflowStepDefinitions.id))
+        .where(eq(programWorkflowSteps.programId, programId))
+        .orderBy(asc(programWorkflowSteps.stepOrder));
+
+        const program = await db.select().from(loanPrograms).where(eq(loanPrograms.id, programId)).limit(1);
+
+        return {
+          programId,
+          programName: program[0]?.name || `Program ${programId}`,
+          steps,
+          projects: projectsWithStages.filter(p => p.programId === programId),
+        };
+      }));
+
+      const unassigned = projectsWithStages.filter(p => !p.programId);
+
+      res.json({ programs: programsData, unassigned });
+    } catch (error) {
+      console.error('Admin pipeline error:', error);
+      res.status(500).json({ error: 'Failed to load pipeline data' });
+    }
+  });
+
+  // Admin - Move project to a different stage (for Kanban drag-and-drop)
+  app.patch('/api/admin/projects/:id/move-stage', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const projectId = parseInt(req.params.id);
+      const { targetStageKey } = req.body;
+
+      if (!targetStageKey) {
+        return res.status(400).json({ error: 'targetStageKey is required' });
+      }
+
+      const project = await storage.getProjectByIdInternal(projectId);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+
+      const stages = await storage.getStagesByProjectId(projectId);
+      const targetStage = stages.find(s => s.stageKey === targetStageKey);
+      if (!targetStage) {
+        return res.status(400).json({ error: `Stage '${targetStageKey}' not found for this project` });
+      }
+
+      for (const stage of stages) {
+        if (stage.stageOrder < targetStage.stageOrder) {
+          if (stage.status !== 'completed') {
+            await storage.updateStage(stage.id, { status: 'completed', completedAt: new Date() });
+          }
+        } else if (stage.id === targetStage.id) {
+          await storage.updateStage(stage.id, { status: 'in_progress', startedAt: stage.startedAt || new Date() });
+        } else {
+          if (stage.status !== 'pending' && stage.status !== 'skipped') {
+            await storage.updateStage(stage.id, { status: 'pending', startedAt: null, completedAt: null });
+          }
+        }
+      }
+
+      await db.update(projects).set({ currentStage: targetStageKey, lastUpdated: new Date() }).where(eq(projects.id, projectId));
+
+      await storage.createProjectActivity({
+        projectId,
+        activityType: 'stage_change',
+        description: `Project moved to stage: ${targetStage.stageName}`,
+        performedBy: req.user!.id,
+      });
+
+      res.json({ success: true, currentStage: targetStageKey });
+    } catch (error) {
+      console.error('Move stage error:', error);
+      res.status(500).json({ error: 'Failed to move project stage' });
     }
   });
 
