@@ -1,0 +1,301 @@
+Got it. The best setup is to treat this like a **rule-driven QA engine** with AI as the “reader,” not the “judge.” Your app is the judge. AI is the intern with perfect eyesight. 👓⚖️
+
+Here’s the clean architecture I’d build in your Replit (Express + React) LOS.
+
+---
+
+## 1) Core concept
+
+### You want 3 things to be true:
+
+1. **Rules are manual and configurable per program + per doc type**
+2. When you click **Review** on a doc, the AI runs **only the relevant rules**
+3. Output is **structured + auditable + repeatable** (not a chatty blob)
+
+So: **Program → Document Type → Rules → AI Review Run → Results**
+
+---
+
+## 2) Data model (minimum that scales)
+
+### A) Programs
+
+`programs`
+
+* `id`
+* `name` (DSCR, RTL, GUC, Commercial Bridge, etc.)
+
+### B) Document types
+
+`document_types`
+
+* `code` (PFS, SREO, BUDGET, TRACK_RECORD, APPRAISAL, INSURANCE, etc.)
+* `label`
+* `description`
+
+### C) Program document requirements (what docs apply)
+
+`program_document_requirements`
+
+* `programId`
+* `documentTypeCode`
+* `required` (true/false)
+* `stage` (INTAKE/UW/CLOSING)
+* `conditionJson` (optional, e.g. only if Bridge)
+
+This answers: “What docs belong to this program?”
+
+### D) Rules per program + doc type (the magic)
+
+`program_doc_rules`
+
+* `id`
+* `programId`
+* `documentTypeCode`
+* `ruleName`
+* `ruleType` (ENUM: `PRESENCE`, `NUMERIC_THRESHOLD`, `FORMAT`, `CONSISTENCY`, `RED_FLAG`, `SIGNATURE_DATE`, etc.)
+* `severity` (INFO/WARN/FAIL)
+* `instructions` (plain English: what to check)
+* `jsonSchema` (optional: what fields to extract)
+* `passCriteria` (optional: structured criteria for deterministic pass/fail)
+* `isActive`
+* `orderIndex`
+
+This answers: “For this program and this doc, what should the AI verify?”
+
+### E) Deal documents
+
+`deal_documents`
+
+* `id`
+* `dealId`
+* `documentTypeCode`
+* `fileUrl`
+* `uploadedBy`
+* `createdAt`
+
+### F) AI review runs + results (audit trail)
+
+`doc_review_runs`
+
+* `id`
+* `dealId`
+* `documentId`
+* `programId`
+* `runByUserId`
+* `status` (RUNNING/DONE/ERROR)
+* `createdAt`
+* `model`
+* `rawResponse` (optional)
+
+`doc_review_results`
+
+* `id`
+* `runId`
+* `ruleId`
+* `passed` (true/false)
+* `severity`
+* `finding`
+* `evidence` (page/quote/field)
+* `extractedJson` (optional)
+* `createdAt`
+
+This lets you display results rule-by-rule and re-run anytime.
+
+---
+
+## 3) Execution flow (what happens when “Review” is clicked)
+
+### Step 1: Determine context
+
+Backend loads:
+
+* Deal → `programId` + key deal fields
+* Document → docType
+* Rules → `program_doc_rules` where `programId + documentTypeCode`
+
+If no rules exist, the UI should say:
+
+> “No rules configured yet for DSCR + PFS.”
+
+### Step 2: Decide whether to “extract then evaluate” or “evaluate directly”
+
+Best practice: **extract once, reuse everywhere**.
+
+So you do:
+
+* If this document doesn’t have an extraction cached → run extraction
+* Then run evaluation rules against extracted data + document content
+
+### Step 3: AI reads the PDF and returns structured data
+
+You send:
+
+* The PDF
+* The rules (as a list with id/name/type/severity/instructions)
+* A strict output format (JSON)
+
+The model returns:
+
+* For each rule: pass/fail + finding + evidence
+* Plus extracted fields (if relevant)
+
+### Step 4: Save results
+
+Write:
+
+* `doc_review_run` row
+* `doc_review_results` rows per rule
+
+### Step 5: Show results in UI
+
+On Project Detail page:
+
+* Next to each doc: **Review** + last status (✅ / ⚠️ / ❌)
+* Click to open a drawer/modal:
+
+  * Rule list with pass/fail
+  * Evidence (page number or text excerpt)
+  * “Create condition” button (optional)
+
+---
+
+## 4) What “rules” should look like (practical examples)
+
+### Example: DSCR Program + PFS rules
+
+* “Must include total assets and total liabilities” (PRESENCE, FAIL)
+* “Liquidity must be ≥ $X” (NUMERIC_THRESHOLD, FAIL)
+* “Must be signed and dated within last 90 days” (SIGNATURE_DATE, WARN/FAIL)
+* “Schedule of real estate must be included OR SREO uploaded separately” (CONSISTENCY, WARN)
+
+### Example: Commercial Bridge + Budget rules
+
+* “Line item budget must include contingency” (PRESENCE, FAIL)
+* “Total costs must be clearly stated” (PRESENCE, FAIL)
+* “Soft costs line items required” (PRESENCE, WARN)
+
+### Example: Track Record rules
+
+* “Must list at least 2 completed projects (address + dates)” (FORMAT, WARN/FAIL)
+* “If no experience, flag and recommend alternative program” (RED_FLAG, FAIL)
+
+---
+
+## 5) Where to keep “manual rules” (best practice)
+
+You have two decent approaches:
+
+### Option A (best): store rules in DB + admin UI
+
+Pros:
+
+* configurable per lender (future SaaS)
+* versionable and auditable
+* change rules without redeploy
+
+Cons:
+
+* you have to build admin UI
+
+### Option B (fast MVP): JSON config file in repo
+
+Pros:
+
+* quickest
+* easy to prototype
+
+Cons:
+
+* not SaaS-friendly
+* redeploy required for updates
+
+Since you plan to sell this, do DB + admin UI.
+
+---
+
+## 6) The “vector store” question: do you need it here?
+
+Not required for this feature.
+
+Vector store is for:
+
+* “Ask the assistant what the guidelines say”
+* Retrieval of program PDFs for QA
+
+But your rules are **manual**. That means the “source of truth” is your DB rules, not PDFs.
+
+So for the **Ai Loan Processor review**, you can skip vector stores and just:
+
+* pass rules from DB
+* analyze document
+* return structured rule-by-rule findings
+
+Later you can add a “Guideline citation” feature via vector store, but it’s optional.
+
+---
+
+## 7) What endpoints to build (Express)
+
+### Get rules
+
+`GET /api/programs/:programId/docs/:docType/rules`
+
+### Run review
+
+`POST /api/deals/:dealId/documents/:documentId/review`
+Server:
+
+* fetch deal + program + doc + rules
+* run AI
+* save results
+* return summary
+
+### Get last review
+
+`GET /api/documents/:documentId/review/latest`
+
+---
+
+## 8) Guardrails (so it doesn’t blow up later)
+
+1. **Caching**: don’t re-extract a 20-page PDF every click
+
+   * store extraction + hash; only re-run if file changes
+2. **Rule versioning**: if rules change, keep prior runs tied to old version
+3. **Permissions**:
+
+   * borrowers see “missing/next steps”
+   * processors see detailed findings
+   * admins can edit rules
+4. **Cost control**:
+
+   * only run review on explicit click
+   * only re-run if changed or user forces it
+
+---
+
+## 9) If I had to summarize the “best way”
+
+Build it like a mini system:
+
+**Config Layer (DB rules) → Execution Layer (AI reads doc using those rules) → Audit Layer (saved run/results) → UI Layer (rule-by-rule display)**
+
+That is robust, scalable, and sellable.
+
+---
+
+## If you want, I can turn this into a single Replit prompt
+
+If you tell me:
+
+* what you call “projects” (loans/deals)
+* what DB you’re using (Postgres? SQLite? Prisma?)
+* where files are stored (Drive? S3? Replit?)
+
+I’ll output a Replit-ready implementation prompt that generates:
+
+* DB migrations
+* Express routes
+* React components for Review buttons + results drawer
+* seed rules for one program (DSCR) + one doc type (PFS)
