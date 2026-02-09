@@ -272,6 +272,16 @@ export async function reviewDocument(
 
     const systemPrompt = `You are an expert loan document reviewer for a private lending company. You review documents against specific rules and produce structured, rule-by-rule findings.
 ${isImage ? '\nIMPORTANT: The document is provided as an IMAGE. You must visually examine the image to read all text, names, dates, numbers, and other information visible in the document. Look carefully at the full image content.\n' : ''}
+IMPORTANT — SIGNATURE RECOGNITION GUIDANCE:
+When checking whether a document is "signed", you must recognize ALL of these as valid forms of signing:
+- Handwritten (wet ink) signatures
+- Electronic/digital signatures (e.g., "/s/ John Doe", typed names in signature blocks, DocuSign stamps)
+- Certification or attestation statements where a named individual certifies the document (e.g., "I certify that...", "I have prepared this as a true and accurate account...")
+- Settlement agent attestations with a named person and/or timestamp (e.g., "Printed on [date] by [name]")
+- Notary acknowledgments or seals
+- Any signature block that includes a printed name, title, date, or "Prepared by" / "Reviewed by" attribution
+A document should be considered "signed" if ANY of these indicators are present. Do NOT require a visible handwritten signature when other valid signing methods are evident.
+
 For EACH rule provided, you must produce exactly one finding with:
 - "ruleIndex": the rule number from the input
 - "status": one of "pass", "fail", "warning", "info"
