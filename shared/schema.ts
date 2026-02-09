@@ -539,6 +539,25 @@ export const insertDealDocumentSchema = createInsertSchema(dealDocuments).omit({
 export type DealDocument = typeof dealDocuments.$inferSelect;
 export type InsertDealDocument = z.infer<typeof insertDealDocumentSchema>;
 
+export const dealDocumentFiles = pgTable("deal_document_files", {
+  id: serial("id").primaryKey(),
+  documentId: integer("document_id").references(() => dealDocuments.id, { onDelete: 'cascade' }).notNull(),
+  filePath: text("file_path").notNull(),
+  fileName: text("file_name"),
+  fileSize: integer("file_size"),
+  mimeType: varchar("mime_type", { length: 100 }),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+  uploadedBy: integer("uploaded_by").references(() => users.id),
+  sortOrder: integer("sort_order").default(0),
+  googleDriveFileId: varchar("google_drive_file_id", { length: 255 }),
+  googleDriveFileUrl: text("google_drive_file_url"),
+  driveUploadStatus: varchar("drive_upload_status", { length: 50 }).default("NOT_SYNCED"),
+  driveUploadError: text("drive_upload_error"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type DealDocumentFile = typeof dealDocumentFiles.$inferSelect;
+
 // Deal tasks - tasks assigned to team members for a deal
 export const dealTasks = pgTable("deal_tasks", {
   id: serial("id").primaryKey(),

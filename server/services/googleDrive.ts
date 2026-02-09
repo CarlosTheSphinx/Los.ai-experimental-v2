@@ -1,7 +1,7 @@
 import { google, drive_v3 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import { db } from '../db';
-import { users, projects, projectDocuments, savedQuotes, systemSettings, dealDocuments } from '@shared/schema';
+import { users, projects, projectDocuments, savedQuotes, systemSettings, dealDocuments, dealDocumentFiles } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { Readable } from 'stream';
 
@@ -371,14 +371,37 @@ export async function syncDocumentToDrive(documentId: number): Promise<void> {
   }
 }
 
-export async function syncDealDocumentToDrive(docId: number): Promise<void> {
+export async function syncDealDocumentToDrive(docId: number, specificFileId?: number): Promise<void> {
   const [doc] = await db.select()
     .from(dealDocuments)
     .where(eq(dealDocuments.id, docId))
     .limit(1);
 
-  if (!doc || !doc.filePath) {
-    throw new Error(`Deal document ${docId} not found or has no file`);
+  if (!doc) {
+    throw new Error(`Deal document ${docId} not found`);
+  }
+
+  let filesToSync: Array<{ filePath: string; fileName: string | null; mimeType: string | null; id: number }> = [];
+
+  if (specificFileId) {
+    const [specificFile] = await db.select().from(dealDocumentFiles)
+      .where(eq(dealDocumentFiles.id, specificFileId))
+      .limit(1);
+    if (specificFile) {
+      filesToSync = [specificFile];
+    }
+  } else {
+    const allFiles = await db.select().from(dealDocumentFiles)
+      .where(eq(dealDocumentFiles.documentId, docId));
+    filesToSync = allFiles;
+  }
+
+  if (filesToSync.length === 0 && doc.filePath) {
+    filesToSync = [{ filePath: doc.filePath, fileName: doc.fileName, mimeType: doc.mimeType, id: 0 }];
+  }
+
+  if (filesToSync.length === 0) {
+    throw new Error(`Deal document ${docId} has no files to sync`);
   }
 
   await db.update(dealDocuments)
@@ -388,10 +411,6 @@ export async function syncDealDocumentToDrive(docId: number): Promise<void> {
   try {
     const { ObjectStorageService } = await import('../replit_integrations/object_storage/objectStorage');
     const objectStorageService = new ObjectStorageService();
-    const objectFile = await objectStorageService.getObjectEntityFile(doc.filePath);
-    const fileStream = objectFile.createReadStream();
-
-    const mimeType = doc.mimeType || 'application/octet-stream';
 
     const [project] = await db.select()
       .from(projects)
@@ -414,30 +433,46 @@ export async function syncDealDocumentToDrive(docId: number): Promise<void> {
 
     const drive = await getDriveClient(admin.googleRefreshToken, admin.googleAccessToken, admin.googleTokenExpiresAt);
 
-    const response = await drive.files.create({
-      requestBody: {
-        name: doc.fileName || doc.documentName,
-        parents: [googleDriveFolderId],
-      },
-      media: {
-        mimeType,
-        body: fileStream,
-      },
-      fields: 'id, webViewLink',
-      supportsAllDrives: true,
-    });
+    let lastFileId: string | null = null;
+    let lastWebViewLink: string | null = null;
 
-    const fileId = response.data.id;
-    const webViewLink = response.data.webViewLink;
+    for (const file of filesToSync) {
+      const objectFile = await objectStorageService.getObjectEntityFile(file.filePath);
+      const fileStream = objectFile.createReadStream();
+      const mimeType = file.mimeType || 'application/octet-stream';
 
-    if (!fileId || !webViewLink) {
-      throw new Error('GOOGLE_DRIVE_ERROR: Failed to upload file - missing id or webViewLink');
+      const response = await drive.files.create({
+        requestBody: {
+          name: file.fileName || doc.documentName,
+          parents: [googleDriveFolderId],
+        },
+        media: {
+          mimeType,
+          body: fileStream,
+        },
+        fields: 'id, webViewLink',
+        supportsAllDrives: true,
+      });
+
+      lastFileId = response.data.id || null;
+      lastWebViewLink = response.data.webViewLink || null;
+
+      if (file.id > 0 && lastFileId) {
+        await db.update(dealDocumentFiles)
+          .set({
+            googleDriveFileId: lastFileId,
+            googleDriveFileUrl: lastWebViewLink,
+            driveUploadStatus: 'OK',
+            driveUploadError: null,
+          })
+          .where(eq(dealDocumentFiles.id, file.id));
+      }
     }
 
     await db.update(dealDocuments)
       .set({
-        googleDriveFileId: fileId,
-        googleDriveFileUrl: webViewLink,
+        googleDriveFileId: lastFileId,
+        googleDriveFileUrl: lastWebViewLink,
         driveUploadStatus: 'OK',
         driveUploadError: null,
       })

@@ -3,7 +3,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { savedQuotes, users, dealDocuments, dealTasks, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies } from "@shared/schema";
+import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies } from "@shared/schema";
 import { priceQuote, validateRuleset, SAMPLE_RTL_RULESET, SAMPLE_DSCR_RULESET, type PricingInputs, analyzeGuidelines, refineProposal } from "./pricing";
 import { getDocumentTemplatesForLoanType } from "./document-templates";
 import { eq, desc, asc, inArray, and, gt, gte, lte, sql, isNull, or } from "drizzle-orm";
@@ -4331,7 +4331,17 @@ export async function registerRoutes(
         .where(eq(dealDocuments.dealId, projectId))
         .orderBy(dealDocuments.sortOrder);
       
-      res.json({ project, stages: stagesWithTasks, tasks, activity, adminTasks, adminActivity: adminActivityList, owner, documents: dealDocs });
+      const allFiles = await db.select()
+        .from(dealDocumentFiles)
+        .where(inArray(dealDocumentFiles.documentId, dealDocs.map(d => d.id).length > 0 ? dealDocs.map(d => d.id) : [0]))
+        .orderBy(dealDocumentFiles.sortOrder, dealDocumentFiles.createdAt);
+      
+      const docsWithFiles = dealDocs.map(doc => ({
+        ...doc,
+        files: allFiles.filter(f => f.documentId === doc.id),
+      }));
+      
+      res.json({ project, stages: stagesWithTasks, tasks, activity, adminTasks, adminActivity: adminActivityList, owner, documents: docsWithFiles });
     } catch (error) {
       console.error('Admin project detail error:', error);
       res.status(500).json({ error: 'Failed to load project' });
@@ -5596,7 +5606,7 @@ export async function registerRoutes(
     }
   });
 
-  // Admin - Complete document upload (update database after file is uploaded)
+  // Admin - Complete document upload (add file to document slot - additive, not replacing)
   app.post('/api/admin/deals/:dealId/documents/:docId/upload-complete', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const dealId = parseInt(req.params.dealId);
@@ -5606,6 +5616,25 @@ export async function registerRoutes(
       if (!objectPath) {
         return res.status(400).json({ error: 'Object path is required' });
       }
+
+      const [doc] = await db.select().from(dealDocuments).where(eq(dealDocuments.id, docId));
+      if (!doc) {
+        return res.status(404).json({ error: 'Document not found' });
+      }
+
+      const existingFiles = await db.select().from(dealDocumentFiles).where(eq(dealDocumentFiles.documentId, docId));
+      const nextSortOrder = existingFiles.length;
+      
+      const [newFile] = await db.insert(dealDocumentFiles).values({
+        documentId: docId,
+        filePath: objectPath,
+        fileName: fileName || null,
+        fileSize: fileSize || null,
+        mimeType: mimeType || null,
+        uploadedAt: new Date(),
+        uploadedBy: req.user!.id,
+        sortOrder: nextSortOrder,
+      }).returning();
       
       const [updated] = await db.update(dealDocuments)
         .set({
@@ -5620,10 +5649,6 @@ export async function registerRoutes(
         .where(eq(dealDocuments.id, docId))
         .returning();
       
-      if (!updated) {
-        return res.status(404).json({ error: 'Document not found' });
-      }
-      
       // Send notification to deal owner
       const deal = await db.select({ userId: savedQuotes.userId })
         .from(savedQuotes).where(eq(savedQuotes.id, dealId)).limit(1);
@@ -5631,16 +5656,16 @@ export async function registerRoutes(
         await postDealNotification(
           deal[0].userId, 
           dealId, 
-          `📄 Document uploaded: ${updated.documentName || fileName || 'New document'}`
+          `Document uploaded: ${updated?.documentName || fileName || 'New document'}`
         );
       }
       
-      // Google Drive sync (non-blocking)
+      // Google Drive sync for the new file (non-blocking)
       try {
         const { isDriveIntegrationEnabled, syncDealDocumentToDrive } = await import('./services/googleDrive');
         const driveEnabled = await isDriveIntegrationEnabled();
-        if (driveEnabled) {
-          syncDealDocumentToDrive(updated.id).catch((err: any) => {
+        if (driveEnabled && updated && newFile) {
+          syncDealDocumentToDrive(updated.id, newFile.id).catch((err: any) => {
             console.error(`Drive sync failed for deal doc ${updated.id}:`, err.message);
           });
         }
@@ -5648,7 +5673,7 @@ export async function registerRoutes(
         console.error('Drive sync check error:', driveErr.message);
       }
       
-      res.json({ document: updated });
+      res.json({ document: updated, file: newFile });
     } catch (error) {
       console.error('Admin upload complete error:', error);
       res.status(500).json({ error: 'Failed to update document record' });
@@ -5681,6 +5706,66 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Admin document download error:', error);
       res.status(500).json({ error: 'Failed to download document' });
+    }
+  });
+
+  // Admin - Download/view individual file from document slot
+  app.get('/api/admin/document-files/:fileId/download', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const fileId = parseInt(req.params.fileId);
+      const [file] = await db.select().from(dealDocumentFiles).where(eq(dealDocumentFiles.id, fileId)).limit(1);
+      if (!file || !file.filePath) {
+        return res.status(404).json({ error: 'File not found' });
+      }
+      const objectFile = await objectStorageService.getObjectEntityFile(file.filePath);
+      if (req.query.download === 'true' && file.fileName) {
+        res.set('Content-Disposition', `attachment; filename="${file.fileName}"`);
+      }
+      await objectStorageService.downloadObject(objectFile, res);
+    } catch (error) {
+      console.error('Admin file download error:', error);
+      res.status(500).json({ error: 'Failed to download file' });
+    }
+  });
+
+  // Admin - Delete individual file from document slot
+  app.delete('/api/admin/document-files/:fileId', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const fileId = parseInt(req.params.fileId);
+      const [file] = await db.select().from(dealDocumentFiles).where(eq(dealDocumentFiles.id, fileId)).limit(1);
+      if (!file) {
+        return res.status(404).json({ error: 'File not found' });
+      }
+      await db.delete(dealDocumentFiles).where(eq(dealDocumentFiles.id, fileId));
+      
+      const remainingFiles = await db.select().from(dealDocumentFiles)
+        .where(eq(dealDocumentFiles.documentId, file.documentId))
+        .orderBy(dealDocumentFiles.sortOrder, dealDocumentFiles.createdAt);
+      
+      if (remainingFiles.length === 0) {
+        await db.update(dealDocuments).set({
+          filePath: null,
+          fileName: null,
+          fileSize: null,
+          mimeType: null,
+          status: 'pending',
+          uploadedAt: null,
+          uploadedBy: null,
+        }).where(eq(dealDocuments.id, file.documentId));
+      } else {
+        const latestFile = remainingFiles[remainingFiles.length - 1];
+        await db.update(dealDocuments).set({
+          filePath: latestFile.filePath,
+          fileName: latestFile.fileName,
+          fileSize: latestFile.fileSize,
+          mimeType: latestFile.mimeType,
+        }).where(eq(dealDocuments.id, file.documentId));
+      }
+      
+      res.json({ success: true, remainingFiles });
+    } catch (error) {
+      console.error('Admin file delete error:', error);
+      res.status(500).json({ error: 'Failed to delete file' });
     }
   });
 

@@ -932,12 +932,13 @@ export default function AdminDealDetail() {
     }
   };
 
-  const handleFileInputChange = (docId: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      handleFileUpload(docId, file);
+  const handleFileInputChange = (docId: number) => async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        await handleFileUpload(docId, files[i]);
+      }
     }
-    // Reset the input so the same file can be selected again
     e.target.value = "";
   };
 
@@ -953,6 +954,34 @@ export default function AdminDealDetail() {
     link.click();
     document.body.removeChild(link);
   };
+
+  const handleViewFile = (fileId: number) => {
+    window.open(`/api/admin/document-files/${fileId}/download`, "_blank");
+  };
+
+  const handleDownloadFile = (fileId: number, fileName: string | null) => {
+    const link = document.createElement("a");
+    link.href = `/api/admin/document-files/${fileId}/download?download=true`;
+    link.download = fileName || "document";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const deleteFileMutation = useMutation({
+    mutationFn: async (fileId: number) => {
+      const res = await apiRequest('DELETE', `/api/admin/document-files/${fileId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${linkedProjectId}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
+      toast({ title: "File removed" });
+    },
+    onError: () => {
+      toast({ title: "Failed to remove file", variant: "destructive" });
+    },
+  });
 
   const deal = data?.deal;
   const documents = projectDetailData?.documents || data?.documents || [];
@@ -1608,7 +1637,13 @@ export default function AdminDealDetail() {
                                         </Badge>
                                       )}
                                     </div>
-                                    {doc.fileName && doc.uploadedAt && (
+                                    {(doc.files?.length > 0) && (
+                                      <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                                        <Paperclip className="h-3 w-3" />
+                                        {doc.files.length} file{doc.files.length !== 1 ? 's' : ''} uploaded
+                                      </div>
+                                    )}
+                                    {(!doc.files || doc.files.length === 0) && doc.fileName && doc.uploadedAt && (
                                       <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
                                         <Paperclip className="h-3 w-3" />
                                         {doc.fileName} <span className="mx-1">-</span> {new Date(doc.uploadedAt).toLocaleDateString()}
@@ -1626,12 +1661,6 @@ export default function AdminDealDetail() {
                                   )}
                                   {doc.filePath && (
                                     <>
-                                      <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); handleViewDocument(doc.id); }} data-testid={`button-view-${doc.id}`} title="View">
-                                        <Eye className="h-3.5 w-3.5" />
-                                      </Button>
-                                      <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); handleDownloadDocument(doc.id, doc.fileName); }} data-testid={`button-download-${doc.id}`} title="Download">
-                                        <Download className="h-3.5 w-3.5" />
-                                      </Button>
                                       {doc.googleDriveFileUrl ? (
                                         <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); window.open(doc.googleDriveFileUrl!, '_blank'); }} data-testid={`button-drive-open-${doc.id}`} title="Open in Google Drive">
                                           <ExternalLink className="h-3.5 w-3.5 text-blue-500" />
@@ -1662,18 +1691,17 @@ export default function AdminDealDetail() {
                                       </Button>
                                     </>
                                   )}
-                                  <input type="file" id={`file-input-${doc.id}`} className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" onChange={handleFileInputChange(doc.id)} data-testid={`input-file-${doc.id}`} />
+                                  <input type="file" id={`file-input-${doc.id}`} className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" onChange={handleFileInputChange(doc.id)} data-testid={`input-file-${doc.id}`} multiple />
+                                  {doc.status !== 'not_applicable' && (
+                                    <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); document.getElementById(`file-input-${doc.id}`)?.click(); }} disabled={uploadingDocId === doc.id} data-testid={`button-upload-${doc.id}`}>
+                                      <Upload className="h-3 w-3 mr-1" />{doc.files?.length > 0 ? 'Add' : 'Upload'}
+                                    </Button>
+                                  )}
                                   {doc.status === 'pending' && (
-                                    <>
-                                      <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); updateDocumentStatus.mutate({ docId: doc.id, status: 'not_applicable' }); }} disabled={updateDocumentStatus.isPending || uploadingDocId === doc.id} data-testid={`button-na-${doc.id}`}>N/A</Button>
-                                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); document.getElementById(`file-input-${doc.id}`)?.click(); }} disabled={uploadingDocId === doc.id} data-testid={`button-upload-${doc.id}`}>
-                                        <Upload className="h-3 w-3 mr-1" />Upload
-                                      </Button>
-                                    </>
+                                    <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); updateDocumentStatus.mutate({ docId: doc.id, status: 'not_applicable' }); }} disabled={updateDocumentStatus.isPending || uploadingDocId === doc.id} data-testid={`button-na-${doc.id}`}>N/A</Button>
                                   )}
                                   {doc.status === 'uploaded' && (
                                     <>
-                                      <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); document.getElementById(`file-input-${doc.id}`)?.click(); }} disabled={uploadingDocId === doc.id} data-testid={`button-reupload-${doc.id}`} title="Replace"><Upload className="h-3.5 w-3.5" /></Button>
                                       <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); updateDocumentStatus.mutate({ docId: doc.id, status: 'rejected' }); }} disabled={updateDocumentStatus.isPending} data-testid={`button-reject-${doc.id}`}>
                                         <XCircle className="h-3 w-3 mr-1" />Reject
                                       </Button>
@@ -1682,22 +1710,32 @@ export default function AdminDealDetail() {
                                       </Button>
                                     </>
                                   )}
-                                  {doc.status === 'approved' && (
-                                    <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); document.getElementById(`file-input-${doc.id}`)?.click(); }} disabled={uploadingDocId === doc.id} data-testid={`button-reupload-${doc.id}`} title="Replace"><Upload className="h-3.5 w-3.5" /></Button>
-                                  )}
-                                  {doc.status === 'rejected' && (
-                                    <>
-                                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); document.getElementById(`file-input-${doc.id}`)?.click(); }} disabled={uploadingDocId === doc.id} data-testid={`button-upload-${doc.id}`}>
-                                        <Upload className="h-3 w-3 mr-1" />Re-upload
-                                      </Button>
-                                      <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); updateDocumentStatus.mutate({ docId: doc.id, status: 'pending' }); }} disabled={updateDocumentStatus.isPending} data-testid={`button-reset-${doc.id}`}>Reset</Button>
-                                    </>
-                                  )}
-                                  {doc.status === 'not_applicable' && (
+                                  {(doc.status === 'rejected' || doc.status === 'not_applicable' || doc.status === 'approved') && (
                                     <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); updateDocumentStatus.mutate({ docId: doc.id, status: 'pending' }); }} disabled={updateDocumentStatus.isPending} data-testid={`button-reset-${doc.id}`}>Reset</Button>
                                   )}
                                 </div>
                               </div>
+                              {doc.files && doc.files.length > 0 && (
+                                <div className="ml-10 space-y-1 mt-1">
+                                  {doc.files.map((file: any) => (
+                                    <div key={file.id} className="flex items-center gap-2 text-xs text-muted-foreground py-1 px-2 rounded bg-muted/30" data-testid={`file-row-${file.id}`}>
+                                      <Paperclip className="h-3 w-3 flex-shrink-0" />
+                                      <span className="truncate flex-1 min-w-0">{file.fileName || 'Unnamed file'}</span>
+                                      {file.fileSize && <span className="flex-shrink-0">{(file.fileSize / 1024).toFixed(0)} KB</span>}
+                                      {file.uploadedAt && <span className="flex-shrink-0">{new Date(file.uploadedAt).toLocaleDateString()}</span>}
+                                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); handleViewFile(file.id); }} data-testid={`button-view-file-${file.id}`} title="View">
+                                        <Eye className="h-3 w-3" />
+                                      </Button>
+                                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); handleDownloadFile(file.id, file.fileName); }} data-testid={`button-download-file-${file.id}`} title="Download">
+                                        <Download className="h-3 w-3" />
+                                      </Button>
+                                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); deleteFileMutation.mutate(file.id); }} data-testid={`button-delete-file-${file.id}`} title="Remove file">
+                                        <Trash2 className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                               {expandedReviewDocId === doc.id && docReview && (
                                 <div className="border border-t-0 rounded-b-lg p-3 bg-muted/30 space-y-2" data-testid={`review-panel-${doc.id}`}>
                                   <div className="flex items-center justify-between gap-2">

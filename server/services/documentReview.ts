@@ -3,7 +3,7 @@ import { ObjectStorageService } from "../replit_integrations/object_storage/obje
 const objectStorageService = new ObjectStorageService();
 import { storage } from "../storage";
 import { db } from "../db";
-import { loanPrograms, dealDocuments, projects, savedQuotes, programReviewRules, programDocumentTemplates } from "@shared/schema";
+import { loanPrograms, dealDocuments, dealDocumentFiles, projects, savedQuotes, programReviewRules, programDocumentTemplates } from "@shared/schema";
 import { eq, and, or, asc } from "drizzle-orm";
 
 const openai = new OpenAI({
@@ -109,7 +109,10 @@ export async function reviewDocument(
       return { success: false, error: 'Document not found' };
     }
 
-    if (!doc.filePath) {
+    const docFiles = await db.select().from(dealDocumentFiles)
+      .where(eq(dealDocumentFiles.documentId, documentId));
+
+    if (!doc.filePath && docFiles.length === 0) {
       return { success: false, error: 'No file uploaded for this document' };
     }
 
@@ -179,32 +182,57 @@ export async function reviewDocument(
       return { success: false, error: 'No review rules configured for this document. Add rules to the document template in Admin > Programs, or assign review rules at the program level.' };
     }
 
-    const isImage = isImageFile(doc.filePath, doc.mimeType);
-    let documentText: string | null = null;
-    let imageBase64: string | null = null;
-    let imageMediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/jpeg';
+    const filesToProcess = docFiles.length > 0 ? docFiles : (doc.filePath ? [{
+      filePath: doc.filePath,
+      fileName: doc.fileName,
+      mimeType: doc.mimeType,
+      id: 0,
+    }] : []);
 
-    if (isImage) {
-      try {
-        const buffer = await downloadDocumentBuffer(doc.filePath);
-        imageBase64 = buffer.toString('base64');
-        imageMediaType = getImageMediaType(doc.mimeType, doc.filePath);
-      } catch (err: any) {
-        return { success: false, error: `Could not read image document: ${err.message}` };
-      }
-    } else {
-      try {
-        documentText = await extractTextFromDocument(doc.filePath, doc.mimeType);
-      } catch (err: any) {
-        return { success: false, error: `Could not read document: ${err.message}` };
-      }
-
-      if (!documentText || documentText.trim().length < 10) {
-        return { success: false, error: 'Could not extract meaningful text from this document. It may be an image-only PDF or an unsupported format.' };
-      }
-
-      documentText = documentText.slice(0, 30000);
+    if (filesToProcess.length === 0) {
+      return { success: false, error: 'No files uploaded for this document' };
     }
+
+    let hasImages = false;
+    let documentText: string | null = null;
+    const imageContents: Array<{ base64: string; mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'; fileName: string }> = [];
+    const textParts: string[] = [];
+
+    for (const file of filesToProcess) {
+      const fp = file.filePath;
+      const mt = file.mimeType;
+      const fn = file.fileName || 'file';
+
+      if (isImageFile(fp, mt)) {
+        hasImages = true;
+        try {
+          const buffer = await downloadDocumentBuffer(fp);
+          imageContents.push({
+            base64: buffer.toString('base64'),
+            mediaType: getImageMediaType(mt, fp),
+            fileName: fn,
+          });
+        } catch (err: any) {
+          console.error(`Could not read image file ${fn}:`, err.message);
+        }
+      } else {
+        try {
+          const text = await extractTextFromDocument(fp, mt);
+          if (text && text.trim().length > 5) {
+            textParts.push(`--- File: ${fn} ---\n${text}`);
+          }
+        } catch (err: any) {
+          console.error(`Could not read file ${fn}:`, err.message);
+        }
+      }
+    }
+
+    if (imageContents.length === 0 && textParts.length === 0) {
+      return { success: false, error: 'Could not extract content from any of the uploaded files.' };
+    }
+
+    const isImage = imageContents.length > 0;
+    documentText = textParts.length > 0 ? textParts.join('\n\n').slice(0, 30000) : null;
 
     let dealInfo = '';
     const referenceDataParts: string[] = [];
@@ -292,31 +320,30 @@ ${dealInfo}
 
 ## Rules to Check (${rulesForPrompt.length} rules)
 ${rulesText}
-${!isImage ? `\n## Document Content\n${documentText}` : '\n## Document Image\nThe document image is attached. Please visually examine it to verify each rule.'}
+${isImage && imageContents.length > 0 ? `\n## Document Images (${imageContents.length} file${imageContents.length > 1 ? 's' : ''})\n${imageContents.map((ic, i) => `Image ${i + 1}: ${ic.fileName}`).join('\n')}\nThe document images are attached. Please visually examine all images to verify each rule.` : ''}
+${documentText ? `\n## Document Content${filesToProcess.length > 1 ? ` (${textParts.length} file${textParts.length > 1 ? 's' : ''})` : ''}\n${documentText}` : ''}
 
 Review this document against ALL ${rulesForPrompt.length} rules above. Produce one finding per rule.`;
 
-    if (isImage && !imageBase64) {
+    if (isImage && imageContents.length === 0) {
       return { success: false, error: 'Failed to load image data for vision analysis.' };
     }
 
     let messages: any[];
-    if (isImage && imageBase64) {
+    if (isImage) {
+      const contentParts: any[] = [{ type: 'text', text: userTextContent }];
+      for (const ic of imageContents) {
+        contentParts.push({
+          type: 'image_url',
+          image_url: {
+            url: `data:${ic.mediaType};base64,${ic.base64}`,
+            detail: 'high',
+          },
+        });
+      }
       messages = [
         { role: 'system', content: systemPrompt },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: userTextContent },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:${imageMediaType};base64,${imageBase64}`,
-                detail: 'high',
-              },
-            },
-          ],
-        },
+        { role: 'user', content: contentParts },
       ];
     } else {
       messages = [
