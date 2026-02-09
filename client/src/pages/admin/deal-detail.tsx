@@ -549,8 +549,8 @@ export default function AdminDealDetail() {
   };
 
   const updateDocumentStatus = useMutation({
-    mutationFn: async ({ docId, status }: { docId: number; status: string }) => {
-      return apiRequest("PATCH", `/api/admin/deals/${dealId}/documents/${docId}`, { status });
+    mutationFn: async ({ docId, status, reviewNotes }: { docId: number; status: string; reviewNotes?: string }) => {
+      return apiRequest("PATCH", `/api/admin/deals/${dealId}/documents/${docId}`, { status, reviewNotes });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
@@ -674,6 +674,8 @@ export default function AdminDealDetail() {
   const [newDocRequired, setNewDocRequired] = useState(true);
   const [reviewingDocId, setReviewingDocId] = useState<number | null>(null);
   const [expandedReviewDocId, setExpandedReviewDocId] = useState<number | null>(null);
+  const [rejectingDocId, setRejectingDocId] = useState<number | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
 
   const { data: aiReviewsData, isLoading: aiReviewsLoading } = useQuery<{ reviews: any[] }>({
     queryKey: [`/api/admin/projects/${linkedProjectId}/ai-reviews`],
@@ -1649,6 +1651,12 @@ export default function AdminDealDetail() {
                                         {doc.fileName} <span className="mx-1">-</span> {new Date(doc.uploadedAt).toLocaleDateString()}
                                       </div>
                                     )}
+                                    {doc.status === 'rejected' && doc.reviewNotes && (
+                                      <div className="text-xs text-red-600 dark:text-red-400 mt-0.5 flex items-start gap-1">
+                                        <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                                        <span>{doc.reviewNotes}</span>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -1800,6 +1808,75 @@ export default function AdminDealDetail() {
                                           </div>
                                         </div>
                                       ))}
+                                    </div>
+                                  )}
+                                  {doc.status !== 'approved' && doc.status !== 'rejected' && (
+                                    <div className="border-t pt-3 mt-3">
+                                      {rejectingDocId === doc.id ? (
+                                        <div className="space-y-2">
+                                          <label className="text-xs font-medium">Rejection Reason</label>
+                                          <Textarea
+                                            placeholder="Explain why this document is being rejected. This will be included in the borrower's loan digest notification..."
+                                            value={rejectionReason}
+                                            onChange={(e) => setRejectionReason(e.target.value)}
+                                            className="text-sm resize-none"
+                                            rows={3}
+                                            data-testid={`textarea-rejection-reason-${doc.id}`}
+                                          />
+                                          <div className="flex items-center gap-2 justify-end">
+                                            <Button
+                                              size="sm"
+                                              variant="ghost"
+                                              onClick={() => { setRejectingDocId(null); setRejectionReason(''); }}
+                                              data-testid={`button-cancel-reject-${doc.id}`}
+                                            >
+                                              Cancel
+                                            </Button>
+                                            <Button
+                                              size="sm"
+                                              variant="destructive"
+                                              disabled={!rejectionReason.trim() || updateDocumentStatus.isPending}
+                                              onClick={() => {
+                                                updateDocumentStatus.mutate(
+                                                  { docId: doc.id, status: 'rejected', reviewNotes: rejectionReason.trim() },
+                                                  { onSuccess: () => { setRejectingDocId(null); setRejectionReason(''); setExpandedReviewDocId(null); } }
+                                                );
+                                              }}
+                                              data-testid={`button-confirm-reject-${doc.id}`}
+                                            >
+                                              {updateDocumentStatus.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <XCircle className="h-3 w-3 mr-1" />}
+                                              Confirm Rejection
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-2 justify-end">
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => { setRejectingDocId(doc.id); setRejectionReason(''); }}
+                                            disabled={updateDocumentStatus.isPending}
+                                            data-testid={`button-review-reject-${doc.id}`}
+                                          >
+                                            <XCircle className="h-3 w-3 mr-1" />
+                                            Reject
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            onClick={() => {
+                                              updateDocumentStatus.mutate(
+                                                { docId: doc.id, status: 'approved' },
+                                                { onSuccess: () => setExpandedReviewDocId(null) }
+                                              );
+                                            }}
+                                            disabled={updateDocumentStatus.isPending}
+                                            data-testid={`button-review-accept-${doc.id}`}
+                                          >
+                                            <Check className="h-3 w-3 mr-1" />
+                                            Accept
+                                          </Button>
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                 </div>
