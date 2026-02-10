@@ -12281,6 +12281,25 @@ Return JSON only:
       }
 
       await storage.updateCommercialSubmissionStatus(id, "NEW");
+
+      // Trigger AI review in background (fire and forget)
+      const submissionId = id;
+      (async () => {
+        try {
+          const { reviewCommercialSubmission } = await import('./services/commercialAiReview');
+          const result = await reviewCommercialSubmission(submissionId);
+          await storage.updateCommercialSubmission(submissionId, {
+            aiDecision: result.decision,
+            aiDecisionReason: result.reason,
+            status: result.decision === 'auto_declined' ? 'DECLINED' : 
+                    result.decision === 'auto_approved' ? 'APPROVED' : 'UNDER_REVIEW',
+            reviewedAt: new Date(),
+          });
+        } catch (err) {
+          console.error('AI review failed for submission', submissionId, err);
+        }
+      })();
+
       res.json({ success: true, submissionId: id });
     } catch (error: any) {
       console.error("Error finalizing commercial submission:", error);
@@ -12675,6 +12694,56 @@ Return JSON only:
       res.json(sponsors);
     } catch (error: any) {
       console.error('Error fetching submission sponsors:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Admin: Manually trigger AI review for a submission
+  app.post('/api/admin/commercial/submissions/:id/ai-review', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const submissionId = parseInt(req.params.id);
+      const submission = await storage.getCommercialSubmissionById(submissionId);
+      if (!submission) {
+        return res.status(404).json({ error: 'Submission not found' });
+      }
+
+      const { reviewCommercialSubmission } = await import('./services/commercialAiReview');
+      const result = await reviewCommercialSubmission(submissionId);
+
+      await storage.updateCommercialSubmission(submissionId, {
+        aiDecision: result.decision,
+        aiDecisionReason: result.reason,
+        status: result.decision === 'auto_declined' ? 'DECLINED' :
+                result.decision === 'auto_approved' ? 'APPROVED' : 'UNDER_REVIEW',
+        reviewedAt: new Date(),
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error('Error running AI review:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Admin: Get AI review result for a submission
+  app.get('/api/admin/commercial/submissions/:id/ai-review', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const submissionId = parseInt(req.params.id);
+      const submission = await storage.getCommercialSubmissionById(submissionId);
+      if (!submission) {
+        return res.status(404).json({ error: 'Submission not found' });
+      }
+
+      const aiReviews = await storage.getSubmissionAiReviews(submissionId);
+
+      res.json({
+        aiDecision: submission.aiDecision,
+        aiDecisionReason: submission.aiDecisionReason,
+        reviewedAt: submission.reviewedAt,
+        reviews: aiReviews,
+      });
+    } catch (error: any) {
+      console.error('Error fetching AI review:', error);
       res.status(500).json({ error: error.message });
     }
   });
