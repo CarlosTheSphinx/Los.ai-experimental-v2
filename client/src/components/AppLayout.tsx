@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   DollarSign,
   Sparkles,
+  ClipboardEdit,
 } from "lucide-react";
 import { 
   Sidebar, 
@@ -76,7 +77,8 @@ const borrowerNavItems: NavItem[] = [
 const adminNavItems: NavItem[] = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/deals", label: "Pipeline", icon: FileText, requiredPermission: "pipeline.view" },
-  { href: "/admin/commercial-submissions", label: "Commercial", icon: Building2, requiredPermission: "commercial.view" },
+  { href: "/admin/commercial-submissions", label: "Commercial Deals", icon: Building2, requiredPermission: "commercial.view" },
+  { href: "/admin/commercial/config", label: "Commercial Config", icon: ClipboardEdit, requiredPermission: "commercial.manage" },
   { href: "/admin/partners", label: "Partners", icon: Handshake, requiredPermission: "partners.view" },
   { href: "/admin/credit-policies", label: "Credit Policies", icon: ShieldCheck, requiredPermission: "programs.view" },
   { href: "/admin/programs", label: "Programs", icon: Settings2, requiredPermission: "programs.view" },

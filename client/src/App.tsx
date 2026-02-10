@@ -44,6 +44,7 @@ import BorrowerQuotes from "@/pages/borrower-quotes";
 import AdminCommercialSubmissions from "@/pages/admin/commercial-submissions";
 import AdminCommercialSubmissionDetail from "@/pages/admin/commercial-submission-detail";
 import AdminAIReview from "@/pages/admin/ai-review";
+import AdminCommercialConfig from "@/pages/admin/commercial-config";
 import { AppLayout } from "@/components/AppLayout";
 import { Loader2 } from "lucide-react";
 
@@ -152,6 +153,7 @@ function MainRoutes() {
         <Route path="/admin/ai-review" component={() => <AdminProtectedRoute component={AdminAIReview} />} />
         <Route path="/admin/commercial-submissions" component={() => <AdminProtectedRoute component={AdminCommercialSubmissions} />} />
         <Route path="/admin/commercial-submissions/:id" component={() => <AdminProtectedRoute component={AdminCommercialSubmissionDetail} />} />
+        <Route path="/admin/commercial/config" component={() => <AdminProtectedRoute component={AdminCommercialConfig} />} />
         
         <Route component={NotFound} />
       </Switch>
