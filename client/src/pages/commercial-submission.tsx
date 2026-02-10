@@ -41,6 +41,9 @@ import {
   Users,
   FolderOpen,
   ClipboardCheck,
+  Calculator,
+  Hammer,
+  Banknote,
 } from "lucide-react";
 
 const US_STATES = [
@@ -99,9 +102,12 @@ const US_STATES = [
 
 const STEPS = [
   { label: "Submitter Info", icon: Users },
-  { label: "Deal Type", icon: DollarSign },
+  { label: "Deal Terms", icon: DollarSign },
   { label: "Property", icon: Building2 },
+  { label: "Financials", icon: Calculator },
+  { label: "Construction", icon: Hammer },
   { label: "Sponsor", icon: Users },
+  { label: "Debt", icon: Banknote },
   { label: "Documents", icon: FolderOpen },
   { label: "Review", icon: ClipboardCheck },
 ];
@@ -147,6 +153,9 @@ const formSchema = z.object({
   desiredCloseDate: z.string().min(1, "Close date is required"),
   exitStrategyType: z.string().optional(),
   exitStrategyDetails: z.string().optional(),
+  loanPurpose: z.string().optional(),
+  requestedLoanTerm: z.string().optional(),
+  closingTimeline: z.string().optional(),
 
   propertyName: z.string().min(1, "Property name is required"),
   propertyAddress: z.string().min(1, "Property address is required"),
@@ -165,12 +174,74 @@ const formSchema = z.object({
   proFormaNOI: z.coerce.number().optional().or(z.literal("")),
   capexBudgetTotal: z.coerce.number().min(0, "CapEx budget is required"),
   businessPlanSummary: z.string().min(50, "Business plan summary must be at least 50 characters"),
+  county: z.string().optional(),
+  squareFootage: z.coerce.number().optional().or(z.literal("")),
+  currentOccupancy: z.coerce.number().min(0).max(100).optional().or(z.literal("")),
+  propertyCondition: z.string().optional(),
+  deferredMaintenanceEstimate: z.coerce.number().optional().or(z.literal("")),
+  deferredMaintenancePercent: z.coerce.number().optional().or(z.literal("")),
+  environmentalIssues: z.boolean(),
+  environmentalDescription: z.string().optional(),
+  zoning: z.string().optional(),
+  zoningCompliant: z.string().optional(),
+
+  currentAnnualDebtService: z.coerce.number().optional().or(z.literal("")),
+  marketRentPsf: z.coerce.number().optional().or(z.literal("")),
+  propertyTaxesAnnual: z.coerce.number().optional().or(z.literal("")),
+  insuranceAnnual: z.coerce.number().optional().or(z.literal("")),
+  numberOfUnits: z.coerce.number().optional().or(z.literal("")),
+  unitMixStudios: z.coerce.number().optional().or(z.literal("")),
+  unitMix1br: z.coerce.number().optional().or(z.literal("")),
+  unitMix2br: z.coerce.number().optional().or(z.literal("")),
+  unitMix3br: z.coerce.number().optional().or(z.literal("")),
+  averageRent: z.coerce.number().optional().or(z.literal("")),
+  marketRent: z.coerce.number().optional().or(z.literal("")),
+  numberOfTenants: z.coerce.number().optional().or(z.literal("")),
+  largestTenant: z.string().optional(),
+  largestTenantPercent: z.coerce.number().optional().or(z.literal("")),
+  averageLeaseTermRemaining: z.string().optional(),
+  tenantCreditQuality: z.string().optional(),
+
+  totalProjectCost: z.coerce.number().optional().or(z.literal("")),
+  landAcquisitionCost: z.coerce.number().optional().or(z.literal("")),
+  hardCosts: z.coerce.number().optional().or(z.literal("")),
+  softCosts: z.coerce.number().optional().or(z.literal("")),
+  contingency: z.coerce.number().optional().or(z.literal("")),
+  contingencyPercent: z.coerce.number().optional().or(z.literal("")),
+  projectTimeline: z.string().optional(),
+  constructionStartDate: z.string().optional(),
+  stabilizationDate: z.string().optional(),
+  generalContractor: z.string().optional(),
+  gcLicensedBonded: z.string().optional(),
 
   primarySponsorName: z.string().min(1, "Sponsor name is required"),
   primarySponsorExperienceYears: z.coerce.number().min(0, "Experience years is required"),
   numberOfSimilarProjects: z.coerce.number().min(0, "Number of projects is required"),
   netWorth: z.coerce.number().min(0, "Net worth is required"),
   liquidity: z.coerce.number().min(0, "Liquidity is required"),
+  entityName: z.string().optional(),
+  entityType: z.string().optional(),
+  entityDateEstablished: z.string().optional(),
+  ownershipStructure: z.string().optional(),
+  sponsorCreditScore: z.string().optional(),
+  personalLiquidity: z.coerce.number().optional().or(z.literal("")),
+  personalNetWorth: z.coerce.number().optional().or(z.literal("")),
+  totalUnitsSfOwned: z.coerce.number().optional().or(z.literal("")),
+  currentPortfolioValue: z.coerce.number().optional().or(z.literal("")),
+  similarDealsLast3Years: z.coerce.number().optional().or(z.literal("")),
+  everDefaulted: z.boolean(),
+  defaultExplanation: z.string().optional(),
+  currentLitigation: z.boolean(),
+  litigationExplanation: z.string().optional(),
+  bankruptcyLast7Years: z.boolean(),
+  bankruptcyExplanation: z.string().optional(),
+
+  currentLender: z.string().optional(),
+  currentLoanBalance: z.coerce.number().optional().or(z.literal("")),
+  currentInterestRate: z.coerce.number().optional().or(z.literal("")),
+  loanMaturityDate: z.string().optional(),
+  prepaymentPenalty: z.string().optional(),
+  additionalNotes: z.string().optional(),
 }).superRefine((data, ctx) => {
   const ltv = data.requestedLTV;
   const ltc = data.requestedLTC;
@@ -203,9 +274,11 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-function formatCurrency(value: number | undefined): string {
-  if (value === undefined || value === null) return "N/A";
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
+function formatCurrency(value: number | undefined | string): string {
+  if (value === undefined || value === null || value === "") return "N/A";
+  const num = typeof value === "string" ? parseFloat(value) : value;
+  if (isNaN(num)) return "N/A";
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(num);
 }
 
 export default function CommercialSubmissionPage() {
@@ -235,6 +308,9 @@ export default function CommercialSubmissionPage() {
       desiredCloseDate: "",
       exitStrategyType: "",
       exitStrategyDetails: "",
+      loanPurpose: "",
+      requestedLoanTerm: "",
+      closingTimeline: "",
       propertyName: "",
       propertyAddress: "",
       city: "",
@@ -252,11 +328,70 @@ export default function CommercialSubmissionPage() {
       proFormaNOI: "",
       capexBudgetTotal: "" as unknown as number,
       businessPlanSummary: "",
+      county: "",
+      squareFootage: "",
+      currentOccupancy: "",
+      propertyCondition: "",
+      deferredMaintenanceEstimate: "",
+      deferredMaintenancePercent: "",
+      environmentalIssues: false,
+      environmentalDescription: "",
+      zoning: "",
+      zoningCompliant: "",
+      currentAnnualDebtService: "",
+      marketRentPsf: "",
+      propertyTaxesAnnual: "",
+      insuranceAnnual: "",
+      numberOfUnits: "",
+      unitMixStudios: "",
+      unitMix1br: "",
+      unitMix2br: "",
+      unitMix3br: "",
+      averageRent: "",
+      marketRent: "",
+      numberOfTenants: "",
+      largestTenant: "",
+      largestTenantPercent: "",
+      averageLeaseTermRemaining: "",
+      tenantCreditQuality: "",
+      totalProjectCost: "",
+      landAcquisitionCost: "",
+      hardCosts: "",
+      softCosts: "",
+      contingency: "",
+      contingencyPercent: "",
+      projectTimeline: "",
+      constructionStartDate: "",
+      stabilizationDate: "",
+      generalContractor: "",
+      gcLicensedBonded: "",
       primarySponsorName: "",
       primarySponsorExperienceYears: "" as unknown as number,
       numberOfSimilarProjects: "" as unknown as number,
       netWorth: "" as unknown as number,
       liquidity: "" as unknown as number,
+      entityName: "",
+      entityType: "",
+      entityDateEstablished: "",
+      ownershipStructure: "",
+      sponsorCreditScore: "",
+      personalLiquidity: "",
+      personalNetWorth: "",
+      totalUnitsSfOwned: "",
+      currentPortfolioValue: "",
+      similarDealsLast3Years: "",
+      everDefaulted: false,
+      defaultExplanation: "",
+      currentLitigation: false,
+      litigationExplanation: "",
+      bankruptcyLast7Years: false,
+      bankruptcyExplanation: "",
+      currentLender: "",
+      currentLoanBalance: "",
+      currentInterestRate: "",
+      loanMaturityDate: "",
+      prepaymentPenalty: "",
+      additionalNotes: "",
     },
     mode: "onTouched",
   });
@@ -278,10 +413,71 @@ export default function CommercialSubmissionPage() {
     }
   }, [user]);
 
+  const urlPrefillDone = useRef(false);
+  useEffect(() => {
+    if (!urlPrefillDone.current) {
+      urlPrefillDone.current = true;
+      const searchParams = new URLSearchParams(window.location.search);
+      const preScreenAssetClass = searchParams.get("assetClass");
+      const preScreenDealType = searchParams.get("dealType");
+      const preScreenState = searchParams.get("state");
+      const preScreenLoanAmount = searchParams.get("loanAmount");
+      const preScreenCreditScore = searchParams.get("creditScore");
+
+      if (preScreenAssetClass) {
+        const mapping: Record<string, string> = {
+          multifamily: "MULTIFAMILY",
+          industrial: "INDUSTRIAL",
+          retail: "RETAIL",
+          office: "OFFICE",
+          mixed_use: "MIXED_USE",
+          hospitality: "HOSPITALITY",
+          self_storage: "SELF_STORAGE",
+          land: "LAND",
+          other: "OTHER",
+        };
+        const mapped = mapping[preScreenAssetClass.toLowerCase()] || preScreenAssetClass.toUpperCase();
+        if (["MULTIFAMILY", "INDUSTRIAL", "RETAIL", "OFFICE", "MIXED_USE", "HOSPITALITY", "SELF_STORAGE", "LAND", "OTHER"].includes(mapped)) {
+          form.setValue("propertyType", mapped as any);
+        }
+      }
+      if (preScreenDealType) {
+        const dtMapping: Record<string, string> = {
+          bridge: "BRIDGE",
+          long_term: "LONG_TERM",
+          longterm: "LONG_TERM",
+        };
+        const mapped = dtMapping[preScreenDealType.toLowerCase()] || preScreenDealType.toUpperCase();
+        if (["BRIDGE", "LONG_TERM"].includes(mapped)) {
+          form.setValue("loanType", mapped as any);
+        }
+      }
+      if (preScreenState && preScreenState.length === 2) {
+        form.setValue("state", preScreenState.toUpperCase());
+      }
+      if (preScreenLoanAmount) {
+        const amt = parseFloat(preScreenLoanAmount);
+        if (!isNaN(amt) && amt > 0) {
+          form.setValue("requestedLoanAmount", amt);
+        }
+      }
+      if (preScreenCreditScore) {
+        form.setValue("sponsorCreditScore", preScreenCreditScore);
+      }
+    }
+  }, []);
+
   const watchedLoanType = form.watch("loanType");
   const watchedPropertyType = form.watch("propertyType");
+  const watchedOccupancyType = form.watch("occupancyType");
+  const watchedEnvironmentalIssues = form.watch("environmentalIssues");
+  const watchedEverDefaulted = form.watch("everDefaulted");
+  const watchedCurrentLitigation = form.watch("currentLitigation");
+  const watchedBankruptcyLast7Years = form.watch("bankruptcyLast7Years");
 
   const unitsLabel = watchedPropertyType === "MULTIFAMILY" ? "Units" : "Sq Ft";
+
+  const isConstructionStep = watchedOccupancyType === "GROUND_UP" || watchedLoanType === "BRIDGE";
 
   const getRequiredDocTypes = (): DocType[] => {
     const required: DocType[] = ["SREO", "PFS", "BUDGET"];
@@ -302,13 +498,16 @@ export default function CommercialSubmissionPage() {
 
   const stepFields: Record<number, (keyof FormValues)[]> = {
     0: ["submitterType", "brokerOrDeveloperName", "companyName", "email", "phone", "roleOnDeal"],
-    1: ["loanType", "requestedLoanAmount", "requestedLTV", "requestedLTC", "interestOnly", "desiredCloseDate", "exitStrategyType", "exitStrategyDetails"],
-    2: ["propertyName", "propertyAddress", "city", "state", "zip", "propertyType", "occupancyType", "unitsOrSqft", "yearBuilt", "purchasePrice", "asIsValue", "arvOrStabilizedValue", "currentNOI", "inPlaceRent", "proFormaNOI", "capexBudgetTotal", "businessPlanSummary"],
-    3: ["primarySponsorName", "primarySponsorExperienceYears", "numberOfSimilarProjects", "netWorth", "liquidity"],
+    1: ["loanType", "requestedLoanAmount", "requestedLTV", "requestedLTC", "interestOnly", "desiredCloseDate", "exitStrategyType", "exitStrategyDetails", "loanPurpose", "requestedLoanTerm", "closingTimeline"],
+    2: ["propertyName", "propertyAddress", "city", "state", "zip", "propertyType", "occupancyType", "unitsOrSqft", "yearBuilt", "purchasePrice", "asIsValue", "arvOrStabilizedValue", "currentNOI", "inPlaceRent", "proFormaNOI", "capexBudgetTotal", "businessPlanSummary", "county", "squareFootage", "currentOccupancy", "propertyCondition", "deferredMaintenanceEstimate", "deferredMaintenancePercent", "environmentalIssues", "environmentalDescription", "zoning", "zoningCompliant"],
+    3: ["currentAnnualDebtService", "marketRentPsf", "propertyTaxesAnnual", "insuranceAnnual", "numberOfUnits", "unitMixStudios", "unitMix1br", "unitMix2br", "unitMix3br", "averageRent", "marketRent", "numberOfTenants", "largestTenant", "largestTenantPercent", "averageLeaseTermRemaining", "tenantCreditQuality"],
+    4: ["totalProjectCost", "landAcquisitionCost", "hardCosts", "softCosts", "contingency", "contingencyPercent", "projectTimeline", "constructionStartDate", "stabilizationDate", "generalContractor", "gcLicensedBonded"],
+    5: ["primarySponsorName", "primarySponsorExperienceYears", "numberOfSimilarProjects", "netWorth", "liquidity", "entityName", "entityType", "entityDateEstablished", "ownershipStructure", "sponsorCreditScore", "personalLiquidity", "personalNetWorth", "totalUnitsSfOwned", "currentPortfolioValue", "similarDealsLast3Years", "everDefaulted", "defaultExplanation", "currentLitigation", "litigationExplanation", "bankruptcyLast7Years", "bankruptcyExplanation"],
+    6: ["currentLender", "currentLoanBalance", "currentInterestRate", "loanMaturityDate", "prepaymentPenalty", "additionalNotes"],
   };
 
   const validateStep = async (step: number): Promise<boolean> => {
-    if (step === 4 || step === 5) return true;
+    if (step === 3 || step === 4 || step === 6 || step === 7 || step === 8) return true;
     const fields = stepFields[step];
     if (!fields) return true;
     const result = await form.trigger(fields);
@@ -321,11 +520,11 @@ export default function CommercialSubmissionPage() {
       toast({ title: "Validation Error", description: "Please fix the errors before continuing.", variant: "destructive" });
       return;
     }
-    if (currentStep === 4 && !allRequiredDocsUploaded()) {
+    if (currentStep === 7 && !allRequiredDocsUploaded()) {
       toast({ title: "Missing Documents", description: "Please upload all required documents before continuing.", variant: "destructive" });
       return;
     }
-    setCurrentStep((s) => Math.min(s + 1, 5));
+    setCurrentStep((s) => Math.min(s + 1, 8));
   };
 
   const handleBack = () => {
@@ -414,6 +613,9 @@ export default function CommercialSubmissionPage() {
     try {
       const values = form.getValues();
 
+      const toNum = (v: any) => (typeof v === "number" ? v : null);
+      const toStr = (v: any) => (v && typeof v === "string" && v.length > 0 ? v : null);
+
       const submissionData = {
         submitterType: values.submitterType,
         brokerOrDeveloperName: values.brokerOrDeveloperName,
@@ -423,12 +625,15 @@ export default function CommercialSubmissionPage() {
         roleOnDeal: values.roleOnDeal,
         loanType: values.loanType,
         requestedLoanAmount: values.requestedLoanAmount,
-        requestedLTV: typeof values.requestedLTV === "number" ? values.requestedLTV : null,
-        requestedLTC: typeof values.requestedLTC === "number" ? values.requestedLTC : null,
+        requestedLTV: toNum(values.requestedLTV),
+        requestedLTC: toNum(values.requestedLTC),
         interestOnly: values.interestOnly,
         desiredCloseDate: new Date(values.desiredCloseDate).toISOString(),
-        exitStrategyType: values.loanType === "BRIDGE" ? values.exitStrategyType : null,
-        exitStrategyDetails: values.loanType === "BRIDGE" ? values.exitStrategyDetails : null,
+        exitStrategyType: values.loanType === "BRIDGE" ? toStr(values.exitStrategyType) : null,
+        exitStrategyDetails: values.loanType === "BRIDGE" ? toStr(values.exitStrategyDetails) : null,
+        loanPurpose: toStr(values.loanPurpose),
+        requestedLoanTerm: toStr(values.requestedLoanTerm),
+        closingTimeline: toStr(values.closingTimeline),
         propertyName: values.propertyName,
         propertyAddress: values.propertyAddress,
         city: values.city,
@@ -437,20 +642,79 @@ export default function CommercialSubmissionPage() {
         propertyType: values.propertyType,
         occupancyType: values.occupancyType,
         unitsOrSqft: values.unitsOrSqft,
-        yearBuilt: typeof values.yearBuilt === "number" ? values.yearBuilt : null,
-        purchasePrice: typeof values.purchasePrice === "number" ? values.purchasePrice : null,
+        yearBuilt: toNum(values.yearBuilt),
+        purchasePrice: toNum(values.purchasePrice),
         asIsValue: values.asIsValue,
-        arvOrStabilizedValue: typeof values.arvOrStabilizedValue === "number" ? values.arvOrStabilizedValue : null,
-        currentNOI: typeof values.currentNOI === "number" ? values.currentNOI : null,
-        inPlaceRent: typeof values.inPlaceRent === "number" ? values.inPlaceRent : null,
-        proFormaNOI: typeof values.proFormaNOI === "number" ? values.proFormaNOI : null,
+        arvOrStabilizedValue: toNum(values.arvOrStabilizedValue),
+        currentNOI: toNum(values.currentNOI),
+        inPlaceRent: toNum(values.inPlaceRent),
+        proFormaNOI: toNum(values.proFormaNOI),
         capexBudgetTotal: values.capexBudgetTotal,
         businessPlanSummary: values.businessPlanSummary,
+        county: toStr(values.county),
+        squareFootage: toNum(values.squareFootage),
+        currentOccupancy: toNum(values.currentOccupancy),
+        propertyCondition: toStr(values.propertyCondition),
+        deferredMaintenanceEstimate: toNum(values.deferredMaintenanceEstimate),
+        deferredMaintenancePercent: toNum(values.deferredMaintenancePercent),
+        environmentalIssues: values.environmentalIssues,
+        environmentalDescription: values.environmentalIssues ? toStr(values.environmentalDescription) : null,
+        zoning: toStr(values.zoning),
+        zoningCompliant: toStr(values.zoningCompliant),
+        currentAnnualDebtService: toNum(values.currentAnnualDebtService),
+        marketRentPsf: toNum(values.marketRentPsf),
+        propertyTaxesAnnual: toNum(values.propertyTaxesAnnual),
+        insuranceAnnual: toNum(values.insuranceAnnual),
+        numberOfUnits: toNum(values.numberOfUnits),
+        unitMixStudios: toNum(values.unitMixStudios),
+        unitMix1br: toNum(values.unitMix1br),
+        unitMix2br: toNum(values.unitMix2br),
+        unitMix3br: toNum(values.unitMix3br),
+        averageRent: toNum(values.averageRent),
+        marketRent: toNum(values.marketRent),
+        numberOfTenants: toNum(values.numberOfTenants),
+        largestTenant: toStr(values.largestTenant),
+        largestTenantPercent: toNum(values.largestTenantPercent),
+        averageLeaseTermRemaining: toStr(values.averageLeaseTermRemaining),
+        tenantCreditQuality: toStr(values.tenantCreditQuality),
+        totalProjectCost: toNum(values.totalProjectCost),
+        landAcquisitionCost: toNum(values.landAcquisitionCost),
+        hardCosts: toNum(values.hardCosts),
+        softCosts: toNum(values.softCosts),
+        contingency: toNum(values.contingency),
+        contingencyPercent: toNum(values.contingencyPercent),
+        projectTimeline: toStr(values.projectTimeline),
+        constructionStartDate: toStr(values.constructionStartDate),
+        stabilizationDate: toStr(values.stabilizationDate),
+        generalContractor: toStr(values.generalContractor),
+        gcLicensedBonded: toStr(values.gcLicensedBonded),
         primarySponsorName: values.primarySponsorName,
         primarySponsorExperienceYears: values.primarySponsorExperienceYears,
         numberOfSimilarProjects: values.numberOfSimilarProjects,
         netWorth: values.netWorth,
         liquidity: values.liquidity,
+        entityName: toStr(values.entityName),
+        entityType: toStr(values.entityType),
+        entityDateEstablished: toStr(values.entityDateEstablished),
+        ownershipStructure: toStr(values.ownershipStructure),
+        sponsorCreditScore: toStr(values.sponsorCreditScore),
+        personalLiquidity: toNum(values.personalLiquidity),
+        personalNetWorth: toNum(values.personalNetWorth),
+        totalUnitsSfOwned: toNum(values.totalUnitsSfOwned),
+        currentPortfolioValue: toNum(values.currentPortfolioValue),
+        similarDealsLast3Years: toNum(values.similarDealsLast3Years),
+        everDefaulted: values.everDefaulted,
+        defaultExplanation: values.everDefaulted ? toStr(values.defaultExplanation) : null,
+        currentLitigation: values.currentLitigation,
+        litigationExplanation: values.currentLitigation ? toStr(values.litigationExplanation) : null,
+        bankruptcyLast7Years: values.bankruptcyLast7Years,
+        bankruptcyExplanation: values.bankruptcyLast7Years ? toStr(values.bankruptcyExplanation) : null,
+        currentLender: toStr(values.currentLender),
+        currentLoanBalance: toNum(values.currentLoanBalance),
+        currentInterestRate: toNum(values.currentInterestRate),
+        loanMaturityDate: toStr(values.loanMaturityDate),
+        prepaymentPenalty: toStr(values.prepaymentPenalty),
+        additionalNotes: toStr(values.additionalNotes),
         status: "DRAFT",
       };
 
@@ -494,7 +758,7 @@ export default function CommercialSubmissionPage() {
         const isActive = idx === currentStep;
         const isCompleted = idx < currentStep;
         return (
-          <div key={idx} className="flex flex-col items-center min-w-[80px] flex-1">
+          <div key={idx} className="flex flex-col items-center min-w-[70px] flex-1">
             <div className="flex items-center w-full">
               {idx > 0 && (
                 <div
@@ -760,6 +1024,70 @@ export default function CommercialSubmissionPage() {
             </FormItem>
           )}
         />
+        <FormField
+          control={form.control}
+          name="loanPurpose"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Loan Purpose (optional)</FormLabel>
+              <FormControl>
+                <Input {...field} placeholder="e.g. Acquisition, Refinance" data-testid="input-loan-purpose" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="requestedLoanTerm"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Requested Loan Term (optional)</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value || ""}>
+                <FormControl>
+                  <SelectTrigger data-testid="select-requested-loan-term">
+                    <SelectValue placeholder="Select term" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="12 months">12 months</SelectItem>
+                  <SelectItem value="24 months">24 months</SelectItem>
+                  <SelectItem value="36 months">36 months</SelectItem>
+                  <SelectItem value="5 years">5 years</SelectItem>
+                  <SelectItem value="7 years">7 years</SelectItem>
+                  <SelectItem value="10 years">10 years</SelectItem>
+                  <SelectItem value="15 years">15 years</SelectItem>
+                  <SelectItem value="30 years">30 years</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="closingTimeline"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Closing Timeline (optional)</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value || ""}>
+                <FormControl>
+                  <SelectTrigger data-testid="select-closing-timeline">
+                    <SelectValue placeholder="Select timeline" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="30 days">30 days</SelectItem>
+                  <SelectItem value="45 days">45 days</SelectItem>
+                  <SelectItem value="60 days">60 days</SelectItem>
+                  <SelectItem value="90 days">90 days</SelectItem>
+                  <SelectItem value="120+ days">120+ days</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
       </div>
 
       {watchedLoanType === "BRIDGE" && (
@@ -893,6 +1221,19 @@ export default function CommercialSubmissionPage() {
         />
         <FormField
           control={form.control}
+          name="county"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>County (optional)</FormLabel>
+              <FormControl>
+                <Input {...field} placeholder="County name" data-testid="input-county" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
           name="propertyType"
           render={({ field }) => (
             <FormItem>
@@ -967,6 +1308,28 @@ export default function CommercialSubmissionPage() {
         />
         <FormField
           control={form.control}
+          name="squareFootage"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Square Footage (optional)</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  placeholder="0"
+                  name={field.name}
+                  ref={field.ref}
+                  onBlur={field.onBlur}
+                  value={field.value ?? ""}
+                  onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                  data-testid="input-square-footage"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
           name="yearBuilt"
           render={({ field }) => (
             <FormItem>
@@ -981,6 +1344,28 @@ export default function CommercialSubmissionPage() {
                   value={field.value ?? ""}
                   onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
                   data-testid="input-year-built"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="currentOccupancy"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Current Occupancy % (optional)</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  placeholder="e.g. 95"
+                  name={field.name}
+                  ref={field.ref}
+                  onBlur={field.onBlur}
+                  value={field.value ?? ""}
+                  onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                  data-testid="input-current-occupancy"
                 />
               </FormControl>
               <FormMessage />
@@ -1049,6 +1434,29 @@ export default function CommercialSubmissionPage() {
                   data-testid="input-arv-stabilized-value"
                 />
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="propertyCondition"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Property Condition (optional)</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value || ""}>
+                <FormControl>
+                  <SelectTrigger data-testid="select-property-condition">
+                    <SelectValue placeholder="Select condition" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="Excellent">Excellent</SelectItem>
+                  <SelectItem value="Good">Good</SelectItem>
+                  <SelectItem value="Fair">Fair</SelectItem>
+                  <SelectItem value="Poor">Poor</SelectItem>
+                </SelectContent>
+              </Select>
               <FormMessage />
             </FormItem>
           )}
@@ -1141,7 +1549,130 @@ export default function CommercialSubmissionPage() {
             </FormItem>
           )}
         />
+        <FormField
+          control={form.control}
+          name="deferredMaintenanceEstimate"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Deferred Maintenance $ (optional)</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  placeholder="0"
+                  name={field.name}
+                  ref={field.ref}
+                  onBlur={field.onBlur}
+                  value={field.value ?? ""}
+                  onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                  data-testid="input-deferred-maintenance-estimate"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="deferredMaintenancePercent"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Deferred Maintenance % (optional)</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  placeholder="0"
+                  name={field.name}
+                  ref={field.ref}
+                  onBlur={field.onBlur}
+                  value={field.value ?? ""}
+                  onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                  data-testid="input-deferred-maintenance-percent"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="zoning"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Zoning (optional)</FormLabel>
+              <FormControl>
+                <Input {...field} placeholder="e.g. C-2, R-3" data-testid="input-zoning" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="zoningCompliant"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Zoning Compliant (optional)</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value || ""}>
+                <FormControl>
+                  <SelectTrigger data-testid="select-zoning-compliant">
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="Yes">Yes</SelectItem>
+                  <SelectItem value="No">No</SelectItem>
+                  <SelectItem value="Unknown">Unknown</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="environmentalIssues"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Environmental Issues</FormLabel>
+              <Select
+                onValueChange={(v) => field.onChange(v === "true")}
+                value={field.value ? "true" : "false"}
+              >
+                <FormControl>
+                  <SelectTrigger data-testid="select-environmental-issues">
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="true">Yes</SelectItem>
+                  <SelectItem value="false">No</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
       </div>
+      {watchedEnvironmentalIssues && (
+        <FormField
+          control={form.control}
+          name="environmentalDescription"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Environmental Issues Description</FormLabel>
+              <FormControl>
+                <Textarea
+                  {...field}
+                  placeholder="Describe the environmental issues..."
+                  rows={3}
+                  data-testid="textarea-environmental-description"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
       <FormField
         control={form.control}
         name="businessPlanSummary"
@@ -1164,6 +1695,609 @@ export default function CommercialSubmissionPage() {
   );
 
   const renderStep3 = () => (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-sm font-semibold mb-3 text-foreground">Income & Expenses</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="currentAnnualDebtService"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Current Annual Debt Service ($)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                    data-testid="input-current-annual-debt-service"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="marketRentPsf"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Market Rent PSF ($)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                    data-testid="input-market-rent-psf"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="propertyTaxesAnnual"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Property Taxes Annual ($)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                    data-testid="input-property-taxes-annual"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="insuranceAnnual"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Insurance Annual ($)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                    data-testid="input-insurance-annual"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+      </div>
+
+      {watchedPropertyType === "MULTIFAMILY" && (
+        <div className="pt-4 border-t">
+          <h3 className="text-sm font-semibold mb-3 text-foreground">Unit Mix</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="numberOfUnits"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Number of Units</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      value={field.value ?? ""}
+                      onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                      data-testid="input-number-of-units"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="unitMixStudios"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Studios</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      value={field.value ?? ""}
+                      onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                      data-testid="input-unit-mix-studios"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="unitMix1br"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>1 Bedroom</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      value={field.value ?? ""}
+                      onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                      data-testid="input-unit-mix-1br"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="unitMix2br"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>2 Bedroom</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      value={field.value ?? ""}
+                      onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                      data-testid="input-unit-mix-2br"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="unitMix3br"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>3+ Bedroom</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      value={field.value ?? ""}
+                      onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                      data-testid="input-unit-mix-3br"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="averageRent"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Average Rent ($)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      value={field.value ?? ""}
+                      onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                      data-testid="input-average-rent"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="marketRent"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Market Rent ($)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      value={field.value ?? ""}
+                      onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                      data-testid="input-market-rent"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        </div>
+      )}
+
+      {(watchedPropertyType === "OFFICE" || watchedPropertyType === "RETAIL" || watchedPropertyType === "INDUSTRIAL") && (
+        <div className="pt-4 border-t">
+          <h3 className="text-sm font-semibold mb-3 text-foreground">Tenant Information</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="numberOfTenants"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Number of Tenants</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      value={field.value ?? ""}
+                      onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                      data-testid="input-number-of-tenants"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="largestTenant"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Largest Tenant</FormLabel>
+                  <FormControl>
+                    <Input {...field} placeholder="Tenant name" data-testid="input-largest-tenant" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="largestTenantPercent"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Largest Tenant % of Space</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      value={field.value ?? ""}
+                      onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                      data-testid="input-largest-tenant-percent"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="averageLeaseTermRemaining"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Avg Lease Term Remaining</FormLabel>
+                  <FormControl>
+                    <Input {...field} placeholder="e.g. 3 years" data-testid="input-average-lease-term-remaining" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="tenantCreditQuality"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tenant Credit Quality</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || ""}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-tenant-credit-quality">
+                        <SelectValue placeholder="Select quality" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="Investment Grade">Investment Grade</SelectItem>
+                      <SelectItem value="National">National</SelectItem>
+                      <SelectItem value="Regional">Regional</SelectItem>
+                      <SelectItem value="Local">Local</SelectItem>
+                      <SelectItem value="Mixed">Mixed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderStep4 = () => {
+    if (!isConstructionStep) {
+      return (
+        <div className="py-8 text-center">
+          <p className="text-muted-foreground" data-testid="text-construction-not-applicable">
+            This section is only applicable for construction or bridge loans.
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="totalProjectCost"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Total Project Cost ($)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                    data-testid="input-total-project-cost"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="landAcquisitionCost"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Land Acquisition Cost ($)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                    data-testid="input-land-acquisition-cost"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="hardCosts"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Hard Costs ($)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                    data-testid="input-hard-costs"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="softCosts"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Soft Costs ($)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                    data-testid="input-soft-costs"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="contingency"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Contingency ($)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                    data-testid="input-contingency"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="contingencyPercent"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Contingency %</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                    data-testid="input-contingency-percent"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="projectTimeline"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Project Timeline</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="e.g. 18 months" data-testid="input-project-timeline" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="constructionStartDate"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Construction Start Date</FormLabel>
+                <FormControl>
+                  <Input
+                    type="date"
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value || ""}
+                    onChange={(e) => field.onChange(e.target.value)}
+                    data-testid="input-construction-start-date"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="stabilizationDate"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Stabilization Date</FormLabel>
+                <FormControl>
+                  <Input
+                    type="date"
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value || ""}
+                    onChange={(e) => field.onChange(e.target.value)}
+                    data-testid="input-stabilization-date"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="generalContractor"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>General Contractor</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="Contractor name" data-testid="input-general-contractor" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="gcLicensedBonded"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>GC Licensed & Bonded</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value || ""}>
+                  <FormControl>
+                    <SelectTrigger data-testid="select-gc-licensed-bonded">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="Yes">Yes</SelectItem>
+                    <SelectItem value="No">No</SelectItem>
+                    <SelectItem value="Unknown">Unknown</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  const renderStep5 = () => (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <FormField
@@ -1268,10 +2402,505 @@ export default function CommercialSubmissionPage() {
           )}
         />
       </div>
+
+      <div className="pt-4 border-t">
+        <h3 className="text-sm font-semibold mb-3 text-foreground">Entity Information</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="entityName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Entity Name (optional)</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="Entity name" data-testid="input-entity-name" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="entityType"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Entity Type (optional)</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value || ""}>
+                  <FormControl>
+                    <SelectTrigger data-testid="select-entity-type">
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="LLC">LLC</SelectItem>
+                    <SelectItem value="LP">LP</SelectItem>
+                    <SelectItem value="Corp">Corp</SelectItem>
+                    <SelectItem value="Trust">Trust</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="entityDateEstablished"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Date Established (optional)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="date"
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value || ""}
+                    onChange={(e) => field.onChange(e.target.value)}
+                    data-testid="input-entity-date-established"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+        <div className="mt-4">
+          <FormField
+            control={form.control}
+            name="ownershipStructure"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Ownership Structure (optional)</FormLabel>
+                <FormControl>
+                  <Textarea
+                    {...field}
+                    placeholder="Describe the ownership structure..."
+                    rows={3}
+                    data-testid="textarea-ownership-structure"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+      </div>
+
+      <div className="pt-4 border-t">
+        <h3 className="text-sm font-semibold mb-3 text-foreground">Financial Background</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="sponsorCreditScore"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Credit Score Range (optional)</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value || ""}>
+                  <FormControl>
+                    <SelectTrigger data-testid="select-sponsor-credit-score">
+                      <SelectValue placeholder="Select range" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="Below 600">Below 600</SelectItem>
+                    <SelectItem value="600-649">600-649</SelectItem>
+                    <SelectItem value="650-699">650-699</SelectItem>
+                    <SelectItem value="700-749">700-749</SelectItem>
+                    <SelectItem value="750+">750+</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="personalLiquidity"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Personal Liquidity ($) (optional)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                    data-testid="input-personal-liquidity"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="personalNetWorth"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Personal Net Worth ($) (optional)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                    data-testid="input-personal-net-worth"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="totalUnitsSfOwned"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Total Units/SF Owned (optional)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                    data-testid="input-total-units-sf-owned"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="currentPortfolioValue"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Current Portfolio Value ($) (optional)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                    data-testid="input-current-portfolio-value"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="similarDealsLast3Years"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Similar Deals Last 3 Years (optional)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    name={field.name}
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                    data-testid="input-similar-deals-last-3-years"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+      </div>
+
+      <div className="pt-4 border-t">
+        <h3 className="text-sm font-semibold mb-3 text-foreground">Legal / Credit History</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="everDefaulted"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Ever Defaulted on a Loan?</FormLabel>
+                <Select
+                  onValueChange={(v) => field.onChange(v === "true")}
+                  value={field.value ? "true" : "false"}
+                >
+                  <FormControl>
+                    <SelectTrigger data-testid="select-ever-defaulted">
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="true">Yes</SelectItem>
+                    <SelectItem value="false">No</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="currentLitigation"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Current Litigation?</FormLabel>
+                <Select
+                  onValueChange={(v) => field.onChange(v === "true")}
+                  value={field.value ? "true" : "false"}
+                >
+                  <FormControl>
+                    <SelectTrigger data-testid="select-current-litigation">
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="true">Yes</SelectItem>
+                    <SelectItem value="false">No</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="bankruptcyLast7Years"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Bankruptcy Last 7 Years?</FormLabel>
+                <Select
+                  onValueChange={(v) => field.onChange(v === "true")}
+                  value={field.value ? "true" : "false"}
+                >
+                  <FormControl>
+                    <SelectTrigger data-testid="select-bankruptcy-last-7-years">
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="true">Yes</SelectItem>
+                    <SelectItem value="false">No</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+        {watchedEverDefaulted && (
+          <div className="mt-4">
+            <FormField
+              control={form.control}
+              name="defaultExplanation"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Default Explanation</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      {...field}
+                      placeholder="Please explain the default..."
+                      rows={3}
+                      data-testid="textarea-default-explanation"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        )}
+        {watchedCurrentLitigation && (
+          <div className="mt-4">
+            <FormField
+              control={form.control}
+              name="litigationExplanation"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Litigation Explanation</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      {...field}
+                      placeholder="Please explain the litigation..."
+                      rows={3}
+                      data-testid="textarea-litigation-explanation"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        )}
+        {watchedBankruptcyLast7Years && (
+          <div className="mt-4">
+            <FormField
+              control={form.control}
+              name="bankruptcyExplanation"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Bankruptcy Explanation</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      {...field}
+                      placeholder="Please explain the bankruptcy..."
+                      rows={3}
+                      data-testid="textarea-bankruptcy-explanation"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 
-  const renderStep4 = () => {
+  const renderStep6 = () => (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <FormField
+          control={form.control}
+          name="currentLender"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Current Lender (optional)</FormLabel>
+              <FormControl>
+                <Input {...field} placeholder="Lender name" data-testid="input-current-lender" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="currentLoanBalance"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Current Loan Balance ($)</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  placeholder="0"
+                  name={field.name}
+                  ref={field.ref}
+                  onBlur={field.onBlur}
+                  value={field.value ?? ""}
+                  onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                  data-testid="input-current-loan-balance"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="currentInterestRate"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Current Interest Rate (%)</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  placeholder="0"
+                  name={field.name}
+                  ref={field.ref}
+                  onBlur={field.onBlur}
+                  value={field.value ?? ""}
+                  onChange={(e) => field.onChange(e.target.value === "" ? "" : e.target.value)}
+                  data-testid="input-current-interest-rate"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="loanMaturityDate"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Loan Maturity Date</FormLabel>
+              <FormControl>
+                <Input
+                  type="date"
+                  name={field.name}
+                  ref={field.ref}
+                  onBlur={field.onBlur}
+                  value={field.value || ""}
+                  onChange={(e) => field.onChange(e.target.value)}
+                  data-testid="input-loan-maturity-date"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="prepaymentPenalty"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Prepayment Penalty</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value || ""}>
+                <FormControl>
+                  <SelectTrigger data-testid="select-prepayment-penalty">
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="None">None</SelectItem>
+                  <SelectItem value="Yield Maintenance">Yield Maintenance</SelectItem>
+                  <SelectItem value="Defeasance">Defeasance</SelectItem>
+                  <SelectItem value="Step-Down">Step-Down</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
+      <FormField
+        control={form.control}
+        name="additionalNotes"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Additional Notes (optional)</FormLabel>
+            <FormControl>
+              <Textarea
+                {...field}
+                placeholder="Any additional information about existing debt..."
+                rows={4}
+                data-testid="textarea-additional-notes"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    </div>
+  );
+
+  const renderStep7 = () => {
     const requiredDocs = getRequiredDocTypes();
     const optionalDocs = getOptionalDocTypes();
 
@@ -1418,11 +3047,10 @@ export default function CommercialSubmissionPage() {
     );
   };
 
-  const renderStep5 = () => {
+  const renderStep8 = () => {
     const values = form.getValues();
     const requiredDocs = getRequiredDocTypes();
     const missingDocs = requiredDocs.filter((dt) => !uploadedDocs.some((d) => d.docType === dt));
-    const canSubmit = Object.keys(form.formState.errors).length === 0 && missingDocs.length === 0;
 
     return (
       <div className="space-y-6">
@@ -1457,7 +3085,7 @@ export default function CommercialSubmissionPage() {
         </div>
 
         <div className="border rounded-md p-4 space-y-4">
-          <h3 className="text-sm font-semibold text-foreground">Deal Type</h3>
+          <h3 className="text-sm font-semibold text-foreground">Deal Terms</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
             <div>
               <span className="text-muted-foreground">Loan Type:</span>{" "}
@@ -1483,6 +3111,24 @@ export default function CommercialSubmissionPage() {
               <span className="text-muted-foreground">Close Date:</span>{" "}
               <span data-testid="review-close-date">{values.desiredCloseDate}</span>
             </div>
+            {values.loanPurpose && (
+              <div>
+                <span className="text-muted-foreground">Loan Purpose:</span>{" "}
+                <span data-testid="review-loan-purpose">{values.loanPurpose}</span>
+              </div>
+            )}
+            {values.requestedLoanTerm && (
+              <div>
+                <span className="text-muted-foreground">Loan Term:</span>{" "}
+                <span data-testid="review-loan-term">{values.requestedLoanTerm}</span>
+              </div>
+            )}
+            {values.closingTimeline && (
+              <div>
+                <span className="text-muted-foreground">Closing Timeline:</span>{" "}
+                <span data-testid="review-closing-timeline">{values.closingTimeline}</span>
+              </div>
+            )}
             {values.loanType === "BRIDGE" && (
               <>
                 <div>
@@ -1513,6 +3159,12 @@ export default function CommercialSubmissionPage() {
               <span className="text-muted-foreground">City/State/ZIP:</span>{" "}
               <span data-testid="review-city-state-zip">{values.city}, {values.state} {values.zip}</span>
             </div>
+            {values.county && (
+              <div>
+                <span className="text-muted-foreground">County:</span>{" "}
+                <span data-testid="review-county">{values.county}</span>
+              </div>
+            )}
             <div>
               <span className="text-muted-foreground">Property Type:</span>{" "}
               <span data-testid="review-property-type">{values.propertyType}</span>
@@ -1533,11 +3185,91 @@ export default function CommercialSubmissionPage() {
               <span className="text-muted-foreground">CapEx Budget:</span>{" "}
               <span data-testid="review-capex">{formatCurrency(values.capexBudgetTotal)}</span>
             </div>
+            {values.propertyCondition && (
+              <div>
+                <span className="text-muted-foreground">Condition:</span>{" "}
+                <span data-testid="review-property-condition">{values.propertyCondition}</span>
+              </div>
+            )}
+            {typeof values.currentOccupancy === "number" && (
+              <div>
+                <span className="text-muted-foreground">Occupancy %:</span>{" "}
+                <span data-testid="review-current-occupancy">{values.currentOccupancy}%</span>
+              </div>
+            )}
+            {values.environmentalIssues && (
+              <div className="md:col-span-2">
+                <span className="text-muted-foreground">Environmental Issues:</span>{" "}
+                <span data-testid="review-environmental">{values.environmentalDescription || "Yes"}</span>
+              </div>
+            )}
           </div>
         </div>
 
         <div className="border rounded-md p-4 space-y-4">
-          <h3 className="text-sm font-semibold text-foreground">Sponsor Experience</h3>
+          <h3 className="text-sm font-semibold text-foreground">Financial Details</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+            {typeof values.propertyTaxesAnnual === "number" && (
+              <div>
+                <span className="text-muted-foreground">Property Taxes:</span>{" "}
+                <span data-testid="review-property-taxes">{formatCurrency(values.propertyTaxesAnnual)}</span>
+              </div>
+            )}
+            {typeof values.insuranceAnnual === "number" && (
+              <div>
+                <span className="text-muted-foreground">Insurance:</span>{" "}
+                <span data-testid="review-insurance">{formatCurrency(values.insuranceAnnual)}</span>
+              </div>
+            )}
+            {typeof values.currentAnnualDebtService === "number" && (
+              <div>
+                <span className="text-muted-foreground">Annual Debt Service:</span>{" "}
+                <span data-testid="review-debt-service">{formatCurrency(values.currentAnnualDebtService)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {isConstructionStep && (
+          <div className="border rounded-md p-4 space-y-4">
+            <h3 className="text-sm font-semibold text-foreground">Construction Budget</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+              {typeof values.totalProjectCost === "number" && (
+                <div>
+                  <span className="text-muted-foreground">Total Project Cost:</span>{" "}
+                  <span data-testid="review-total-project-cost">{formatCurrency(values.totalProjectCost)}</span>
+                </div>
+              )}
+              {typeof values.hardCosts === "number" && (
+                <div>
+                  <span className="text-muted-foreground">Hard Costs:</span>{" "}
+                  <span data-testid="review-hard-costs">{formatCurrency(values.hardCosts)}</span>
+                </div>
+              )}
+              {typeof values.softCosts === "number" && (
+                <div>
+                  <span className="text-muted-foreground">Soft Costs:</span>{" "}
+                  <span data-testid="review-soft-costs">{formatCurrency(values.softCosts)}</span>
+                </div>
+              )}
+              {values.generalContractor && (
+                <div>
+                  <span className="text-muted-foreground">General Contractor:</span>{" "}
+                  <span data-testid="review-general-contractor">{values.generalContractor}</span>
+                </div>
+              )}
+              {values.projectTimeline && (
+                <div>
+                  <span className="text-muted-foreground">Timeline:</span>{" "}
+                  <span data-testid="review-project-timeline">{values.projectTimeline}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="border rounded-md p-4 space-y-4">
+          <h3 className="text-sm font-semibold text-foreground">Sponsor & Entity</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
             <div>
               <span className="text-muted-foreground">Sponsor:</span>{" "}
@@ -1559,8 +3291,82 @@ export default function CommercialSubmissionPage() {
               <span className="text-muted-foreground">Liquidity:</span>{" "}
               <span data-testid="review-liquidity">{formatCurrency(values.liquidity)}</span>
             </div>
+            {values.entityName && (
+              <div>
+                <span className="text-muted-foreground">Entity:</span>{" "}
+                <span data-testid="review-entity-name">{values.entityName}</span>
+              </div>
+            )}
+            {values.entityType && (
+              <div>
+                <span className="text-muted-foreground">Entity Type:</span>{" "}
+                <span data-testid="review-entity-type">{values.entityType}</span>
+              </div>
+            )}
+            {values.sponsorCreditScore && (
+              <div>
+                <span className="text-muted-foreground">Credit Score:</span>{" "}
+                <span data-testid="review-credit-score">{values.sponsorCreditScore}</span>
+              </div>
+            )}
+            {values.everDefaulted && (
+              <div className="md:col-span-2">
+                <span className="text-muted-foreground">Default History:</span>{" "}
+                <span data-testid="review-default-history">Yes - {values.defaultExplanation || "No details"}</span>
+              </div>
+            )}
+            {values.currentLitigation && (
+              <div className="md:col-span-2">
+                <span className="text-muted-foreground">Litigation:</span>{" "}
+                <span data-testid="review-litigation">Yes - {values.litigationExplanation || "No details"}</span>
+              </div>
+            )}
+            {values.bankruptcyLast7Years && (
+              <div className="md:col-span-2">
+                <span className="text-muted-foreground">Bankruptcy:</span>{" "}
+                <span data-testid="review-bankruptcy">Yes - {values.bankruptcyExplanation || "No details"}</span>
+              </div>
+            )}
           </div>
         </div>
+
+        {(values.currentLender || typeof values.currentLoanBalance === "number") && (
+          <div className="border rounded-md p-4 space-y-4">
+            <h3 className="text-sm font-semibold text-foreground">Existing Debt</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+              {values.currentLender && (
+                <div>
+                  <span className="text-muted-foreground">Current Lender:</span>{" "}
+                  <span data-testid="review-current-lender">{values.currentLender}</span>
+                </div>
+              )}
+              {typeof values.currentLoanBalance === "number" && (
+                <div>
+                  <span className="text-muted-foreground">Loan Balance:</span>{" "}
+                  <span data-testid="review-loan-balance">{formatCurrency(values.currentLoanBalance)}</span>
+                </div>
+              )}
+              {typeof values.currentInterestRate === "number" && (
+                <div>
+                  <span className="text-muted-foreground">Interest Rate:</span>{" "}
+                  <span data-testid="review-current-rate">{values.currentInterestRate}%</span>
+                </div>
+              )}
+              {values.loanMaturityDate && (
+                <div>
+                  <span className="text-muted-foreground">Maturity Date:</span>{" "}
+                  <span data-testid="review-maturity-date">{values.loanMaturityDate}</span>
+                </div>
+              )}
+              {values.prepaymentPenalty && (
+                <div>
+                  <span className="text-muted-foreground">Prepayment Penalty:</span>{" "}
+                  <span data-testid="review-prepayment-penalty">{values.prepaymentPenalty}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="border rounded-md p-4 space-y-4">
           <h3 className="text-sm font-semibold text-foreground">Documents</h3>
@@ -1595,8 +3401,11 @@ export default function CommercialSubmissionPage() {
   const stepTitles = [
     { title: "Submitter Information", description: "Tell us about yourself and your role on this deal." },
     { title: "Deal Type & Terms", description: "Specify the loan type and requested terms." },
-    { title: "Property Details", description: "Provide details about the subject property." },
-    { title: "Sponsor Experience", description: "Tell us about the primary sponsor's background." },
+    { title: "Property Details & Condition", description: "Provide details about the subject property." },
+    { title: "Financial Details", description: "Income, expenses, and tenant information." },
+    { title: "Construction Budget", description: "Budget details for construction or bridge loans." },
+    { title: "Sponsor & Entity", description: "Tell us about the sponsor, entity, and background." },
+    { title: "Existing Debt", description: "Details about any existing debt on the property." },
     { title: "Document Uploads", description: "Upload the required supporting documents." },
     { title: "Review & Submit", description: "Review all information and submit your deal." },
   ];
@@ -1609,6 +3418,9 @@ export default function CommercialSubmissionPage() {
       case 3: return renderStep3();
       case 4: return renderStep4();
       case 5: return renderStep5();
+      case 6: return renderStep6();
+      case 7: return renderStep7();
+      case 8: return renderStep8();
       default: return null;
     }
   };
@@ -1645,7 +3457,7 @@ export default function CommercialSubmissionPage() {
               Back
             </Button>
 
-            {currentStep < 5 ? (
+            {currentStep < 8 ? (
               <Button onClick={handleNext} disabled={isSubmitting} data-testid="button-next">
                 Next
                 <ArrowRight className="w-4 h-4 ml-1" />
