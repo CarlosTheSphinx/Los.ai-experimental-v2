@@ -24,8 +24,19 @@ import {
   type DocumentReviewResult, type InsertDocumentReviewResult,
   type ProgramReviewRule, type InsertProgramReviewRule,
   type CreditPolicy, type InsertCreditPolicy,
+  submissionCriteria, submissionSponsors, submissionFields, submissionFieldResponses,
+  submissionDocumentRequirements, submissionReviewRules, submissionAiReviews, submissionNotes, submissionNotifications,
+  type SubmissionCriteria, type InsertSubmissionCriteria,
+  type SubmissionSponsor, type InsertSubmissionSponsor,
+  type SubmissionField, type InsertSubmissionField,
+  type SubmissionFieldResponse, type InsertSubmissionFieldResponse,
+  type SubmissionDocumentRequirement, type InsertSubmissionDocumentRequirement,
+  type SubmissionReviewRule, type InsertSubmissionReviewRule,
+  type SubmissionAiReview, type InsertSubmissionAiReview,
+  type SubmissionNote, type InsertSubmissionNote,
+  type SubmissionNotification, type InsertSubmissionNotification,
 } from "@shared/schema";
-import { desc, eq, and, gt, like, sql, asc, or, isNull, count } from "drizzle-orm";
+import { desc, eq, and, gt, like, sql, asc, or, isNull, count, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -94,6 +105,61 @@ export interface IStorage {
   deleteReviewRule(id: number): Promise<void>;
   deleteReviewRulesByProgramId(programId: number): Promise<void>;
   deleteReviewRulesByDocumentTemplateId(documentTemplateId: number): Promise<void>;
+
+  // Submission Criteria CRUD
+  getSubmissionCriteria(): Promise<SubmissionCriteria[]>;
+  getSubmissionCriteriaByType(type: string): Promise<SubmissionCriteria | undefined>;
+  createSubmissionCriteria(data: InsertSubmissionCriteria): Promise<SubmissionCriteria>;
+  updateSubmissionCriteria(id: number, data: Partial<InsertSubmissionCriteria>): Promise<SubmissionCriteria>;
+  deleteSubmissionCriteria(id: number): Promise<void>;
+
+  // Submission Sponsors CRUD
+  getSubmissionSponsorsBySubmissionId(submissionId: number): Promise<SubmissionSponsor[]>;
+  createSubmissionSponsor(data: InsertSubmissionSponsor): Promise<SubmissionSponsor>;
+  deleteSubmissionSponsor(id: number): Promise<void>;
+  deleteSubmissionSponsorsBySubmissionId(submissionId: number): Promise<void>;
+
+  // Submission Fields (Admin custom questions) CRUD
+  getSubmissionFields(dealType?: string): Promise<SubmissionField[]>;
+  getSubmissionFieldById(id: number): Promise<SubmissionField | undefined>;
+  createSubmissionField(data: InsertSubmissionField): Promise<SubmissionField>;
+  updateSubmissionField(id: number, data: Partial<InsertSubmissionField>): Promise<SubmissionField>;
+  deleteSubmissionField(id: number): Promise<void>;
+
+  // Submission Field Responses CRUD
+  getSubmissionFieldResponses(submissionId: number): Promise<SubmissionFieldResponse[]>;
+  createSubmissionFieldResponse(data: InsertSubmissionFieldResponse): Promise<SubmissionFieldResponse>;
+  deleteSubmissionFieldResponsesBySubmissionId(submissionId: number): Promise<void>;
+
+  // Submission Document Requirements CRUD
+  getSubmissionDocumentRequirements(dealType?: string): Promise<SubmissionDocumentRequirement[]>;
+  getSubmissionDocumentRequirementById(id: number): Promise<SubmissionDocumentRequirement | undefined>;
+  createSubmissionDocumentRequirement(data: InsertSubmissionDocumentRequirement): Promise<SubmissionDocumentRequirement>;
+  updateSubmissionDocumentRequirement(id: number, data: Partial<InsertSubmissionDocumentRequirement>): Promise<SubmissionDocumentRequirement>;
+  deleteSubmissionDocumentRequirement(id: number): Promise<void>;
+
+  // Submission Review Rules CRUD
+  getSubmissionReviewRules(category?: string): Promise<SubmissionReviewRule[]>;
+  getSubmissionReviewRuleById(id: number): Promise<SubmissionReviewRule | undefined>;
+  createSubmissionReviewRule(data: InsertSubmissionReviewRule): Promise<SubmissionReviewRule>;
+  updateSubmissionReviewRule(id: number, data: Partial<InsertSubmissionReviewRule>): Promise<SubmissionReviewRule>;
+  deleteSubmissionReviewRule(id: number): Promise<void>;
+
+  // Submission AI Reviews CRUD
+  getSubmissionAiReviews(submissionId: number): Promise<SubmissionAiReview[]>;
+  createSubmissionAiReview(data: InsertSubmissionAiReview): Promise<SubmissionAiReview>;
+
+  // Submission Notes CRUD
+  getSubmissionNotes(submissionId: number): Promise<SubmissionNote[]>;
+  createSubmissionNote(data: InsertSubmissionNote): Promise<SubmissionNote>;
+
+  // Submission Notifications CRUD
+  getSubmissionNotifications(submissionId: number): Promise<SubmissionNotification[]>;
+  createSubmissionNotification(data: InsertSubmissionNotification): Promise<SubmissionNotification>;
+
+  // Enhanced commercial submission methods
+  updateCommercialSubmission(id: number, data: Partial<CommercialSubmission>): Promise<CommercialSubmission | undefined>;
+  getCommercialSubmissionsByStatus(statuses: string[]): Promise<CommercialSubmission[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1056,6 +1122,218 @@ export class DatabaseStorage implements IStorage {
 
   async deleteReviewRulesByCreditPolicyId(creditPolicyId: number): Promise<void> {
     await db.delete(programReviewRules).where(eq(programReviewRules.creditPolicyId, creditPolicyId));
+  }
+
+  // Submission Criteria CRUD
+  async getSubmissionCriteria(): Promise<SubmissionCriteria[]> {
+    return await db.select().from(submissionCriteria).orderBy(asc(submissionCriteria.criteriaType));
+  }
+
+  async getSubmissionCriteriaByType(type: string): Promise<SubmissionCriteria | undefined> {
+    const [result] = await db.select().from(submissionCriteria).where(eq(submissionCriteria.criteriaType, type));
+    return result;
+  }
+
+  async createSubmissionCriteria(data: InsertSubmissionCriteria): Promise<SubmissionCriteria> {
+    const [created] = await db.insert(submissionCriteria).values(data).returning();
+    return created;
+  }
+
+  async updateSubmissionCriteria(id: number, data: Partial<InsertSubmissionCriteria>): Promise<SubmissionCriteria> {
+    const [updated] = await db.update(submissionCriteria)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(submissionCriteria.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteSubmissionCriteria(id: number): Promise<void> {
+    await db.delete(submissionCriteria).where(eq(submissionCriteria.id, id));
+  }
+
+  // Submission Sponsors CRUD
+  async getSubmissionSponsorsBySubmissionId(submissionId: number): Promise<SubmissionSponsor[]> {
+    return await db.select().from(submissionSponsors).where(eq(submissionSponsors.submissionId, submissionId));
+  }
+
+  async createSubmissionSponsor(data: InsertSubmissionSponsor): Promise<SubmissionSponsor> {
+    const [created] = await db.insert(submissionSponsors).values(data).returning();
+    return created;
+  }
+
+  async deleteSubmissionSponsor(id: number): Promise<void> {
+    await db.delete(submissionSponsors).where(eq(submissionSponsors.id, id));
+  }
+
+  async deleteSubmissionSponsorsBySubmissionId(submissionId: number): Promise<void> {
+    await db.delete(submissionSponsors).where(eq(submissionSponsors.submissionId, submissionId));
+  }
+
+  // Submission Fields CRUD
+  async getSubmissionFields(dealType?: string): Promise<SubmissionField[]> {
+    if (dealType) {
+      return await db.select().from(submissionFields)
+        .where(or(
+          eq(submissionFields.appliesToDealTypes, 'all'),
+          sql`${submissionFields.appliesToDealTypes} LIKE ${'%' + dealType + '%'}`
+        ))
+        .orderBy(asc(submissionFields.fieldOrder));
+    }
+    return await db.select().from(submissionFields).orderBy(asc(submissionFields.fieldOrder));
+  }
+
+  async getSubmissionFieldById(id: number): Promise<SubmissionField | undefined> {
+    const [field] = await db.select().from(submissionFields).where(eq(submissionFields.id, id));
+    return field;
+  }
+
+  async createSubmissionField(data: InsertSubmissionField): Promise<SubmissionField> {
+    const [created] = await db.insert(submissionFields).values(data).returning();
+    return created;
+  }
+
+  async updateSubmissionField(id: number, data: Partial<InsertSubmissionField>): Promise<SubmissionField> {
+    const [updated] = await db.update(submissionFields)
+      .set(data)
+      .where(eq(submissionFields.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteSubmissionField(id: number): Promise<void> {
+    await db.delete(submissionFields).where(eq(submissionFields.id, id));
+  }
+
+  // Submission Field Responses CRUD
+  async getSubmissionFieldResponses(submissionId: number): Promise<SubmissionFieldResponse[]> {
+    return await db.select().from(submissionFieldResponses).where(eq(submissionFieldResponses.submissionId, submissionId));
+  }
+
+  async createSubmissionFieldResponse(data: InsertSubmissionFieldResponse): Promise<SubmissionFieldResponse> {
+    const [created] = await db.insert(submissionFieldResponses).values(data).returning();
+    return created;
+  }
+
+  async deleteSubmissionFieldResponsesBySubmissionId(submissionId: number): Promise<void> {
+    await db.delete(submissionFieldResponses).where(eq(submissionFieldResponses.submissionId, submissionId));
+  }
+
+  // Submission Document Requirements CRUD
+  async getSubmissionDocumentRequirements(dealType?: string): Promise<SubmissionDocumentRequirement[]> {
+    if (dealType) {
+      return await db.select().from(submissionDocumentRequirements)
+        .where(or(
+          eq(submissionDocumentRequirements.dealType, 'all'),
+          eq(submissionDocumentRequirements.dealType, dealType)
+        ))
+        .orderBy(asc(submissionDocumentRequirements.displayOrder));
+    }
+    return await db.select().from(submissionDocumentRequirements).orderBy(asc(submissionDocumentRequirements.displayOrder));
+  }
+
+  async getSubmissionDocumentRequirementById(id: number): Promise<SubmissionDocumentRequirement | undefined> {
+    const [req] = await db.select().from(submissionDocumentRequirements).where(eq(submissionDocumentRequirements.id, id));
+    return req;
+  }
+
+  async createSubmissionDocumentRequirement(data: InsertSubmissionDocumentRequirement): Promise<SubmissionDocumentRequirement> {
+    const [created] = await db.insert(submissionDocumentRequirements).values(data).returning();
+    return created;
+  }
+
+  async updateSubmissionDocumentRequirement(id: number, data: Partial<InsertSubmissionDocumentRequirement>): Promise<SubmissionDocumentRequirement> {
+    const [updated] = await db.update(submissionDocumentRequirements)
+      .set(data)
+      .where(eq(submissionDocumentRequirements.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteSubmissionDocumentRequirement(id: number): Promise<void> {
+    await db.delete(submissionDocumentRequirements).where(eq(submissionDocumentRequirements.id, id));
+  }
+
+  // Submission Review Rules CRUD
+  async getSubmissionReviewRules(category?: string): Promise<SubmissionReviewRule[]> {
+    if (category) {
+      return await db.select().from(submissionReviewRules)
+        .where(eq(submissionReviewRules.ruleCategory, category))
+        .orderBy(asc(submissionReviewRules.rulePriority));
+    }
+    return await db.select().from(submissionReviewRules).orderBy(asc(submissionReviewRules.rulePriority));
+  }
+
+  async getSubmissionReviewRuleById(id: number): Promise<SubmissionReviewRule | undefined> {
+    const [rule] = await db.select().from(submissionReviewRules).where(eq(submissionReviewRules.id, id));
+    return rule;
+  }
+
+  async createSubmissionReviewRule(data: InsertSubmissionReviewRule): Promise<SubmissionReviewRule> {
+    const [created] = await db.insert(submissionReviewRules).values(data).returning();
+    return created;
+  }
+
+  async updateSubmissionReviewRule(id: number, data: Partial<InsertSubmissionReviewRule>): Promise<SubmissionReviewRule> {
+    const [updated] = await db.update(submissionReviewRules)
+      .set(data)
+      .where(eq(submissionReviewRules.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteSubmissionReviewRule(id: number): Promise<void> {
+    await db.delete(submissionReviewRules).where(eq(submissionReviewRules.id, id));
+  }
+
+  // Submission AI Reviews CRUD
+  async getSubmissionAiReviews(submissionId: number): Promise<SubmissionAiReview[]> {
+    return await db.select().from(submissionAiReviews)
+      .where(eq(submissionAiReviews.submissionId, submissionId))
+      .orderBy(desc(submissionAiReviews.createdAt));
+  }
+
+  async createSubmissionAiReview(data: InsertSubmissionAiReview): Promise<SubmissionAiReview> {
+    const [created] = await db.insert(submissionAiReviews).values(data).returning();
+    return created;
+  }
+
+  // Submission Notes CRUD
+  async getSubmissionNotes(submissionId: number): Promise<SubmissionNote[]> {
+    return await db.select().from(submissionNotes)
+      .where(eq(submissionNotes.submissionId, submissionId))
+      .orderBy(desc(submissionNotes.createdAt));
+  }
+
+  async createSubmissionNote(data: InsertSubmissionNote): Promise<SubmissionNote> {
+    const [created] = await db.insert(submissionNotes).values(data).returning();
+    return created;
+  }
+
+  // Submission Notifications CRUD
+  async getSubmissionNotifications(submissionId: number): Promise<SubmissionNotification[]> {
+    return await db.select().from(submissionNotifications)
+      .where(eq(submissionNotifications.submissionId, submissionId))
+      .orderBy(desc(submissionNotifications.sentAt));
+  }
+
+  async createSubmissionNotification(data: InsertSubmissionNotification): Promise<SubmissionNotification> {
+    const [created] = await db.insert(submissionNotifications).values(data).returning();
+    return created;
+  }
+
+  // Enhanced commercial submission methods
+  async updateCommercialSubmission(id: number, data: Partial<CommercialSubmission>): Promise<CommercialSubmission | undefined> {
+    const [updated] = await db.update(commercialSubmissions)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(commercialSubmissions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getCommercialSubmissionsByStatus(statuses: string[]): Promise<CommercialSubmission[]> {
+    return await db.select().from(commercialSubmissions)
+      .where(inArray(commercialSubmissions.status, statuses))
+      .orderBy(desc(commercialSubmissions.createdAt));
   }
 }
 

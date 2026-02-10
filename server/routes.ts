@@ -3,7 +3,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies } from "@shared/schema";
+import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema } from "@shared/schema";
 import { priceQuote, validateRuleset, SAMPLE_RTL_RULESET, SAMPLE_DSCR_RULESET, type PricingInputs, analyzeGuidelines, refineProposal } from "./pricing";
 import { getDocumentTemplatesForLoanType } from "./document-templates";
 import { eq, desc, asc, inArray, and, gt, gte, lte, sql, isNull, or } from "drizzle-orm";
@@ -12267,6 +12267,300 @@ Respond ONLY with valid JSON in this format:
       await objectStorageService.downloadObject(objectFile, res);
     } catch (error: any) {
       console.error("Error downloading commercial submission document:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ==================== COMMERCIAL SUBMISSION ADMIN CONFIG ROUTES ====================
+
+  // --- Submission Criteria (Pre-screener config) ---
+  app.get('/api/admin/commercial/criteria', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const criteria = await storage.getSubmissionCriteria();
+      res.json(criteria);
+    } catch (error: any) {
+      console.error('Error fetching submission criteria:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/admin/commercial/criteria', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const parsed = insertSubmissionCriteriaSchema.parse(req.body);
+      const created = await storage.createSubmissionCriteria(parsed);
+      res.status(201).json(created);
+    } catch (error: any) {
+      console.error('Error creating submission criteria:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch('/api/admin/commercial/criteria/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updated = await storage.updateSubmissionCriteria(id, req.body);
+      res.json(updated);
+    } catch (error: any) {
+      console.error('Error updating submission criteria:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete('/api/admin/commercial/criteria/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteSubmissionCriteria(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error deleting submission criteria:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // --- Submission Fields (Custom questions) ---
+  app.get('/api/admin/commercial/fields', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const fields = await storage.getSubmissionFields();
+      res.json(fields);
+    } catch (error: any) {
+      console.error('Error fetching submission fields:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/admin/commercial/fields', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const parsed = insertSubmissionFieldSchema.parse(req.body);
+      const created = await storage.createSubmissionField(parsed);
+      res.status(201).json(created);
+    } catch (error: any) {
+      console.error('Error creating submission field:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch('/api/admin/commercial/fields/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updated = await storage.updateSubmissionField(id, req.body);
+      res.json(updated);
+    } catch (error: any) {
+      console.error('Error updating submission field:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete('/api/admin/commercial/fields/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteSubmissionField(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error deleting submission field:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // --- Submission Document Requirements ---
+  app.get('/api/admin/commercial/document-requirements', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealType = req.query.dealType as string | undefined;
+      const requirements = await storage.getSubmissionDocumentRequirements(dealType);
+      res.json(requirements);
+    } catch (error: any) {
+      console.error('Error fetching document requirements:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/admin/commercial/document-requirements', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const parsed = insertSubmissionDocumentRequirementSchema.parse(req.body);
+      const created = await storage.createSubmissionDocumentRequirement(parsed);
+      res.status(201).json(created);
+    } catch (error: any) {
+      console.error('Error creating document requirement:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch('/api/admin/commercial/document-requirements/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updated = await storage.updateSubmissionDocumentRequirement(id, req.body);
+      res.json(updated);
+    } catch (error: any) {
+      console.error('Error updating document requirement:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete('/api/admin/commercial/document-requirements/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteSubmissionDocumentRequirement(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error deleting document requirement:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // --- Submission Review Rules (AI rules config) ---
+  app.get('/api/admin/commercial/review-rules', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const category = req.query.category as string | undefined;
+      const rules = await storage.getSubmissionReviewRules(category);
+      res.json(rules);
+    } catch (error: any) {
+      console.error('Error fetching review rules:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/admin/commercial/review-rules', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const parsed = insertSubmissionReviewRuleSchema.parse(req.body);
+      const created = await storage.createSubmissionReviewRule(parsed);
+      res.status(201).json(created);
+    } catch (error: any) {
+      console.error('Error creating review rule:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch('/api/admin/commercial/review-rules/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updated = await storage.updateSubmissionReviewRule(id, req.body);
+      res.json(updated);
+    } catch (error: any) {
+      console.error('Error updating review rule:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete('/api/admin/commercial/review-rules/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteSubmissionReviewRule(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error deleting review rule:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // --- Public criteria endpoint (broker-facing, requires login) ---
+  app.get('/api/commercial/criteria', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+      const criteria = await storage.getSubmissionCriteria();
+      const active = criteria.filter((c: any) => c.isActive !== false);
+      res.json(active);
+    } catch (error: any) {
+      console.error('Error fetching public criteria:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // --- Public document requirements endpoint (broker-facing, requires login) ---
+  app.get('/api/commercial/document-requirements', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+      const dealType = req.query.dealType as string | undefined;
+      const requirements = await storage.getSubmissionDocumentRequirements(dealType);
+      const active = requirements.filter((r: any) => r.isActive !== false);
+      res.json(active);
+    } catch (error: any) {
+      console.error('Error fetching public document requirements:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // --- Public custom fields endpoint (broker-facing, requires login) ---
+  app.get('/api/commercial/fields', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+      const dealType = req.query.dealType as string | undefined;
+      const fields = await storage.getSubmissionFields(dealType);
+      const active = fields.filter((f: any) => f.isActive !== false);
+      res.json(active);
+    } catch (error: any) {
+      console.error('Error fetching public fields:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // --- Enhanced commercial submission admin routes ---
+  app.patch('/api/admin/commercial/submissions/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updated = await storage.updateCommercialSubmission(id, req.body);
+      if (!updated) {
+        return res.status(404).json({ error: 'Submission not found' });
+      }
+      res.json(updated);
+    } catch (error: any) {
+      console.error('Error updating commercial submission:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/admin/commercial/submissions/:id/ai-reviews', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const submissionId = parseInt(req.params.id);
+      const reviews = await storage.getSubmissionAiReviews(submissionId);
+      res.json(reviews);
+    } catch (error: any) {
+      console.error('Error fetching AI reviews:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/admin/commercial/submissions/:id/notes', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const submissionId = parseInt(req.params.id);
+      const notes = await storage.getSubmissionNotes(submissionId);
+      res.json(notes);
+    } catch (error: any) {
+      console.error('Error fetching submission notes:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/admin/commercial/submissions/:id/notes', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const submissionId = parseInt(req.params.id);
+      const { noteText } = req.body;
+      if (!noteText) {
+        return res.status(400).json({ error: 'noteText is required' });
+      }
+      const note = await storage.createSubmissionNote({
+        submissionId,
+        adminUserId: req.user!.id,
+        noteText,
+      });
+      res.status(201).json(note);
+    } catch (error: any) {
+      console.error('Error creating submission note:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/admin/commercial/submissions/:id/sponsors', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const submissionId = parseInt(req.params.id);
+      const sponsors = await storage.getSubmissionSponsorsBySubmissionId(submissionId);
+      res.json(sponsors);
+    } catch (error: any) {
+      console.error('Error fetching submission sponsors:', error);
       res.status(500).json({ error: error.message });
     }
   });
