@@ -672,6 +672,10 @@ export default function ProjectDetail() {
                 <FileText className="h-4 w-4 mr-2" />
                 Required Documents
               </TabsTrigger>
+              <TabsTrigger value="tasks" data-testid="tab-tasks">
+                <CheckSquare className="h-4 w-4 mr-2" />
+                Your Tasks
+              </TabsTrigger>
               <TabsTrigger value="messages" data-testid="tab-messages">
                 <MessageSquare className="h-4 w-4 mr-2" />
                 Messages
@@ -787,6 +791,73 @@ export default function ProjectDetail() {
                   )}
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            <TabsContent value="tasks">
+              <div className="space-y-4">
+                {stages.map((stage) => {
+                  const borrowerTasks = stage.tasks.filter(t => t.visibleToBorrower);
+                  if (borrowerTasks.length === 0) return null;
+
+                  return (
+                    <Card key={stage.id}>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            {getStageIcon(stage.status)}
+                            <div>
+                              <CardTitle className="text-base">{stage.stageName} Tasks</CardTitle>
+                              <CardDescription>Tasks for you to complete in this stage</CardDescription>
+                            </div>
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {borrowerTasks.filter(t => t.status === 'completed').length}/{borrowerTasks.length} complete
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          {borrowerTasks.map((task) => (
+                            <div 
+                              key={task.id} 
+                              className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50"
+                            >
+                              {task.status === 'completed' 
+                                ? <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
+                                : <Circle className="h-5 w-5 text-muted-foreground shrink-0" />
+                              }
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={`text-sm ${task.status === 'completed' ? 'line-through text-muted-foreground' : ''}`}>
+                                    {task.taskTitle}
+                                  </span>
+                                  {getPriorityBadge(task.priority)}
+                                  {task.borrowerActionRequired && (
+                                    <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">Action Required</Badge>
+                                  )}
+                                </div>
+                                {task.completedAt && (
+                                  <div className="text-xs text-muted-foreground mt-0.5">
+                                    Completed {formatDateTime(task.completedAt)}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+                {stages.every(s => s.tasks.filter(t => t.visibleToBorrower).length === 0) && (
+                  <Card>
+                    <CardContent className="pt-6 text-center text-muted-foreground">
+                      <CheckSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p>No tasks assigned to you at this time.</p>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
             </TabsContent>
 
             <TabsContent value="messages">
