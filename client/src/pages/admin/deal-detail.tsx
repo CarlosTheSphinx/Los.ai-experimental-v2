@@ -747,6 +747,8 @@ export default function AdminDealDetail() {
   const [expandedReviewDocId, setExpandedReviewDocId] = useState<number | null>(null);
   const [rejectingDocId, setRejectingDocId] = useState<number | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [rejectingFindingKey, setRejectingFindingKey] = useState<string | null>(null);
+  const [findingRejectionReason, setFindingRejectionReason] = useState('');
 
   const { data: aiReviewsData, isLoading: aiReviewsLoading } = useQuery<{ reviews: any[] }>({
     queryKey: [`/api/admin/projects/${linkedProjectId}/ai-reviews`],
@@ -773,6 +775,23 @@ export default function AdminDealDetail() {
     onError: (error: any) => {
       setReviewingDocId(null);
       toast({ title: "AI Review Failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const overrideFindingMutation = useMutation({
+    mutationFn: async ({ reviewId, findingIndex, action, reason }: { reviewId: number; findingIndex: number; action: string; reason?: string }) => {
+      const res = await apiRequest('PATCH', `/api/admin/reviews/${reviewId}/findings/${findingIndex}/override`, { action, reason });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${linkedProjectId}/ai-reviews`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
+      setRejectingFindingKey(null);
+      setFindingRejectionReason('');
+      toast({ title: "Rule action saved" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to save action", description: error.message, variant: "destructive" });
     },
   });
 
@@ -1924,47 +1943,160 @@ export default function AdminDealDetail() {
                                   )}
                                   {docReview.findings && docReview.findings.length > 0 && (
                                     <div className="space-y-1.5">
-                                      {docReview.findings.map((finding: any, idx: number) => (
+                                      {docReview.findings.map((finding: any, idx: number) => {
+                                        const findingKey = `${docReview.id}-${idx}`;
+                                        const isOverridden = !!finding.overrideAction;
+                                        const showRejectInput = rejectingFindingKey === findingKey;
+                                        const canAct = (finding.status === 'fail' || finding.status === 'warning') && doc.status !== 'approved' && doc.status !== 'rejected';
+
+                                        return (
                                         <div key={idx} data-testid={`finding-row-${doc.id}-${idx}`} className={cn(
-                                          "flex items-start gap-2 p-2 rounded-md text-xs border",
-                                          finding.status === 'pass' && "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800",
-                                          finding.status === 'fail' && "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800",
-                                          finding.status === 'warning' && "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800",
-                                          finding.status === 'info' && "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800"
+                                          "p-2 rounded-md text-xs border",
+                                          !isOverridden && finding.status === 'pass' && "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800",
+                                          !isOverridden && finding.status === 'fail' && "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800",
+                                          !isOverridden && finding.status === 'warning' && "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800",
+                                          !isOverridden && finding.status === 'info' && "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800",
+                                          isOverridden && finding.overrideAction === 'override_accept' && "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800",
+                                          isOverridden && finding.overrideAction === 'manual_review' && "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800",
+                                          isOverridden && finding.overrideAction === 'reject' && "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800"
                                         )}>
-                                          <div className="flex-shrink-0 mt-0.5">
-                                            {finding.status === 'pass' ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> :
-                                             finding.status === 'fail' ? <XCircle className="h-3.5 w-3.5 text-red-600" /> :
-                                             finding.status === 'warning' ? <AlertCircle className="h-3.5 w-3.5 text-amber-600" /> :
-                                             <Circle className="h-3.5 w-3.5 text-blue-600" />}
-                                          </div>
-                                          <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-1.5 flex-wrap">
-                                              <span className="font-medium">{finding.ruleName || finding.title}</span>
-                                              {finding.severity && (
-                                                <Badge variant={finding.severity === 'fail' ? 'destructive' : finding.severity === 'warn' ? 'secondary' : 'outline'} className="text-[9px] px-1 py-0">
-                                                  {finding.severity === 'fail' ? 'Required' : finding.severity === 'warn' ? 'Warning' : 'Info'}
-                                                </Badge>
+                                          <div className="flex items-start gap-2">
+                                            <div className="flex-shrink-0 mt-0.5">
+                                              {isOverridden && finding.overrideAction === 'override_accept' ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> :
+                                               isOverridden && finding.overrideAction === 'manual_review' ? <AlertCircle className="h-3.5 w-3.5 text-amber-600" /> :
+                                               isOverridden && finding.overrideAction === 'reject' ? <XCircle className="h-3.5 w-3.5 text-red-600" /> :
+                                               finding.status === 'pass' ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> :
+                                               finding.status === 'fail' ? <XCircle className="h-3.5 w-3.5 text-red-600" /> :
+                                               finding.status === 'warning' ? <AlertCircle className="h-3.5 w-3.5 text-amber-600" /> :
+                                               <Circle className="h-3.5 w-3.5 text-blue-600" />}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-center gap-1.5 flex-wrap">
+                                                <span className="font-medium">{finding.ruleName || finding.title}</span>
+                                                {finding.severity && (
+                                                  <Badge variant={finding.severity === 'fail' ? 'destructive' : finding.severity === 'warn' ? 'secondary' : 'outline'} className="text-[9px] px-1 py-0">
+                                                    {finding.severity === 'fail' ? 'Required' : finding.severity === 'warn' ? 'Warning' : 'Info'}
+                                                  </Badge>
+                                                )}
+                                                {isOverridden && (
+                                                  <Badge variant={finding.overrideAction === 'override_accept' ? 'outline' : finding.overrideAction === 'reject' ? 'destructive' : 'secondary'} className="text-[9px] px-1 py-0">
+                                                    {finding.overrideAction === 'override_accept' ? 'Overridden' : finding.overrideAction === 'manual_review' ? 'Manual Review' : 'Rejected'}
+                                                  </Badge>
+                                                )}
+                                                {finding.ruleType && finding.ruleType !== 'general' && !isOverridden && (
+                                                  <Badge variant="outline" className="text-[9px] px-1 py-0">{finding.ruleType.replace('_', ' ')}</Badge>
+                                                )}
+                                                {!finding.ruleType && finding.category && !isOverridden && (
+                                                  <Badge variant="outline" className="text-[9px] px-1 py-0">{finding.category}</Badge>
+                                                )}
+                                              </div>
+                                              <p className="text-muted-foreground mt-0.5">{finding.detail}</p>
+                                              {finding.evidence && (
+                                                <div className="mt-1 p-1.5 rounded bg-background border text-[11px] italic text-muted-foreground">
+                                                  {finding.evidence}
+                                                </div>
                                               )}
-                                              {finding.ruleType && finding.ruleType !== 'general' && (
-                                                <Badge variant="outline" className="text-[9px] px-1 py-0">{finding.ruleType.replace('_', ' ')}</Badge>
+                                              {finding.pageReference && (
+                                                <span className="text-[10px] text-muted-foreground mt-0.5 inline-block">{finding.pageReference}</span>
                                               )}
-                                              {!finding.ruleType && finding.category && (
-                                                <Badge variant="outline" className="text-[9px] px-1 py-0">{finding.category}</Badge>
+                                              {isOverridden && finding.overrideReason && (
+                                                <div className="mt-1 p-1.5 rounded bg-background border text-[11px] text-muted-foreground">
+                                                  Reason: {finding.overrideReason}
+                                                </div>
                                               )}
                                             </div>
-                                            <p className="text-muted-foreground mt-0.5">{finding.detail}</p>
-                                            {finding.evidence && (
-                                              <div className="mt-1 p-1.5 rounded bg-background border text-[11px] italic text-muted-foreground">
-                                                {finding.evidence}
-                                              </div>
-                                            )}
-                                            {finding.pageReference && (
-                                              <span className="text-[10px] text-muted-foreground mt-0.5 inline-block">{finding.pageReference}</span>
-                                            )}
                                           </div>
+
+                                          {canAct && !isOverridden && !showRejectInput && (
+                                            <div className="flex items-center gap-1.5 mt-2 pt-1.5 border-t border-dashed justify-end flex-wrap">
+                                              <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-7 text-[11px]"
+                                                disabled={overrideFindingMutation.isPending}
+                                                onClick={() => overrideFindingMutation.mutate({ reviewId: docReview.id, findingIndex: idx, action: 'override_accept' })}
+                                                data-testid={`button-override-accept-${doc.id}-${idx}`}
+                                              >
+                                                <CheckCircle2 className="h-3 w-3 mr-1 text-emerald-600" />
+                                                Override & Accept
+                                              </Button>
+                                              <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-7 text-[11px]"
+                                                disabled={overrideFindingMutation.isPending}
+                                                onClick={() => overrideFindingMutation.mutate({ reviewId: docReview.id, findingIndex: idx, action: 'manual_review' })}
+                                                data-testid={`button-manual-review-${doc.id}-${idx}`}
+                                              >
+                                                <AlertCircle className="h-3 w-3 mr-1 text-amber-600" />
+                                                Review Manually
+                                              </Button>
+                                              <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-7 text-[11px]"
+                                                disabled={overrideFindingMutation.isPending}
+                                                onClick={() => { setRejectingFindingKey(findingKey); setFindingRejectionReason(''); }}
+                                                data-testid={`button-reject-finding-${doc.id}-${idx}`}
+                                              >
+                                                <XCircle className="h-3 w-3 mr-1 text-red-600" />
+                                                Reject
+                                              </Button>
+                                            </div>
+                                          )}
+
+                                          {showRejectInput && (
+                                            <div className="mt-2 pt-1.5 border-t border-dashed space-y-1.5">
+                                              <Textarea
+                                                placeholder="Rejection reason (will be included in borrower notifications)..."
+                                                value={findingRejectionReason}
+                                                onChange={(e) => setFindingRejectionReason(e.target.value)}
+                                                className="text-xs resize-none"
+                                                rows={2}
+                                                data-testid={`textarea-finding-reject-${doc.id}-${idx}`}
+                                              />
+                                              <div className="flex items-center gap-1.5 justify-end">
+                                                <Button
+                                                  size="sm"
+                                                  variant="ghost"
+                                                  className="h-7 text-[11px]"
+                                                  onClick={() => { setRejectingFindingKey(null); setFindingRejectionReason(''); }}
+                                                  data-testid={`button-cancel-finding-reject-${doc.id}-${idx}`}
+                                                >
+                                                  Cancel
+                                                </Button>
+                                                <Button
+                                                  size="sm"
+                                                  variant="destructive"
+                                                  className="h-7 text-[11px]"
+                                                  disabled={!findingRejectionReason.trim() || overrideFindingMutation.isPending}
+                                                  onClick={() => overrideFindingMutation.mutate({ reviewId: docReview.id, findingIndex: idx, action: 'reject', reason: findingRejectionReason.trim() })}
+                                                  data-testid={`button-confirm-finding-reject-${doc.id}-${idx}`}
+                                                >
+                                                  {overrideFindingMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <XCircle className="h-3 w-3 mr-1" />}
+                                                  Confirm Rejection
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {isOverridden && canAct && (
+                                            <div className="flex justify-end mt-1.5">
+                                              <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-6 text-[10px] text-muted-foreground"
+                                                disabled={overrideFindingMutation.isPending}
+                                                onClick={() => overrideFindingMutation.mutate({ reviewId: docReview.id, findingIndex: idx, action: 'clear' })}
+                                                data-testid={`button-undo-override-${doc.id}-${idx}`}
+                                              >
+                                                Change Decision
+                                              </Button>
+                                            </div>
+                                          )}
                                         </div>
-                                      ))}
+                                        );
+                                      })}
                                     </div>
                                   )}
                                   {doc.status !== 'approved' && doc.status !== 'rejected' && (

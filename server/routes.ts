@@ -5957,6 +5957,105 @@ export async function registerRoutes(
     }
   });
 
+  // Override/action on a specific AI review finding
+  app.patch('/api/admin/reviews/:reviewId/findings/:findingIndex/override', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const reviewId = parseInt(req.params.reviewId);
+      const findingIndex = parseInt(req.params.findingIndex);
+      const { action, reason } = req.body; // action: 'override_accept' | 'manual_review' | 'reject'
+
+      if (!['override_accept', 'manual_review', 'reject', 'clear'].includes(action)) {
+        return res.status(400).json({ error: 'Invalid action. Must be override_accept, manual_review, reject, or clear' });
+      }
+
+      const [review] = await db.select().from(documentReviewResults).where(eq(documentReviewResults.id, reviewId));
+      if (!review) {
+        return res.status(404).json({ error: 'Review not found' });
+      }
+
+      const findings: any[] = review.findings ? JSON.parse(review.findings as string) : [];
+      if (findingIndex < 0 || findingIndex >= findings.length) {
+        return res.status(400).json({ error: 'Invalid finding index' });
+      }
+
+      if (action === 'clear') {
+        delete findings[findingIndex].overrideAction;
+        delete findings[findingIndex].overrideReason;
+        delete findings[findingIndex].overriddenBy;
+        delete findings[findingIndex].overriddenAt;
+      } else {
+        findings[findingIndex].overrideAction = action;
+        findings[findingIndex].overrideReason = reason || null;
+        findings[findingIndex].overriddenBy = req.user!.id;
+        findings[findingIndex].overriddenAt = new Date().toISOString();
+      }
+
+      const failedFindings = findings.filter(f => f.status === 'fail');
+      const allFailedResolved = failedFindings.every(f => f.overrideAction);
+      const anyRejected = failedFindings.some(f => f.overrideAction === 'reject');
+      const anyManualReview = failedFindings.some(f => f.overrideAction === 'manual_review');
+
+      let newOverallStatus: string;
+      if (failedFindings.length === 0) {
+        newOverallStatus = 'pass';
+      } else if (allFailedResolved) {
+        if (anyRejected) {
+          newOverallStatus = 'fail';
+        } else if (anyManualReview) {
+          newOverallStatus = 'needs_review';
+        } else {
+          newOverallStatus = 'pass';
+        }
+      } else {
+        newOverallStatus = 'fail';
+      }
+
+      await db.update(documentReviewResults)
+        .set({ findings: JSON.stringify(findings), overallStatus: newOverallStatus })
+        .where(eq(documentReviewResults.id, reviewId));
+
+      if (action === 'reject' && reason) {
+        const [doc] = await db.select().from(dealDocuments).where(eq(dealDocuments.id, review.documentId));
+        if (doc) {
+          await db.update(dealDocuments)
+            .set({ status: 'rejected', reviewNotes: reason })
+            .where(eq(dealDocuments.id, review.documentId));
+
+          if (review.projectId) {
+            await storage.addProjectActivity({
+              projectId: review.projectId,
+              activityType: 'document_rejected',
+              activityDescription: `Document "${doc.documentName}" rejected — ${reason}`,
+              performedBy: req.user!.id,
+              metadata: JSON.stringify({ documentId: doc.id, rejectionReason: reason, fromAiReview: true }),
+            });
+          }
+        }
+      }
+
+      if (action === 'override_accept' && allFailedResolved && !anyRejected && !anyManualReview) {
+        const [doc] = await db.select().from(dealDocuments).where(eq(dealDocuments.id, review.documentId));
+        if (doc && doc.status !== 'approved') {
+          await db.update(dealDocuments)
+            .set({ status: 'approved', reviewNotes: 'All failed rules overridden and accepted' })
+            .where(eq(dealDocuments.id, review.documentId));
+        }
+      }
+
+      res.json({
+        success: true,
+        review: {
+          ...review,
+          findings,
+          overallStatus: newOverallStatus,
+        },
+      });
+    } catch (error: any) {
+      console.error('Override finding error:', error);
+      res.status(500).json({ error: 'Failed to override finding' });
+    }
+  });
+
   // Admin - Update deal stage
   app.patch('/api/admin/deals/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
