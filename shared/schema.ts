@@ -1783,11 +1783,97 @@ export const commercialSubmissions = pgTable("commercial_submissions", {
   netWorth: real("net_worth").notNull(),
   liquidity: real("liquidity").notNull(),
   adminNotes: text("admin_notes"),
+
+  county: varchar("county", { length: 100 }),
+  squareFootage: real("square_footage"),
+  currentOccupancy: real("current_occupancy"),
+  loanPurpose: varchar("loan_purpose", { length: 100 }),
+  requestedLoanTerm: integer("requested_loan_term"),
+  closingTimeline: varchar("closing_timeline", { length: 50 }),
+
+  currentAnnualDebtService: real("current_annual_debt_service"),
+  marketRentPsf: real("market_rent_psf"),
+  propertyTaxesAnnual: real("property_taxes_annual"),
+  insuranceAnnual: real("insurance_annual"),
+  ltvCalculated: real("ltv_calculated"),
+  dscrCalculated: real("dscr_calculated"),
+
+  totalProjectCost: real("total_project_cost"),
+  landAcquisitionCost: real("land_acquisition_cost"),
+  hardCosts: real("hard_costs"),
+  softCosts: real("soft_costs"),
+  contingency: real("contingency"),
+  contingencyPercent: real("contingency_percent"),
+  projectTimeline: integer("project_timeline"),
+  constructionStartDate: timestamp("construction_start_date"),
+  stabilizationDate: timestamp("stabilization_date"),
+  generalContractor: varchar("general_contractor", { length: 255 }),
+  gcLicensedBonded: boolean("gc_licensed_bonded"),
+
+  entityName: varchar("entity_name", { length: 255 }),
+  entityType: varchar("entity_type", { length: 50 }),
+  entityDateEstablished: timestamp("entity_date_established"),
+  ownershipStructure: varchar("ownership_structure", { length: 100 }),
+  sponsorCreditScore: varchar("sponsor_credit_score", { length: 20 }),
+  personalLiquidity: real("personal_liquidity"),
+  personalNetWorth: real("personal_net_worth"),
+
+  totalUnitsSfOwned: varchar("total_units_sf_owned", { length: 255 }),
+  currentPortfolioValue: real("current_portfolio_value"),
+  similarDealsLast3Years: integer("similar_deals_last_3_years"),
+  everDefaulted: boolean("ever_defaulted").default(false),
+  defaultExplanation: text("default_explanation"),
+  currentLitigation: boolean("current_litigation").default(false),
+  litigationExplanation: text("litigation_explanation"),
+  bankruptcyLast7Years: boolean("bankruptcy_last_7_years").default(false),
+  bankruptcyExplanation: text("bankruptcy_explanation"),
+
+  propertyCondition: varchar("property_condition", { length: 50 }),
+  deferredMaintenanceEstimate: real("deferred_maintenance_estimate"),
+  deferredMaintenancePercent: real("deferred_maintenance_percent"),
+  environmentalIssues: boolean("environmental_issues").default(false),
+  environmentalDescription: text("environmental_description"),
+  zoning: varchar("zoning", { length: 100 }),
+  zoningCompliant: boolean("zoning_compliant"),
+
+  numberOfUnits: integer("number_of_units"),
+  unitMixStudios: integer("unit_mix_studios"),
+  unitMix1br: integer("unit_mix_1br"),
+  unitMix2br: integer("unit_mix_2br"),
+  unitMix3br: integer("unit_mix_3br"),
+  averageRent: real("average_rent"),
+  marketRent: real("market_rent"),
+
+  numberOfTenants: integer("number_of_tenants"),
+  largestTenant: varchar("largest_tenant", { length: 255 }),
+  largestTenantPercent: real("largest_tenant_percent"),
+  averageLeaseTermRemaining: real("average_lease_term_remaining"),
+  tenantCreditQuality: varchar("tenant_credit_quality", { length: 50 }),
+
+  currentLender: varchar("current_lender", { length: 255 }),
+  currentLoanBalance: real("current_loan_balance"),
+  currentInterestRate: real("current_interest_rate"),
+  loanMaturityDate: timestamp("loan_maturity_date"),
+  prepaymentPenalty: real("prepayment_penalty"),
+
+  additionalNotes: text("additional_notes"),
+
+  aiDecision: varchar("ai_decision", { length: 50 }),
+  aiDecisionReason: text("ai_decision_reason"),
+  reviewedAt: timestamp("reviewed_at"),
+  submittedAt: timestamp("submitted_at"),
+  assignedTo: integer("assigned_to").references(() => users.id),
+
+  expiresAt: timestamp("expires_at"),
+
+  driveFolderId: varchar("drive_folder_id", { length: 255 }),
+  driveFolderUrl: text("drive_folder_url"),
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const insertCommercialSubmissionSchema = createInsertSchema(commercialSubmissions).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertCommercialSubmissionSchema = createInsertSchema(commercialSubmissions).omit({ id: true, createdAt: true, updatedAt: true, submittedAt: true, reviewedAt: true });
 export type CommercialSubmission = typeof commercialSubmissions.$inferSelect;
 export type InsertCommercialSubmission = z.infer<typeof insertCommercialSubmissionSchema>;
 
@@ -1805,6 +1891,134 @@ export const commercialSubmissionDocuments = pgTable("commercial_submission_docu
 export const insertCommercialSubmissionDocumentSchema = createInsertSchema(commercialSubmissionDocuments).omit({ id: true, uploadedAt: true });
 export type CommercialSubmissionDocument = typeof commercialSubmissionDocuments.$inferSelect;
 export type InsertCommercialSubmissionDocument = z.infer<typeof insertCommercialSubmissionDocumentSchema>;
+
+export const submissionCriteria = pgTable("submission_criteria", {
+  id: serial("id").primaryKey(),
+  criteriaType: varchar("criteria_type", { length: 100 }).notNull(),
+  criteriaValue: text("criteria_value").notNull(),
+  criteriaLabel: varchar("criteria_label", { length: 255 }),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSubmissionCriteriaSchema = createInsertSchema(submissionCriteria).omit({ id: true, createdAt: true });
+export type SubmissionCriteria = typeof submissionCriteria.$inferSelect;
+export type InsertSubmissionCriteria = z.infer<typeof insertSubmissionCriteriaSchema>;
+
+export const submissionSponsors = pgTable("submission_sponsors", {
+  id: serial("id").primaryKey(),
+  submissionId: integer("submission_id").references(() => commercialSubmissions.id, { onDelete: 'cascade' }).notNull(),
+  sponsorName: varchar("sponsor_name", { length: 255 }).notNull(),
+  ownershipPercent: real("ownership_percent"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSubmissionSponsorSchema = createInsertSchema(submissionSponsors).omit({ id: true, createdAt: true });
+export type SubmissionSponsor = typeof submissionSponsors.$inferSelect;
+export type InsertSubmissionSponsor = z.infer<typeof insertSubmissionSponsorSchema>;
+
+export const submissionFields = pgTable("submission_fields", {
+  id: serial("id").primaryKey(),
+  fieldLabel: varchar("field_label", { length: 255 }).notNull(),
+  fieldType: varchar("field_type", { length: 50 }).notNull(),
+  fieldOptions: text("field_options"),
+  isRequired: boolean("is_required").default(false).notNull(),
+  appliesToDealTypes: text("applies_to_deal_types").default("all").notNull(),
+  fieldOrder: integer("field_order").default(0).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSubmissionFieldSchema = createInsertSchema(submissionFields).omit({ id: true, createdAt: true });
+export type SubmissionField = typeof submissionFields.$inferSelect;
+export type InsertSubmissionField = z.infer<typeof insertSubmissionFieldSchema>;
+
+export const submissionFieldResponses = pgTable("submission_field_responses", {
+  id: serial("id").primaryKey(),
+  submissionId: integer("submission_id").references(() => commercialSubmissions.id, { onDelete: 'cascade' }).notNull(),
+  fieldId: integer("field_id").references(() => submissionFields.id, { onDelete: 'cascade' }).notNull(),
+  responseValue: text("response_value"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSubmissionFieldResponseSchema = createInsertSchema(submissionFieldResponses).omit({ id: true, createdAt: true });
+export type SubmissionFieldResponse = typeof submissionFieldResponses.$inferSelect;
+export type InsertSubmissionFieldResponse = z.infer<typeof insertSubmissionFieldResponseSchema>;
+
+export const submissionDocumentRequirements = pgTable("submission_document_requirements", {
+  id: serial("id").primaryKey(),
+  documentName: varchar("document_name", { length: 255 }).notNull(),
+  documentCategory: varchar("document_category", { length: 100 }),
+  dealType: varchar("deal_type", { length: 50 }).default("all").notNull(),
+  isRequired: boolean("is_required").default(true).notNull(),
+  displayOrder: integer("display_order").default(0).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSubmissionDocumentRequirementSchema = createInsertSchema(submissionDocumentRequirements).omit({ id: true, createdAt: true });
+export type SubmissionDocumentRequirement = typeof submissionDocumentRequirements.$inferSelect;
+export type InsertSubmissionDocumentRequirement = z.infer<typeof insertSubmissionDocumentRequirementSchema>;
+
+export const submissionReviewRules = pgTable("submission_review_rules", {
+  id: serial("id").primaryKey(),
+  ruleCategory: varchar("rule_category", { length: 50 }).notNull(),
+  ruleDescription: text("rule_description").notNull(),
+  rulePriority: integer("rule_priority").default(0).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSubmissionReviewRuleSchema = createInsertSchema(submissionReviewRules).omit({ id: true, createdAt: true });
+export type SubmissionReviewRule = typeof submissionReviewRules.$inferSelect;
+export type InsertSubmissionReviewRule = z.infer<typeof insertSubmissionReviewRuleSchema>;
+
+export const submissionAiReviews = pgTable("submission_ai_reviews", {
+  id: serial("id").primaryKey(),
+  submissionId: integer("submission_id").references(() => commercialSubmissions.id, { onDelete: 'cascade' }).notNull(),
+  decision: varchar("decision", { length: 50 }).notNull(),
+  decisionReason: text("decision_reason"),
+  strengths: text("strengths"),
+  concerns: text("concerns"),
+  requestedDocuments: text("requested_documents"),
+  declineReasons: text("decline_reasons"),
+  manualReviewFlags: text("manual_review_flags"),
+  nextSteps: text("next_steps"),
+  rulesChecked: integer("rules_checked").default(0),
+  rulesPassed: integer("rules_passed").default(0),
+  rulesFailed: integer("rules_failed").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSubmissionAiReviewSchema = createInsertSchema(submissionAiReviews).omit({ id: true, createdAt: true });
+export type SubmissionAiReview = typeof submissionAiReviews.$inferSelect;
+export type InsertSubmissionAiReview = z.infer<typeof insertSubmissionAiReviewSchema>;
+
+export const submissionNotes = pgTable("submission_notes", {
+  id: serial("id").primaryKey(),
+  submissionId: integer("submission_id").references(() => commercialSubmissions.id, { onDelete: 'cascade' }).notNull(),
+  adminUserId: integer("admin_user_id").references(() => users.id).notNull(),
+  noteText: text("note_text").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSubmissionNoteSchema = createInsertSchema(submissionNotes).omit({ id: true, createdAt: true });
+export type SubmissionNote = typeof submissionNotes.$inferSelect;
+export type InsertSubmissionNote = z.infer<typeof insertSubmissionNoteSchema>;
+
+export const submissionNotifications = pgTable("submission_notifications", {
+  id: serial("id").primaryKey(),
+  submissionId: integer("submission_id").references(() => commercialSubmissions.id, { onDelete: 'cascade' }).notNull(),
+  notificationType: varchar("notification_type", { length: 100 }).notNull(),
+  recipientEmail: varchar("recipient_email", { length: 255 }).notNull(),
+  sentAt: timestamp("sent_at").defaultNow(),
+  status: varchar("status", { length: 50 }).default("sent").notNull(),
+});
+
+export const insertSubmissionNotificationSchema = createInsertSchema(submissionNotifications).omit({ id: true, sentAt: true });
+export type SubmissionNotification = typeof submissionNotifications.$inferSelect;
+export type InsertSubmissionNotification = z.infer<typeof insertSubmissionNotificationSchema>;
 
 export const documentReviewResults = pgTable("document_review_results", {
   id: serial("id").primaryKey(),
