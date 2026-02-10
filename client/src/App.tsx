@@ -36,6 +36,7 @@ import MessagesPage from "@/pages/messages";
 import OnboardingPage from "@/pages/onboarding";
 import ResourcesPage from "@/pages/resources";
 import SelectRolePage from "@/pages/select-role";
+import CommercialPreScreenPage from "@/pages/commercial-pre-screen";
 import CommercialSubmissionPage from "@/pages/commercial-submission";
 import CommercialSubmissionConfirmation from "@/pages/commercial-submission-confirmation";
 import CommissionsPage from "@/pages/commissions";
@@ -131,6 +132,7 @@ function MainRoutes() {
         <Route path="/resources" component={() => <ProtectedRoute component={ResourcesPage} />} />
         <Route path="/borrower-quote" component={() => <ProtectedRoute component={BorrowerQuote} />} />
         <Route path="/borrower-quotes" component={() => <ProtectedRoute component={BorrowerQuotes} />} />
+        <Route path="/commercial/pre-screen" component={() => <ProtectedRoute component={CommercialPreScreenPage} />} />
         <Route path="/commercial-submission/new" component={() => <ProtectedRoute component={CommercialSubmissionPage} />} />
         <Route path="/commercial-submission/:id/confirmation" component={() => <ProtectedRoute component={CommercialSubmissionConfirmation} />} />
         

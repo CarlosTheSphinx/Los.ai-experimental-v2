@@ -61,7 +61,7 @@ const brokerNavItems: NavItem[] = [
   { href: "/agreements", label: "Term Sheets", icon: ClipboardList },
   { href: "/projects", label: "Loans", icon: FolderKanban },
   { href: "/commissions", label: "My Commissions", icon: DollarSign },
-  { href: "/commercial-submission/new", label: "Commercial", icon: Building2 },
+  { href: "/commercial/pre-screen", label: "Commercial", icon: Building2 },
   { href: "/messages", label: "Messages", icon: MessageSquare, showBadge: true },
   { href: "/resources", label: "Resources", icon: BookOpen },
 ];

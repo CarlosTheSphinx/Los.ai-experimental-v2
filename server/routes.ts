@@ -11880,6 +11880,120 @@ Respond ONLY with valid JSON in this format:
     }
   });
 
+  // ===================== Commercial Pre-Screener =====================
+
+  const preScreenValidation = z.object({
+    loanAmount: z.number().positive(),
+    assetClass: z.string().min(1),
+    propertyState: z.string().min(1),
+    dealType: z.string().min(1),
+    creditScore: z.string().min(1),
+  });
+
+  app.post('/api/commercial/pre-screen', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const parsed = preScreenValidation.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: 'Invalid request body', details: parsed.error.errors });
+      }
+
+      const { loanAmount, assetClass, propertyState, dealType, creditScore } = parsed.data;
+
+      const criteria = await storage.getSubmissionCriteria();
+
+      let minLoan = 0;
+      let maxLoan = Infinity;
+      let approvedClasses: string[] = [];
+      let approvedStates: string[] = [];
+
+      for (const c of criteria) {
+        if (c.criteriaType === 'min_loan_size') {
+          minLoan = parseFloat(c.criteriaValue) || 0;
+        } else if (c.criteriaType === 'max_loan_size') {
+          maxLoan = parseFloat(c.criteriaValue) || Infinity;
+        } else if (c.criteriaType === 'approved_asset_classes') {
+          try { approvedClasses = JSON.parse(c.criteriaValue); } catch {}
+        } else if (c.criteriaType === 'approved_states') {
+          try { approvedStates = JSON.parse(c.criteriaValue); } catch {}
+        }
+      }
+
+      const flags: string[] = [];
+      if (loanAmount < minLoan) flags.push(`Loan amount $${loanAmount.toLocaleString()} is below minimum of $${minLoan.toLocaleString()}`);
+      if (loanAmount > maxLoan) flags.push(`Loan amount $${loanAmount.toLocaleString()} exceeds maximum of $${maxLoan.toLocaleString()}`);
+      if (approvedClasses.length > 0 && !approvedClasses.includes(assetClass)) flags.push(`Asset class "${assetClass}" is not in approved list`);
+      if (approvedStates.length > 0 && !approvedStates.includes(propertyState)) flags.push(`State "${propertyState}" is not in approved states`);
+
+      const rulesDecision = flags.length === 0
+        ? { decision: 'proceed' as const, reason: 'All criteria checks passed', encouragement: '' }
+        : { decision: 'decline' as const, reason: flags.join('; '), encouragement: '' };
+
+      if (criteria.length === 0) {
+        return res.json(rulesDecision);
+      }
+
+      try {
+        const OpenAI = (await import('openai')).default;
+        const openai = new OpenAI({
+          apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+          baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+        });
+
+        const prompt = `Review this pre-screener data:
+Loan Amount: ${loanAmount}
+Asset Class: ${assetClass}
+State: ${propertyState}
+Deal Type: ${dealType}
+Credit Score: ${creditScore}
+
+Our criteria:
+Min Loan: $${minLoan}
+Max Loan: $${maxLoan}
+Approved Asset Classes: ${approvedClasses.join(', ')}
+Approved States: ${approvedStates.join(', ')}
+
+Quick rules check findings:
+${flags.length > 0 ? flags.join('\n') : 'All checks passed'}
+
+Return JSON only:
+{
+  "decision": "proceed" | "decline" | "borderline",
+  "reason": "brief explanation for the broker",
+  "encouragement": "optional motivational message if borderline"
+}`;
+
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: 'You are a commercial lending pre-screener. Analyze the deal data against the criteria and return a JSON decision. Return ONLY valid JSON, no markdown or extra text.' },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.3,
+        });
+
+        const content = response.choices[0]?.message?.content?.trim() || '';
+        const jsonMatch = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        const aiResult = JSON.parse(jsonMatch);
+
+        return res.json({
+          decision: aiResult.decision || rulesDecision.decision,
+          reason: aiResult.reason || rulesDecision.reason,
+          encouragement: aiResult.encouragement || '',
+        });
+      } catch (aiError) {
+        console.error('OpenAI pre-screen error, falling back to rules:', aiError);
+        return res.json(rulesDecision);
+      }
+    } catch (error) {
+      console.error('Pre-screen error:', error);
+      res.status(500).json({ error: 'Pre-screening failed' });
+    }
+  });
+
   // ===================== Commercial Deal Submission Routes =====================
 
   const commercialSubmissionValidation = z.object({
