@@ -788,8 +788,6 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
     onSuccess: (data) => {
       if (data.success && data.signer) {
         setSigners(prev => [...prev, { ...data.signer }]);
-        setNewSignerName("");
-        setNewSignerEmail("");
       }
     }
   });
