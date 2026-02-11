@@ -316,7 +316,6 @@ export async function createDocumentFromPdf(
   options: {
     name: string;
     recipients: PandaDocRecipient[];
-    fields?: Record<string, PandaDocFieldPlacement[]>;
     tokens?: PandaDocToken[];
     metadata?: Record<string, any>;
   }
@@ -334,9 +333,6 @@ export async function createDocumentFromPdf(
     parse_form_fields: false,
   };
 
-  if (options.fields && Object.keys(options.fields).length > 0) {
-    data.fields = options.fields;
-  }
   if (options.tokens && options.tokens.length > 0) {
     data.tokens = options.tokens;
   }
@@ -346,7 +342,7 @@ export async function createDocumentFromPdf(
 
   formData.append("data", JSON.stringify(data));
 
-  console.log(`[PandaDoc] POST ${apiBase}/documents (PDF upload with ${Object.values(options.fields || {}).flat().length} fields)`);
+  console.log(`[PandaDoc] POST ${apiBase}/documents (PDF upload)`);
 
   const response = await fetch(`${apiBase}/documents`, {
     method: "POST",
@@ -399,6 +395,80 @@ export async function createTemplateFromFile(
     const errorText = await response.text();
     console.error("PandaDoc create template error:", errorText);
     throw new Error(`Failed to create PandaDoc template: ${response.status} ${errorText}`);
+  }
+
+  return response.json();
+}
+
+export async function getDocumentDetails(documentId: string): Promise<any> {
+  const response = await pandaDocRequest(`/documents/${documentId}/details`);
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("PandaDoc get document details error:", errorText);
+    throw new Error(`Failed to get PandaDoc document details: ${response.status} ${errorText}`);
+  }
+  
+  return response.json();
+}
+
+interface PandaDocFieldInjection {
+  name: string;
+  type: string;
+  assignedToRecipientUuid: string;
+  page: number;
+  offsetX: number;
+  offsetY: number;
+  width: number;
+  height: number;
+  required?: boolean;
+  value?: string;
+}
+
+export async function injectDocumentFields(
+  documentId: string,
+  fields: PandaDocFieldInjection[]
+): Promise<{ fields: any[] }> {
+  if (fields.length === 0) {
+    console.log(`[PandaDoc] No fields to inject for document ${documentId}`);
+    return { fields: [] };
+  }
+
+  const payload = {
+    fields: fields.map(f => ({
+      name: f.name,
+      type: f.type,
+      assigned_to: f.assignedToRecipientUuid,
+      settings: {
+        required: f.required !== false,
+        ...(f.value && f.type === 'text' ? { default_value: f.value } : {}),
+      },
+      layout: {
+        page: f.page,
+        position: {
+          offset_x: String(f.offsetX),
+          offset_y: String(f.offsetY),
+          anchor_point: 'topleft',
+        },
+        style: {
+          width: f.width,
+          height: f.height,
+        },
+      },
+    })),
+  };
+
+  console.log(`[PandaDoc] POST /documents/${documentId}/fields (injecting ${fields.length} fields)`);
+
+  const response = await pandaDocRequest(`/documents/${documentId}/fields`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("[PandaDoc] Field injection error:", errorText);
+    throw new Error(`Failed to inject fields into PandaDoc document: ${response.status} ${errorText}`);
   }
 
   return response.json();

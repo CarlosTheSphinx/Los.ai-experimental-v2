@@ -1,0 +1,304 @@
+If the PandaDoc doc is showing up **blank (no fields)** even though your UI has 12+ mapped fields, it almost always means one simple thing:
+
+✅ **Your app is creating/sending the PandaDoc document… but never actually creating PandaDoc “fields” (form fields) or “tokens” in PandaDoc.**
+So PandaDoc receives a PDF and recipients, sends it, and the PDF has **nothing interactive on it**.
+
+Your UI “fields” are just overlay objects in your app. PandaDoc doesn’t know they exist unless you explicitly send them in the API payload (either as **template tokens** or as **document fields**).
+
+Below is the exact Replit code pattern to fix it.
+
+---
+
+## Fix approach (recommended): Create PandaDoc doc, then inject fields, then send
+
+### 1) Backend: update your PandaDoc send route to include fields
+
+**`server/routes/pandadoc.ts`** (or wherever your send endpoint is)
+
+```ts
+import axios from "axios";
+import type { Request, Response } from "express";
+import { z } from "zod";
+import { db } from "../db"; // adjust import
+
+const PANDADOC_API_KEY = process.env.PANDADOC_API_KEY!;
+const PANDADOC_BASE = "https://api.pandadoc.com/public/v1";
+
+if (!PANDADOC_API_KEY) {
+  throw new Error("Missing PANDADOC_API_KEY");
+}
+
+const FieldSchema = z.object({
+  fieldType: z.enum(["signature", "initials", "text", "date", "data"]),
+  page: z.number().int().min(1),
+
+  // these MUST be finite numbers
+  x: z.number().finite(),
+  y: z.number().finite(),
+  w: z.number().finite(),
+  h: z.number().finite(),
+
+  // for text/data
+  value: z.string().optional(),
+
+  // who should complete it
+  assignedToEmail: z.string().email().optional(),
+
+  fontSize: z.number().int().min(6).max(72).optional(),
+});
+
+function authHeaders() {
+  return {
+    Authorization: `API-Key ${PANDADOC_API_KEY}`,
+    "Content-Type": "application/json",
+  };
+}
+
+/**
+ * IMPORTANT:
+ * PandaDoc coordinates/field format can vary based on doc type (template vs uploaded pdf).
+ * The key fix is: you must send fields to PandaDoc in an endpoint/payload it recognizes,
+ * not just store fields in your DB.
+ */
+function mapToPandaDocFields(placedFields: any[]) {
+  // NOTE: Replace "type" mapping as needed by PandaDoc schema in your implementation
+  return placedFields.map((f) => ({
+    // Unique name for field in PandaDoc
+    name: f.fieldKey || `field_${crypto.randomUUID()}`,
+
+    // PandaDoc type mapping (these strings may vary depending on endpoint used)
+    type:
+      f.fieldType === "signature" ? "signature" :
+      f.fieldType === "initials" ? "initials" :
+      f.fieldType === "date" ? "date" :
+      "text",
+
+    // Page numbers in PandaDoc are typically 1-indexed
+    page_number: f.page,
+
+    // Rectangle position. Some endpoints want {x, y, width, height}
+    // Some want {x1,y1,x2,y2}. Adjust if PandaDoc responds with validation errors.
+    rect: {
+      x: f.x,
+      y: f.y,
+      width: f.w,
+      height: f.h,
+    },
+
+    // Assignment
+    // Some schemas use "assignee" as email, others use role name.
+    assignee: f.assignedToEmail || null,
+
+    // Prefill text fields
+    value: f.value || null,
+
+    // Optional styling
+    font_size: f.fontSize || null,
+  }));
+}
+
+export async function sendViaPandaDoc(req: Request, res: Response) {
+  try {
+    const termSheetId = req.params.id;
+
+    // 1) Load term sheet + recipients + pdf + saved field placements from DB
+    const ts = await db.query(
+      `SELECT id, pdf_url, pdf_hash, recipients_json, fields_json
+       FROM term_sheets
+       WHERE id = $1`,
+      [termSheetId]
+    );
+
+    if (ts.rowCount === 0) {
+      return res.status(404).json({ success: false, error: "Term sheet not found" });
+    }
+
+    const termSheet = ts.rows[0];
+    const recipients = termSheet.recipients_json ? JSON.parse(termSheet.recipients_json) : [];
+    const placedFields = termSheet.fields_json ? JSON.parse(termSheet.fields_json) : [];
+
+    // Guard: if you mapped 12 fields but fields_json is empty, you’re not saving placements correctly
+    if (!placedFields.length) {
+      return res.status(400).json({
+        success: false,
+        error: "No fields found to send. fields_json is empty. Save field placements before sending.",
+      });
+    }
+
+    // Validate fields so we never ship NaN to anything
+    const validatedFields = placedFields.map((f: any) =>
+      FieldSchema.parse({
+        fieldType: f.field_type ?? f.fieldType ?? f.type,
+        page: Number(f.page ?? f.page_number ?? f.pageNumber),
+        x: Number(f.x),
+        y: Number(f.y),
+        w: Number(f.w ?? f.width),
+        h: Number(f.h ?? f.height),
+        value: f.value ?? undefined,
+        assignedToEmail: f.assigned_to_email ?? f.assignedToEmail ?? undefined,
+        fontSize: f.font_size ?? f.fontSize ?? undefined,
+      })
+    );
+
+    if (!recipients.length) {
+      return res.status(400).json({ success: false, error: "No recipients found." });
+    }
+    if (!termSheet.pdf_url) {
+      return res.status(400).json({ success: false, error: "No PDF URL found on term sheet." });
+    }
+
+    // 2) Create PandaDoc document (PDF upload/import flow)
+    // NOTE: Your existing code likely already does this. Keep it.
+    const createPayload = {
+      name: `Term Sheet ${termSheet.id}`,
+      recipients: recipients.map((r: any) => ({
+        email: r.email,
+        first_name: r.firstName || "Signer",
+        last_name: r.lastName || "",
+        role: r.role || "signer",
+      })),
+      // If you are importing a PDF, PandaDoc supports "document_upload" style flows.
+      // Your current working create step is fine.
+      // Keep whatever field you currently use to attach the PDF.
+      // Example patterns include "url" or multipart upload depending on your implementation.
+      // --- IMPORTANT: This is just a placeholder structure ---
+      document: {
+        url: termSheet.pdf_url,
+      },
+    };
+
+    const created = await axios.post(`${PANDADOC_BASE}/documents`, createPayload, {
+      headers: authHeaders(),
+    });
+
+    const pandaDocId = created.data?.id;
+    if (!pandaDocId) {
+      return res.status(500).json({ success: false, error: "PandaDoc document ID missing from create response." });
+    }
+
+    // 3) ADD FIELDS TO THE PANDA DOC (THIS IS THE MISSING PIECE)
+    const pandaFields = mapToPandaDocFields(validatedFields);
+
+    // IMPORTANT:
+    // This endpoint name may differ depending on whether you are using templates or uploaded PDFs.
+    // The key is: make the “create fields” call AFTER document creation.
+    //
+    // In your codebase, implement the correct PandaDoc endpoint you are using.
+    // If this call errors, log response.data and adjust shape.
+    try {
+      await axios.post(`${PANDADOC_BASE}/documents/${pandaDocId}/fields`, { fields: pandaFields }, {
+        headers: authHeaders(),
+      });
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const body = err?.response?.data;
+      console.error("PandaDoc field injection failed:", status, body);
+      return res.status(500).json({
+        success: false,
+        error: "Created PandaDoc doc but failed to add fields. Check fields endpoint/payload format.",
+        pandadocStatus: status,
+        pandadocError: body,
+      });
+    }
+
+    // 4) SEND THE DOCUMENT
+    const sendPayload = {
+      subject: "Please sign",
+      message: "Please review and sign.",
+      silent: false,
+    };
+
+    await axios.post(`${PANDADOC_BASE}/documents/${pandaDocId}/send`, sendPayload, {
+      headers: authHeaders(),
+    });
+
+    // 5) Save provider metadata
+    await db.query(
+      `UPDATE term_sheets
+       SET provider = 'pandadoc',
+           provider_document_id = $1,
+           status = 'sent'
+       WHERE id = $2`,
+      [pandaDocId, termSheetId]
+    );
+
+    return res.json({ success: true, providerDocumentId: pandaDocId });
+  } catch (e: any) {
+    console.error("sendViaPandaDoc error:", e?.response?.data || e.message);
+    return res.status(500).json({ success: false, error: e?.response?.data || e.message });
+  }
+}
+```
+
+### Why this fixes your issue
+
+Your system was likely doing:
+
+✅ create doc → ✅ send doc
+but missing:
+
+❌ **push fields into PandaDoc** (so PandaDoc had nothing to display)
+
+This route explicitly injects fields right after creation.
+
+---
+
+## 2) Frontend: make sure you actually saved field placements before send
+
+If PandaDoc comes through blank, also check your DB: `term_sheets.fields_json` might still be `[]`.
+
+### Add this before you call send:
+
+* call your “Save fields” endpoint
+* then call PandaDoc send
+
+Example:
+
+```ts
+await fetch(`/api/term-sheets/${id}/fields`, { method:"POST", body: JSON.stringify({ fields }) });
+await fetch(`/api/term-sheets/${id}/pandadoc/send`, { method:"POST" });
+```
+
+If you skip the save step, your send endpoint loads **no fields** and PandaDoc gets none.
+
+---
+
+## 3) The one gotcha: PandaDoc field APIs differ by doc type
+
+I can’t guarantee the exact `/documents/{id}/fields` endpoint name in *your* PandaDoc configuration without seeing your current PandaDoc calls or your response errors.
+
+So here’s the best Replit instruction to make it self-correct:
+
+### Prompt Replit to “make the field injection endpoint match the current PandaDoc API responses”
+
+Copy/paste:
+
+```text
+We successfully create + send PandaDoc documents, but the fields we mapped in our UI are not appearing in PandaDoc (document is blank).
+
+Fix:
+- After creating the PandaDoc document, add a mandatory step that creates PandaDoc form fields (signature/initials/date/text) using our saved field placements.
+- Implement this as a second API call after document creation (field injection), then send.
+
+Requirements:
+1) The backend must load fields_json from the term sheet and validate no NaN values.
+2) Convert our internal fields into PandaDoc-recognized form fields with page + rect coordinates + assignee.
+3) If the first attempt endpoint/payload fails, log PandaDoc response.data and adjust to the correct PandaDoc schema until fields render.
+4) Only call /send AFTER fields injection succeeds.
+5) Add a debug route /api/pandadoc/debug/:id that:
+   - creates a doc to a test email,
+   - injects 1 signature field,
+   - sends it,
+   - returns PandaDoc IDs and any validation errors.
+```
+
+---
+
+## Quick check you should do (takes 30 seconds)
+
+Open the PandaDoc document created by Replit and see if it has **ANY fields** at all.
+
+* If it has **zero fields**, you are not injecting fields into PandaDoc.
+* If it has fields but the **data fields are blank**, then you’re creating fields but not setting `value` or you’re using template tokens incorrectly.
+
+If you paste your current PandaDoc create/send code (just the route file, redact secrets), I’ll adjust the field payload to match the exact endpoint you’re using so it works on the first try.

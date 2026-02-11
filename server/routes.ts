@@ -1961,21 +1961,6 @@ export async function registerRoutes(
         signerRoleMap.set(signer.id, `Signer ${idx + 1}`);
       });
 
-      // Map our fields to PandaDoc field format
-      // PandaDoc fields are keyed by role
-      const pandadocFields: Record<string, Array<{
-        name: string;
-        role: string;
-        type: string;
-        required?: boolean;
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-        page: number;
-        value?: string;
-      }>> = {};
-
       const fieldTypeMap: Record<string, string> = {
         'signature': 'signature',
         'initial': 'initials',
@@ -2000,45 +1985,72 @@ export async function registerRoutes(
         'totalFees': 'text',
       };
 
-      docFields.forEach((field, idx) => {
-        const role = field.signerId ? (signerRoleMap.get(field.signerId) || 'Signer 1') : 'Signer 1';
-        const pandadocType = fieldTypeMap[field.fieldType] || 'text';
-
-        if (!pandadocFields[role]) {
-          pandadocFields[role] = [];
-        }
-
-        pandadocFields[role].push({
-          name: `${field.fieldType}_${idx}`,
-          role,
-          type: pandadocType,
-          required: field.required ?? true,
-          x: Math.round(field.x),
-          y: Math.round(field.y),
-          width: Math.round(field.width),
-          height: Math.round(field.height),
-          page: field.pageNumber - 1, // PandaDoc uses 0-based pages
-          ...(field.value && pandadocType === 'text' ? { value: field.value } : {}),
-        });
-      });
-
       console.log(`[PandaDoc Send] Creating document with ${recipients.length} recipients, ${docFields.length} fields`);
 
-      // Import PandaDoc module
       const pandadoc = await import('./esign/pandadoc');
 
-      // Create document from PDF
+      // Step 1: Create document from PDF (no fields - they must be injected separately)
       const pandaDoc = await pandadoc.createDocumentFromPdf(pdfBuffer, {
         name: doc.name || `Term Sheet - ${doc.fileName}`,
         recipients,
-        fields: pandadocFields,
       });
 
       console.log(`[PandaDoc Send] Document created: ${pandaDoc.id}, status: ${pandaDoc.status}`);
 
-      // Wait for document to be ready (draft status)
+      // Step 2: Wait for document to reach draft status
       await pandadoc.waitForDocumentReady(pandaDoc.id);
-      console.log(`[PandaDoc Send] Document ready, sending...`);
+      console.log(`[PandaDoc Send] Document ready (draft)`);
+
+      // Step 3: Get recipient UUIDs from PandaDoc to map our signers
+      const pandaDocDetails = await pandadoc.getDocumentDetails(pandaDoc.id);
+      const pandaRecipients = pandaDocDetails.recipients || [];
+
+      // Build role-to-recipientUUID map (recipients are ordered same as our input)
+      const roleToRecipientUuid = new Map<string, string>();
+      pandaRecipients.forEach((r: any) => {
+        const matchingRole = recipients.find(
+          orig => orig.email === r.email
+        );
+        if (matchingRole) {
+          roleToRecipientUuid.set(matchingRole.role, r.id);
+        }
+      });
+      // Fallback: if only one recipient, use them for all fields
+      if (pandaRecipients.length === 1) {
+        roleToRecipientUuid.set('Signer 1', pandaRecipients[0].id);
+      }
+
+      console.log(`[PandaDoc Send] Mapped ${roleToRecipientUuid.size} recipient UUIDs`);
+
+      // Step 4: Inject fields via POST /documents/{id}/fields
+      if (docFields.length > 0) {
+        const fieldsToInject = docFields.map((field, idx) => {
+          const role = field.signerId ? (signerRoleMap.get(field.signerId) || 'Signer 1') : 'Signer 1';
+          const recipientUuid = roleToRecipientUuid.get(role) || pandaRecipients[0]?.id;
+          if (!recipientUuid) {
+            throw new Error(`No PandaDoc recipient UUID found for role "${role}". Cannot assign field "${field.fieldType}" on page ${field.pageNumber}.`);
+          }
+          const pandadocType = fieldTypeMap[field.fieldType] || 'text';
+
+          return {
+            name: `${field.fieldType}_${idx}`,
+            type: pandadocType,
+            assignedToRecipientUuid: recipientUuid,
+            page: field.pageNumber, // PandaDoc fields API uses 1-based pages
+            offsetX: Math.round(field.x),
+            offsetY: Math.round(field.y),
+            width: Math.round(field.width),
+            height: Math.round(field.height),
+            required: field.required ?? true,
+            ...(field.value && pandadocType === 'text' ? { value: field.value } : {}),
+          };
+        });
+
+        const injectionResult = await pandadoc.injectDocumentFields(pandaDoc.id, fieldsToInject);
+        console.log(`[PandaDoc Send] Injected ${injectionResult.fields?.length || 0} fields successfully`);
+      }
+
+      console.log(`[PandaDoc Send] Sending document...`);
 
       // Try to send the document via PandaDoc API
       const editorUrl = `https://app.pandadoc.com/a/#/documents/${pandaDoc.id}`;
