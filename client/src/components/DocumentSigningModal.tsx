@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, Users, FileText, Send, Plus, Trash2, X, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Check, Mail, ZoomIn, ZoomOut, FileStack, Sparkles, ExternalLink, Loader2 } from "lucide-react";
+import { Upload, Users, FileText, Send, Plus, Trash2, X, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Check, Mail, ZoomIn, ZoomOut, FileStack, Sparkles, ExternalLink, Loader2, Copy, BookmarkPlus, PanelRightOpen, PanelRightClose } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { SavedQuote } from "@shared/schema";
@@ -401,6 +401,7 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
   const [pandadocDraft, setPandadocDraft] = useState<{ envelopeId: number; externalDocumentId: string; editorUrl: string } | null>(null);
   const [pandadocEditorToken, setPandadocEditorToken] = useState<string | null>(null);
   const [pandadocEditorLoading, setPandadocEditorLoading] = useState(false);
+  const [showVariablesSidebar, setShowVariablesSidebar] = useState(true);
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const [templateRoles, setTemplateRoles] = useState<Array<{ name: string }>>([]);
   const [templateRolesLoading, setTemplateRolesLoading] = useState(false);
@@ -423,7 +424,7 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
 
   const { data: tokenPreviewData } = useQuery<{ tokens: Array<{ name: string; value: string }>; availableTokenNames: string[] }>({
     queryKey: ["/api/esign/pandadoc/quote", quote.id, "tokens"],
-    enabled: open && uploadMode === "pandadoc" && showTokenPreview,
+    enabled: open && uploadMode === "pandadoc" && (showTokenPreview || !!pandadocDraft),
   });
 
   // PandaDoc create draft mutation
@@ -506,9 +507,9 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
         setPandadocEditorToken(null);
         toast({ 
           title: "Term Sheet Sent!", 
-          description: pandadocSendMethod === 'email' 
-            ? "The recipient will receive an email with the signing link." 
-            : "Opening signing session..." 
+          description: data.envelope?.signingUrl 
+            ? "Document ready for signing. A signing link has been generated." 
+            : "Document has been sent for signature."
         });
         if (data.envelope?.signingUrl) {
           window.open(data.envelope.signingUrl, '_blank');
@@ -519,6 +520,33 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message || "Failed to send document", variant: "destructive" });
+    },
+  });
+
+  const [saveAsTemplateName, setSaveAsTemplateName] = useState('');
+  const [showSaveTemplateInput, setShowSaveTemplateInput] = useState(false);
+  
+  const saveAsTemplateMutation = useMutation({
+    mutationFn: async () => {
+      if (!pandadocDraft) throw new Error('No draft document');
+      const templateName = saveAsTemplateName || `${quote.quoteName || 'Loan'} Template`;
+      const res = await apiRequest('POST', `/api/esign/pandadoc/documents/${pandadocDraft.externalDocumentId}/save-as-template`, {
+        name: templateName,
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        toast({ title: "Template Saved!", description: `Template "${data.template?.name || 'New Template'}" created in PandaDoc` });
+        setShowSaveTemplateInput(false);
+        setSaveAsTemplateName('');
+        queryClient.invalidateQueries({ queryKey: ["/api/esign/pandadoc/templates"] });
+      } else {
+        toast({ title: "Error", description: data.error || "Failed to save template", variant: "destructive" });
+      }
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to save template", variant: "destructive" });
     },
   });
 
@@ -1247,13 +1275,22 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                           <Button onClick={onClose} data-testid="button-close-success">Close</Button>
                         </div>
                       ) : pandadocDraft ? (
-                        <div className="flex flex-col h-full gap-4">
+                        <div className="flex flex-col h-full gap-2">
                           <div className="flex items-center justify-between gap-4 flex-wrap">
                             <div className="flex items-center gap-2">
                               <FileText className="w-5 h-5 text-primary" />
                               <h3 className="font-semibold">Review & Edit Draft</h3>
                             </div>
                             <div className="flex items-center gap-2 flex-wrap">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setShowVariablesSidebar(!showVariablesSidebar)}
+                                data-testid="button-toggle-variables"
+                              >
+                                {showVariablesSidebar ? <PanelRightClose className="w-4 h-4 mr-1" /> : <PanelRightOpen className="w-4 h-4 mr-1" />}
+                                Variables
+                              </Button>
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -1306,33 +1343,133 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                             </div>
                           </div>
                           
-                          <div className="flex-1 min-h-[600px] border rounded-lg overflow-hidden relative" style={{ height: 'calc(90vh - 180px)' }}>
-                            {pandadocEditorLoading ? (
-                              <div className="absolute inset-0 flex items-center justify-center bg-muted/50">
-                                <div className="text-center space-y-2">
-                                  <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
-                                  <p className="text-sm text-muted-foreground">Loading editor...</p>
+                          <div className="flex flex-1 gap-2 min-h-0" style={{ height: 'calc(95vh - 120px)' }}>
+                            <div className="flex-1 border rounded-lg overflow-hidden relative min-w-0">
+                              {pandadocEditorLoading ? (
+                                <div className="absolute inset-0 flex items-center justify-center bg-muted/50">
+                                  <div className="text-center space-y-2">
+                                    <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
+                                    <p className="text-sm text-muted-foreground">Loading editor...</p>
+                                  </div>
                                 </div>
-                              </div>
-                            ) : !pandadocEditorToken ? (
-                              <div className="absolute inset-0 flex items-center justify-center bg-muted/50">
-                                <div className="text-center space-y-3 max-w-sm">
-                                  <FileText className="w-10 h-10 mx-auto text-muted-foreground" />
-                                  <p className="text-sm text-muted-foreground">
-                                    Embedded editor not available. You can still review and edit in PandaDoc directly.
-                                  </p>
+                              ) : !pandadocEditorToken ? (
+                                <div className="absolute inset-0 flex items-center justify-center bg-muted/50">
+                                  <div className="text-center space-y-3 max-w-sm">
+                                    <FileText className="w-10 h-10 mx-auto text-muted-foreground" />
+                                    <p className="text-sm text-muted-foreground">
+                                      Embedded editor not available. You can still review and edit in PandaDoc directly.
+                                    </p>
+                                    <Button
+                                      variant="outline"
+                                      onClick={() => window.open(pandadocDraft.editorUrl, '_blank')}
+                                      data-testid="button-review-pandadoc-fallback"
+                                    >
+                                      <ExternalLink className="w-4 h-4 mr-2" />
+                                      Open in PandaDoc
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : null}
+                              <div ref={editorContainerRef} className="w-full h-full" />
+                            </div>
+                            
+                            {showVariablesSidebar && (
+                              <div className="w-72 border rounded-lg flex flex-col overflow-hidden shrink-0" data-testid="variables-sidebar">
+                                <div className="p-3 border-b bg-muted/30">
+                                  <h4 className="font-semibold text-sm">Quote Variables</h4>
+                                  <p className="text-xs text-muted-foreground mt-1">Copy token names to paste into your document as PandaDoc tokens</p>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                  {tokenPreviewData?.tokens?.filter(t => t.value).map((token) => (
+                                    <div
+                                      key={token.name}
+                                      className="flex items-start gap-2 p-2 rounded-md hover-elevate cursor-pointer group text-xs"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(`{{${token.name}}}`);
+                                        toast({ title: "Copied!", description: `{{${token.name}}} copied to clipboard` });
+                                      }}
+                                      data-testid={`token-${token.name}`}
+                                    >
+                                      <div className="flex-1 min-w-0">
+                                        <div className="font-mono text-xs text-primary truncate">{`{{${token.name}}}`}</div>
+                                        <div className="text-muted-foreground truncate mt-0.5">{token.value}</div>
+                                      </div>
+                                      <Copy className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 mt-0.5" />
+                                    </div>
+                                  ))}
+                                  {(!tokenPreviewData?.tokens || tokenPreviewData.tokens.filter(t => t.value).length === 0) && (
+                                    <div className="text-center py-6 text-xs text-muted-foreground">
+                                      <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2" />
+                                      Loading variables...
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="p-2 border-t space-y-2">
                                   <Button
                                     variant="outline"
-                                    onClick={() => window.open(pandadocDraft.editorUrl, '_blank')}
-                                    data-testid="button-review-pandadoc-fallback"
+                                    size="sm"
+                                    className="w-full"
+                                    onClick={() => {
+                                      const allTokens = tokenPreviewData?.tokens?.filter(t => t.value).map(t => `{{${t.name}}}`).join('\n') || '';
+                                      navigator.clipboard.writeText(allTokens);
+                                      toast({ title: "All tokens copied!", description: `${tokenPreviewData?.tokens?.filter(t => t.value).length || 0} tokens copied to clipboard` });
+                                    }}
+                                    data-testid="button-copy-all-tokens"
                                   >
-                                    <ExternalLink className="w-4 h-4 mr-2" />
-                                    Open in PandaDoc
+                                    <Copy className="w-3 h-3 mr-1" />
+                                    Copy All Tokens
                                   </Button>
+                                  {showSaveTemplateInput ? (
+                                    <div className="space-y-1.5">
+                                      <Input
+                                        placeholder="Template name..."
+                                        value={saveAsTemplateName}
+                                        onChange={(e) => setSaveAsTemplateName(e.target.value)}
+                                        className="text-xs"
+                                        data-testid="input-template-name"
+                                      />
+                                      <div className="flex gap-1">
+                                        <Button
+                                          size="sm"
+                                          className="flex-1"
+                                          onClick={() => saveAsTemplateMutation.mutate()}
+                                          disabled={saveAsTemplateMutation.isPending}
+                                          data-testid="button-confirm-save-template"
+                                        >
+                                          {saveAsTemplateMutation.isPending ? (
+                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                          ) : (
+                                            "Save"
+                                          )}
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => { setShowSaveTemplateInput(false); setSaveAsTemplateName(''); }}
+                                          data-testid="button-cancel-save-template"
+                                        >
+                                          Cancel
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="w-full"
+                                      onClick={() => {
+                                        setSaveAsTemplateName(`${quote.quoteName || 'Loan'} Template`);
+                                        setShowSaveTemplateInput(true);
+                                      }}
+                                      data-testid="button-save-as-template"
+                                    >
+                                      <BookmarkPlus className="w-3 h-3 mr-1" />
+                                      Save as Template
+                                    </Button>
+                                  )}
                                 </div>
                               </div>
-                            ) : null}
-                            <div ref={editorContainerRef} className="w-full h-full min-h-[500px]" />
+                            )}
                           </div>
                         </div>
                       ) : (

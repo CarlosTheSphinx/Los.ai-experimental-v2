@@ -283,6 +283,60 @@ export async function getTemplateDetails(templateId: string): Promise<any> {
   return response.json();
 }
 
+export async function downloadDocument(documentId: string): Promise<Buffer> {
+  const response = await pandaDocRequest(`/documents/${documentId}/download`, {
+    method: "GET",
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("PandaDoc download document error:", errorText);
+    throw new Error(`Failed to download PandaDoc document: ${response.status} ${errorText}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
+export async function createTemplateFromFile(
+  name: string,
+  pdfBuffer: Buffer,
+  options: { roles?: Array<{ name: string }>; tags?: string[] } = {}
+): Promise<{ id: string; name: string }> {
+  const apiBase = getApiBase();
+  const apiKey = process.env.PANDADOC_API_KEY;
+  if (!apiKey) throw new Error("PANDADOC_API_KEY not configured");
+
+  const formData = new FormData();
+  formData.append("name", name);
+  const blob = new Blob([pdfBuffer], { type: "application/pdf" });
+  formData.append("file", blob, `${name}.pdf`);
+
+  if (options.roles && options.roles.length > 0) {
+    formData.append("roles", JSON.stringify(options.roles));
+  }
+  if (options.tags && options.tags.length > 0) {
+    formData.append("tags", JSON.stringify(options.tags));
+  }
+
+  console.log(`[PandaDoc] POST ${apiBase}/templates (file upload)`);
+  const response = await fetch(`${apiBase}/templates`, {
+    method: "POST",
+    headers: {
+      Authorization: `API-Key ${apiKey}`,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("PandaDoc create template error:", errorText);
+    throw new Error(`Failed to create PandaDoc template: ${response.status} ${errorText}`);
+  }
+
+  return response.json();
+}
+
 export function mapStatusToPandaDoc(pandaStatus: string): string {
   const statusMap: Record<string, string> = {
     "document.draft": "draft",

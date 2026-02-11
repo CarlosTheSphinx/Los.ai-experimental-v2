@@ -11602,7 +11602,8 @@ Respond ONLY with valid JSON in this format:
           console.error('Failed to create embedded session, falling back to email:', sessionError);
           await pandadoc.sendDocument(documentId, { 
             subject: subject || `Document for Signature: ${envelope.documentName}`,
-            message: message || 'Please review and sign the attached document.' 
+            message: message || 'Please review and sign the attached document.',
+            silent: true
           });
           await db.update(esignEnvelopes)
             .set({ status: 'sent', sentAt: new Date() })
@@ -11611,10 +11612,23 @@ Respond ONLY with valid JSON in this format:
       } else {
         await pandadoc.sendDocument(documentId, { 
           subject: subject || `Document for Signature: ${envelope.documentName}`,
-          message: message || 'Please review and sign the attached document.' 
+          message: message || 'Please review and sign the attached document.',
+          silent: true
         });
+        
+        const recipients = JSON.parse(envelope.recipients as string || '[]');
+        const recipientEmail = recipients[0]?.email;
+        if (recipientEmail) {
+          try {
+            const session = await pandadoc.createEmbeddedSession(documentId, recipientEmail);
+            signingUrl = `https://app.pandadoc.com/s/${session.id}`;
+          } catch (embeddedErr) {
+            console.log('Could not create embedded session after silent send, signing URL not available');
+          }
+        }
+        
         await db.update(esignEnvelopes)
-          .set({ status: 'sent', sentAt: new Date() })
+          .set({ status: 'sent', sentAt: new Date(), ...(signingUrl ? { signingUrl } : {}) })
           .where(eq(esignEnvelopes.id, envelope.id));
       }
       
@@ -11710,6 +11724,33 @@ Respond ONLY with valid JSON in this format:
       res.json({ tokens, availableTokenNames });
     } catch (error: any) {
       console.error('Error generating token preview:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Save PandaDoc document as template
+  app.post('/api/esign/pandadoc/documents/:documentId/save-as-template', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { documentId } = req.params;
+      const { name } = req.body;
+      
+      if (!name) {
+        return res.status(400).json({ error: 'Template name is required' });
+      }
+      
+      console.log(`[PandaDoc] Downloading document ${documentId} to save as template...`);
+      const pdfBuffer = await pandadoc.downloadDocument(documentId);
+      
+      console.log(`[PandaDoc] Creating template "${name}" from document...`);
+      const template = await pandadoc.createTemplateFromFile(name, pdfBuffer, {
+        roles: [{ name: 'Client' }],
+        tags: ['auto-created'],
+      });
+      
+      console.log(`[PandaDoc] Template created: ${template.id}`);
+      res.json({ success: true, template });
+    } catch (error: any) {
+      console.error('Error saving document as template:', error);
       res.status(500).json({ error: error.message });
     }
   });
