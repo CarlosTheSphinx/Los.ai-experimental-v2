@@ -200,24 +200,75 @@ interface DraggableFieldProps {
   scale: number;
 }
 
+function computeFontSize(height: number, width: number, text: string): number {
+  const MIN_FONT = 8;
+  const MAX_FONT = 24;
+  let fontSize = Math.min(MAX_FONT, Math.max(MIN_FONT, height * 0.6));
+  if (text && text.length > 0) {
+    const avgCharWidth = fontSize * 0.6;
+    const charsPerLine = Math.floor(width / avgCharWidth);
+    if (charsPerLine > 0 && text.length > charsPerLine) {
+      const needed = text.length / charsPerLine;
+      const shrunk = height / (needed * 1.3);
+      fontSize = Math.min(fontSize, Math.max(MIN_FONT, shrunk));
+    }
+  }
+  return Math.round(fontSize * 10) / 10;
+}
+
 function DraggableResizableField({ field, index, signer, onUpdate, onRemove, containerWidth, containerHeight, scale }: DraggableFieldProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [position, setPosition] = useState({ x: field.x, y: field.y });
   const [size, setSize] = useState({ width: field.width, height: field.height });
+  const [textValue, setTextValue] = useState(field.value || '');
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   
   const dragStartRef = useRef({ x: 0, y: 0 });
   const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
 
   const isPrepopulated = ALL_PREPOPULATED_FIELD_TYPES.some(f => f.type === field.fieldType);
+  const isTextField = field.fieldType === 'text';
   const fieldLabel = [...SIGNATURE_FIELD_TYPES, ...ALL_PREPOPULATED_FIELD_TYPES].find(f => f.type === field.fieldType)?.label || field.fieldType;
+
+  const dynamicFontSize = computeFontSize(size.height, size.width, textValue || field.value || fieldLabel);
 
   useEffect(() => {
     setPosition({ x: field.x, y: field.y });
     setSize({ width: field.width, height: field.height });
   }, [field.x, field.y, field.width, field.height]);
 
+  useEffect(() => {
+    if (field.value !== undefined && field.value !== textValue) {
+      setTextValue(field.value);
+    }
+  }, [field.value]);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isEditing]);
+
+  const textValueRef = useRef(textValue);
+  textValueRef.current = textValue;
+
+  useEffect(() => {
+    return () => {
+      if (isTextField && !isPrepopulated) {
+        onUpdate(index, { value: textValueRef.current });
+      }
+    };
+  }, []);
+
+  const commitText = useCallback(() => {
+    setIsEditing(false);
+    onUpdate(index, { value: textValue });
+  }, [index, textValue, onUpdate]);
+
   const handleMouseDownDrag = (e: React.MouseEvent) => {
+    if (isEditing) return;
     e.stopPropagation();
     e.preventDefault();
     setIsDragging(true);
@@ -225,6 +276,14 @@ function DraggableResizableField({ field, index, signer, onUpdate, onRemove, con
       x: e.clientX - position.x * scale,
       y: e.clientY - position.y * scale
     };
+  };
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    if (isTextField && !isPrepopulated) {
+      e.stopPropagation();
+      e.preventDefault();
+      setIsEditing(true);
+    }
   };
 
   const handleMouseDownResize = (e: React.MouseEvent) => {
@@ -295,6 +354,76 @@ function DraggableResizableField({ field, index, signer, onUpdate, onRemove, con
 
   const isActive = isDragging || isResizing;
 
+  const displayContent = () => {
+    if (isTextField && !isPrepopulated) {
+      if (isEditing) {
+        return (
+          <textarea
+            ref={inputRef}
+            value={textValue}
+            onChange={(e) => {
+              setTextValue(e.target.value);
+              onUpdate(index, { value: e.target.value });
+            }}
+            onBlur={() => setIsEditing(false)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                commitText();
+              }
+              e.stopPropagation();
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            placeholder="Type here..."
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              background: 'transparent',
+              border: 'none',
+              outline: 'none',
+              resize: 'none',
+              padding: '2px 4px',
+              fontSize: `${dynamicFontSize * scale}px`,
+              lineHeight: 1.3,
+              color: signer?.color || '#3B82F6',
+              fontFamily: 'inherit',
+              overflow: 'auto',
+              cursor: 'text'
+            }}
+            data-testid={`input-text-field-${index}`}
+          />
+        );
+      }
+      return (
+        <span 
+          className="font-medium px-1 w-full h-full flex items-center" 
+          style={{ 
+            color: textValue ? (signer?.color || '#3B82F6') : '#9CA3AF',
+            fontSize: `${dynamicFontSize * scale}px`,
+            lineHeight: 1.3,
+            overflow: 'hidden',
+            wordBreak: 'break-word'
+          }}
+        >
+          {textValue || 'Type here...'}
+        </span>
+      );
+    }
+    return (
+      <span 
+        className="font-medium truncate px-1" 
+        style={{ 
+          color: isPrepopulated ? '#92400E' : signer?.color,
+          fontSize: `${dynamicFontSize * scale}px`
+        }}
+      >
+        {isPrepopulated && field.value ? field.value : fieldLabel}
+      </span>
+    );
+  };
+
   return (
     <div
       style={{
@@ -306,27 +435,21 @@ function DraggableResizableField({ field, index, signer, onUpdate, onRemove, con
         border: `2px solid ${signer?.color || '#3B82F6'}`,
         backgroundColor: isPrepopulated ? '#FEF3C7' : `${signer?.color || '#3B82F6'}20`,
         borderRadius: '4px',
-        cursor: isDragging ? 'grabbing' : 'grab',
-        userSelect: 'none',
-        zIndex: isActive ? 1000 : 10,
-        boxShadow: isActive ? '0 4px 12px rgba(0,0,0,0.3)' : 'none',
+        cursor: isEditing ? 'text' : isDragging ? 'grabbing' : 'grab',
+        userSelect: isEditing ? 'text' : 'none',
+        zIndex: isActive || isEditing ? 1000 : 10,
+        boxShadow: isActive ? '0 4px 12px rgba(0,0,0,0.3)' : isEditing ? '0 0 0 2px rgba(59,130,246,0.5)' : 'none',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        pointerEvents: 'auto'
+        pointerEvents: 'auto',
+        overflow: 'hidden'
       }}
       onMouseDown={handleMouseDownDrag}
+      onDoubleClick={handleDoubleClick}
       data-testid={`field-${field.fieldType}-${index}`}
     >
-      <span 
-        className="text-xs font-medium truncate px-1 pointer-events-none" 
-        style={{ 
-          color: isPrepopulated ? '#92400E' : signer?.color,
-          fontSize: `${Math.max(10, 12 * scale)}px`
-        }}
-      >
-        {isPrepopulated && field.value ? field.value : fieldLabel}
-      </span>
+      {displayContent()}
       
       <button
         className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
@@ -1542,9 +1665,9 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
             </Card>
           </TabsContent>
 
-          <TabsContent value="fields" className="flex-1 min-h-0 p-4">
+          <TabsContent value="fields" className="flex-1 min-h-0 overflow-hidden p-4">
             <div className="flex gap-4 h-full">
-              <div className="w-64 space-y-4 flex-shrink-0 overflow-y-auto">
+              <div className="w-64 space-y-4 flex-shrink-0 overflow-y-auto max-h-full">
                 <div>
                   <Label className="text-sm font-medium">Select Signer</Label>
                   <div className="flex flex-wrap gap-2 mt-2">
@@ -1666,6 +1789,7 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
               
               <div 
                 className="flex-1 border rounded-lg bg-slate-100 min-h-0 overflow-auto"
+                style={{ maxHeight: 'calc(100vh - 220px)' }}
               >
                 <div className="p-4 inline-block min-w-full">
                   {pageCount > 1 && (
