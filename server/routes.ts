@@ -1801,8 +1801,42 @@ export async function registerRoutes(
         return Number.isFinite(n) ? n : null;
       };
 
+      const { signers: signerData } = req.body;
+      
+      const existingSigners = await storage.getSignersByDocumentId(documentId);
+      const existingSignerIds = new Set(existingSigners.map(s => s.id));
+      
+      const signerIdMap = new Map<number, number>();
+      
+      if (Array.isArray(signerData) && signerData.length > 0) {
+        for (const s of signerData) {
+          if (s.id && existingSignerIds.has(s.id)) {
+            signerIdMap.set(s.id, s.id);
+          } else {
+            const newSigner = await storage.createSigner({
+              documentId,
+              name: s.name || 'Signer',
+              email: s.email || '',
+              color: s.color || '#3B82F6',
+              signingOrder: s.signingOrder || 1,
+              status: 'pending'
+            });
+            signerIdMap.set(s.id || newSigner.id, newSigner.id);
+          }
+        }
+      } else {
+        for (const s of existingSigners) {
+          signerIdMap.set(s.id, s.id);
+        }
+      }
+
       const validatedFields = fields.map((field: any, idx: number) => {
-        const signerId = safeInt(field.signerId);
+        let signerId = safeInt(field.signerId);
+        if (signerId !== null && signerIdMap.has(signerId)) {
+          signerId = signerIdMap.get(signerId)!;
+        } else if (signerId !== null && !existingSignerIds.has(signerId)) {
+          signerId = null;
+        }
         const pageNumber = safeNum(field.pageNumber, 1);
         const x = safeNum(field.x, 0);
         const y = safeNum(field.y, 0);
@@ -1838,7 +1872,9 @@ export async function registerRoutes(
         createdFields.push(created);
       }
 
-      res.json({ success: true, fields: createdFields });
+      const signerIdMapping = Object.fromEntries(signerIdMap.entries());
+      const updatedSigners = await storage.getSignersByDocumentId(documentId);
+      res.json({ success: true, fields: createdFields, signerIdMapping, signers: updatedSigners });
     } catch (error) {
       console.error('Error saving fields:', error);
       res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });

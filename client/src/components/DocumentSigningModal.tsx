@@ -1063,8 +1063,12 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
 
   const addSignerMutation = useMutation({
     mutationFn: async (data: { name: string; email: string; color: string }) => {
-      const res = await apiRequest('POST', `/api/documents/${documentId}/signers`, data);
-      return res.json();
+      if (documentId && Number.isFinite(documentId)) {
+        const res = await apiRequest('POST', `/api/documents/${documentId}/signers`, data);
+        return res.json();
+      }
+      const tempId = -(Date.now());
+      return { success: true, signer: { id: tempId, ...data, status: 'pending' } };
     },
     onSuccess: (data) => {
       if (data.success && data.signer) {
@@ -1077,7 +1081,9 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
 
   const deleteSignerMutation = useMutation({
     mutationFn: async (signerId: number) => {
-      await apiRequest('DELETE', `/api/signers/${signerId}`);
+      if (signerId > 0) {
+        await apiRequest('DELETE', `/api/signers/${signerId}`);
+      }
       return signerId;
     },
     onSuccess: (signerId) => {
@@ -1118,14 +1124,38 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
         width: Number.isFinite(f.width) ? Math.max(10, f.width) : 100,
         height: Number.isFinite(f.height) ? Math.max(10, f.height) : 30,
       }));
-      const res = await apiRequest('POST', `/api/documents/${activeDocId}/fields/bulk`, { fields: sanitizedFields });
+      const res = await apiRequest('POST', `/api/documents/${activeDocId}/fields/bulk`, { 
+        fields: sanitizedFields,
+        signers: signers.map(s => ({ id: s.id, name: s.name, email: s.email, color: s.color }))
+      });
       const data = await res.json();
       if (!data.success) {
         throw new Error(data.error || 'Failed to save fields');
       }
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
+      if (data.signers && Array.isArray(data.signers)) {
+        setSigners(data.signers.map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          email: s.email,
+          color: s.color || SIGNER_COLORS[0],
+        })));
+      }
+      if (data.fields && Array.isArray(data.fields)) {
+        setFields(data.fields.map((f: any) => ({
+          id: f.id,
+          signerId: f.signerId,
+          pageNumber: f.pageNumber || 1,
+          fieldType: f.fieldType,
+          x: f.x,
+          y: f.y,
+          width: f.width,
+          height: f.height,
+          value: f.value || '',
+        })));
+      }
       toast({ title: "Fields Saved", description: "Signature fields saved successfully" });
       setStep("send");
     },
