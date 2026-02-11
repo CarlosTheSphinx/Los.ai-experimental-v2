@@ -428,17 +428,21 @@ interface PandaDocFieldInjection {
 
 const WIDGET_FIELD_TYPES = new Set(['signature', 'initials', 'date']);
 
-function getFieldOffsetRatio(fieldType: string): number {
-  if (fieldType === 'signature') {
-    return parseFloat(process.env.SIGNATURE_Y_OFFSET_RATIO || '0');
-  }
-  if (fieldType === 'date') {
-    return parseFloat(process.env.DATE_Y_OFFSET_RATIO || '0');
-  }
-  if (fieldType === 'initials') {
-    return parseFloat(process.env.INITIALS_Y_OFFSET_RATIO || '0');
-  }
-  return 0;
+const PANDADOC_MIN_WIDGET_HEIGHT: Record<string, number> = {
+  signature: 50,
+  date: 50,
+  initials: 50,
+};
+
+function getWidgetYOffset(fieldType: string, declaredHeight: number): number {
+  const ratio = fieldType === 'signature' ? parseFloat(process.env.SIGNATURE_Y_OFFSET_RATIO || '1')
+    : fieldType === 'date' ? parseFloat(process.env.DATE_Y_OFFSET_RATIO || '1')
+    : fieldType === 'initials' ? parseFloat(process.env.INITIALS_Y_OFFSET_RATIO || '1')
+    : 0;
+  if (ratio === 0) return 0;
+  const minHeight = PANDADOC_MIN_WIDGET_HEIGHT[fieldType] || 50;
+  const effectiveHeight = Math.max(declaredHeight, minHeight);
+  return ratio * effectiveHeight;
 }
 
 function buildFieldPayload(f: PandaDocFieldInjection) {
@@ -446,10 +450,8 @@ function buildFieldPayload(f: PandaDocFieldInjection) {
   const isWidget = WIDGET_FIELD_TYPES.has(f.type);
 
   if (isWidget) {
-    const offsetRatio = getFieldOffsetRatio(f.type);
-    if (offsetRatio !== 0) {
-      finalOffsetY = f.offsetY + (offsetRatio * f.height);
-    }
+    const yOffset = getWidgetYOffset(f.type, f.height);
+    finalOffsetY = f.offsetY + yOffset;
   }
 
   return {
