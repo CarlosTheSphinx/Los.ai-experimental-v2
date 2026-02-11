@@ -487,14 +487,13 @@ function DraggableResizableField({ field, index, signer, onUpdate, onRemove, con
 
 export function DocumentSigningModal({ open, onClose, quote, existingDocumentId }: DocumentSigningModalProps) {
   const { toast } = useToast();
-  const [step, setStep] = useState<"upload" | "signers" | "fields" | "send">("upload");
+  type Step = "upload" | "fields" | "send";
+  const [step, setStep] = useState<Step>("upload");
   const [documentId, setDocumentId] = useState<number | null>(null);
   const [fileName, setFileName] = useState("");
   const [pdfData, setPdfData] = useState<string | null>(null);
   const [pageCount, setPageCount] = useState(1);
   const [signers, setSigners] = useState<Array<{ id?: number; name: string; email: string; color: string }>>([]);
-  const [newSignerName, setNewSignerName] = useState("");
-  const [newSignerEmail, setNewSignerEmail] = useState("");
   const [fields, setFields] = useState<FieldData[]>([]);
   const [selectedFieldType, setSelectedFieldType] = useState<string | null>(null);
   const [selectedSignerIndex, setSelectedSignerIndex] = useState(0);
@@ -503,7 +502,6 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
   const [pdfScale, setPdfScale] = useState(1.0);
   const [pdfDimensions, setPdfDimensions] = useState({ width: 612, height: 792 });
   
-  const [uploadMode, setUploadMode] = useState<"template" | "manual" | "pandadoc">("template");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [templateFieldsLoaded, setTemplateFieldsLoaded] = useState(false);
   const [templateDimensions, setTemplateDimensions] = useState<{ width: number; height: number } | null>(null);
@@ -515,27 +513,24 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
   const [templateCategory, setTemplateCategory] = useState("");
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   
-  // PandaDoc state
-  const [pandadocTemplateId, setPandadocTemplateId] = useState<string>("");
   const [pandadocRecipients, setPandadocRecipients] = useState<Array<{ name: string; email: string; role: string }>>([
     { name: `${quote.customerFirstName || ''} ${quote.customerLastName || ''}`.trim(), email: quote.customerEmail || '', role: 'Signer' }
   ]);
-  const [showVariablesSidebar, setShowVariablesSidebar] = useState(true);
-  const editorContainerRef = useRef<HTMLDivElement>(null);
-  const [templateRoles, setTemplateRoles] = useState<Array<{ name: string }>>([]);
-  const [templateRolesLoading, setTemplateRolesLoading] = useState(false);
-  const [templateRolesError, setTemplateRolesError] = useState<string | null>(null);
-  const [showTokenPreview, setShowTokenPreview] = useState(false);
-  const [pandadocPdfUploaded, setPandadocPdfUploaded] = useState(false);
-  const pandadocFileInputRef = useRef<HTMLInputElement>(null);
-  const [customVariableName, setCustomVariableName] = useState("");
-  const [customVariableValue, setCustomVariableValue] = useState("");
-  const [customVariables, setCustomVariables] = useState<Array<{ type: string; label: string; value: string; width: number; height: number }>>([]);
-  const [newRecipientName, setNewRecipientName] = useState("");
-  const [newRecipientEmail, setNewRecipientEmail] = useState("");
-  const [newRecipientRole, setNewRecipientRole] = useState("Signer");
-  
-  const isPandadocMode = uploadMode === "pandadoc";
+  const [pdfUploaded, setPdfUploaded] = useState(false);
+
+  const canGoToFields = pdfUploaded && pandadocRecipients.some(r => r.email.trim() && r.role.trim());
+  const canGoToSend = fields.length > 0;
+
+  const goToStep = (target: Step) => {
+    if (target === "fields" && !canGoToFields) return;
+    if (target === "send" && !canGoToSend) return;
+    setStep(target);
+  };
+
+  const goBack = () => {
+    if (step === "send") setStep("fields");
+    else if (step === "fields") setStep("upload");
+  };
   
   const pdfContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -543,17 +538,6 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
   const { data: templatesData, isLoading: templatesLoading, isError: templatesError } = useQuery<{ templates: DocumentTemplate[] }>({
     queryKey: ["/api/document-templates"],
     enabled: open,
-  });
-
-  // Query for PandaDoc templates
-  const { data: pandadocTemplatesData, isLoading: pandadocTemplatesLoading } = useQuery<{ templates: Array<{ id: string; name: string }> }>({
-    queryKey: ["/api/esign/pandadoc/templates"],
-    enabled: open && uploadMode === "pandadoc",
-  });
-
-  const { data: tokenPreviewData } = useQuery<{ tokens: Array<{ name: string; value: string }>; availableTokenNames: string[] }>({
-    queryKey: ["/api/esign/pandadoc/quote", quote.id, "tokens"],
-    enabled: open && uploadMode === "pandadoc" && showTokenPreview,
   });
 
   const [existingDocLoaded, setExistingDocLoaded] = useState(false);
@@ -598,15 +582,13 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
           })));
         }
         
-        setUploadMode("manual");
+        setPdfUploaded(true);
         setExistingDocLoaded(true);
         
         if (agreement.signers && agreement.signers.length > 0 && agreement.fields && agreement.fields.length > 0) {
           setStep("fields");
-        } else if (agreement.signers && agreement.signers.length > 0) {
-          setStep("signers");
         } else {
-          setStep("signers");
+          setStep("upload");
         }
       } catch (err) {
         console.error('Failed to load existing document:', err);
@@ -624,52 +606,6 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
   }, [open]);
 
 
-  const [saveAsTemplateName, setSaveAsTemplateName] = useState('');
-  const [showSaveTemplateInput, setShowSaveTemplateInput] = useState(false);
-  
-
-  // Fetch template roles when template ID changes
-  useEffect(() => {
-    if (!pandadocTemplateId) {
-      setTemplateRoles([]);
-      setTemplateRolesError(null);
-      return;
-    }
-
-    const fetchTemplateDetails = async () => {
-      setTemplateRolesLoading(true);
-      setTemplateRolesError(null);
-      try {
-        const res = await fetch(`/api/esign/pandadoc/templates/${pandadocTemplateId}/details`, {
-          credentials: 'include',
-        });
-        if (!res.ok) {
-          const errorData = await res.json();
-          throw new Error(errorData.error || 'Failed to fetch template details');
-        }
-        const data = await res.json();
-        const roles = data.roles || [];
-        setTemplateRoles(roles);
-        
-        // Update recipient roles to first available role if they're empty
-        if (roles.length > 0) {
-          setPandadocRecipients(prev => prev.map(r => ({
-            ...r,
-            role: r.role || roles[0].name,
-          })));
-        }
-      } catch (error: any) {
-        console.error('Error fetching template details:', error);
-        setTemplateRolesError(error.message);
-        setTemplateRoles([]);
-      } finally {
-        setTemplateRolesLoading(false);
-      }
-    };
-
-    const debounceTimer = setTimeout(fetchTemplateDetails, 500);
-    return () => clearTimeout(debounceTimer);
-  }, [pandadocTemplateId]);
 
 
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
@@ -716,7 +652,6 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
       if (data.success && data.document) {
         setDocumentId(data.document.id);
         toast({ title: "Document Uploaded", description: "PDF uploaded successfully" });
-        setStep("signers");
       }
     },
     onError: () => {
@@ -829,8 +764,9 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
           setTemplateFieldsLoaded(true);
         }
         
-        toast({ title: "Template Loaded", description: "Template and fields loaded. Add signers and review." });
-        setStep("signers");
+        setPdfUploaded(true);
+        toast({ title: "Template Loaded", description: "Template and fields loaded. Review recipients and continue." });
+        setStep("upload");
       } catch (error: any) {
         toast({ title: "Error", description: error.message || "Failed to set up document", variant: "destructive" });
       }
@@ -1097,43 +1033,7 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
     }
   };
 
-  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
 
-    if (file.type !== 'application/pdf') {
-      toast({ title: "Invalid File", description: "Please upload a PDF file", variant: "destructive" });
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
-      setPdfData(base64);
-      setFileName(file.name);
-    };
-    reader.readAsDataURL(file);
-  }, [toast]);
-
-  const handleUploadSubmit = () => {
-    if (!pdfData || !fileName) return;
-    createDocumentMutation.mutate({
-      name: `Agreement for ${quote.customerFirstName} ${quote.customerLastName}`,
-      fileName,
-      fileData: pdfData,
-      pageCount
-    });
-  };
-
-  const handleAddSigner = () => {
-    if (!newSignerName.trim() || !newSignerEmail.trim()) {
-      toast({ title: "Missing Info", description: "Please enter name and email", variant: "destructive" });
-      return;
-    }
-    
-    const color = SIGNER_COLORS[signers.length % SIGNER_COLORS.length];
-    addSignerMutation.mutate({ name: newSignerName, email: newSignerEmail, color });
-  };
 
   const handlePdfClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!selectedFieldType || selectedSignerIndex < 0 || !signers[selectedSignerIndex]?.id) return;
@@ -1194,23 +1094,17 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs value={step} className="flex-1 overflow-hidden flex flex-col">
-          <TabsList className={`grid ${uploadMode === "pandadoc" ? 'grid-cols-3' : 'grid-cols-4'}`}>
-            <TabsTrigger value="upload" disabled={step !== "upload" && !documentId && !pandadocPdfUploaded}>
+        <Tabs value={step} onValueChange={(v) => goToStep(v as Step)} className="flex-1 overflow-hidden flex flex-col">
+          <TabsList className="grid grid-cols-3">
+            <TabsTrigger value="upload" data-testid="step-upload">
               <Upload className="w-4 h-4 mr-2" />
-              {uploadMode === "pandadoc" ? "Upload & Recipients" : "Upload"}
+              Upload & Recipients
             </TabsTrigger>
-            {uploadMode !== "pandadoc" && (
-              <TabsTrigger value="signers" disabled={!documentId}>
-                <Users className="w-4 h-4 mr-2" />
-                Signers
-              </TabsTrigger>
-            )}
-            <TabsTrigger value="fields" disabled={uploadMode === "pandadoc" ? !pandadocPdfUploaded || signers.length === 0 : signers.length === 0}>
+            <TabsTrigger value="fields" disabled={!canGoToFields} data-testid="step-fields">
               <FileText className="w-4 h-4 mr-2" />
               Fields
             </TabsTrigger>
-            <TabsTrigger value="send" disabled={fields.length === 0}>
+            <TabsTrigger value="send" disabled={!canGoToSend} data-testid="step-send">
               <Send className="w-4 h-4 mr-2" />
               Send
             </TabsTrigger>
@@ -1220,112 +1114,62 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
             <Card>
               <CardContent className="pt-6">
                 <div className="space-y-6">
-                  <div className="flex justify-center gap-4 mb-6">
-                    <Button
-                      variant={uploadMode === "template" ? "default" : "outline"}
-                      onClick={() => setUploadMode("template")}
-                      className="flex items-center gap-2"
-                      data-testid="button-use-template"
-                    >
-                      <FileStack className="w-4 h-4" />
-                      Use Template
-                    </Button>
-                    <Button
-                      variant={uploadMode === "manual" ? "default" : "outline"}
-                      onClick={() => setUploadMode("manual")}
-                      className="flex items-center gap-2"
-                      data-testid="button-upload-manual"
-                    >
-                      <Upload className="w-4 h-4" />
-                      Upload PDF
-                    </Button>
-                    <Button
-                      variant={uploadMode === "pandadoc" ? "default" : "outline"}
-                      onClick={() => setUploadMode("pandadoc")}
-                      className="flex items-center gap-2"
-                      data-testid="button-use-pandadoc"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      PandaDoc
-                    </Button>
+                  <div className="text-center mb-2">
+                    <Send className="w-10 h-10 mx-auto text-primary mb-2" />
+                    <h3 className="text-lg font-semibold">Send via PandaDoc</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Upload your PDF, add recipients, place fields, then send via PandaDoc
+                    </p>
                   </div>
 
-                  {uploadMode === "template" && (
-                    <div className="space-y-4">
-                      <div className="text-center mb-4">
-                        <Sparkles className="w-10 h-10 mx-auto text-blue-500 mb-2" />
-                        <h3 className="text-lg font-semibold">Choose a Template</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Templates have pre-configured fields that auto-populate with loan data
-                        </p>
+                  {templatesData?.templates && templatesData.templates.length > 0 && !pdfUploaded && (
+                    <div className="space-y-3 border rounded-lg p-4 bg-muted/30">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-blue-500" />
+                        <Label className="text-sm font-medium">Or use a saved template</Label>
                       </div>
-                      
-                      {templatesLoading ? (
-                        <div className="text-center py-8 text-muted-foreground">
-                          <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4" />
-                          <p>Loading templates...</p>
-                        </div>
-                      ) : templatesError ? (
-                        <div className="text-center py-8 text-destructive">
-                          <FileStack className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                          <p>Failed to load templates</p>
-                          <p className="text-sm">Please try again or upload a PDF manually</p>
-                        </div>
-                      ) : templatesData?.templates && templatesData.templates.length > 0 ? (
-                        <div className="max-w-md mx-auto space-y-4">
-                          <Select
-                            value={selectedTemplateId}
-                            onValueChange={setSelectedTemplateId}
+                      <div className="flex gap-2 items-end flex-wrap">
+                        <Select
+                          value={selectedTemplateId}
+                          onValueChange={setSelectedTemplateId}
+                        >
+                          <SelectTrigger className="flex-1 min-w-[200px]" data-testid="select-template">
+                            <SelectValue placeholder="Select a template..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {templatesData.templates.map((template) => (
+                              <SelectItem key={template.id} value={template.id.toString()}>
+                                <div className="flex items-center gap-2">
+                                  <FileStack className="w-4 h-4 text-blue-500" />
+                                  <span>{template.name}</span>
+                                  {template.category && (
+                                    <Badge variant="outline" className="ml-2 text-xs">
+                                      {template.category}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {selectedTemplateId && (
+                          <Button
+                            onClick={() => useTemplateMutation.mutate(parseInt(selectedTemplateId))}
+                            disabled={useTemplateMutation.isPending}
+                            data-testid="button-load-template"
                           >
-                            <SelectTrigger data-testid="select-template">
-                              <SelectValue placeholder="Select a document template" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {templatesData.templates.map((template) => (
-                                <SelectItem key={template.id} value={template.id.toString()}>
-                                  <div className="flex items-center gap-2">
-                                    <FileStack className="w-4 h-4 text-blue-500" />
-                                    <span>{template.name}</span>
-                                    {template.category && (
-                                      <Badge variant="outline" className="ml-2 text-xs">
-                                        {template.category}
-                                      </Badge>
-                                    )}
-                                  </div>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          
-                          {selectedTemplateId && (
-                            <Button
-                              onClick={() => useTemplateMutation.mutate(parseInt(selectedTemplateId))}
-                              disabled={useTemplateMutation.isPending}
-                              className="w-full"
-                              data-testid="button-load-template"
-                            >
-                              {useTemplateMutation.isPending ? (
-                                <>Loading Template...</>
-                              ) : (
-                                <>
-                                  <Sparkles className="w-4 h-4 mr-2" />
-                                  Use This Template
-                                </>
-                              )}
-                            </Button>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-center py-8 text-muted-foreground">
-                          <FileStack className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                          <p>No templates available</p>
-                          <p className="text-sm">Upload a PDF manually or ask an admin to create templates</p>
-                        </div>
-                      )}
+                            {useTemplateMutation.isPending ? (
+                              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Loading...</>
+                            ) : (
+                              <><Sparkles className="w-4 h-4 mr-2" />Use Template</>
+                            )}
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   )}
 
-                  {uploadMode === "manual" && (
+                  <div className="max-w-lg mx-auto space-y-6">
                     <div className="text-center space-y-4">
                       <div 
                         className="border-2 border-dashed rounded-lg p-8 hover:bg-muted/50 cursor-pointer transition-colors"
@@ -1333,242 +1177,132 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
                         data-testid="upload-area"
                       >
                         <Upload className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                        <p className="text-lg font-medium">Click to upload PDF</p>
-                        <p className="text-sm text-muted-foreground">or drag and drop</p>
+                        <p className="text-lg font-medium">Upload your Term Sheet PDF</p>
+                        <p className="text-sm text-muted-foreground">Click to select a PDF file</p>
                         <input
                           ref={fileInputRef}
                           type="file"
                           accept=".pdf"
-                          onChange={handleFileUpload}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            if (file.type !== 'application/pdf') {
+                              toast({ title: "Invalid File", description: "Please upload a PDF file", variant: "destructive" });
+                              return;
+                            }
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              setPdfData(ev.target?.result as string);
+                              setFileName(file.name);
+                              setPdfUploaded(true);
+                            };
+                            reader.readAsDataURL(file);
+                          }}
                           className="hidden"
                           data-testid="file-input"
                         />
                       </div>
-                  
-                      {pdfData && (
+
+                      {pdfData && pdfUploaded && (
                         <div className="space-y-4">
                           <div className="flex items-center justify-center gap-2 text-green-600">
                             <Check className="w-5 h-5" />
                             <span>{fileName}</span>
                           </div>
-                          <div className="border rounded-lg overflow-hidden max-h-[300px]">
+                          <div className="border rounded-lg overflow-hidden max-h-[200px]">
                             <PDFDocument file={pdfData} onLoadSuccess={onDocumentLoadSuccess}>
                               <PDFPage pageNumber={1} width={400} />
                             </PDFDocument>
                           </div>
-                          <Button 
-                            onClick={handleUploadSubmit} 
-                            disabled={createDocumentMutation.isPending}
-                            data-testid="button-upload-continue"
-                          >
-                            {createDocumentMutation.isPending ? "Uploading..." : "Continue"}
-                            <ChevronRight className="w-4 h-4 ml-2" />
-                          </Button>
                         </div>
                       )}
                     </div>
-                  )}
 
-                  {uploadMode === "pandadoc" && (
-                    <div className="space-y-6">
-                      <div className="text-center mb-4">
-                        <ExternalLink className="w-10 h-10 mx-auto text-purple-500 mb-2" />
-                        <h3 className="text-lg font-semibold">Send via PandaDoc</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Upload your PDF, place signature and data fields visually, then send via PandaDoc for signing
-                        </p>
-                      </div>
-
-                        <div className="max-w-lg mx-auto space-y-6">
-                          <div className="text-center space-y-4">
-                            <div 
-                              className="border-2 border-dashed rounded-lg p-8 hover:bg-muted/50 cursor-pointer transition-colors"
-                              onClick={() => pandadocFileInputRef.current?.click()}
-                              data-testid="pandadoc-upload-area"
-                            >
-                              <Upload className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                              <p className="text-lg font-medium">Upload your Term Sheet PDF</p>
-                              <p className="text-sm text-muted-foreground">Click to select a PDF file to send via PandaDoc</p>
-                              <input
-                                ref={pandadocFileInputRef}
-                                type="file"
-                                accept=".pdf"
+                    {pdfData && pdfUploaded && (
+                      <>
+                        <div className="space-y-3">
+                          <Label>Recipients</Label>
+                          {pandadocRecipients.map((recipient, idx) => (
+                            <div key={idx} className="flex gap-2 items-center flex-wrap">
+                              <Input
+                                placeholder="Name"
+                                value={recipient.name}
                                 onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (!file) return;
-                                  if (file.type !== 'application/pdf') {
-                                    toast({ title: "Invalid File", description: "Please upload a PDF file", variant: "destructive" });
-                                    return;
-                                  }
-                                  const reader = new FileReader();
-                                  reader.onload = (ev) => {
-                                    setPdfData(ev.target?.result as string);
-                                    setFileName(file.name);
-                                    setPandadocPdfUploaded(true);
-                                  };
-                                  reader.readAsDataURL(file);
+                                  const updated = [...pandadocRecipients];
+                                  updated[idx].name = e.target.value;
+                                  setPandadocRecipients(updated);
                                 }}
-                                className="hidden"
-                                data-testid="pandadoc-file-input"
+                                className="flex-1 min-w-[120px]"
+                                data-testid={`input-recipient-name-${idx}`}
                               />
-                            </div>
-
-                            {pdfData && pandadocPdfUploaded && (
-                              <div className="space-y-4">
-                                <div className="flex items-center justify-center gap-2 text-green-600">
-                                  <Check className="w-5 h-5" />
-                                  <span>{fileName}</span>
-                                </div>
-                                <div className="border rounded-lg overflow-hidden max-h-[200px]">
-                                  <PDFDocument file={pdfData} onLoadSuccess={onDocumentLoadSuccess}>
-                                    <PDFPage pageNumber={1} width={400} />
-                                  </PDFDocument>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {pdfData && pandadocPdfUploaded && (
-                            <>
-                              <div className="space-y-3">
-                                <Label>Recipients</Label>
-                                {pandadocRecipients.map((recipient, idx) => (
-                                  <div key={idx} className="flex gap-2 items-center flex-wrap">
-                                    <Input
-                                      placeholder="Name"
-                                      value={recipient.name}
-                                      onChange={(e) => {
-                                        const updated = [...pandadocRecipients];
-                                        updated[idx].name = e.target.value;
-                                        setPandadocRecipients(updated);
-                                      }}
-                                      className="flex-1 min-w-[120px]"
-                                      data-testid={`input-recipient-name-${idx}`}
-                                    />
-                                    <Input
-                                      placeholder="Email"
-                                      type="email"
-                                      value={recipient.email}
-                                      onChange={(e) => {
-                                        const updated = [...pandadocRecipients];
-                                        updated[idx].email = e.target.value;
-                                        setPandadocRecipients(updated);
-                                      }}
-                                      className="flex-1 min-w-[140px]"
-                                      data-testid={`input-recipient-email-${idx}`}
-                                    />
-                                    <Input
-                                      placeholder="Role (e.g. Signer)"
-                                      value={recipient.role}
-                                      onChange={(e) => {
-                                        const updated = [...pandadocRecipients];
-                                        updated[idx].role = e.target.value;
-                                        setPandadocRecipients(updated);
-                                      }}
-                                      className="w-32"
-                                      data-testid={`input-recipient-role-${idx}`}
-                                    />
-                                    {pandadocRecipients.length > 1 && (
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => setPandadocRecipients(prev => prev.filter((_, i) => i !== idx))}
-                                        data-testid={`button-remove-recipient-${idx}`}
-                                      >
-                                        <Trash2 className="w-4 h-4 text-destructive" />
-                                      </Button>
-                                    )}
-                                  </div>
-                                ))}
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => setPandadocRecipients(prev => [...prev, { name: '', email: '', role: 'Signer' }])}
-                                  data-testid="button-add-recipient"
-                                >
-                                  <Plus className="w-4 h-4 mr-2" />
-                                  Add Recipient
-                                </Button>
-                              </div>
-
-                              <Button
-                                onClick={() => {
-                                  const recipientSigners = pandadocRecipients.map((r, i) => ({
-                                    id: i + 1,
-                                    name: r.name,
-                                    email: r.email,
-                                    color: SIGNER_COLORS[i % SIGNER_COLORS.length],
-                                  }));
-                                  setSigners(recipientSigners);
-                                  setStep("fields");
+                              <Input
+                                placeholder="Email"
+                                type="email"
+                                value={recipient.email}
+                                onChange={(e) => {
+                                  const updated = [...pandadocRecipients];
+                                  updated[idx].email = e.target.value;
+                                  setPandadocRecipients(updated);
                                 }}
-                                disabled={!pdfData || pandadocRecipients.some(r => !r.email.trim() || !r.role.trim())}
-                                className="w-full"
-                                data-testid="button-pandadoc-continue-fields"
-                              >
-                                Continue to Place Fields
-                                <ChevronRight className="w-4 h-4 ml-2" />
-                              </Button>
-                            </>
-                          )}
+                                className="flex-1 min-w-[140px]"
+                                data-testid={`input-recipient-email-${idx}`}
+                              />
+                              <Input
+                                placeholder="Role (e.g. Signer)"
+                                value={recipient.role}
+                                onChange={(e) => {
+                                  const updated = [...pandadocRecipients];
+                                  updated[idx].role = e.target.value;
+                                  setPandadocRecipients(updated);
+                                }}
+                                className="w-32"
+                                data-testid={`input-recipient-role-${idx}`}
+                              />
+                              {pandadocRecipients.length > 1 && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setPandadocRecipients(prev => prev.filter((_, i) => i !== idx))}
+                                  data-testid={`button-remove-recipient-${idx}`}
+                                >
+                                  <Trash2 className="w-4 h-4 text-destructive" />
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPandadocRecipients(prev => [...prev, { name: '', email: '', role: 'Signer' }])}
+                            data-testid="button-add-recipient"
+                          >
+                            <Plus className="w-4 h-4 mr-2" />
+                            Add Recipient
+                          </Button>
                         </div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
 
-          <TabsContent value="signers" className="flex-1 overflow-auto p-4">
-            <Card>
-              <CardContent className="pt-6 space-y-4">
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Signer Name"
-                    value={newSignerName}
-                    onChange={(e) => setNewSignerName(e.target.value)}
-                    data-testid="input-signer-name"
-                  />
-                  <Input
-                    placeholder="Email Address"
-                    type="email"
-                    value={newSignerEmail}
-                    onChange={(e) => setNewSignerEmail(e.target.value)}
-                    data-testid="input-signer-email"
-                  />
-                  <Button onClick={handleAddSigner} disabled={addSignerMutation.isPending} data-testid="button-add-signer">
-                    <Plus className="w-4 h-4" />
-                  </Button>
+                        <Button
+                          onClick={() => {
+                            const recipientSigners = pandadocRecipients.map((r, i) => ({
+                              id: i + 1,
+                              name: r.name,
+                              email: r.email,
+                              color: SIGNER_COLORS[i % SIGNER_COLORS.length],
+                            }));
+                            setSigners(recipientSigners);
+                            setStep("fields");
+                          }}
+                          disabled={pandadocRecipients.some(r => !r.email.trim() || !r.role.trim())}
+                          className="w-full"
+                          data-testid="button-continue-fields"
+                        >
+                          Continue to Place Fields
+                          <ChevronRight className="w-4 h-4 ml-2" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </div>
-                
-                <div className="space-y-2">
-                  {signers.map((signer, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 border rounded-lg" data-testid={`signer-${i}`}>
-                      <div className="flex items-center gap-3">
-                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: signer.color }} />
-                        <div>
-                          <p className="font-medium">{signer.name}</p>
-                          <p className="text-sm text-muted-foreground">{signer.email}</p>
-                        </div>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => signer.id && deleteSignerMutation.mutate(signer.id)}
-                        data-testid={`delete-signer-${i}`}
-                      >
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-                
-                {signers.length > 0 && (
-                  <Button onClick={() => setStep("fields")} data-testid="button-signers-continue">
-                    Continue to Place Fields
-                    <ChevronRight className="w-4 h-4 ml-2" />
-                  </Button>
-                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -1691,6 +1425,16 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
                   >
                     <FileStack className="w-4 h-4 mr-2" />
                     Save as Template
+                  </Button>
+
+                  <Button 
+                    variant="ghost"
+                    onClick={goBack}
+                    className="w-full"
+                    data-testid="button-fields-back"
+                  >
+                    <ChevronLeft className="w-4 h-4 mr-2" />
+                    Back to Upload & Recipients
                   </Button>
                 </div>
               </div>
@@ -1893,19 +1637,30 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
                     </Button>
                   </div>
                 ) : (
-                  <Button 
-                    onClick={() => sendViaPandadocMutation.mutate()} 
-                    disabled={sendViaPandadocMutation.isPending}
-                    className="w-full"
-                    size="lg"
-                    data-testid="button-send-pandadoc"
-                  >
-                    {sendViaPandadocMutation.isPending ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending via PandaDoc...</>
-                    ) : (
-                      <>Send via PandaDoc<Send className="w-4 h-4 ml-2" /></>
-                    )}
-                  </Button>
+                  <div className="space-y-3">
+                    <Button 
+                      onClick={() => sendViaPandadocMutation.mutate()} 
+                      disabled={sendViaPandadocMutation.isPending}
+                      className="w-full"
+                      size="lg"
+                      data-testid="button-send-pandadoc"
+                    >
+                      {sendViaPandadocMutation.isPending ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending via PandaDoc...</>
+                      ) : (
+                        <>Send via PandaDoc<Send className="w-4 h-4 ml-2" /></>
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="w-full"
+                      onClick={goBack}
+                      data-testid="button-send-back"
+                    >
+                      <ChevronLeft className="w-4 h-4 mr-2" />
+                      Back to Fields
+                    </Button>
+                  </div>
                 )}
               </CardContent>
             </Card>

@@ -1,0 +1,526 @@
+Below is **drop-in code** (Node/TypeScript + Postgres + React) to fix:
+
+1. **Step navigation**: you can go back from Step 3 to Step 2/1
+2. **Remove non-PandaDoc send options** in Step 1
+3. **Template creation**: save the exact placed fields (positions + pages + values) for a specific PDF as a reusable template, then load/apply it later
+
+I’m going to assume your flow looks like:
+
+* **Step 1**: Upload & Recipients
+* **Step 2**: Fields (place overlay fields)
+* **Step 3**: Send (Ready to Send)
+
+If your file names differ, search for your “Send Quote for Signature” modal component and map accordingly.
+
+---
+
+# 1) Fix: allow Back navigation (Step 3 → Step 2 → Step 1)
+
+### Frontend: Stepper state + Back button wiring
+
+**`src/components/SendQuoteModal.tsx`** (or wherever your modal lives)
+
+```tsx
+import React, { useMemo, useState } from "react";
+
+type Step = 1 | 2 | 3;
+
+export function SendQuoteModal(props: { termSheetId: string; onClose: () => void }) {
+  const [step, setStep] = useState<Step>(1);
+
+  // Optional: block skipping if missing required info
+  const canGoToStep2 = true; // replace with: hasPdf && recipients.length > 0
+  const canGoToStep3 = true; // replace with: fieldsPlacedCount > 0
+
+  const goToStep = (target: Step) => {
+    // Guard rails so user can’t jump forward if prerequisites not met
+    if (target === 2 && !canGoToStep2) return;
+    if (target === 3 && !canGoToStep3) return;
+    setStep(target);
+  };
+
+  const goBack = () => setStep((s) => (s > 1 ? ((s - 1) as Step) : s));
+  const goNext = () => setStep((s) => (s < 3 ? ((s + 1) as Step) : s));
+
+  return (
+    <div className="modal">
+      <div className="modal-header">
+        <h2>Send Quote for Signature</h2>
+        <button onClick={props.onClose} aria-label="Close">✕</button>
+      </div>
+
+      {/* Make the step headers clickable */}
+      <div className="stepper">
+        <button
+          className={step === 1 ? "active" : ""}
+          onClick={() => goToStep(1)}
+          type="button"
+        >
+          Upload & Recipients
+        </button>
+
+        <button
+          className={step === 2 ? "active" : ""}
+          onClick={() => goToStep(2)}
+          type="button"
+          disabled={!canGoToStep2}
+        >
+          Fields
+        </button>
+
+        <button
+          className={step === 3 ? "active" : ""}
+          onClick={() => goToStep(3)}
+          type="button"
+          disabled={!canGoToStep3}
+        >
+          Send
+        </button>
+      </div>
+
+      <div className="modal-body">
+        {step === 1 && <Step1UploadRecipients termSheetId={props.termSheetId} onNext={goNext} />}
+        {step === 2 && <Step2Fields termSheetId={props.termSheetId} onNext={goNext} onBack={goBack} />}
+        {step === 3 && <Step3Send termSheetId={props.termSheetId} onBack={goBack} />}
+      </div>
+
+      {/* Optional footer with Back/Next */}
+      <div className="modal-footer">
+        <button type="button" onClick={goBack} disabled={step === 1}>
+          Back
+        </button>
+        {step < 3 ? (
+          <button type="button" onClick={goNext}>
+            Continue
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+```
+
+### Step 3: add an explicit Back button
+
+**`src/components/Step3Send.tsx`**
+
+```tsx
+export function Step3Send(props: { termSheetId: string; onBack: () => void }) {
+  return (
+    <div>
+      <div className="ready-card">
+        {/* … your Ready to Send UI … */}
+      </div>
+
+      <div className="flex gap-2 mt-4">
+        <button type="button" onClick={props.onBack}>
+          ← Back to Fields
+        </button>
+
+        <button type="button" className="primary">
+          Send via PandaDoc
+        </button>
+      </div>
+    </div>
+  );
+}
+```
+
+That alone solves “can’t go back”.
+
+---
+
+# 2) Fix: remove other send options, only PandaDoc
+
+This is usually a **provider selection** or a **dropdown** in Step 1 (Upload & Recipients).
+
+### Option A (best): delete the UI entirely and hardcode provider = pandadoc
+
+**`src/components/Step1UploadRecipients.tsx`**
+Remove any radio/select options like DocuSign, Email, etc. Replace with:
+
+```tsx
+export function Step1UploadRecipients(props: { termSheetId: string; onNext: () => void }) {
+  // force provider
+  const provider = "pandadoc";
+
+  return (
+    <div>
+      <h3>Upload & Recipients</h3>
+
+      {/* If you previously had provider choices, remove them */}
+      <div className="mt-2 p-3 border rounded">
+        <div className="text-sm text-muted">Signature Provider</div>
+        <div className="font-medium">PandaDoc (only)</div>
+        <input type="hidden" name="provider" value={provider} />
+      </div>
+
+      {/* ...rest of upload & recipients form... */}
+
+      <button type="button" className="primary mt-4" onClick={props.onNext}>
+        Continue to Fields →
+      </button>
+    </div>
+  );
+}
+```
+
+### Backend guardrail (prevents any other provider via API)
+
+In your send endpoint, enforce provider:
+
+```ts
+// inside /api/term-sheets/:id/send (or your pandadoc send route)
+if (req.body.provider && req.body.provider !== "pandadoc") {
+  return res.status(400).json({ success: false, error: "Only PandaDoc sending is supported." });
+}
+```
+
+---
+
+# 3) Template creation: save exact field placements for a specific PDF as a template
+
+You want: “after I place fields on this settlement statement, save them as a reusable template.”
+
+This means you need:
+
+* a `templates` table
+* a `template_fields` (or JSON blob)
+* an endpoint to **create template from the current document placements**
+* an endpoint to **apply template** to another term sheet that uses the same PDF (or same “document_type”)
+
+## 3.1 Database schema (Postgres)
+
+Run these SQL migrations:
+
+```sql
+CREATE TABLE IF NOT EXISTS document_templates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  source_term_sheet_id uuid,
+  source_pdf_hash text,          -- so template is tied to an exact document/PDF
+  source_pdf_url text,
+  created_by_user_id uuid,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS document_template_fields (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  template_id uuid NOT NULL REFERENCES document_templates(id) ON DELETE CASCADE,
+
+  field_key text NOT NULL,       -- e.g. "loan_amount" or "signature_1"
+  field_type text NOT NULL,      -- signature | initials | text | date | data
+  page int NOT NULL,
+
+  x numeric NOT NULL,
+  y numeric NOT NULL,
+  w numeric NOT NULL,
+  h numeric NOT NULL,
+
+  font_size int,
+  value text,                    -- optional default/prefill (for DSCR data)
+  assigned_to_email text,        -- signer email or role
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_template_fields_template_id ON document_template_fields(template_id);
+```
+
+### Add a PDF hash column on your term sheet (optional but recommended)
+
+So you can ensure template matches the exact PDF:
+
+```sql
+ALTER TABLE term_sheets
+ADD COLUMN IF NOT EXISTS pdf_hash text;
+```
+
+Compute this hash when you upload/store the PDF (SHA256 of the bytes or stable hash of URL if bytes not available).
+
+---
+
+## 3.2 Backend: create template endpoint
+
+**`src/routes/templates.ts`** (Express)
+
+```ts
+import { Router } from "express";
+import { z } from "zod";
+import { db } from "../db";
+
+export const templatesRouter = Router();
+
+const FieldSchema = z.object({
+  id: z.string().optional(),
+  fieldKey: z.string(),
+  fieldType: z.enum(["signature", "initials", "text", "date", "data"]),
+  page: z.number().int().min(1),
+  x: z.number().finite(),
+  y: z.number().finite(),
+  w: z.number().finite(),
+  h: z.number().finite(),
+  fontSize: z.number().int().min(6).max(72).optional(),
+  value: z.string().optional(),
+  assignedToEmail: z.string().email().optional()
+});
+
+const CreateTemplateSchema = z.object({
+  name: z.string().min(1),
+  sourceTermSheetId: z.string().uuid(),
+  sourcePdfHash: z.string().min(10),
+  sourcePdfUrl: z.string().url(),
+  fields: z.array(FieldSchema).min(1)
+});
+
+templatesRouter.post("/api/templates", async (req, res) => {
+  const parsed = CreateTemplateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ success: false, error: parsed.error.message });
+  }
+
+  const { name, sourceTermSheetId, sourcePdfHash, sourcePdfUrl, fields } = parsed.data;
+
+  // TODO: attach your auth user id
+  const createdByUserId = (req as any).user?.id ?? null;
+
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+
+    const tpl = await client.query(
+      `
+      INSERT INTO document_templates (name, source_term_sheet_id, source_pdf_hash, source_pdf_url, created_by_user_id)
+      VALUES ($1,$2,$3,$4,$5)
+      RETURNING id
+      `,
+      [name, sourceTermSheetId, sourcePdfHash, sourcePdfUrl, createdByUserId]
+    );
+
+    const templateId = tpl.rows[0].id as string;
+
+    for (const f of fields) {
+      await client.query(
+        `
+        INSERT INTO document_template_fields
+          (template_id, field_key, field_type, page, x, y, w, h, font_size, value, assigned_to_email)
+        VALUES
+          ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        `,
+        [
+          templateId,
+          f.fieldKey,
+          f.fieldType,
+          f.page,
+          f.x,
+          f.y,
+          f.w,
+          f.h,
+          f.fontSize ?? null,
+          f.value ?? null,
+          f.assignedToEmail ?? null
+        ]
+      );
+    }
+
+    await client.query("COMMIT");
+    return res.json({ success: true, templateId });
+  } catch (e: any) {
+    await client.query("ROLLBACK");
+    return res.status(500).json({ success: false, error: e.message });
+  } finally {
+    client.release();
+  }
+});
+```
+
+### Backend: list templates for a PDF hash
+
+```ts
+templatesRouter.get("/api/templates", async (req, res) => {
+  const pdfHash = String(req.query.pdfHash || "");
+  if (!pdfHash) return res.status(400).json({ success: false, error: "pdfHash required" });
+
+  const result = await db.query(
+    `SELECT id, name, created_at FROM document_templates WHERE source_pdf_hash = $1 ORDER BY created_at DESC`,
+    [pdfHash]
+  );
+
+  res.json({ success: true, templates: result.rows });
+});
+```
+
+### Backend: apply template to a term sheet
+
+This copies template fields into your term sheet’s `fields` storage (whatever you use).
+
+Assuming you store fields in `term_sheet_fields` table or a `term_sheets.fields_json` column. I’ll show JSON column for simplicity:
+
+```ts
+const ApplySchema = z.object({
+  termSheetId: z.string().uuid(),
+  templateId: z.string().uuid()
+});
+
+templatesRouter.post("/api/templates/apply", async (req, res) => {
+  const parsed = ApplySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ success: false, error: parsed.error.message });
+
+  const { termSheetId, templateId } = parsed.data;
+
+  const tpl = await db.query(
+    `SELECT t.source_pdf_hash, ts.pdf_hash
+     FROM document_templates t
+     JOIN term_sheets ts ON ts.id = $1
+     WHERE t.id = $2`,
+    [termSheetId, templateId]
+  );
+
+  if (tpl.rowCount === 0) return res.status(404).json({ success: false, error: "Not found" });
+
+  const { source_pdf_hash, pdf_hash } = tpl.rows[0];
+  if (source_pdf_hash && pdf_hash && source_pdf_hash !== pdf_hash) {
+    return res.status(400).json({
+      success: false,
+      error: "Template does not match this PDF. Upload the same PDF or create a new template."
+    });
+  }
+
+  const fields = await db.query(
+    `SELECT field_key, field_type, page, x, y, w, h, font_size, value, assigned_to_email
+     FROM document_template_fields
+     WHERE template_id = $1
+     ORDER BY page ASC`,
+    [templateId]
+  );
+
+  // Update your term sheet with these fields
+  await db.query(
+    `UPDATE term_sheets SET fields_json = $1 WHERE id = $2`,
+    [JSON.stringify(fields.rows), termSheetId]
+  );
+
+  res.json({ success: true, appliedCount: fields.rowCount });
+});
+```
+
+> If you already have a `term_sheet_fields` table, tell me and I’ll adapt this to insert rows instead of JSON.
+
+---
+
+## 3.3 Frontend: “Save as Template” button in Step 2 (Fields page)
+
+Add a button in the Fields step that posts the placements.
+
+**`src/components/Step2Fields.tsx`**
+
+```tsx
+import { useState } from "react";
+
+export function Step2Fields(props: { termSheetId: string; onNext: () => void; onBack: () => void }) {
+  // assume your placed fields live here
+  const [placedFields, setPlacedFields] = useState<any[]>([]);
+  const [templateName, setTemplateName] = useState("");
+  const pdfHash = "PUT_REAL_HASH_HERE"; // load from term sheet API
+  const pdfUrl = "PUT_REAL_URL_HERE";   // load from term sheet API
+
+  const saveAsTemplate = async () => {
+    const name = templateName.trim() || "Settlement Statement Template";
+
+    const payload = {
+      name,
+      sourceTermSheetId: props.termSheetId,
+      sourcePdfHash: pdfHash,
+      sourcePdfUrl: pdfUrl,
+      fields: placedFields.map((f) => ({
+        fieldKey: f.fieldKey ?? f.id ?? crypto.randomUUID(),
+        fieldType: f.type,          // "signature" | "initials" | "text" | "date" | "data"
+        page: f.page,               // must be int
+        x: f.x,
+        y: f.y,
+        w: f.w,
+        h: f.h,
+        fontSize: f.fontSize,
+        value: f.value,
+        assignedToEmail: f.assignedToEmail
+      }))
+    };
+
+    const res = await fetch("/api/templates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || "Failed to create template");
+      return;
+    }
+
+    alert(`Template saved! ID: ${data.templateId}`);
+  };
+
+  return (
+    <div className="fields-step">
+      {/* ...your PDF viewer + overlay field placement UI... */}
+
+      <div className="mt-3 flex gap-2 items-center">
+        <button type="button" onClick={props.onBack}>← Back</button>
+
+        <input
+          value={templateName}
+          onChange={(e) => setTemplateName(e.target.value)}
+          placeholder="Template name (optional)"
+          className="border rounded px-2 py-1"
+        />
+
+        <button type="button" onClick={saveAsTemplate}>
+          Save as Template
+        </button>
+
+        <button type="button" className="primary ml-auto" onClick={props.onNext}>
+          Continue to Send →
+        </button>
+      </div>
+    </div>
+  );
+}
+```
+
+Now after placing fields on that settlement statement, you can press **Save as Template** and persist exact positions/pages.
+
+---
+
+# One more critical detail (so templates are “exact”)
+
+Your `x,y,w,h` must be stored in a **normalized coordinate system** or with a **known PDF scale**. Best practice:
+
+* store coordinates relative to the **PDF page width/height** (0..1)
+* then re-scale when rendering
+
+If right now you store raw pixel coords, it can shift if the page renders at different zoom.
+
+If you want to normalize, change save mapping:
+
+```ts
+xNorm = x / pageWidth
+yNorm = y / pageHeight
+wNorm = w / pageWidth
+hNorm = h / pageHeight
+```
+
+…and on render multiply back.
+
+If you tell me whether you’re using `react-pdf` or `pdf.js`, I’ll give the exact page dimension hooks.
+
+---
+
+## If you want me to tailor this precisely
+
+Paste (no secrets) the names of:
+
+* the modal component file
+* the backend route file that handles term sheets and fields
+* how you currently store fields (JSON column vs table)
+
+…and I’ll rewrite the code to match your project structure exactly.
