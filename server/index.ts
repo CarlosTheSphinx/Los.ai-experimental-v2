@@ -102,6 +102,11 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      import('./services/pandadocSync').then(({ startPolling }) => {
+        startPolling();
+      }).catch(err => {
+        console.error('Failed to start PandaDoc polling:', err);
+      });
     },
   );
 })();

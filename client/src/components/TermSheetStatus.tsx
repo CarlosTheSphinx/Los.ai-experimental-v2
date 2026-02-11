@@ -17,6 +17,8 @@ import {
   ExternalLink,
   FolderPlus,
   Loader2,
+  RefreshCw,
+  Building2,
 } from "lucide-react";
 
 interface Envelope {
@@ -31,6 +33,7 @@ interface Envelope {
   sentAt: string | null;
   completedAt: string | null;
   createdAt: string;
+  hasProject: boolean;
   events: Array<{
     id: number;
     eventType: string;
@@ -112,6 +115,34 @@ export function TermSheetStatus({ quoteId }: { quoteId: number }) {
     queryKey: ["/api/esign/pandadoc/quote", quoteId, "envelopes"],
   });
 
+  const syncMutation = useMutation({
+    mutationFn: async (envelopeId: number) => {
+      const res = await apiRequest("POST", `/api/esign/envelopes/${envelopeId}/sync`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.changed) {
+        toast({
+          title: "Status Updated",
+          description: `Status changed from "${data.oldStatus}" to "${data.newStatus}"`,
+        });
+      } else {
+        toast({
+          title: "Status Current",
+          description: `Document status is already up to date (${data.newStatus})`,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/esign/pandadoc/quote", quoteId, "envelopes"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Sync Failed",
+        description: error.message || "Failed to sync document status",
+        variant: "destructive",
+      });
+    },
+  });
+
   const createProjectMutation = useMutation({
     mutationFn: async (envelopeId: number) => {
       const res = await apiRequest("POST", `/api/envelopes/${envelopeId}/create-project`);
@@ -177,17 +208,25 @@ export function TermSheetStatus({ quoteId }: { quoteId: number }) {
 
           return (
             <div key={envelope.id} className="border rounded-lg p-4 space-y-3 border-border">
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm truncate">{envelope.documentName}</div>
                   <div className="text-xs text-muted-foreground mt-1">
                     Created {formatDate(envelope.createdAt)}
                   </div>
                 </div>
-                <Badge variant={getStatusVariant(envelope.status)} className="flex items-center gap-1.5 whitespace-nowrap">
-                  {getStatusIcon(envelope.status)}
-                  <span>{envelope.status}</span>
-                </Badge>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {envelope.hasProject && (
+                    <Badge variant="outline" className="flex items-center gap-1.5 whitespace-nowrap text-green-600 dark:text-green-400 border-green-200 dark:border-green-800" data-testid={`badge-loan-created-${envelope.id}`}>
+                      <Building2 className="w-3 h-3" />
+                      <span>Loan Created</span>
+                    </Badge>
+                  )}
+                  <Badge variant={getStatusVariant(envelope.status)} className="flex items-center gap-1.5 whitespace-nowrap">
+                    {getStatusIcon(envelope.status)}
+                    <span>{envelope.status}</span>
+                  </Badge>
+                </div>
               </div>
 
               <div className="space-y-2 text-xs">
@@ -241,23 +280,34 @@ export function TermSheetStatus({ quoteId }: { quoteId: number }) {
                 </div>
               )}
 
-              {envelope.signingUrl && envelope.status.toLowerCase() !== "completed" && (
-                <div className="pt-2">
+              <div className="pt-2 flex items-center gap-2 flex-wrap">
+                {envelope.status.toLowerCase() !== "completed" && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => syncMutation.mutate(envelope.id)}
+                    disabled={syncMutation.isPending}
+                    data-testid={`button-sync-status-${envelope.id}`}
+                  >
+                    <RefreshCw className={`w-4 h-4 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+                    Sync Status
+                  </Button>
+                )}
+
+                {envelope.signingUrl && envelope.status.toLowerCase() !== "completed" && (
                   <Button
                     size="sm"
                     variant="default"
                     onClick={() => window.open(envelope.signingUrl || "", "_blank")}
-                    className="w-full gap-2"
+                    className="flex-1 gap-2"
                     data-testid={`button-open-signing-${envelope.id}`}
                   >
                     <ExternalLink className="w-4 h-4" />
                     Open Signing Link
                   </Button>
-                </div>
-              )}
+                )}
 
-              {envelope.status.toLowerCase() === "completed" && (
-                <div className="pt-2">
+                {envelope.status.toLowerCase() === "completed" && !envelope.hasProject && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -273,8 +323,8 @@ export function TermSheetStatus({ quoteId }: { quoteId: number }) {
                     )}
                     Create Loan Project
                   </Button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           );
         })}

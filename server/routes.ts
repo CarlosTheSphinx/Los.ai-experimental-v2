@@ -11789,13 +11789,18 @@ Respond ONLY with valid JSON in this format:
         .where(eq(esignEnvelopes.quoteId, quoteId))
         .orderBy(esignEnvelopes.createdAt);
       
-      // Get events for each envelope
       const envelopesWithEvents = await Promise.all(
         envelopes.map(async (env) => {
           const events = await db.select().from(esignEvents)
             .where(eq(esignEvents.envelopeId, env.id))
             .orderBy(esignEvents.createdAt);
-          return { ...env, events };
+          let hasProject = false;
+          if (env.quoteId) {
+            const existingProjects = await db.select({ id: projects.id }).from(projects)
+              .where(eq(projects.quoteId, env.quoteId));
+            hasProject = existingProjects.length > 0;
+          }
+          return { ...env, events, hasProject };
         })
       );
       
@@ -12086,6 +12091,64 @@ Respond ONLY with valid JSON in this format:
     }
   });
 
+  // ===================== PandaDoc Status Sync =====================
+
+  app.post('/api/admin/pandadoc/sync/:envelopeId', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const envelopeId = parseInt(req.params.envelopeId);
+      const { syncEnvelopeStatus } = await import('./services/pandadocSync');
+      const result = await syncEnvelopeStatus(envelopeId);
+      res.json({ success: true, ...result });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post('/api/admin/pandadoc/sync-all', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { pollPendingEnvelopes } = await import('./services/pandadocSync');
+      const result = await pollPendingEnvelopes();
+      res.json({ success: true, ...result });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.get('/api/admin/pandadoc/events/:envelopeId', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const envelopeId = parseInt(req.params.envelopeId);
+      const events = await db.select().from(esignEvents)
+        .where(eq(esignEvents.envelopeId, envelopeId))
+        .orderBy(esignEvents.createdAt);
+      res.json({ events });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/esign/envelopes/:id/sync', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const envelopeId = parseInt(req.params.id);
+      const [envelope] = await db.select().from(esignEnvelopes)
+        .where(eq(esignEnvelopes.id, envelopeId));
+      
+      if (!envelope) {
+        return res.status(404).json({ error: 'Envelope not found' });
+      }
+      
+      const isAdmin = req.user && (req.user.role === 'admin' || req.user.role === 'super_admin');
+      if (!isAdmin && envelope.createdBy !== req.user!.id) {
+        return res.status(403).json({ error: 'Not authorized' });
+      }
+      
+      const { syncEnvelopeStatus } = await import('./services/pandadocSync');
+      const result = await syncEnvelopeStatus(envelopeId);
+      res.json({ success: true, ...result });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Get envelopes for a quote
   app.get('/api/esign/envelopes/quote/:quoteId', authenticateUser, async (req: AuthRequest, res: Response) => {
     try {
@@ -12324,29 +12387,30 @@ Respond ONLY with valid JSON in this format:
         .where(eq(esignEnvelopes.externalDocumentId, documentId));
       
       if (envelope) {
-        // Log event
-        await db.insert(esignEvents).values({
+        const [eventRecord] = await db.insert(esignEvents).values({
           vendor: 'pandadoc',
           envelopeId: envelope.id,
           externalDocumentId: documentId,
           eventType: event,
           eventData: JSON.stringify(req.body),
-        });
+          processed: false,
+        }).returning();
         
-        // Update envelope status
-        const newStatus = pandadoc.mapStatusToPandaDoc(event);
-        const updates: any = { status: newStatus, updatedAt: new Date() };
+        let processingError: string | null = null;
         
-        if (event === 'document.completed') {
-          updates.completedAt = new Date();
+        try {
+          const newStatus = pandadoc.mapStatusToPandaDoc(event);
+          const updates: any = { status: newStatus, updatedAt: new Date() };
           
-          // Download and store signed PDF (optionally)
-          try {
-            const pdfBuffer = await pandadoc.downloadSignedPdf(documentId);
-            console.log(`Downloaded signed PDF for document ${documentId}, size: ${pdfBuffer.byteLength} bytes`);
-          } catch (downloadError) {
-            console.error('Failed to download signed PDF:', downloadError);
-          }
+          if (event === 'document.completed') {
+            updates.completedAt = new Date();
+            
+            try {
+              const pdfBuffer = await pandadoc.downloadSignedPdf(documentId);
+              console.log(`Downloaded signed PDF for document ${documentId}, size: ${pdfBuffer.byteLength} bytes`);
+            } catch (downloadError) {
+              console.error('Failed to download signed PDF:', downloadError);
+            }
           
           // Auto-create project/deal from signed term sheet
           if (envelope.quoteId) {
@@ -12503,13 +12567,24 @@ Respond ONLY with valid JSON in this format:
           }
         }
         
-        if (event === 'document.viewed') {
-          updates.viewedAt = new Date();
+          if (event === 'document.viewed') {
+            updates.viewedAt = new Date();
+          }
+          
+          await db.update(esignEnvelopes)
+            .set(updates)
+            .where(eq(esignEnvelopes.id, envelope.id));
+          
+          await db.update(esignEvents)
+            .set({ processed: true })
+            .where(eq(esignEvents.id, eventRecord.id));
+        } catch (procError: any) {
+          processingError = procError.message || String(procError);
+          console.error('[PandaDoc Webhook] Event processing error:', procError);
+          await db.update(esignEvents)
+            .set({ processed: false, error: processingError })
+            .where(eq(esignEvents.id, eventRecord.id));
         }
-        
-        await db.update(esignEnvelopes)
-          .set(updates)
-          .where(eq(esignEnvelopes.id, envelope.id));
       }
       
       res.json({ received: true });
