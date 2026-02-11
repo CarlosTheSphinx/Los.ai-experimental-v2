@@ -12125,10 +12125,12 @@ Respond ONLY with valid JSON in this format:
     }
   });
 
-  // Admin: manually create project from a signed envelope (fallback if webhook didn't fire)
-  app.post('/api/admin/envelopes/:envelopeId/create-project', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+  // Create project from a signed envelope (available to quote owner or admin)
+  app.post('/api/envelopes/:envelopeId/create-project', authenticateUser, async (req: AuthRequest, res: Response) => {
     try {
       const envelopeId = parseInt(req.params.envelopeId);
+      const userId = req.user!.id;
+      const userRole = req.user!.role;
       const [envelope] = await db.select().from(esignEnvelopes).where(eq(esignEnvelopes.id, envelopeId));
       if (!envelope) {
         res.status(404).json({ error: 'Envelope not found' });
@@ -12145,6 +12147,11 @@ Respond ONLY with valid JSON in this format:
       const [quote] = await db.select().from(savedQuotes).where(eq(savedQuotes.id, envelope.quoteId));
       if (!quote) {
         res.status(404).json({ error: 'Linked quote not found' });
+        return;
+      }
+      const isAdmin = userRole === 'admin' || userRole === 'super_admin';
+      if (!isAdmin && quote.userId !== userId) {
+        res.status(403).json({ error: 'You do not have permission to create a project from this quote' });
         return;
       }
       const existingProjects = await db.select().from(projects).where(eq(projects.quoteId, quote.id));
@@ -12257,7 +12264,7 @@ Respond ONLY with valid JSON in this format:
         projectId: project.id,
         userId: req.user!.id,
         activityType: 'project_created',
-        activityDescription: `Loan project ${projectNumber} manually created by admin from signed envelope "${envelope.documentName}"`,
+        activityDescription: `Loan project ${projectNumber} created from signed term sheet "${envelope.documentName}"`,
         visibleToBorrower: true,
       });
 

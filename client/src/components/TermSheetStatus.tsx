@@ -104,7 +104,7 @@ const getStatusColor = (status: string) => {
   }
 };
 
-export function TermSheetStatus({ quoteId, isAdmin = false }: { quoteId: number; isAdmin?: boolean }) {
+export function TermSheetStatus({ quoteId }: { quoteId: number }) {
   const [expandedEnvelopes, setExpandedEnvelopes] = useState<number[]>([]);
   const { toast } = useToast();
 
@@ -114,7 +114,7 @@ export function TermSheetStatus({ quoteId, isAdmin = false }: { quoteId: number;
 
   const createProjectMutation = useMutation({
     mutationFn: async (envelopeId: number) => {
-      const res = await apiRequest("POST", `/api/admin/envelopes/${envelopeId}/create-project`);
+      const res = await apiRequest("POST", `/api/envelopes/${envelopeId}/create-project`);
       return res.json();
     },
     onSuccess: (data) => {
@@ -256,7 +256,7 @@ export function TermSheetStatus({ quoteId, isAdmin = false }: { quoteId: number;
                 </div>
               )}
 
-              {isAdmin && envelope.status.toLowerCase() === "completed" && (
+              {envelope.status.toLowerCase() === "completed" && (
                 <div className="pt-2">
                   <Button
                     size="sm"

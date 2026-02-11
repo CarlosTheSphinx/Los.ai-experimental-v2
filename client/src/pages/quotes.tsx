@@ -532,7 +532,7 @@ export default function Quotes() {
                           <MessageSquare className="w-4 h-4" />
                         </Button>
                       </div>
-                      <TermSheetStatus quoteId={quote.id} isAdmin={isAdmin} />
+                      <TermSheetStatus quoteId={quote.id} />
                       <Button
                         onClick={() => setSigningQuote(quote)}
                         className="w-full"
