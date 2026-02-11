@@ -81,6 +81,7 @@
     "openai": "^6.17.0",
     "p-limit": "^7.2.0",
     "p-retry": "^7.1.1",
+    "pandadoc-editor": "^0.0.0-b.10",
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
     "pdf-lib": "^1.17.1",
