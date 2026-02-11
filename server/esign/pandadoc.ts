@@ -428,24 +428,11 @@ interface PandaDocFieldInjection {
 
 const WIDGET_FIELD_TYPES = new Set(['signature', 'initials', 'date']);
 
-const PANDADOC_WIDGET_EFFECTIVE_HEIGHT: Record<string, number> = {
-  signature: 50,
-  date: 100,
-  initials: 80,
-};
-
-const PANDADOC_WIDGET_X_OFFSET = 5;
+const PANDADOC_DPI_SCALE = 96 / 72;
 
 function buildFieldPayload(f: PandaDocFieldInjection) {
-  let finalOffsetX = f.offsetX;
-  let finalOffsetY = f.offsetY;
-  const isWidget = WIDGET_FIELD_TYPES.has(f.type);
-
-  if (isWidget) {
-    const effectiveHeight = PANDADOC_WIDGET_EFFECTIVE_HEIGHT[f.type] || 50;
-    finalOffsetY = f.offsetY + effectiveHeight;
-    finalOffsetX = f.offsetX + PANDADOC_WIDGET_X_OFFSET;
-  }
+  const finalOffsetX = f.offsetX * PANDADOC_DPI_SCALE;
+  const finalOffsetY = f.offsetY * PANDADOC_DPI_SCALE;
 
   return {
     name: f.name,
@@ -463,8 +450,8 @@ function buildFieldPayload(f: PandaDocFieldInjection) {
         anchor_point: 'topleft',
       },
       style: {
-        width: f.width,
-        height: f.height,
+        width: Math.round(f.width * PANDADOC_DPI_SCALE),
+        height: Math.round(f.height * PANDADOC_DPI_SCALE),
       },
     },
   };
