@@ -2040,61 +2040,78 @@ export async function registerRoutes(
       await pandadoc.waitForDocumentReady(pandaDoc.id);
       console.log(`[PandaDoc Send] Document ready, sending...`);
 
-      // Send the document
-      const sendResult = await pandadoc.sendDocument(pandaDoc.id, {
-        subject: subject || `Please sign: ${doc.name}`,
-        message: message || 'Please review and sign the attached document.',
-        silent: false,
-      });
+      // Try to send the document via PandaDoc API
+      const editorUrl = `https://app.pandadoc.com/a/#/documents/${pandaDoc.id}`;
+      let apiSendSucceeded = false;
+      let sendFallbackReason: string | null = null;
 
-      console.log(`[PandaDoc Send] Document sent successfully: ${sendResult.id}, status: ${sendResult.status}`);
+      try {
+        const sendResult = await pandadoc.sendDocument(pandaDoc.id, {
+          subject: subject || `Please sign: ${doc.name}`,
+          message: message || 'Please review and sign the attached document.',
+          silent: false,
+        });
+        console.log(`[PandaDoc Send] Document sent successfully: ${sendResult.id}, status: ${sendResult.status}`);
+        apiSendSucceeded = true;
+      } catch (sendError: any) {
+        const errorMsg = sendError.message || '';
+        if (errorMsg.includes('outside of your organization') || errorMsg.includes('403')) {
+          console.log(`[PandaDoc Send] API send blocked (external org restriction). Falling back to editor URL.`);
+          sendFallbackReason = 'Your PandaDoc plan restricts API sending to external recipients. The document has been created in PandaDoc — open the editor to send it manually.';
+        } else {
+          throw sendError;
+        }
+      }
 
       // Update local document with PandaDoc metadata
       await storage.updateDocument(documentId, {
-        status: 'sent',
+        status: apiSendSucceeded ? 'sent' : 'draft',
         vendor: 'pandadoc',
         pandadocDocumentId: pandaDoc.id,
-        sentAt: new Date(),
+        sentAt: apiSendSucceeded ? new Date() : undefined,
       });
 
       // Update signer statuses
       for (const signer of docSigners) {
-        await storage.updateSigner(signer.id, { status: 'sent' });
+        await storage.updateSigner(signer.id, { status: apiSendSucceeded ? 'sent' : 'pending' });
       }
 
       // Create audit log
       await storage.createAuditLog({
         documentId,
-        action: 'sent_via_pandadoc',
-        details: `Document sent via PandaDoc (ID: ${pandaDoc.id}) to ${docSigners.length} signer(s)`,
+        action: apiSendSucceeded ? 'sent_via_pandadoc' : 'created_in_pandadoc',
+        details: apiSendSucceeded
+          ? `Document sent via PandaDoc (ID: ${pandaDoc.id}) to ${docSigners.length} signer(s)`
+          : `Document created in PandaDoc (ID: ${pandaDoc.id}) — manual send required via editor`,
         ipAddress: req.ip,
       });
 
-      // Also create an esign envelope record for tracking
-      const editorUrl = `https://app.pandadoc.com/a/#/documents/${pandaDoc.id}`;
+      // Create esign envelope record for tracking
       await db.insert(esignEnvelopes).values({
         vendor: 'pandadoc',
         quoteId: doc.quoteId,
         externalDocumentId: pandaDoc.id,
         documentName: doc.name,
-        status: 'sent',
+        status: apiSendSucceeded ? 'sent' : 'draft',
         recipients: JSON.stringify(recipients.map(r => ({
           name: `${r.first_name} ${r.last_name}`.trim(),
           email: r.email,
           role: r.role,
-          status: 'sent',
+          status: apiSendSucceeded ? 'sent' : 'pending',
         }))),
         sendMethod: 'email',
-        sentAt: new Date(),
+        sentAt: apiSendSucceeded ? new Date() : null,
         createdBy: userId,
       });
 
       res.json({
         success: true,
         providerDocumentId: pandaDoc.id,
-        status: 'sent',
+        status: apiSendSucceeded ? 'sent' : 'created',
         editorUrl,
         recipients: recipients.map(r => ({ email: r.email, name: `${r.first_name} ${r.last_name}`.trim() })),
+        requiresManualSend: !apiSendSucceeded,
+        fallbackReason: sendFallbackReason,
       });
     } catch (error) {
       console.error('[PandaDoc Send] Error:', error);
@@ -11832,6 +11849,50 @@ Respond ONLY with valid JSON in this format:
   });
 
   // Debug endpoint to test PandaDoc connection and list all templates
+  app.get('/api/pandadoc/debug', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const pandadoc = await import('./esign/pandadoc');
+      const debugInfo = await pandadoc.getDebugInfo();
+      
+      const runTest = req.query.test === 'true';
+      let capabilityTest = null;
+      
+      if (runTest) {
+        const testEmail = process.env.TEST_EXTERNAL_EMAIL || 'test-external@example.com';
+        capabilityTest = await pandadoc.runCapabilityTest(testEmail);
+        capabilityTest = { ...capabilityTest, testEmail };
+      }
+      
+      res.json({
+        success: true,
+        debug: {
+          apiBase: debugInfo.apiBase,
+          authType: debugInfo.authType,
+          apiKeyPrefix: debugInfo.apiKeyPrefix,
+          isSandbox: debugInfo.isSandbox,
+          currentMember: debugInfo.currentMember,
+          workspaceId: debugInfo.workspaceId,
+          connectedAccount: debugInfo.currentMember?.email || null,
+          connectedName: debugInfo.currentMember?.first_name 
+            ? `${debugInfo.currentMember.first_name} ${debugInfo.currentMember.last_name || ''}`.trim()
+            : null,
+          workspaceName: debugInfo.currentMember?.workspace_name || null,
+          memberRole: debugInfo.currentMember?.role || null,
+          userLicense: debugInfo.currentMember?.user_license || null,
+        },
+        capabilityTest,
+        diagnosis: debugInfo.isSandbox
+          ? "SANDBOX KEY DETECTED: Sandbox API keys cannot send documents to external recipients. You need a production API key from a paid PandaDoc plan."
+          : debugInfo.currentMember?.error
+            ? "AUTHENTICATION ERROR: Could not verify the connected PandaDoc account. Check your API key."
+            : "API key is production and connected to the correct workspace. If sending to external recipients fails, your PandaDoc plan may not include API-level external sending. Documents will be created in PandaDoc and you can send them from the PandaDoc editor.",
+      });
+    } catch (error: any) {
+      console.error('PandaDoc debug error:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   app.get('/api/esign/pandadoc/debug/templates', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const pandadoc = await import('./esign/pandadoc');

@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, Users, FileText, Send, Plus, Trash2, X, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Check, Mail, ZoomIn, ZoomOut, FileStack, Sparkles, ExternalLink, Loader2, Copy, BookmarkPlus, PanelRightOpen, PanelRightClose, Save } from "lucide-react";
+import { Upload, Users, FileText, Send, Plus, Trash2, X, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Check, Mail, ZoomIn, ZoomOut, FileStack, Sparkles, ExternalLink, Loader2, Copy, BookmarkPlus, PanelRightOpen, PanelRightClose, Save, AlertTriangle, Info } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { SavedQuote } from "@shared/schema";
@@ -945,6 +945,17 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
   });
 
 
+  const pandadocDebugQuery = useQuery({
+    queryKey: ['/api/pandadoc/debug'],
+    enabled: step === 'send',
+    staleTime: 60000,
+  });
+
+  const pandadocDebug = pandadocDebugQuery.data as any;
+
+  const [pandadocEditorUrl, setPandadocEditorUrl] = useState<string | null>(null);
+  const [pandadocFallbackReason, setPandadocFallbackReason] = useState<string | null>(null);
+
   const sendViaPandadocMutation = useMutation({
     mutationFn: async () => {
       if (!documentId) throw new Error('No document to send');
@@ -959,13 +970,24 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
       return data;
     },
     onSuccess: (data: any) => {
-      toast({ 
-        title: "Sent via PandaDoc", 
-        description: `Document sent to ${data.recipients?.length || signers.length} signer(s) for signature` 
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/documents'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/esignature/agreements'] });
-      onClose();
+      if (data.requiresManualSend) {
+        setPandadocEditorUrl(data.editorUrl);
+        setPandadocFallbackReason(data.fallbackReason);
+        toast({ 
+          title: "Document Created in PandaDoc", 
+          description: "Open PandaDoc to send the document to recipients.",
+        });
+        queryClient.invalidateQueries({ queryKey: ['/api/documents'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/esignature/agreements'] });
+      } else {
+        toast({ 
+          title: "Sent via PandaDoc", 
+          description: `Document sent to ${data.recipients?.length || signers.length} signer(s) for signature` 
+        });
+        queryClient.invalidateQueries({ queryKey: ['/api/documents'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/esignature/agreements'] });
+        onClose();
+      }
     },
     onError: (error: Error) => {
       console.error('PandaDoc send error:', error);
@@ -1774,6 +1796,45 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
                     Your document will be sent to {signers.length} signer(s) for signature via PandaDoc
                   </p>
                 </div>
+
+                {pandadocDebugQuery.isLoading && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground border rounded-lg p-3" data-testid="pandadoc-debug-loading">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Checking PandaDoc connection...
+                  </div>
+                )}
+
+                {pandadocDebug?.debug && (
+                  <div className={`border rounded-lg p-4 space-y-2 text-sm ${pandadocDebug.debug.isSandbox ? 'border-destructive bg-destructive/5' : 'border-border'}`} data-testid="pandadoc-debug-info">
+                    <div className="flex items-center gap-2 font-medium">
+                      {pandadocDebug.debug.isSandbox ? (
+                        <AlertTriangle className="w-4 h-4 text-destructive" />
+                      ) : (
+                        <Info className="w-4 h-4 text-muted-foreground" />
+                      )}
+                      PandaDoc Connection
+                    </div>
+                    <div className="space-y-1 text-muted-foreground">
+                      {pandadocDebug.debug.connectedAccount && (
+                        <p data-testid="text-pandadoc-account">Connected account: <span className="font-medium text-foreground">{pandadocDebug.debug.connectedName || ''} ({pandadocDebug.debug.connectedAccount})</span></p>
+                      )}
+                      {pandadocDebug.debug.workspaceName && (
+                        <p data-testid="text-pandadoc-workspace">Workspace: <span className="font-medium text-foreground">{pandadocDebug.debug.workspaceName}</span> <span className="font-mono text-xs">({pandadocDebug.debug.workspaceId})</span></p>
+                      )}
+                      {pandadocDebug.debug.memberRole && (
+                        <p>Role: <span className="text-foreground">{pandadocDebug.debug.memberRole}</span> ({pandadocDebug.debug.userLicense})</p>
+                      )}
+                      <p>API: <span className="font-mono text-foreground">{pandadocDebug.debug.apiBase}</span></p>
+                      <p>Auth: <span className="text-foreground">{pandadocDebug.debug.authType} ({pandadocDebug.debug.apiKeyPrefix})</span></p>
+                    </div>
+                    {pandadocDebug.debug.currentMember?.error && (
+                      <p className="text-destructive" data-testid="text-pandadoc-error">Auth error: {pandadocDebug.debug.currentMember.error}</p>
+                    )}
+                    {pandadocDebug.diagnosis && !pandadocDebug.debug.isSandbox && (
+                      <p className="text-yellow-600 dark:text-yellow-400">{pandadocDebug.diagnosis}</p>
+                    )}
+                  </div>
+                )}
                 
                 <div className="space-y-2">
                   <Label>From (Sender Name)</Label>
@@ -1803,19 +1864,49 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
                   </p>
                 </div>
                 
-                <Button 
-                  onClick={() => sendViaPandadocMutation.mutate()} 
-                  disabled={sendViaPandadocMutation.isPending}
-                  className="w-full"
-                  size="lg"
-                  data-testid="button-send-pandadoc"
-                >
-                  {sendViaPandadocMutation.isPending ? (
-                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending via PandaDoc...</>
-                  ) : (
-                    <>Send via PandaDoc<Send className="w-4 h-4 ml-2" /></>
-                  )}
-                </Button>
+                {pandadocEditorUrl ? (
+                  <div className="space-y-3">
+                    <div className="border rounded-lg p-4 bg-muted/30 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 shrink-0" />
+                        <p className="text-sm font-medium">Document created — manual send required</p>
+                      </div>
+                      {pandadocFallbackReason && (
+                        <p className="text-sm text-muted-foreground">{pandadocFallbackReason}</p>
+                      )}
+                    </div>
+                    <Button
+                      className="w-full"
+                      size="lg"
+                      onClick={() => window.open(pandadocEditorUrl, '_blank')}
+                      data-testid="button-open-pandadoc-editor"
+                    >
+                      Open in PandaDoc to Send<ExternalLink className="w-4 h-4 ml-2" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={onClose}
+                      data-testid="button-close-after-create"
+                    >
+                      Close
+                    </Button>
+                  </div>
+                ) : (
+                  <Button 
+                    onClick={() => sendViaPandadocMutation.mutate()} 
+                    disabled={sendViaPandadocMutation.isPending}
+                    className="w-full"
+                    size="lg"
+                    data-testid="button-send-pandadoc"
+                  >
+                    {sendViaPandadocMutation.isPending ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending via PandaDoc...</>
+                    ) : (
+                      <>Send via PandaDoc<Send className="w-4 h-4 ml-2" /></>
+                    )}
+                  </Button>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

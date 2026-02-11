@@ -422,6 +422,131 @@ export function mapStatusToPandaDoc(pandaStatus: string): string {
   return statusMap[pandaStatus] || pandaStatus;
 }
 
+export async function getCurrentMember(): Promise<any> {
+  const response = await pandaDocRequest("/members/current");
+  if (!response.ok) {
+    const errorText = await response.text();
+    return { error: `${response.status} ${response.statusText}: ${errorText}` };
+  }
+  return response.json();
+}
+
+export async function getDebugInfo(): Promise<{
+  apiBase: string;
+  authType: string;
+  apiKeyPrefix: string;
+  currentMember: any;
+  workspaceId: string | null;
+  isSandbox: boolean;
+}> {
+  const apiBase = getApiBase();
+  const apiKey = getApiKey();
+  const apiKeyPrefix = apiKey.substring(0, 8) + "..." + apiKey.substring(apiKey.length - 4);
+  const isSandbox = apiBase.includes("sandbox") || apiKey.toLowerCase().includes("sandbox");
+
+  let currentMember: any = null;
+  let workspaceId: string | null = null;
+  try {
+    currentMember = await getCurrentMember();
+    workspaceId = currentMember?.workspace || currentMember?.workspace_id || null;
+  } catch (err: any) {
+    currentMember = { error: err.message };
+  }
+
+  return {
+    apiBase,
+    authType: "API-Key",
+    apiKeyPrefix,
+    currentMember,
+    workspaceId,
+    isSandbox,
+  };
+}
+
+export async function runCapabilityTest(testEmail: string): Promise<{
+  success: boolean;
+  step: string;
+  error?: string;
+  pandadocError?: any;
+  documentId?: string;
+}> {
+  try {
+    const minimalPdf = Buffer.from(
+      "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF",
+      "utf-8"
+    );
+
+    const formData = new FormData();
+    const blob = new Blob([minimalPdf], { type: "application/pdf" });
+    formData.append("file", blob, "capability_test.pdf");
+    formData.append("data", JSON.stringify({
+      name: "[API Test] Capability Test - Delete Me",
+      recipients: [{
+        email: testEmail,
+        first_name: "Test",
+        last_name: "Recipient",
+        role: "Signer 1",
+      }],
+      parse_form_fields: false,
+    }));
+
+    const apiBase = getApiBase();
+    const apiKey = getApiKey();
+
+    const createRes = await fetch(`${apiBase}/documents`, {
+      method: "POST",
+      headers: { Authorization: `API-Key ${apiKey}` },
+      body: formData,
+    });
+
+    if (!createRes.ok) {
+      const errorText = await createRes.text();
+      let parsedError;
+      try { parsedError = JSON.parse(errorText); } catch { parsedError = errorText; }
+      return { success: false, step: "create_document", error: errorText, pandadocError: parsedError };
+    }
+
+    const doc = await createRes.json();
+    console.log(`[PandaDoc Debug] Test doc created: ${doc.id}`);
+
+    for (let i = 0; i < 10; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      const statusRes = await pandaDocRequest(`/documents/${doc.id}`);
+      if (statusRes.ok) {
+        const statusDoc = await statusRes.json();
+        if (statusDoc.status === "document.draft") break;
+        if (statusDoc.status === "document.error") {
+          return { success: false, step: "wait_draft", error: "Document entered error state", documentId: doc.id };
+        }
+      }
+    }
+
+    const sendRes = await pandaDocRequest(`/documents/${doc.id}/send`, {
+      method: "POST",
+      body: JSON.stringify({
+        subject: "[Test] Capability Test - Please Ignore",
+        message: "This is an automated API capability test. Please ignore.",
+        silent: true,
+      }),
+    });
+
+    if (!sendRes.ok) {
+      const errorText = await sendRes.text();
+      let parsedError;
+      try { parsedError = JSON.parse(errorText); } catch { parsedError = errorText; }
+      return { success: false, step: "send_document", error: errorText, pandadocError: parsedError, documentId: doc.id };
+    }
+
+    try {
+      await pandaDocRequest(`/documents/${doc.id}`, { method: "DELETE" });
+    } catch {}
+
+    return { success: true, step: "completed", documentId: doc.id };
+  } catch (err: any) {
+    return { success: false, step: "exception", error: err.message };
+  }
+}
+
 export async function verifyWebhookSignature(
   payload: string,
   signature: string

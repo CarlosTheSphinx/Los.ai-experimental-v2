@@ -54,17 +54,20 @@ function QuoteDocumentStatus({ quoteId }: { quoteId: number }) {
 
   const resendMutation = useMutation({
     mutationFn: async (documentId: number) => {
-      return apiRequest('POST', `/api/documents/${documentId}/pandadoc/send`, {
+      const res = await apiRequest('POST', `/api/documents/${documentId}/pandadoc/send`, {
         subject: 'Reminder: Please sign this document',
         message: 'This is a reminder to review and sign the attached document from Sphinx Capital.',
       });
+      return res.json();
     },
-    onSuccess: () => {
-      toast({ 
-        title: "Resent via PandaDoc", 
-        description: "The signing request has been resent via PandaDoc." 
-      });
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/quotes', quoteId, 'documents'] });
+      if (data.requiresManualSend && data.editorUrl) {
+        toast({ title: "Document Created in PandaDoc", description: "Opening PandaDoc editor to send..." });
+        window.open(data.editorUrl, '_blank');
+      } else {
+        toast({ title: "Resent via PandaDoc", description: "The signing request has been resent via PandaDoc." });
+      }
     },
     onError: () => {
       toast({ 

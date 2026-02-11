@@ -191,15 +191,21 @@ export default function Agreements() {
 
   const sendViaPandadocMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest('POST', `/api/documents/${id}/pandadoc/send`, {
+      const res = await apiRequest('POST', `/api/documents/${id}/pandadoc/send`, {
         subject: 'Please sign this document',
         message: 'Please review and sign the attached document from Sphinx Capital.',
       });
+      return res.json();
     },
-    onSuccess: () => {
-      toast({ title: "Sent via PandaDoc", description: "Document sent for signing via PandaDoc." });
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/esignature/agreements'] });
       queryClient.invalidateQueries({ queryKey: ['/api/documents'] });
+      if (data.requiresManualSend && data.editorUrl) {
+        toast({ title: "Document Created in PandaDoc", description: "Opening PandaDoc editor to send..." });
+        window.open(data.editorUrl, '_blank');
+      } else {
+        toast({ title: "Sent via PandaDoc", description: "Document sent for signing via PandaDoc." });
+      }
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to send via PandaDoc", variant: "destructive" });
