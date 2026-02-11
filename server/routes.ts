@@ -11556,6 +11556,125 @@ Respond ONLY with valid JSON in this format:
     }
   });
 
+  // Create PandaDoc document from uploaded PDF with positioned fields
+  app.post('/api/esign/pandadoc/documents/create-from-pdf', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { quoteId, pdfBase64, recipients, fields, sendMethod } = req.body;
+
+      if (!quoteId || !pdfBase64 || !recipients?.length) {
+        return res.status(400).json({ error: 'quoteId, pdfBase64, and recipients are required' });
+      }
+
+      const [quote] = await db.select().from(savedQuotes).where(eq(savedQuotes.id, quoteId));
+      if (!quote) {
+        return res.status(404).json({ error: 'Quote not found' });
+      }
+
+      const pandadoc = await import('./esign/pandadoc');
+      const { mapQuoteToPandaTokens } = await import('./esign/field-mapping');
+
+      const tokens = mapQuoteToPandaTokens(quote);
+
+      const base64Data = pdfBase64.replace(/^data:application\/pdf;base64,/, '');
+      const pdfBuffer = Buffer.from(base64Data, 'base64');
+
+      const pandaRecipients = recipients.map((r: any) => ({
+        email: r.email,
+        first_name: r.firstName || r.name?.split(' ')[0] || '',
+        last_name: r.lastName || r.name?.split(' ').slice(1).join(' ') || '',
+        role: r.role || 'Signer',
+      }));
+
+      const pandaFields: Record<string, any[]> = {};
+      if (fields && fields.length > 0) {
+        for (const field of fields) {
+          const role = field.recipientRole || recipients[0]?.role || 'Signer';
+          if (!pandaFields[role]) {
+            pandaFields[role] = [];
+          }
+
+          let pandaType = 'text';
+          if (field.fieldType === 'signature') pandaType = 'signature';
+          else if (field.fieldType === 'initial') pandaType = 'initials';
+          else if (field.fieldType === 'date') pandaType = 'date';
+
+          const pandaField: any = {
+            name: field.label || field.fieldType || `field_${pandaFields[role].length + 1}`,
+            role: role,
+            type: pandaType,
+            required: true,
+            x: Math.round(field.x),
+            y: Math.round(field.y),
+            width: Math.round(field.width),
+            height: Math.round(field.height),
+            page: (field.pageNumber || 1) - 1,
+          };
+
+          if (field.value && pandaType === 'text') {
+            pandaField.value = field.value;
+          }
+
+          pandaFields[role].push(pandaField);
+        }
+      }
+
+      const docName = `${quote.quoteName || 'Term Sheet'} - ${quote.customerFullName || quote.customerFirstName || 'Customer'}`;
+      const pandaDoc = await pandadoc.createDocumentFromPdf(pdfBuffer, {
+        name: docName,
+        recipients: pandaRecipients,
+        fields: pandaFields,
+        tokens,
+        metadata: { quoteId: quoteId.toString() },
+      });
+
+      const [envelope] = await db.insert(esignEnvelopes).values({
+        vendor: 'pandadoc',
+        quoteId,
+        externalDocumentId: pandaDoc.id,
+        externalTemplateId: null,
+        documentName: docName,
+        status: pandaDoc.status,
+        recipients: JSON.stringify(recipients.map((r: any) => ({
+          ...r,
+          status: 'pending',
+        }))),
+        sendMethod: sendMethod || 'email',
+        createdBy: req.user!.id,
+      }).returning();
+
+      await db.insert(esignEvents).values({
+        vendor: 'pandadoc',
+        envelopeId: envelope.id,
+        externalDocumentId: pandaDoc.id,
+        eventType: 'document.created',
+        eventData: JSON.stringify({ pandaDoc, source: 'pdf-upload' }),
+      });
+
+      console.log(`[PandaDoc] Waiting for PDF document ${pandaDoc.id} to be ready...`);
+      await pandadoc.waitForDocumentReady(pandaDoc.id);
+      console.log(`[PandaDoc] PDF document ${pandaDoc.id} is ready (draft status)`);
+
+      await db.update(esignEnvelopes)
+        .set({ status: 'draft' })
+        .where(eq(esignEnvelopes.id, envelope.id));
+
+      const editorUrl = `https://app.pandadoc.com/a/#/documents/${pandaDoc.id}`;
+
+      res.json({
+        success: true,
+        envelope: {
+          id: envelope.id,
+          externalDocumentId: pandaDoc.id,
+          status: 'draft',
+          editorUrl,
+        },
+      });
+    } catch (error: any) {
+      console.error('PandaDoc create document from PDF error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Send an existing PandaDoc draft document
   app.post('/api/esign/pandadoc/documents/:envelopeId/send', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {

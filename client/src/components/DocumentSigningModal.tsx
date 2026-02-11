@@ -394,7 +394,7 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
   // PandaDoc state
   const [pandadocTemplateId, setPandadocTemplateId] = useState<string>("");
   const [pandadocRecipients, setPandadocRecipients] = useState<Array<{ name: string; email: string; role: string }>>([
-    { name: `${quote.customerFirstName || ''} ${quote.customerLastName || ''}`.trim(), email: quote.customerEmail || '', role: '' }
+    { name: `${quote.customerFirstName || ''} ${quote.customerLastName || ''}`.trim(), email: quote.customerEmail || '', role: 'Signer' }
   ]);
   const [pandadocSendMethod, setPandadocSendMethod] = useState<"email" | "embedded">("email");
   const [pandadocResult, setPandadocResult] = useState<{ success: boolean; signingUrl?: string; envelopeId?: number } | null>(null);
@@ -407,6 +407,16 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
   const [templateRolesLoading, setTemplateRolesLoading] = useState(false);
   const [templateRolesError, setTemplateRolesError] = useState<string | null>(null);
   const [showTokenPreview, setShowTokenPreview] = useState(false);
+  const [pandadocPdfUploaded, setPandadocPdfUploaded] = useState(false);
+  const pandadocFileInputRef = useRef<HTMLInputElement>(null);
+  const [customVariableName, setCustomVariableName] = useState("");
+  const [customVariableValue, setCustomVariableValue] = useState("");
+  const [customVariables, setCustomVariables] = useState<Array<{ type: string; label: string; value: string; width: number; height: number }>>([]);
+  const [newRecipientName, setNewRecipientName] = useState("");
+  const [newRecipientEmail, setNewRecipientEmail] = useState("");
+  const [newRecipientRole, setNewRecipientRole] = useState("Signer");
+  
+  const isPandadocMode = uploadMode === "pandadoc";
   
   const pdfContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -427,7 +437,7 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
     enabled: open && uploadMode === "pandadoc" && (showTokenPreview || !!pandadocDraft),
   });
 
-  // PandaDoc create draft mutation
+  // PandaDoc create draft mutation (from template)
   const createPandadocDraftMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest('POST', '/api/esign/pandadoc/documents/create', {
@@ -482,6 +492,66 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message || "Failed to create PandaDoc document", variant: "destructive" });
+    },
+  });
+
+  // PandaDoc create document from uploaded PDF with positioned fields
+  const createPandadocFromPdfMutation = useMutation({
+    mutationFn: async () => {
+      if (!pdfData) throw new Error('No PDF uploaded');
+      if (pandadocRecipients.length === 0) throw new Error('No recipients added');
+
+      const fieldData = fields.map(f => {
+        const recipientIdx = signers.findIndex(s => s.id === f.signerId);
+        const recipient = pandadocRecipients[recipientIdx] || pandadocRecipients[0];
+        const allFieldTypes = [...SIGNATURE_FIELD_TYPES, ...ALL_PREPOPULATED_FIELD_TYPES, ...customVariables];
+        const fieldConfig = allFieldTypes.find(ft => ft.type === f.fieldType);
+        return {
+          fieldType: f.fieldType,
+          label: fieldConfig?.label || f.fieldType,
+          x: f.x,
+          y: f.y,
+          width: f.width,
+          height: f.height,
+          pageNumber: f.pageNumber,
+          value: f.value || '',
+          recipientRole: recipient?.role || 'Signer',
+        };
+      });
+
+      const res = await apiRequest('POST', '/api/esign/pandadoc/documents/create-from-pdf', {
+        quoteId: quote.id,
+        pdfBase64: pdfData,
+        recipients: pandadocRecipients.map(r => ({
+          name: r.name,
+          firstName: r.name.split(' ')[0],
+          lastName: r.name.split(' ').slice(1).join(' '),
+          email: r.email,
+          role: r.role,
+        })),
+        fields: fieldData,
+        sendMethod: pandadocSendMethod,
+      });
+      return res.json();
+    },
+    onSuccess: async (data) => {
+      if (data.success) {
+        const draftInfo = {
+          envelopeId: data.envelope.id,
+          externalDocumentId: data.envelope.externalDocumentId,
+          editorUrl: data.envelope.editorUrl,
+        };
+        setPandadocDraft(draftInfo);
+        toast({
+          title: "Draft Created",
+          description: "Your document has been uploaded to PandaDoc. Ready to send for signing.",
+        });
+      } else {
+        toast({ title: "Error", description: data.error || "Failed to create document", variant: "destructive" });
+      }
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to create PandaDoc document from PDF", variant: "destructive" });
     },
   });
 
@@ -1069,16 +1139,18 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
         </DialogHeader>
 
         <Tabs value={step} className="flex-1 overflow-hidden flex flex-col">
-          <TabsList className={`grid grid-cols-4 ${pandadocDraft && pandadocEditorToken ? 'hidden' : ''}`}>
-            <TabsTrigger value="upload" disabled={step !== "upload" && !documentId}>
+          <TabsList className={`grid ${uploadMode === "pandadoc" ? 'grid-cols-3' : 'grid-cols-4'} ${pandadocDraft && pandadocEditorToken ? 'hidden' : ''}`}>
+            <TabsTrigger value="upload" disabled={step !== "upload" && !documentId && !pandadocPdfUploaded}>
               <Upload className="w-4 h-4 mr-2" />
-              Upload
+              {uploadMode === "pandadoc" ? "Upload & Recipients" : "Upload"}
             </TabsTrigger>
-            <TabsTrigger value="signers" disabled={!documentId}>
-              <Users className="w-4 h-4 mr-2" />
-              Signers
-            </TabsTrigger>
-            <TabsTrigger value="fields" disabled={signers.length === 0}>
+            {uploadMode !== "pandadoc" && (
+              <TabsTrigger value="signers" disabled={!documentId}>
+                <Users className="w-4 h-4 mr-2" />
+                Signers
+              </TabsTrigger>
+            )}
+            <TabsTrigger value="fields" disabled={uploadMode === "pandadoc" ? !pandadocPdfUploaded || signers.length === 0 : signers.length === 0}>
               <FileText className="w-4 h-4 mr-2" />
               Fields
             </TabsTrigger>
@@ -1247,7 +1319,7 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                         <ExternalLink className="w-10 h-10 mx-auto text-purple-500 mb-2" />
                         <h3 className="text-lg font-semibold">Send via PandaDoc</h3>
                         <p className="text-sm text-muted-foreground">
-                          Use your PandaDoc templates with automatic token population from quote data
+                          Upload your PDF, place signature and data fields visually, then send via PandaDoc for signing
                         </p>
                       </div>
 
@@ -1274,466 +1346,139 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                           )}
                           <Button onClick={onClose} data-testid="button-close-success">Close</Button>
                         </div>
-                      ) : pandadocDraft ? (
-                        <div className="flex flex-col h-full gap-2">
-                          <div className="flex items-center justify-between gap-4 flex-wrap">
-                            <div className="flex items-center gap-2">
-                              <FileText className="w-5 h-5 text-primary" />
-                              <h3 className="font-semibold">Review & Edit Draft</h3>
-                            </div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setShowVariablesSidebar(!showVariablesSidebar)}
-                                data-testid="button-toggle-variables"
-                              >
-                                {showVariablesSidebar ? <PanelRightClose className="w-4 h-4 mr-1" /> : <PanelRightOpen className="w-4 h-4 mr-1" />}
-                                Variables
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => window.open(pandadocDraft.editorUrl, '_blank')}
-                                data-testid="button-open-pandadoc-external"
-                              >
-                                <ExternalLink className="w-4 h-4 mr-1" />
-                                Open in PandaDoc
-                              </Button>
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant={pandadocSendMethod === "email" ? "default" : "outline"}
-                                  onClick={() => setPandadocSendMethod("email")}
-                                  data-testid="button-draft-send-email"
-                                >
-                                  <Mail className="w-4 h-4 mr-1" />
-                                  Email
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant={pandadocSendMethod === "embedded" ? "default" : "outline"}
-                                  onClick={() => setPandadocSendMethod("embedded")}
-                                  data-testid="button-draft-send-embedded"
-                                >
-                                  <ExternalLink className="w-4 h-4 mr-1" />
-                                  Embedded
-                                </Button>
-                              </div>
-                              <Button
-                                onClick={() => sendPandadocDraftMutation.mutate()}
-                                disabled={sendPandadocDraftMutation.isPending}
-                                size="sm"
-                                data-testid="button-send-draft"
-                              >
-                                {sendPandadocDraftMutation.isPending ? (
-                                  <>
-                                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                                    Sending...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Send className="w-4 h-4 mr-1" />
-                                    Send for Signature
-                                  </>
-                                )}
-                              </Button>
-                            </div>
-                          </div>
-                          
-                          <div className="flex flex-1 min-h-0" style={{ height: 'calc(95vh - 120px)' }}>
-                            {showVariablesSidebar && (
-                              <div className="w-64 border-r flex flex-col overflow-hidden shrink-0" data-testid="variables-sidebar">
-                                <div className="p-3 border-b bg-muted/30">
-                                  <h4 className="font-semibold text-sm">Quote Variables</h4>
-                                  <p className="text-xs text-muted-foreground mt-1">Copy token names to paste into your document as PandaDoc tokens</p>
-                                </div>
-                                <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                                  {tokenPreviewData?.tokens?.filter(t => t.value).map((token) => (
-                                    <div
-                                      key={token.name}
-                                      className="flex items-start gap-2 p-2 rounded-md hover-elevate cursor-pointer group text-xs"
-                                      onClick={() => {
-                                        navigator.clipboard.writeText(`{{${token.name}}}`);
-                                        toast({ title: "Copied!", description: `{{${token.name}}} copied to clipboard` });
-                                      }}
-                                      data-testid={`token-${token.name}`}
-                                    >
-                                      <div className="flex-1 min-w-0">
-                                        <div className="font-mono text-xs text-primary truncate">{`{{${token.name}}}`}</div>
-                                        <div className="text-muted-foreground truncate mt-0.5">{token.value}</div>
-                                      </div>
-                                      <Copy className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 mt-0.5" />
-                                    </div>
-                                  ))}
-                                  {(!tokenPreviewData?.tokens || tokenPreviewData.tokens.filter(t => t.value).length === 0) && (
-                                    <div className="text-center py-6 text-xs text-muted-foreground">
-                                      <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2" />
-                                      Loading variables...
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="p-2 border-t space-y-2">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="w-full"
-                                    onClick={() => {
-                                      const allTokens = tokenPreviewData?.tokens?.filter(t => t.value).map(t => `{{${t.name}}}`).join('\n') || '';
-                                      navigator.clipboard.writeText(allTokens);
-                                      toast({ title: "All tokens copied!", description: `${tokenPreviewData?.tokens?.filter(t => t.value).length || 0} tokens copied to clipboard` });
-                                    }}
-                                    data-testid="button-copy-all-tokens"
-                                  >
-                                    <Copy className="w-3 h-3 mr-1" />
-                                    Copy All Tokens
-                                  </Button>
-                                  
-                                  {!showSaveTemplateInput ? (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="w-full"
-                                      onClick={() => {
-                                        setSaveAsTemplateName(`${quote.quoteName || 'Loan'} Template`);
-                                        setShowSaveTemplateInput(true);
-                                      }}
-                                      data-testid="button-show-save-template"
-                                    >
-                                      <Save className="w-3 h-3 mr-1" />
-                                      Save as Template
-                                    </Button>
-                                  ) : (
-                                    <div className="space-y-1.5">
-                                      <Input
-                                        placeholder="Template name..."
-                                        value={saveAsTemplateName}
-                                        onChange={(e) => setSaveAsTemplateName(e.target.value)}
-                                        className="text-xs h-8"
-                                        data-testid="input-template-name"
-                                      />
-                                      <div className="flex gap-1">
-                                        <Button
-                                          variant="default"
-                                          size="sm"
-                                          className="flex-1 text-xs"
-                                          disabled={!saveAsTemplateName.trim() || saveAsTemplateMutation.isPending}
-                                          onClick={() => saveAsTemplateMutation.mutate()}
-                                          data-testid="button-save-template-confirm"
-                                        >
-                                          {saveAsTemplateMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3 mr-1" />}
-                                          Save
-                                        </Button>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="text-xs"
-                                          onClick={() => { setShowSaveTemplateInput(false); setSaveAsTemplateName(''); }}
-                                          data-testid="button-cancel-save-template"
-                                        >
-                                          Cancel
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                            <div className="flex-1 border rounded-lg overflow-hidden relative min-w-0">
-                              {pandadocEditorLoading ? (
-                                <div className="absolute inset-0 flex items-center justify-center bg-muted/50">
-                                  <div className="text-center space-y-2">
-                                    <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
-                                    <p className="text-sm text-muted-foreground">Loading editor...</p>
-                                  </div>
-                                </div>
-                              ) : !pandadocEditorToken ? (
-                                <div className="absolute inset-0 flex items-center justify-center bg-muted/50">
-                                  <div className="text-center space-y-3 max-w-sm">
-                                    <FileText className="w-10 h-10 mx-auto text-muted-foreground" />
-                                    <p className="text-sm text-muted-foreground">
-                                      Embedded editor not available. You can still review and edit in PandaDoc directly.
-                                    </p>
-                                    <Button
-                                      variant="outline"
-                                      onClick={() => window.open(pandadocDraft.editorUrl, '_blank')}
-                                      data-testid="button-review-pandadoc-fallback"
-                                    >
-                                      <ExternalLink className="w-4 h-4 mr-2" />
-                                      Open in PandaDoc
-                                    </Button>
-                                  </div>
-                                </div>
-                              ) : null}
-                              <div ref={editorContainerRef} className="w-full h-full" />
-                            </div>
-                          </div>
-                        </div>
                       ) : (
                         <div className="max-w-lg mx-auto space-y-6">
-                          <div className="space-y-2">
-                            <Label>Select Template</Label>
-                            {pandadocTemplatesLoading ? (
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                Loading templates...
-                              </div>
-                            ) : pandadocTemplatesData?.templates && pandadocTemplatesData.templates.length > 0 ? (
-                              <Select
-                                value={pandadocTemplateId}
-                                onValueChange={(value) => setPandadocTemplateId(value)}
-                              >
-                                <SelectTrigger data-testid="select-pandadoc-template">
-                                  <SelectValue placeholder="Choose a PandaDoc template" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {pandadocTemplatesData.templates.map((t) => (
-                                    <SelectItem key={t.id} value={t.id}>
-                                      {t.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            ) : (
-                              <Input
-                                placeholder="Enter PandaDoc template UUID"
-                                value={pandadocTemplateId}
-                                onChange={(e) => setPandadocTemplateId(e.target.value)}
-                                data-testid="input-pandadoc-template"
-                              />
-                            )}
-                            <p className="text-xs text-muted-foreground">
-                              Select a template or paste a Template ID from PandaDoc
-                            </p>
-                          </div>
-
-                          <div className="space-y-2">
-                            <Label>Send Method</Label>
-                            <div className="flex gap-4">
-                              <Button
-                                type="button"
-                                variant={pandadocSendMethod === "email" ? "default" : "outline"}
-                                onClick={() => setPandadocSendMethod("email")}
-                                className="flex-1"
-                                data-testid="button-send-email"
-                              >
-                                <Mail className="w-4 h-4 mr-2" />
-                                Email
-                              </Button>
-                              <Button
-                                type="button"
-                                variant={pandadocSendMethod === "embedded" ? "default" : "outline"}
-                                onClick={() => setPandadocSendMethod("embedded")}
-                                className="flex-1"
-                                data-testid="button-send-embedded"
-                              >
-                                <ExternalLink className="w-4 h-4 mr-2" />
-                                Embedded
-                              </Button>
-                            </div>
-                          </div>
-
-                          <div className="space-y-3">
-                            <Label>Recipients</Label>
-                            {pandadocRecipients.map((recipient, idx) => (
-                              <div key={idx} className="flex gap-2 items-center flex-wrap">
-                                <Input
-                                  placeholder="Name"
-                                  value={recipient.name}
-                                  onChange={(e) => {
-                                    const updated = [...pandadocRecipients];
-                                    updated[idx].name = e.target.value;
-                                    setPandadocRecipients(updated);
-                                  }}
-                                  className="flex-1 min-w-[120px]"
-                                  data-testid={`input-recipient-name-${idx}`}
-                                />
-                                <Input
-                                  placeholder="Email"
-                                  type="email"
-                                  value={recipient.email}
-                                  onChange={(e) => {
-                                    const updated = [...pandadocRecipients];
-                                    updated[idx].email = e.target.value;
-                                    setPandadocRecipients(updated);
-                                  }}
-                                  className="flex-1 min-w-[140px]"
-                                  data-testid={`input-recipient-email-${idx}`}
-                                />
-                                {templateRoles.length > 0 ? (
-                                  <Select
-                                    value={recipient.role}
-                                    onValueChange={(value) => {
-                                      const updated = [...pandadocRecipients];
-                                      updated[idx].role = value;
-                                      setPandadocRecipients(updated);
-                                    }}
-                                  >
-                                    <SelectTrigger className="w-32" data-testid={`select-recipient-role-${idx}`}>
-                                      <SelectValue placeholder="Select role" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {templateRoles.map((role) => (
-                                        <SelectItem key={role.name} value={role.name}>
-                                          {role.name}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                ) : (
-                                  <Input
-                                    placeholder="Role"
-                                    value={recipient.role}
-                                    onChange={(e) => {
-                                      const updated = [...pandadocRecipients];
-                                      updated[idx].role = e.target.value;
-                                      setPandadocRecipients(updated);
-                                    }}
-                                    className="w-32"
-                                    data-testid={`input-recipient-role-${idx}`}
-                                  />
-                                )}
-                                {pandadocRecipients.length > 1 && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => setPandadocRecipients(prev => prev.filter((_, i) => i !== idx))}
-                                    data-testid={`button-remove-recipient-${idx}`}
-                                  >
-                                    <Trash2 className="w-4 h-4 text-destructive" />
-                                  </Button>
-                                )}
-                              </div>
-                            ))}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setPandadocRecipients(prev => [...prev, { 
-                                name: '', 
-                                email: '', 
-                                role: templateRoles.length > 0 ? templateRoles[0].name : '' 
-                              }])}
-                              data-testid="button-add-recipient"
+                          <div className="text-center space-y-4">
+                            <div 
+                              className="border-2 border-dashed rounded-lg p-8 hover:bg-muted/50 cursor-pointer transition-colors"
+                              onClick={() => pandadocFileInputRef.current?.click()}
+                              data-testid="pandadoc-upload-area"
                             >
-                              <Plus className="w-4 h-4 mr-2" />
-                              Add Recipient
-                            </Button>
-                            
-                            {templateRolesLoading && (
-                              <p className="text-sm text-muted-foreground mt-2">Loading template roles...</p>
-                            )}
-                            {templateRolesError && (
-                              <p className="text-sm text-destructive mt-2">Error: {templateRolesError}</p>
-                            )}
-                            {templateRoles.length > 0 && !templateRolesLoading && (
-                              <p className="text-xs text-muted-foreground mt-2">
-                                Available roles: {templateRoles.map(r => r.name).join(', ')}
-                              </p>
+                              <Upload className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                              <p className="text-lg font-medium">Upload your Term Sheet PDF</p>
+                              <p className="text-sm text-muted-foreground">Click to select a PDF file to send via PandaDoc</p>
+                              <input
+                                ref={pandadocFileInputRef}
+                                type="file"
+                                accept=".pdf"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  if (file.type !== 'application/pdf') {
+                                    toast({ title: "Invalid File", description: "Please upload a PDF file", variant: "destructive" });
+                                    return;
+                                  }
+                                  const reader = new FileReader();
+                                  reader.onload = (ev) => {
+                                    setPdfData(ev.target?.result as string);
+                                    setFileName(file.name);
+                                    setPandadocPdfUploaded(true);
+                                  };
+                                  reader.readAsDataURL(file);
+                                }}
+                                className="hidden"
+                                data-testid="pandadoc-file-input"
+                              />
+                            </div>
+
+                            {pdfData && pandadocPdfUploaded && (
+                              <div className="space-y-4">
+                                <div className="flex items-center justify-center gap-2 text-green-600">
+                                  <Check className="w-5 h-5" />
+                                  <span>{fileName}</span>
+                                </div>
+                                <div className="border rounded-lg overflow-hidden max-h-[200px]">
+                                  <PDFDocument file={pdfData} onLoadSuccess={onDocumentLoadSuccess}>
+                                    <PDFPage pageNumber={1} width={400} />
+                                  </PDFDocument>
+                                </div>
+                              </div>
                             )}
                           </div>
 
-                          <div className="border-t pt-4">
-                            <div className="bg-muted/50 rounded-lg p-4 mb-4 space-y-3">
-                              <div className="flex items-center justify-between gap-2">
-                                <h4 className="font-medium">Fields Auto-Populated from Quote</h4>
+                          {pdfData && pandadocPdfUploaded && (
+                            <>
+                              <div className="space-y-3">
+                                <Label>Recipients</Label>
+                                {pandadocRecipients.map((recipient, idx) => (
+                                  <div key={idx} className="flex gap-2 items-center flex-wrap">
+                                    <Input
+                                      placeholder="Name"
+                                      value={recipient.name}
+                                      onChange={(e) => {
+                                        const updated = [...pandadocRecipients];
+                                        updated[idx].name = e.target.value;
+                                        setPandadocRecipients(updated);
+                                      }}
+                                      className="flex-1 min-w-[120px]"
+                                      data-testid={`input-recipient-name-${idx}`}
+                                    />
+                                    <Input
+                                      placeholder="Email"
+                                      type="email"
+                                      value={recipient.email}
+                                      onChange={(e) => {
+                                        const updated = [...pandadocRecipients];
+                                        updated[idx].email = e.target.value;
+                                        setPandadocRecipients(updated);
+                                      }}
+                                      className="flex-1 min-w-[140px]"
+                                      data-testid={`input-recipient-email-${idx}`}
+                                    />
+                                    <Input
+                                      placeholder="Role (e.g. Signer)"
+                                      value={recipient.role}
+                                      onChange={(e) => {
+                                        const updated = [...pandadocRecipients];
+                                        updated[idx].role = e.target.value;
+                                        setPandadocRecipients(updated);
+                                      }}
+                                      className="w-32"
+                                      data-testid={`input-recipient-role-${idx}`}
+                                    />
+                                    {pandadocRecipients.length > 1 && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => setPandadocRecipients(prev => prev.filter((_, i) => i !== idx))}
+                                        data-testid={`button-remove-recipient-${idx}`}
+                                      >
+                                        <Trash2 className="w-4 h-4 text-destructive" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                ))}
                                 <Button
-                                  variant="ghost"
+                                  variant="outline"
                                   size="sm"
-                                  onClick={() => setShowTokenPreview(!showTokenPreview)}
-                                  data-testid="button-toggle-tokens"
+                                  onClick={() => setPandadocRecipients(prev => [...prev, { name: '', email: '', role: 'Signer' }])}
+                                  data-testid="button-add-recipient"
                                 >
-                                  {showTokenPreview ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                                  {showTokenPreview ? 'Hide All' : 'Show All'}
+                                  <Plus className="w-4 h-4 mr-2" />
+                                  Add Recipient
                                 </Button>
                               </div>
-                              <div className="grid grid-cols-2 gap-2 text-sm">
-                                <div><span className="text-muted-foreground">Borrower:</span> {quote.customerFirstName} {quote.customerLastName}</div>
-                                <div><span className="text-muted-foreground">Loan Amount:</span> ${((quote.loanData as any)?.loanAmount || 0).toLocaleString()}</div>
-                                <div><span className="text-muted-foreground">Interest Rate:</span> {quote.interestRate}%</div>
-                                <div><span className="text-muted-foreground">Property:</span> {quote.propertyAddress}</div>
-                                {(quote.loanData as any)?.loanTerm && (
-                                  <div><span className="text-muted-foreground">Loan Term:</span> {(quote.loanData as any).loanTerm}</div>
-                                )}
-                                {(quote.loanData as any)?.loanType && (
-                                  <div><span className="text-muted-foreground">Loan Type:</span> {(quote.loanData as any).loanType}</div>
-                                )}
-                                {quote.pointsCharged > 0 && (
-                                  <div><span className="text-muted-foreground">Points:</span> {quote.pointsCharged}%</div>
-                                )}
-                                {(quote.loanData as any)?.dscr && (
-                                  <div><span className="text-muted-foreground">DSCR:</span> {(quote.loanData as any).dscr}</div>
-                                )}
-                              </div>
-                              {showTokenPreview && tokenPreviewData && (
-                                <div className="border-t mt-3 pt-3">
-                                  <p className="text-xs text-muted-foreground mb-2">
-                                    These token names can be used in your PandaDoc template as {'{{token_name}}'}:
-                                  </p>
-                                  <div className="max-h-48 overflow-y-auto space-y-1">
-                                    {tokenPreviewData.tokens
-                                      .filter((t: { name: string; value: string }) => t.value)
-                                      .map((t: { name: string; value: string }) => (
-                                        <div key={t.name} className="flex items-center gap-2 text-xs font-mono">
-                                          <span className="text-muted-foreground min-w-[180px]">{`{{${t.name}}}`}</span>
-                                          <span className="truncate">{t.value}</span>
-                                        </div>
-                                      ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
 
-                          {pandadocTemplateId && templateRolesError && (
-                            <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 mb-4" data-testid="error-template-fetch">
-                              <p className="text-sm text-destructive">
-                                Could not fetch template roles. Please verify your Template ID is correct.
-                              </p>
-                            </div>
+                              <Button
+                                onClick={() => {
+                                  const recipientSigners = pandadocRecipients.map((r, i) => ({
+                                    id: i + 1,
+                                    name: r.name,
+                                    email: r.email,
+                                    color: SIGNER_COLORS[i % SIGNER_COLORS.length],
+                                  }));
+                                  setSigners(recipientSigners);
+                                  setStep("fields");
+                                }}
+                                disabled={!pdfData || pandadocRecipients.some(r => !r.email.trim() || !r.role.trim())}
+                                className="w-full"
+                                data-testid="button-pandadoc-continue-fields"
+                              >
+                                Continue to Place Fields
+                                <ChevronRight className="w-4 h-4 ml-2" />
+                              </Button>
+                            </>
                           )}
-                          {pandadocTemplateId && !templateRolesLoading && templateRoles.length === 0 && !templateRolesError && (
-                            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 mb-4" data-testid="warning-no-roles">
-                              <p className="text-sm text-yellow-600 dark:text-yellow-400">
-                                No roles found in this template. Please ensure your PandaDoc template has roles defined, or check the Template ID.
-                              </p>
-                            </div>
-                          )}
-                          {templateRoles.length > 0 && pandadocRecipients.some(r => r.role && !templateRoles.some(tr => tr.name === r.role)) && (
-                            <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 mb-4" data-testid="error-role-mismatch">
-                              <p className="text-sm text-destructive">
-                                Some recipient roles don't match template roles. Please select a valid role for each recipient.
-                              </p>
-                            </div>
-                          )}
-
-                          <Button
-                            onClick={() => createPandadocDraftMutation.mutate()}
-                            disabled={
-                              !pandadocTemplateId || 
-                              pandadocRecipients.some(r => !r.email || !r.role.trim()) || 
-                              templateRolesLoading ||
-                              !!templateRolesError ||
-                              (pandadocTemplateId && templateRoles.length === 0 && !templateRolesLoading) ||
-                              (templateRoles.length > 0 && pandadocRecipients.some(r => !templateRoles.some(tr => tr.name === r.role.trim()))) ||
-                              createPandadocDraftMutation.isPending
-                            }
-                            className="w-full"
-                            data-testid="button-create-pandadoc-draft"
-                          >
-                            {createPandadocDraftMutation.isPending ? (
-                              <>
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                Creating Draft...
-                              </>
-                            ) : (
-                              <>
-                                <FileText className="w-4 h-4 mr-2" />
-                                Create Term Sheet Draft
-                              </>
-                            )}
-                          </Button>
                         </div>
                       )}
                     </div>
@@ -2016,48 +1761,145 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                   <Mail className="w-12 h-12 mx-auto text-primary" />
                   <h3 className="text-xl font-semibold">Ready to Send</h3>
                   <p className="text-muted-foreground">
-                    Your document will be sent to {signers.length} signer(s) for signature
+                    Your document will be sent to {uploadMode === "pandadoc" ? pandadocRecipients.length : signers.length} signer(s) for signature
+                    {uploadMode === "pandadoc" && " via PandaDoc"}
                   </p>
                 </div>
                 
-                <div className="space-y-2">
-                  <Label>From (Sender Name)</Label>
-                  <Input
-                    value={senderName}
-                    onChange={(e) => setSenderName(e.target.value)}
-                    placeholder="Your name or company"
-                    data-testid="input-sender-name"
-                  />
-                </div>
-                
-                <div className="border rounded-lg p-4 space-y-2">
-                  <h4 className="font-medium">Recipients:</h4>
-                  {signers.map((signer, i) => (
-                    <div key={i} className="flex items-center gap-2 text-sm">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: signer.color }} />
-                      <span>{signer.name}</span>
-                      <span className="text-muted-foreground">({signer.email})</span>
+                {uploadMode === "pandadoc" ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Send Method</Label>
+                      <div className="flex gap-4">
+                        <Button
+                          type="button"
+                          variant={pandadocSendMethod === "email" ? "default" : "outline"}
+                          onClick={() => setPandadocSendMethod("email")}
+                          className="flex-1"
+                          data-testid="button-send-email"
+                        >
+                          <Mail className="w-4 h-4 mr-2" />
+                          Email
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={pandadocSendMethod === "embedded" ? "default" : "outline"}
+                          onClick={() => setPandadocSendMethod("embedded")}
+                          className="flex-1"
+                          data-testid="button-send-embedded"
+                        >
+                          <ExternalLink className="w-4 h-4 mr-2" />
+                          Embedded Link
+                        </Button>
+                      </div>
                     </div>
-                  ))}
-                </div>
-                
-                <div className="border rounded-lg p-4 space-y-2">
-                  <h4 className="font-medium">Fields to Complete:</h4>
-                  <p className="text-sm text-muted-foreground">
-                    {fields.length} field(s) across {pageCount} page(s)
-                  </p>
-                </div>
-                
-                <Button 
-                  onClick={() => sendDocumentMutation.mutate()} 
-                  disabled={sendDocumentMutation.isPending}
-                  className="w-full"
-                  size="lg"
-                  data-testid="button-send-document"
-                >
-                  {sendDocumentMutation.isPending ? "Sending..." : "Send for Signature"}
-                  <Send className="w-4 h-4 ml-2" />
-                </Button>
+
+                    <div className="border rounded-lg p-4 space-y-2">
+                      <h4 className="font-medium">Recipients:</h4>
+                      {pandadocRecipients.map((r, i) => (
+                        <div key={i} className="flex items-center gap-2 text-sm">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: SIGNER_COLORS[i % SIGNER_COLORS.length] }} />
+                          <span>{r.name || 'No name'}</span>
+                          <span className="text-muted-foreground">({r.email})</span>
+                          <Badge variant="secondary">{r.role}</Badge>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="border rounded-lg p-4 space-y-2">
+                      <h4 className="font-medium">Document:</h4>
+                      <p className="text-sm text-muted-foreground">{fileName}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {fields.length} field(s) across {pageCount} page(s)
+                      </p>
+                    </div>
+
+                    {pandadocDraft ? (
+                      <div className="text-center space-y-4 py-4">
+                        <div className="w-12 h-12 rounded-full bg-green-100 mx-auto flex items-center justify-center">
+                          <Check className="w-6 h-6 text-green-600" />
+                        </div>
+                        <p className="font-medium text-green-600">Draft created in PandaDoc</p>
+                        <div className="flex gap-2 justify-center flex-wrap">
+                          <Button
+                            variant="outline"
+                            onClick={() => window.open(pandadocDraft.editorUrl, '_blank')}
+                            data-testid="button-open-pandadoc-draft"
+                          >
+                            <ExternalLink className="w-4 h-4 mr-2" />
+                            Open in PandaDoc
+                          </Button>
+                          <Button
+                            onClick={() => sendPandadocDraftMutation.mutate()}
+                            disabled={sendPandadocDraftMutation.isPending}
+                            data-testid="button-send-pandadoc-draft"
+                          >
+                            {sendPandadocDraftMutation.isPending ? (
+                              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending...</>
+                            ) : (
+                              <><Send className="w-4 h-4 mr-2" />Send for Signature</>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button 
+                        onClick={() => createPandadocFromPdfMutation.mutate()} 
+                        disabled={createPandadocFromPdfMutation.isPending}
+                        className="w-full"
+                        size="lg"
+                        data-testid="button-create-send-pandadoc"
+                      >
+                        {createPandadocFromPdfMutation.isPending ? (
+                          <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating PandaDoc Draft...</>
+                        ) : (
+                          <>Create & Send via PandaDoc<Send className="w-4 h-4 ml-2" /></>
+                        )}
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <Label>From (Sender Name)</Label>
+                      <Input
+                        value={senderName}
+                        onChange={(e) => setSenderName(e.target.value)}
+                        placeholder="Your name or company"
+                        data-testid="input-sender-name"
+                      />
+                    </div>
+                    
+                    <div className="border rounded-lg p-4 space-y-2">
+                      <h4 className="font-medium">Recipients:</h4>
+                      {signers.map((signer, i) => (
+                        <div key={i} className="flex items-center gap-2 text-sm">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: signer.color }} />
+                          <span>{signer.name}</span>
+                          <span className="text-muted-foreground">({signer.email})</span>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    <div className="border rounded-lg p-4 space-y-2">
+                      <h4 className="font-medium">Fields to Complete:</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {fields.length} field(s) across {pageCount} page(s)
+                      </p>
+                    </div>
+                    
+                    <Button 
+                      onClick={() => sendDocumentMutation.mutate()} 
+                      disabled={sendDocumentMutation.isPending}
+                      className="w-full"
+                      size="lg"
+                      data-testid="button-send-document"
+                    >
+                      {sendDocumentMutation.isPending ? "Sending..." : "Send for Signature"}
+                      <Send className="w-4 h-4 ml-2" />
+                    </Button>
+                  </>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

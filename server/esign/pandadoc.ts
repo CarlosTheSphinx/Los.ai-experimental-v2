@@ -298,6 +298,73 @@ export async function downloadDocument(documentId: string): Promise<Buffer> {
   return Buffer.from(arrayBuffer);
 }
 
+interface PandaDocFieldPlacement {
+  name: string;
+  role: string;
+  type: string;
+  required?: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  page: number;
+  value?: string;
+}
+
+export async function createDocumentFromPdf(
+  pdfBuffer: Buffer,
+  options: {
+    name: string;
+    recipients: PandaDocRecipient[];
+    fields?: Record<string, PandaDocFieldPlacement[]>;
+    tokens?: PandaDocToken[];
+    metadata?: Record<string, any>;
+  }
+): Promise<PandaDocDocument> {
+  const apiBase = getApiBase();
+  const apiKey = getApiKey();
+
+  const formData = new FormData();
+  const blob = new Blob([pdfBuffer], { type: "application/pdf" });
+  formData.append("file", blob, `${options.name}.pdf`);
+
+  const data: any = {
+    name: options.name,
+    recipients: options.recipients,
+    parse_form_fields: false,
+  };
+
+  if (options.fields && Object.keys(options.fields).length > 0) {
+    data.fields = options.fields;
+  }
+  if (options.tokens && options.tokens.length > 0) {
+    data.tokens = options.tokens;
+  }
+  if (options.metadata) {
+    data.metadata = options.metadata;
+  }
+
+  formData.append("data", JSON.stringify(data));
+
+  console.log(`[PandaDoc] POST ${apiBase}/documents (PDF upload with ${Object.values(options.fields || {}).flat().length} fields)`);
+
+  const response = await fetch(`${apiBase}/documents`, {
+    method: "POST",
+    headers: {
+      Authorization: `API-Key ${apiKey}`,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("PandaDoc create document from PDF error:", errorText);
+    throw new Error(`Failed to create PandaDoc document from PDF: ${response.status} ${errorText}`);
+  }
+
+  return response.json();
+}
+
 export async function createTemplateFromFile(
   name: string,
   pdfBuffer: Buffer,
