@@ -10,6 +10,7 @@ import { CheckCircle2, XCircle, AlertTriangle, RotateCcw, TrendingUp, Percent, D
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 
 interface RTLPricingResultProps {
   result: RTLPricingResponse;
@@ -21,6 +22,7 @@ interface RTLPricingResultProps {
 
 export function RTLPricingResult({ result, formData, onReset, onEdit, programId }: RTLPricingResultProps) {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const MIN_POINTS = 2.0;
   const MAX_ADDITIONAL_POINTS = 3.0;
   const [additionalPoints, setAdditionalPoints] = useState(0);
@@ -33,7 +35,7 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
     mutationFn: async () => {
       const formattedRate = result.finalRate ? `${result.finalRate.toFixed(3)}%` : "N/A";
       
-      return apiRequest('POST', '/api/quotes', {
+      const response = await apiRequest('POST', '/api/quotes', {
         customerFirstName,
         customerLastName,
         customerCompanyName,
@@ -43,6 +45,7 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
         pointsCharged: MIN_POINTS + additionalPoints,
         programId: programId || null
       });
+      return response.json();
     },
     onSuccess: () => {
       toast({
@@ -51,6 +54,7 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
       });
       queryClient.invalidateQueries({ queryKey: ['/api/quotes'] });
       setShowQuoteForm(false);
+      setLocation('/quotes');
     },
     onError: (error) => {
       toast({

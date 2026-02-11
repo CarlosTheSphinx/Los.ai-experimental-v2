@@ -10,6 +10,7 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
+import { useLocation } from "wouter";
 
 interface PricingResultProps {
   result: PricingResponse;
@@ -20,6 +21,7 @@ interface PricingResultProps {
 
 export function PricingResult({ result, formData, onReset, programId }: PricingResultProps) {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [showQuoteForm, setShowQuoteForm] = useState(false);
   const [customerFirstName, setCustomerFirstName] = useState("");
   const [customerLastName, setCustomerLastName] = useState("");
@@ -41,7 +43,7 @@ export function PricingResult({ result, formData, onReset, programId }: PricingR
       const rate = result.interestRate;
       const formattedRate = typeof rate === 'string' ? rate : (rate ? `${rate.toFixed(3)}%` : "N/A");
       
-      return apiRequest('POST', '/api/quotes', {
+      const response = await apiRequest('POST', '/api/quotes', {
           customerFirstName,
           customerLastName,
           customerCompanyName,
@@ -51,6 +53,7 @@ export function PricingResult({ result, formData, onReset, programId }: PricingR
           pointsCharged,
           programId: programId || null
         });
+      return response.json();
     },
     onSuccess: () => {
       toast({
@@ -59,6 +62,7 @@ export function PricingResult({ result, formData, onReset, programId }: PricingR
       });
       queryClient.invalidateQueries({ queryKey: ['/api/quotes'] });
       setShowQuoteForm(false);
+      setLocation('/quotes');
     },
     onError: (error) => {
       toast({
