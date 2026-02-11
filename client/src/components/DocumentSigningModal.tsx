@@ -399,6 +399,7 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
   const [pandadocSendMethod, setPandadocSendMethod] = useState<"email" | "embedded">("email");
   const [pandadocSending, setPandadocSending] = useState(false);
   const [pandadocResult, setPandadocResult] = useState<{ success: boolean; signingUrl?: string; envelopeId?: number } | null>(null);
+  const [pandadocDraft, setPandadocDraft] = useState<{ envelopeId: number; externalDocumentId: string; editorUrl: string } | null>(null);
   const [templateRoles, setTemplateRoles] = useState<Array<{ name: string }>>([]);
   const [templateRolesLoading, setTemplateRolesLoading] = useState(false);
   const [templateRolesError, setTemplateRolesError] = useState<string | null>(null);
@@ -423,8 +424,8 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
     enabled: open && uploadMode === "pandadoc" && showTokenPreview,
   });
 
-  // PandaDoc send mutation
-  const sendPandadocMutation = useMutation({
+  // PandaDoc create draft mutation
+  const createPandadocDraftMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest('POST', '/api/esign/pandadoc/documents/create', {
         quoteId: quote.id,
@@ -444,15 +445,47 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
     },
     onSuccess: (data) => {
       if (data.success) {
+        setPandadocDraft({
+          envelopeId: data.envelope.id,
+          externalDocumentId: data.envelope.externalDocumentId,
+          editorUrl: data.envelope.editorUrl,
+        });
+        toast({ 
+          title: "Draft Created", 
+          description: "Your term sheet has been created. Review it in PandaDoc before sending." 
+        });
+      } else {
+        toast({ title: "Error", description: data.error || "Failed to create document", variant: "destructive" });
+      }
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to create PandaDoc document", variant: "destructive" });
+    },
+  });
+
+  // PandaDoc send draft mutation
+  const sendPandadocDraftMutation = useMutation({
+    mutationFn: async () => {
+      if (!pandadocDraft) throw new Error('No draft to send');
+      const res = await apiRequest('POST', `/api/esign/pandadoc/documents/${pandadocDraft.envelopeId}/send`, {
+        sendMethod: pandadocSendMethod,
+        subject: `Document for Signature: ${quote.quoteName || 'Loan Agreement'}`,
+        message: `Please review and sign the attached document for your loan application.`,
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.success) {
         setPandadocResult({
           success: true,
           signingUrl: data.envelope?.signingUrl,
           envelopeId: data.envelope?.id,
         });
+        setPandadocDraft(null);
         toast({ 
-          title: "Document Sent!", 
+          title: "Term Sheet Sent!", 
           description: pandadocSendMethod === 'email' 
-            ? "The document has been sent for signature via email." 
+            ? "The recipient will receive an email with the signing link." 
             : "Opening signing session..." 
         });
         if (data.envelope?.signingUrl) {
@@ -463,7 +496,7 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
       }
     },
     onError: (error: any) => {
-      toast({ title: "Error", description: error.message || "Failed to send PandaDoc document", variant: "destructive" });
+      toast({ title: "Error", description: error.message || "Failed to send document", variant: "destructive" });
     },
   });
 
@@ -1134,7 +1167,7 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                           <div className="w-16 h-16 rounded-full bg-green-100 mx-auto flex items-center justify-center">
                             <Check className="w-8 h-8 text-green-600" />
                           </div>
-                          <h3 className="text-lg font-semibold text-green-600">Document Sent Successfully!</h3>
+                          <h3 className="text-lg font-semibold text-green-600">Term Sheet Sent Successfully!</h3>
                           <p className="text-muted-foreground">
                             {pandadocSendMethod === 'email' 
                               ? 'The recipient will receive an email with the signing link.' 
@@ -1151,6 +1184,77 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                             </Button>
                           )}
                           <Button onClick={onClose} data-testid="button-close-success">Close</Button>
+                        </div>
+                      ) : pandadocDraft ? (
+                        <div className="max-w-lg mx-auto space-y-6">
+                          <div className="text-center space-y-3">
+                            <div className="w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900/30 mx-auto flex items-center justify-center">
+                              <FileText className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <h3 className="text-lg font-semibold">Draft Created</h3>
+                            <p className="text-sm text-muted-foreground">
+                              Your term sheet has been created as a draft in PandaDoc. Review and edit it before sending to the borrower.
+                            </p>
+                          </div>
+
+                          <Card>
+                            <CardContent className="pt-6 space-y-4">
+                              <Button
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => window.open(pandadocDraft.editorUrl, '_blank')}
+                                data-testid="button-review-pandadoc"
+                              >
+                                <ExternalLink className="w-4 h-4 mr-2" />
+                                Open in PandaDoc to Review & Edit
+                              </Button>
+                              
+                              <div className="border-t pt-4 space-y-3">
+                                <Label>Send Method</Label>
+                                <div className="flex gap-4">
+                                  <Button
+                                    type="button"
+                                    variant={pandadocSendMethod === "email" ? "default" : "outline"}
+                                    onClick={() => setPandadocSendMethod("email")}
+                                    className="flex-1"
+                                    data-testid="button-draft-send-email"
+                                  >
+                                    <Mail className="w-4 h-4 mr-2" />
+                                    Email
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant={pandadocSendMethod === "embedded" ? "default" : "outline"}
+                                    onClick={() => setPandadocSendMethod("embedded")}
+                                    className="flex-1"
+                                    data-testid="button-draft-send-embedded"
+                                  >
+                                    <ExternalLink className="w-4 h-4 mr-2" />
+                                    Embedded
+                                  </Button>
+                                </div>
+                              </div>
+
+                              <Button
+                                onClick={() => sendPandadocDraftMutation.mutate()}
+                                disabled={sendPandadocDraftMutation.isPending}
+                                className="w-full"
+                                data-testid="button-send-draft"
+                              >
+                                {sendPandadocDraftMutation.isPending ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Sending Term Sheet...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Send className="w-4 h-4 mr-2" />
+                                    Send Term Sheet for Signature
+                                  </>
+                                )}
+                              </Button>
+                            </CardContent>
+                          </Card>
                         </div>
                       ) : (
                         <div className="max-w-lg mx-auto space-y-6">
@@ -1390,7 +1494,7 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                           )}
 
                           <Button
-                            onClick={() => sendPandadocMutation.mutate()}
+                            onClick={() => createPandadocDraftMutation.mutate()}
                             disabled={
                               !pandadocTemplateId || 
                               pandadocRecipients.some(r => !r.email || !r.role.trim()) || 
@@ -1398,20 +1502,20 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                               !!templateRolesError ||
                               (pandadocTemplateId && templateRoles.length === 0 && !templateRolesLoading) ||
                               (templateRoles.length > 0 && pandadocRecipients.some(r => !templateRoles.some(tr => tr.name === r.role.trim()))) ||
-                              sendPandadocMutation.isPending
+                              createPandadocDraftMutation.isPending
                             }
                             className="w-full"
-                            data-testid="button-send-pandadoc"
+                            data-testid="button-create-pandadoc-draft"
                           >
-                            {sendPandadocMutation.isPending ? (
+                            {createPandadocDraftMutation.isPending ? (
                               <>
                                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                Sending via PandaDoc...
+                                Creating Draft...
                               </>
                             ) : (
                               <>
-                                <Send className="w-4 h-4 mr-2" />
-                                Create & Send Term Sheet
+                                <FileText className="w-4 h-4 mr-2" />
+                                Create Term Sheet Draft
                               </>
                             )}
                           </Button>

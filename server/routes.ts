@@ -11530,20 +11530,69 @@ Respond ONLY with valid JSON in this format:
         eventData: JSON.stringify({ pandaDoc }),
       });
       
-      let signingUrl: string | null = null;
-      
-      // Wait for PandaDoc to finish processing the document before sending
+      // Wait for PandaDoc to finish processing the document
       console.log(`[PandaDoc] Waiting for document ${pandaDoc.id} to be ready...`);
       await pandadoc.waitForDocumentReady(pandaDoc.id);
       console.log(`[PandaDoc] Document ${pandaDoc.id} is ready (draft status)`);
       
-      // Send document based on method
-      if (sendMethod === 'embedded') {
+      await db.update(esignEnvelopes)
+        .set({ status: 'draft' })
+        .where(eq(esignEnvelopes.id, envelope.id));
+      
+      const editorUrl = `https://app.pandadoc.com/a/#/documents/${pandaDoc.id}`;
+      
+      res.json({
+        success: true,
+        envelope: {
+          id: envelope.id,
+          externalDocumentId: pandaDoc.id,
+          status: 'draft',
+          editorUrl,
+        },
+      });
+    } catch (error: any) {
+      console.error('PandaDoc create document error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Send an existing PandaDoc draft document
+  app.post('/api/esign/pandadoc/documents/:envelopeId/send', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const envelopeId = parseInt(req.params.envelopeId);
+      const { sendMethod, subject, message } = req.body;
+      
+      const [envelope] = await db.select().from(esignEnvelopes).where(eq(esignEnvelopes.id, envelopeId));
+      if (!envelope) {
+        return res.status(404).json({ error: 'Envelope not found' });
+      }
+      
+      if (envelope.status === 'sent' || envelope.status === 'completed') {
+        return res.status(400).json({ error: `Document is already ${envelope.status}` });
+      }
+      
+      const pandadoc = await import('./esign/pandadoc');
+      const documentId = envelope.externalDocumentId;
+      
+      if (!documentId) {
+        return res.status(400).json({ error: 'No external document ID found' });
+      }
+      
+      // Ensure document is in draft status before sending
+      await pandadoc.waitForDocumentReady(documentId);
+      
+      let signingUrl: string | null = null;
+      const method = sendMethod || envelope.sendMethod || 'email';
+      
+      if (method === 'embedded') {
+        const recipients = JSON.parse(envelope.recipients as string || '[]');
+        const recipientEmail = recipients[0]?.email;
+        if (!recipientEmail) {
+          return res.status(400).json({ error: 'No recipient email found' });
+        }
+        
         try {
-          const session = await pandadoc.createEmbeddedSession(
-            pandaDoc.id,
-            recipients[0].email
-          );
+          const session = await pandadoc.createEmbeddedSession(documentId, recipientEmail);
           signingUrl = `https://app.pandadoc.com/s/${session.id}`;
           
           await db.update(esignEnvelopes)
@@ -11551,39 +11600,43 @@ Respond ONLY with valid JSON in this format:
             .where(eq(esignEnvelopes.id, envelope.id));
         } catch (sessionError: any) {
           console.error('Failed to create embedded session, falling back to email:', sessionError);
-          await pandadoc.sendDocument(pandaDoc.id, { subject, message });
+          await pandadoc.sendDocument(documentId, { 
+            subject: subject || `Document for Signature: ${envelope.documentName}`,
+            message: message || 'Please review and sign the attached document.' 
+          });
           await db.update(esignEnvelopes)
             .set({ status: 'sent', sentAt: new Date() })
             .where(eq(esignEnvelopes.id, envelope.id));
         }
       } else {
-        // Send via email
-        await pandadoc.sendDocument(pandaDoc.id, { subject, message });
+        await pandadoc.sendDocument(documentId, { 
+          subject: subject || `Document for Signature: ${envelope.documentName}`,
+          message: message || 'Please review and sign the attached document.' 
+        });
         await db.update(esignEnvelopes)
           .set({ status: 'sent', sentAt: new Date() })
           .where(eq(esignEnvelopes.id, envelope.id));
       }
       
-      // Log send event
       await db.insert(esignEvents).values({
         vendor: 'pandadoc',
         envelopeId: envelope.id,
-        externalDocumentId: pandaDoc.id,
+        externalDocumentId: documentId,
         eventType: 'document.sent',
-        eventData: JSON.stringify({ sendMethod, signingUrl }),
+        eventData: JSON.stringify({ sendMethod: method, signingUrl }),
       });
       
       res.json({
         success: true,
         envelope: {
           id: envelope.id,
-          externalDocumentId: pandaDoc.id,
+          externalDocumentId: documentId,
           status: 'sent',
           signingUrl,
         },
       });
     } catch (error: any) {
-      console.error('PandaDoc create document error:', error);
+      console.error('PandaDoc send document error:', error);
       res.status(500).json({ error: error.message });
     }
   });
