@@ -23,6 +23,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { SavedQuote } from "@shared/schema";
 import { DocumentSigningModal } from "@/components/DocumentSigningModal";
+import { TermSheetStatus } from "@/components/TermSheetStatus";
 
 interface DocumentInfo {
   id: number;
@@ -481,13 +482,14 @@ export default function Quotes() {
                           <MessageSquare className="w-4 h-4" />
                         </Button>
                       </div>
+                      <TermSheetStatus quoteId={quote.id} />
                       <Button
                         onClick={() => setSigningQuote(quote)}
                         className="w-full"
                         data-testid={`button-send-signature-${quote.id}`}
                       >
                         <Send className="w-4 h-4 mr-2" />
-                        Send Quote for Signature
+                        Send Term Sheet for Signature
                       </Button>
                     </div>
                   </CardContent>

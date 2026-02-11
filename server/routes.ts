@@ -11588,6 +11588,59 @@ Respond ONLY with valid JSON in this format:
     }
   });
 
+  // Get envelopes for a quote (signing status tracking)
+  app.get('/api/esign/pandadoc/quote/:quoteId/envelopes', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const quoteId = parseInt(req.params.quoteId);
+      if (isNaN(quoteId)) {
+        return res.status(400).json({ error: 'Invalid quoteId' });
+      }
+      
+      const envelopes = await db.select().from(esignEnvelopes)
+        .where(eq(esignEnvelopes.quoteId, quoteId))
+        .orderBy(esignEnvelopes.createdAt);
+      
+      // Get events for each envelope
+      const envelopesWithEvents = await Promise.all(
+        envelopes.map(async (env) => {
+          const events = await db.select().from(esignEvents)
+            .where(eq(esignEvents.envelopeId, env.id))
+            .orderBy(esignEvents.createdAt);
+          return { ...env, events };
+        })
+      );
+      
+      res.json({ envelopes: envelopesWithEvents });
+    } catch (error: any) {
+      console.error('Error fetching envelopes for quote:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Preview tokens that will be populated for a quote
+  app.get('/api/esign/pandadoc/quote/:quoteId/tokens', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const quoteId = parseInt(req.params.quoteId);
+      if (isNaN(quoteId)) {
+        return res.status(400).json({ error: 'Invalid quoteId' });
+      }
+      
+      const [quote] = await db.select().from(savedQuotes).where(eq(savedQuotes.id, quoteId));
+      if (!quote) {
+        return res.status(404).json({ error: 'Quote not found' });
+      }
+      
+      const { mapQuoteToPandaTokens, getAllAvailableTokenNames } = await import('./esign/field-mapping');
+      const tokens = mapQuoteToPandaTokens(quote);
+      const availableTokenNames = getAllAvailableTokenNames();
+      
+      res.json({ tokens, availableTokenNames });
+    } catch (error: any) {
+      console.error('Error generating token preview:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Get PandaDoc document status
   app.get('/api/esign/pandadoc/documents/:documentId/status', authenticateUser, async (req: AuthRequest, res: Response) => {
     try {
@@ -11858,10 +11911,101 @@ Respond ONLY with valid JSON in this format:
           // Download and store signed PDF (optionally)
           try {
             const pdfBuffer = await pandadoc.downloadSignedPdf(documentId);
-            // Store in object storage if available, or just note completion
             console.log(`Downloaded signed PDF for document ${documentId}, size: ${pdfBuffer.byteLength} bytes`);
           } catch (downloadError) {
             console.error('Failed to download signed PDF:', downloadError);
+          }
+          
+          // Auto-create project/deal from signed term sheet
+          if (envelope.quoteId) {
+            try {
+              const [quote] = await db.select().from(savedQuotes).where(eq(savedQuotes.id, envelope.quoteId));
+              if (quote) {
+                // Check if a project already exists for this quote (prevent duplicates)
+                const existingProjects = await db.select().from(projects)
+                  .where(eq(projects.quoteId, quote.id));
+                
+                if (existingProjects.length === 0) {
+                  const projectNumber = await storage.generateProjectNumber();
+                  const borrowerToken = (await import('uuid')).v4().replace(/-/g, '') + (await import('uuid')).v4().replace(/-/g, '');
+                  const loanData = (quote.loanData || {}) as Record<string, any>;
+                  const recipientsData = typeof envelope.recipients === 'string' 
+                    ? JSON.parse(envelope.recipients) 
+                    : (envelope.recipients || []);
+                  const firstRecipient = Array.isArray(recipientsData) ? recipientsData[0] : null;
+                  
+                  const project = await storage.createProject({
+                    userId: quote.userId || envelope.createdBy!,
+                    projectName: `${quote.customerFirstName} ${quote.customerLastName} - ${envelope.documentName}`,
+                    projectNumber,
+                    loanAmount: loanData.loanAmount ? Number(loanData.loanAmount) : null,
+                    interestRate: quote.interestRate ? Number(quote.interestRate) : null,
+                    loanTermMonths: loanData.loanTerm ? parseInt(String(loanData.loanTerm)) : 12,
+                    loanType: loanData.loanType || loanData.selectedLoanType || null,
+                    programId: quote.programId || null,
+                    propertyAddress: quote.propertyAddress || null,
+                    borrowerName: `${quote.customerFirstName || ''} ${quote.customerLastName || ''}`.trim(),
+                    borrowerEmail: quote.customerEmail || firstRecipient?.email || null,
+                    status: 'active',
+                    currentStage: 'documentation',
+                    progressPercentage: 0,
+                    applicationDate: new Date(),
+                    targetCloseDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+                    borrowerPortalToken: borrowerToken,
+                    borrowerPortalEnabled: true,
+                    quoteId: quote.id,
+                    metadata: { pandadocEnvelopeId: envelope.id, pandadocDocumentId: documentId },
+                  } as any);
+                  
+                  // Build pipeline from program template
+                  const { buildProjectPipelineFromProgram } = await import('./services/projectPipeline');
+                  const pipelineResult = await buildProjectPipelineFromProgram(project.id, quote.programId || null, quote.id);
+                  console.log(`[PandaDoc Webhook] Pipeline created: ${pipelineResult.stagesCreated} stages, ${pipelineResult.tasksCreated} tasks, ${pipelineResult.documentsCreated} documents`);
+                  
+                  // Update quote stage to term-sheet-signed
+                  await db.update(savedQuotes)
+                    .set({ stage: 'term-sheet-signed' })
+                    .where(eq(savedQuotes.id, quote.id));
+                  
+                  // Log activity
+                  await storage.createProjectActivity({
+                    projectId: project.id,
+                    userId: quote.userId || envelope.createdBy!,
+                    activityType: 'project_created',
+                    activityDescription: `Project ${projectNumber} auto-created from signed PandaDoc term sheet "${envelope.documentName}"`,
+                    visibleToBorrower: true,
+                  });
+                  
+                  // Trigger webhook
+                  const { triggerWebhook } = await import('./utils/webhooks');
+                  await triggerWebhook(project.id, 'project_created', {
+                    project_number: projectNumber,
+                    created_from_pandadoc: true,
+                    pandadoc_document_id: documentId,
+                    envelope_id: envelope.id,
+                  });
+                  
+                  console.log(`[PandaDoc Webhook] Project ${projectNumber} auto-created from signed term sheet (envelope ${envelope.id})`);
+                  
+                  // Google Drive folder creation (non-blocking)
+                  try {
+                    const { isDriveIntegrationEnabled, ensureProjectFolder } = await import('./services/googleDrive');
+                    const driveEnabled = await isDriveIntegrationEnabled();
+                    if (driveEnabled) {
+                      ensureProjectFolder(project.id).catch((err: any) => {
+                        console.error(`Drive folder creation failed for project ${project.id}:`, err.message);
+                      });
+                    }
+                  } catch (driveErr: any) {
+                    console.error('Drive integration check error:', driveErr.message);
+                  }
+                } else {
+                  console.log(`[PandaDoc Webhook] Project already exists for envelope ${envelope.id}, skipping auto-creation`);
+                }
+              }
+            } catch (projectError) {
+              console.error('[PandaDoc Webhook] Error creating project from signed term sheet:', projectError);
+            }
           }
         }
         

@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, Users, FileText, Send, Plus, Trash2, X, ChevronRight, ChevronLeft, Check, Mail, ZoomIn, ZoomOut, FileStack, Sparkles, ExternalLink, Loader2 } from "lucide-react";
+import { Upload, Users, FileText, Send, Plus, Trash2, X, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Check, Mail, ZoomIn, ZoomOut, FileStack, Sparkles, ExternalLink, Loader2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { SavedQuote } from "@shared/schema";
@@ -402,6 +402,7 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
   const [templateRoles, setTemplateRoles] = useState<Array<{ name: string }>>([]);
   const [templateRolesLoading, setTemplateRolesLoading] = useState(false);
   const [templateRolesError, setTemplateRolesError] = useState<string | null>(null);
+  const [showTokenPreview, setShowTokenPreview] = useState(false);
   
   const pdfContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -415,6 +416,11 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
   const { data: pandadocTemplatesData, isLoading: pandadocTemplatesLoading } = useQuery<{ templates: Array<{ id: string; name: string }> }>({
     queryKey: ["/api/esign/pandadoc/templates"],
     enabled: open && uploadMode === "pandadoc",
+  });
+
+  const { data: tokenPreviewData } = useQuery<{ tokens: Array<{ name: string; value: string }>; availableTokenNames: string[] }>({
+    queryKey: ["/api/esign/pandadoc/quote", quote.id, "tokens"],
+    enabled: open && uploadMode === "pandadoc" && showTokenPreview,
   });
 
   // PandaDoc send mutation
@@ -1149,15 +1155,38 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                       ) : (
                         <div className="max-w-lg mx-auto space-y-6">
                           <div className="space-y-2">
-                            <Label>PandaDoc Template ID</Label>
-                            <Input
-                              placeholder="Enter PandaDoc template UUID"
-                              value={pandadocTemplateId}
-                              onChange={(e) => setPandadocTemplateId(e.target.value)}
-                              data-testid="input-pandadoc-template"
-                            />
+                            <Label>Select Template</Label>
+                            {pandadocTemplatesLoading ? (
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Loading templates...
+                              </div>
+                            ) : pandadocTemplatesData?.templates && pandadocTemplatesData.templates.length > 0 ? (
+                              <Select
+                                value={pandadocTemplateId}
+                                onValueChange={(value) => setPandadocTemplateId(value)}
+                              >
+                                <SelectTrigger data-testid="select-pandadoc-template">
+                                  <SelectValue placeholder="Choose a PandaDoc template" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {pandadocTemplatesData.templates.map((t) => (
+                                    <SelectItem key={t.id} value={t.id}>
+                                      {t.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <Input
+                                placeholder="Enter PandaDoc template UUID"
+                                value={pandadocTemplateId}
+                                onChange={(e) => setPandadocTemplateId(e.target.value)}
+                                data-testid="input-pandadoc-template"
+                              />
+                            )}
                             <p className="text-xs text-muted-foreground">
-                              Find this in PandaDoc under Templates → Template Settings → Template ID
+                              Select a template or paste a Template ID from PandaDoc
                             </p>
                           </div>
 
@@ -1190,7 +1219,7 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                           <div className="space-y-3">
                             <Label>Recipients</Label>
                             {pandadocRecipients.map((recipient, idx) => (
-                              <div key={idx} className="flex gap-2 items-center">
+                              <div key={idx} className="flex gap-2 items-center flex-wrap">
                                 <Input
                                   placeholder="Name"
                                   value={recipient.name}
@@ -1199,7 +1228,7 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                                     updated[idx].name = e.target.value;
                                     setPandadocRecipients(updated);
                                   }}
-                                  className="flex-1"
+                                  className="flex-1 min-w-[120px]"
                                   data-testid={`input-recipient-name-${idx}`}
                                 />
                                 <Input
@@ -1211,7 +1240,7 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                                     updated[idx].email = e.target.value;
                                     setPandadocRecipients(updated);
                                   }}
-                                  className="flex-1"
+                                  className="flex-1 min-w-[140px]"
                                   data-testid={`input-recipient-email-${idx}`}
                                 />
                                 {templateRoles.length > 0 ? (
@@ -1287,18 +1316,57 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                           </div>
 
                           <div className="border-t pt-4">
-                            <div className="bg-muted/50 rounded-lg p-4 mb-4">
-                              <h4 className="font-medium mb-2">Quote Data to be Populated:</h4>
+                            <div className="bg-muted/50 rounded-lg p-4 mb-4 space-y-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <h4 className="font-medium">Fields Auto-Populated from Quote</h4>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setShowTokenPreview(!showTokenPreview)}
+                                  data-testid="button-toggle-tokens"
+                                >
+                                  {showTokenPreview ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                  {showTokenPreview ? 'Hide All' : 'Show All'}
+                                </Button>
+                              </div>
                               <div className="grid grid-cols-2 gap-2 text-sm">
                                 <div><span className="text-muted-foreground">Borrower:</span> {quote.customerFirstName} {quote.customerLastName}</div>
                                 <div><span className="text-muted-foreground">Loan Amount:</span> ${((quote.loanData as any)?.loanAmount || 0).toLocaleString()}</div>
                                 <div><span className="text-muted-foreground">Interest Rate:</span> {quote.interestRate}%</div>
                                 <div><span className="text-muted-foreground">Property:</span> {quote.propertyAddress}</div>
+                                {(quote.loanData as any)?.loanTerm && (
+                                  <div><span className="text-muted-foreground">Loan Term:</span> {(quote.loanData as any).loanTerm}</div>
+                                )}
+                                {(quote.loanData as any)?.loanType && (
+                                  <div><span className="text-muted-foreground">Loan Type:</span> {(quote.loanData as any).loanType}</div>
+                                )}
+                                {quote.pointsCharged > 0 && (
+                                  <div><span className="text-muted-foreground">Points:</span> {quote.pointsCharged}%</div>
+                                )}
+                                {(quote.loanData as any)?.dscr && (
+                                  <div><span className="text-muted-foreground">DSCR:</span> {(quote.loanData as any).dscr}</div>
+                                )}
                               </div>
+                              {showTokenPreview && tokenPreviewData && (
+                                <div className="border-t mt-3 pt-3">
+                                  <p className="text-xs text-muted-foreground mb-2">
+                                    These token names can be used in your PandaDoc template as {'{{token_name}}'}:
+                                  </p>
+                                  <div className="max-h-48 overflow-y-auto space-y-1">
+                                    {tokenPreviewData.tokens
+                                      .filter((t: { name: string; value: string }) => t.value)
+                                      .map((t: { name: string; value: string }) => (
+                                        <div key={t.name} className="flex items-center gap-2 text-xs font-mono">
+                                          <span className="text-muted-foreground min-w-[180px]">{`{{${t.name}}}`}</span>
+                                          <span className="truncate">{t.value}</span>
+                                        </div>
+                                      ))}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
 
-                          {/* Validation warnings */}
                           {pandadocTemplateId && templateRolesError && (
                             <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 mb-4" data-testid="error-template-fetch">
                               <p className="text-sm text-destructive">
@@ -1343,7 +1411,7 @@ export function DocumentSigningModal({ open, onClose, quote }: DocumentSigningMo
                             ) : (
                               <>
                                 <Send className="w-4 h-4 mr-2" />
-                                Create & Send Document
+                                Create & Send Term Sheet
                               </>
                             )}
                           </Button>
