@@ -1039,7 +1039,9 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
     const container = pdfContainerRef.current;
     if (!container) return;
     
-    const rect = container.getBoundingClientRect();
+    const canvas = container.querySelector('canvas');
+    const measureTarget = canvas || container;
+    const rect = measureTarget.getBoundingClientRect();
     const x = (e.clientX - rect.left) / pdfScale;
     const y = (e.clientY - rect.top) / pdfScale;
     
@@ -1488,12 +1490,14 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
                   
                   <div 
                     ref={pdfContainerRef}
-                    className="relative inline-block"
+                    className="relative inline-block overflow-hidden"
                     onClick={handlePdfClick}
                     style={{ 
                       cursor: selectedFieldType ? 'crosshair' : 'default',
                       width: scaledWidth,
-                      height: scaledHeight
+                      height: scaledHeight,
+                      fontSize: 0,
+                      lineHeight: 0,
                     }}
                     data-testid="pdf-container"
                   >
@@ -1503,6 +1507,7 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
                           pageNumber={currentPage} 
                           scale={pdfScale}
                           onLoadSuccess={onPageLoadSuccess}
+                          renderAnnotationLayer={false}
                         />
                       </PDFDocument>
                     ) : (

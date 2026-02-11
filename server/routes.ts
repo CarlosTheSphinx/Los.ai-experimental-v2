@@ -1889,6 +1889,52 @@ export async function registerRoutes(
     });
   });
 
+  app.get('/api/documents/:id/pandadoc/preview-mapping', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const documentId = parseInt(req.params.id);
+      const userId = req.user!.id;
+      const doc = await storage.getDocumentById(documentId, userId);
+      if (!doc) return res.status(404).json({ error: 'Document not found' });
+      
+      const docFields = await storage.getFieldsByDocumentId(documentId);
+      
+      const base64Data = doc.fileData.replace(/^data:application\/pdf;base64,/, '');
+      const pdfBuffer = Buffer.from(base64Data, 'base64');
+      const { PDFDocument: PDFLib } = await import('pdf-lib');
+      const pdfDoc = await PDFLib.load(pdfBuffer);
+      const pages = pdfDoc.getPages();
+      const pdfPageDims = pages.map(p => ({ width: p.getWidth(), height: p.getHeight() }));
+      
+      const SIGNER_TYPES = new Set(['signature', 'initial', 'initials', 'date']);
+      
+      const mappedFields = docFields.slice(0, 10).map(f => {
+        const pageDims = pdfPageDims[f.pageNumber - 1] || { width: 612, height: 792 };
+        const isSigner = SIGNER_TYPES.has(f.fieldType) || (f.fieldType === 'text' && !f.value);
+        return {
+          fieldType: f.fieldType,
+          category: isSigner ? 'signer-interactive' : 'prefilled-burned',
+          page: f.pageNumber,
+          uiCoords: { x: f.x, y: f.y, w: f.width, h: f.height },
+          pandadocCoords: isSigner ? { offset_x: Math.round(f.x), offset_y: Math.round(f.y), w: Math.round(f.width), h: Math.round(f.height) } : 'N/A (burned into PDF)',
+          pdfPageDims: pageDims,
+          value: f.value || null,
+          yFlipApplied: false,
+        };
+      });
+      
+      res.json({
+        documentId,
+        totalFields: docFields.length,
+        pdfPageDims,
+        coordinateSystem: 'top-left origin (PandaDoc topleft anchor)',
+        yFlipApplied: false,
+        fields: mappedFields,
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // Send document via PandaDoc (create + send in one flow)
   app.post('/api/documents/:id/pandadoc/send', authenticateUser, async (req: AuthRequest, res) => {
     try {
@@ -1961,35 +2007,64 @@ export async function registerRoutes(
         signerRoleMap.set(signer.id, `Signer ${idx + 1}`);
       });
 
+      const SIGNER_FIELD_TYPES = new Set(['signature', 'initial', 'initials', 'date']);
+      
       const fieldTypeMap: Record<string, string> = {
         'signature': 'signature',
         'initial': 'initials',
         'initials': 'initials',
         'date': 'date',
         'text': 'text',
-        'name': 'text',
-        'email': 'text',
-        'company': 'text',
-        'title': 'text',
-        'loanAmount': 'text',
-        'interestRate': 'text',
-        'propertyType': 'text',
-        'loanPurpose': 'text',
-        'fico': 'text',
-        'propertyValue': 'text',
-        'ltv': 'text',
-        'loanTerm': 'text',
-        'dscr': 'text',
-        'monthlyPayment': 'text',
-        'closingCosts': 'text',
-        'totalFees': 'text',
       };
 
-      console.log(`[PandaDoc Send] Creating document with ${recipients.length} recipients, ${docFields.length} fields`);
+      const signerFields = docFields.filter(f => SIGNER_FIELD_TYPES.has(f.fieldType) || (f.fieldType === 'text' && !f.value));
+      const prefilledFields = docFields.filter(f => !SIGNER_FIELD_TYPES.has(f.fieldType) && f.value);
+
+      console.log(`[PandaDoc Send] Fields: ${signerFields.length} signer-interactive, ${prefilledFields.length} prefilled (burned into PDF)`);
+
+      // Get actual PDF page dimensions for coordinate normalization
+      const { PDFDocument: PDFLib, StandardFonts, rgb } = await import('pdf-lib');
+      const pdfDoc = await PDFLib.load(pdfBuffer);
+      const pages = pdfDoc.getPages();
+      const pdfPageDims = pages.map(p => ({ width: p.getWidth(), height: p.getHeight() }));
+      console.log(`[PandaDoc Send] PDF page dimensions:`, JSON.stringify(pdfPageDims));
+
+      // Burn prefilled text values directly into the PDF using pdf-lib
+      // This makes them permanent, non-editable text on the document
+      if (prefilledFields.length > 0) {
+        const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+        for (const field of prefilledFields) {
+          const pageIndex = field.pageNumber - 1;
+          if (pageIndex < 0 || pageIndex >= pages.length) continue;
+
+          const page = pages[pageIndex];
+          const pageHeight = page.getHeight();
+          const value = field.value || '';
+          if (!value) continue;
+
+          const fontSize = Math.min(Math.max(field.height * 0.55, 8), 16);
+          const textY = pageHeight - field.y - field.height + (field.height - fontSize) / 2 + fontSize * 0.15;
+
+          page.drawText(value, {
+            x: field.x + 4,
+            y: textY,
+            size: fontSize,
+            font,
+            color: rgb(0.1, 0.1, 0.1),
+            maxWidth: field.width - 8,
+          });
+        }
+
+        pdfBuffer = Buffer.from(await pdfDoc.save());
+        console.log(`[PandaDoc Send] Burned ${prefilledFields.length} prefilled values into PDF`);
+      }
+
+      console.log(`[PandaDoc Send] Creating document with ${recipients.length} recipients`);
 
       const pandadoc = await import('./esign/pandadoc');
 
-      // Step 1: Create document from PDF (no fields - they must be injected separately)
+      // Step 1: Create document from modified PDF (prefilled values already burned in)
       const pandaDoc = await pandadoc.createDocumentFromPdf(pdfBuffer, {
         name: doc.name || `Term Sheet - ${doc.fileName}`,
         recipients,
@@ -2005,7 +2080,7 @@ export async function registerRoutes(
       const pandaDocDetails = await pandadoc.getDocumentDetails(pandaDoc.id);
       const pandaRecipients = pandaDocDetails.recipients || [];
 
-      // Build role-to-recipientUUID map (recipients are ordered same as our input)
+      // Build role-to-recipientUUID map
       const roleToRecipientUuid = new Map<string, string>();
       pandaRecipients.forEach((r: any) => {
         const matchingRole = recipients.find(
@@ -2015,39 +2090,47 @@ export async function registerRoutes(
           roleToRecipientUuid.set(matchingRole.role, r.id);
         }
       });
-      // Fallback: if only one recipient, use them for all fields
       if (pandaRecipients.length === 1) {
         roleToRecipientUuid.set('Signer 1', pandaRecipients[0].id);
       }
 
       console.log(`[PandaDoc Send] Mapped ${roleToRecipientUuid.size} recipient UUIDs`);
 
-      // Step 4: Inject fields via POST /documents/{id}/fields
-      if (docFields.length > 0) {
-        const fieldsToInject = docFields.map((field, idx) => {
+      // Step 4: Inject only signer-interactive fields (signature, initials, date, empty text)
+      // Coordinates from frontend are in react-pdf viewport units (scale 1.0).
+      // For standard US Letter, viewport = 612x792 = PDF points.
+      // We normalize to the actual PDF page dimensions to handle non-standard page sizes.
+      if (signerFields.length > 0) {
+        const fieldsToInject = signerFields.map((field, idx) => {
           const role = field.signerId ? (signerRoleMap.get(field.signerId) || 'Signer 1') : 'Signer 1';
           const recipientUuid = roleToRecipientUuid.get(role) || pandaRecipients[0]?.id;
           if (!recipientUuid) {
             throw new Error(`No PandaDoc recipient UUID found for role "${role}". Cannot assign field "${field.fieldType}" on page ${field.pageNumber}.`);
           }
           const pandadocType = fieldTypeMap[field.fieldType] || 'text';
+          const pageDims = pdfPageDims[field.pageNumber - 1] || { width: 612, height: 792 };
+          
+          const viewportWidth = doc.pageDimensions?.[field.pageNumber - 1]?.width || pageDims.width;
+          const viewportHeight = doc.pageDimensions?.[field.pageNumber - 1]?.height || pageDims.height;
+          
+          const scaleX = pageDims.width / viewportWidth;
+          const scaleY = pageDims.height / viewportHeight;
 
           return {
             name: `${field.fieldType}_${idx}`,
             type: pandadocType,
             assignedToRecipientUuid: recipientUuid,
-            page: field.pageNumber, // PandaDoc fields API uses 1-based pages
-            offsetX: Math.round(field.x),
-            offsetY: Math.round(field.y),
-            width: Math.round(field.width),
-            height: Math.round(field.height),
+            page: field.pageNumber,
+            offsetX: Math.round(field.x * scaleX),
+            offsetY: Math.round(field.y * scaleY),
+            width: Math.round(field.width * scaleX),
+            height: Math.round(field.height * scaleY),
             required: field.required ?? true,
-            ...(field.value ? { value: field.value } : {}),
           };
         });
 
         const injectionResult = await pandadoc.injectDocumentFields(pandaDoc.id, fieldsToInject);
-        console.log(`[PandaDoc Send] Injected ${injectionResult.fields?.length || 0} fields successfully`);
+        console.log(`[PandaDoc Send] Injected ${injectionResult.fields?.length || 0} signer fields successfully`);
       }
 
       console.log(`[PandaDoc Send] Sending document...`);

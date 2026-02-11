@@ -1,0 +1,107 @@
+Got you. Two separate issues are happening:
+	1.	“Looks prepopulated but still must be typed”
+That means you’re creating fillable fields in PandaDoc, but you’re not setting their value as a prefill (or you’re assigning the value to a property PandaDoc ignores). In PandaDoc, having text visible can be a placeholder/appearance thing, while the field still has an empty stored value.
+	2.	Fields land slightly too high
+That’s almost always a coordinate system mismatch:
+
+	•	your app uses top-left origin, PandaDoc uses bottom-left (or vice versa), or
+	•	you’re not converting using the true PDF page height (you’re using viewport height, zoomed height, or container height), or
+	•	you’re not compensating for page padding/top offset in the rendered PDF canvas.
+
+The fix: normalize coordinates + convert using PDF page dimensions, and set true prefill values.
+
+Here’s the best Replit prompt to get both solved, with very specific instructions.
+
+⸻
+
+Copy/paste this Replit prompt
+
+We are close. Two remaining issues with PandaDoc fields:
+
+ISSUE 1: Prefilled values are not actually filled
+- In PandaDoc, fields appear like they have values but recipients still must type them.
+- Fix: ensure we are setting true “prefill” values recognized by PandaDoc (not placeholder text).
+- For fields that should be read-only/prefilled (loan amount, rate, fees, borrower name, etc):
+  - Set the PandaDoc field “value” correctly at creation time OR call the correct PandaDoc endpoint to set field values after creation.
+  - Make those fields non-editable by recipient if possible (read-only / locked), OR assign them to the sender role, not the signer.
+
+Implementation requirements:
+1) Distinguish field categories:
+   A) Signer-completed: signature, initials, date, any signer-entered text
+   B) Sender-prefilled: DSCR/program data fields that must be locked
+2) For category B:
+   - Ensure PandaDoc receives actual field value in the correct property for that field type.
+   - If PandaDoc requires a separate “set values” call, implement it:
+     - Create doc → create fields → set field values → send
+3) Confirm in PandaDoc UI the field is already completed and does NOT require typing.
+
+ISSUE 2: Coordinates are slightly off (fields placed too high)
+- Our overlay placements in the editor are correct, but PandaDoc positions land slightly above.
+- This is a coordinate transform bug (origin/scale/padding).
+Fix it properly by normalizing coordinates at save-time and converting at send-time:
+
+Coordinate Fix Plan:
+1) During field placement (client), store coordinates normalized to the PDF page:
+   - xNorm = xPixels / pageRenderWidth
+   - yNorm = yPixels / pageRenderHeight
+   - wNorm = wPixels / pageRenderWidth
+   - hNorm = hPixels / pageRenderHeight
+   Also store:
+   - pageNumber
+   - pageRenderWidth, pageRenderHeight (for debugging)
+   - pdfPageWidth, pdfPageHeight from PDF.js (true PDF points) if available
+
+2) At send-time (server), convert normalized coords to PandaDoc expected coordinate system using the TRUE PDF page dimensions:
+   - x = xNorm * pdfPageWidth
+   - y = yNorm * pdfPageHeight
+   - w = wNorm * pdfPageWidth
+   - h = hNorm * pdfPageHeight
+
+3) Handle origin mismatch:
+   - If PandaDoc uses bottom-left origin and we store top-left:
+     y_pd = pdfPageHeight - (y + h)
+   - If PandaDoc uses top-left origin, keep as-is.
+Implement a calibration test:
+- Place a field at top-left corner (small margin) and compare in PandaDoc.
+- If it shifts vertically, flip y using the formula above.
+
+4) Remove page padding offsets:
+- Ensure our x/y in the client are relative to the PDF page container itself (not the modal, not scroll container).
+- When computing placement from mouse events, subtract the bounding rect of the PDF page element.
+
+Deliverables:
+- Update DB schema/fields_json to store normalized coordinates (xNorm,yNorm,wNorm,hNorm) and the page’s render dimensions.
+- Update PandaDoc mapping to use normalized→PDF conversion and correct y-axis orientation.
+- Add a debug endpoint /api/pandadoc/preview-mapping that returns:
+  - pdfPageWidth/Height used,
+  - computed PandaDoc coords for first 5 fields,
+  - whether y-flip was applied.
+- Confirm:
+  1) Prepopulated fields are truly filled (no manual typing required)
+  2) Coordinates match exactly (no upward shift)
+
+
+⸻
+
+A practical “calibration” trick (so Replit can’t hand-wave it)
+
+If you want to make this bulletproof, add this line:
+
+Add a temporary “Calibration Mode” button that places a 10x10 test box at (xNorm=0.05,yNorm=0.05) on page 1 and sends to PandaDoc, so we can verify whether y-axis must be flipped.
+
+
+⸻
+
+Why your prefill “looks filled” but isn’t
+
+Most likely you’re doing one of these:
+	•	Setting value on the wrong object (field vs token vs recipient field)
+	•	Using a “text” field type that’s meant for signer input, not sender prefill
+	•	Assigning the field to the signer role, so PandaDoc expects signer action even if you supplied a default-looking value
+	•	Using “content”/“placeholder” property, which renders visually but isn’t stored as field value
+
+The prompt forces Replit to separate signer fields vs sender-prefilled fields, and to “lock” the data fields.
+
+⸻
+
+If you paste one sample of your saved field JSON (just 1 field object) and which PandaDoc endpoint you’re calling to create fields, I can tell you exactly whether you need the y-flip and what property to use for prefill in your current payload.
