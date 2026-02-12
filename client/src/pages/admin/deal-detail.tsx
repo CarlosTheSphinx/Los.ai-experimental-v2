@@ -1751,9 +1751,13 @@ export default function AdminDealDetail() {
                                   </SelectTrigger>
                                   <SelectContent>
                                     <SelectItem value="unassigned">Unassigned</SelectItem>
-                                    {teamData?.teamMembers?.filter(m => m.role === 'admin' || m.role === 'super_admin' || m.role === 'staff').map(member => (
+                                    <SelectItem value="borrower">{borrowerName.trim() || 'Borrower'} (Borrower)</SelectItem>
+                                    {deal.userName && (
+                                      <SelectItem value="broker">{deal.userName} (Broker)</SelectItem>
+                                    )}
+                                    {teamData?.teamMembers?.filter(m => m.role === 'admin' || m.role === 'super_admin' || m.role === 'staff' || m.role === 'processor').map(member => (
                                       <SelectItem key={member.id} value={String(member.id)}>
-                                        {member.fullName || member.email}
+                                        {member.fullName || member.email} ({member.role === 'super_admin' ? 'Super Admin' : member.role.charAt(0).toUpperCase() + member.role.slice(1)})
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
@@ -2830,9 +2834,13 @@ export default function AdminDealDetail() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="unassigned">Unassigned</SelectItem>
-                  {teamData?.teamMembers?.filter((m: any) => m.role === 'admin' || m.role === 'super_admin' || m.role === 'staff').map((member: any) => (
+                  <SelectItem value="borrower">{borrowerName.trim() || 'Borrower'} (Borrower)</SelectItem>
+                  {deal.userName && (
+                    <SelectItem value="broker">{deal.userName} (Broker)</SelectItem>
+                  )}
+                  {teamData?.teamMembers?.filter((m: any) => m.role === 'admin' || m.role === 'super_admin' || m.role === 'staff' || m.role === 'processor').map((member: any) => (
                     <SelectItem key={member.id} value={String(member.id)}>
-                      {member.fullName || member.email}
+                      {member.fullName || member.email} ({member.role === 'super_admin' ? 'Super Admin' : member.role.charAt(0).toUpperCase() + member.role.slice(1)})
                     </SelectItem>
                   ))}
                 </SelectContent>

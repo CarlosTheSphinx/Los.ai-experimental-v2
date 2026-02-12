@@ -29,7 +29,11 @@ import {
   HardDrive,
   Download,
   Trash2,
-  MessageSquare
+  MessageSquare,
+  Smartphone,
+  PhoneCall,
+  AtSign,
+  Users
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -58,6 +62,7 @@ interface Task {
   status: string;
   completedAt: string | null;
   completedBy: string | null;
+  assignedTo: string | null;
   visibleToBorrower: boolean;
   borrowerActionRequired: boolean;
 }
@@ -146,6 +151,19 @@ interface Project {
   programName?: string | null;
 }
 
+interface DealProcessor {
+  id: number;
+  userId: number;
+  role: string;
+  assignedAt: string;
+  user: {
+    id: number;
+    fullName: string;
+    email: string;
+    phone: string | null;
+  };
+}
+
 interface MessageThread {
   id: number;
   dealId: number | null;
@@ -183,6 +201,7 @@ export default function ProjectDetail() {
     project: Project; 
     stages: Stage[]; 
     activity: ActivityItem[];
+    processors?: DealProcessor[];
   }>({
     queryKey: ['/api/deals', projectId],
     queryFn: async () => {
@@ -410,7 +429,7 @@ export default function ProjectDetail() {
     );
   }
 
-  const { project, stages, activity } = data;
+  const { project, stages, activity, processors } = data;
 
   const formatCurrency = (amount: number | null) => {
     if (!amount) return '—';
@@ -457,7 +476,31 @@ export default function ProjectDetail() {
 
   const filteredActivity = isBorrower 
     ? activity.filter(item => item.visibleToBorrower) 
-    : activity;
+    : activity.filter(item => {
+        const desc = (item.activityDescription || '').toLowerCase();
+        if (item.activityType === 'task_completed' || item.activityType === 'task_updated') {
+          if (desc.includes('internal') || desc.includes('admin task')) return false;
+        }
+        return item.visibleToBorrower !== false;
+      });
+
+  const filterTasksForRole = (tasks: Task[]) => {
+    if (isBorrower) {
+      return tasks.filter(t => {
+        const assignee = (t.assignedTo || '').toLowerCase();
+        return t.visibleToBorrower !== false && (assignee === '' || assignee === 'borrower' || assignee === 'all');
+      });
+    }
+    return tasks.filter(t => {
+      const assignee = (t.assignedTo || '').toLowerCase();
+      return assignee === '' || assignee === 'broker' || assignee === 'borrower' || assignee === 'all';
+    });
+  };
+
+  const filteredStages = stages.map(stage => ({
+    ...stage,
+    tasks: filterTasksForRole(stage.tasks),
+  }));
 
   const dealDocsByStage = stages.map(stage => ({
     stageId: stage.id,
@@ -557,7 +600,7 @@ export default function ProjectDetail() {
 
       {isBorrower ? (
         <>
-          {stages.length > 0 && (() => {
+          {filteredStages.length > 0 && (() => {
             const computeStageProgress = (stage: Stage) => {
               const completedTasks = stage.tasks.filter(t => t.status === 'completed').length;
               const totalTasks = stage.tasks.length;
@@ -570,12 +613,12 @@ export default function ProjectDetail() {
             
             let totalItems = 0;
             let completedItems = 0;
-            stages.forEach(stage => {
+            filteredStages.forEach(stage => {
               const progress = computeStageProgress(stage);
               totalItems += progress.totalItems;
               completedItems += progress.completedItems;
             });
-            const unstagedDocs = (dealDocsData || []).filter(d => !d.stageId || !stages.find(s => s.id === d.stageId));
+            const unstagedDocs = (dealDocsData || []).filter(d => !d.stageId || !filteredStages.find(s => s.id === d.stageId));
             totalItems += unstagedDocs.length;
             completedItems += unstagedDocs.filter(d => d.status === 'approved' || d.status === 'uploaded').length;
             const overallPercent = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
@@ -588,7 +631,7 @@ export default function ProjectDetail() {
                     <span className="text-2xl font-bold" data-testid="text-overall-progress">{overallPercent}% Complete</span>
                   </div>
                   <div className="flex items-start justify-between relative">
-                    {stages.map((stage, i) => {
+                    {filteredStages.map((stage, i) => {
                       const progress = computeStageProgress(stage);
                       const isCompleted = progress.totalItems > 0 && progress.completedItems >= progress.totalItems;
                       const isActive = stage.status === 'in_progress';
@@ -618,7 +661,7 @@ export default function ProjectDetail() {
                               </div>
                             )}
                           </div>
-                          {i < stages.length - 1 && (
+                          {i < filteredStages.length - 1 && (
                             <div
                               className={`absolute top-6 left-[calc(50%+24px)] h-[3px] z-0 ${
                                 isCompleted ? 'bg-green-300 dark:bg-green-700' : 'bg-border'
@@ -905,21 +948,21 @@ export default function ProjectDetail() {
                   <span className="text-2xl font-bold" data-testid="text-overall-progress">{(() => {
                     let totalItems = 0;
                     let completedItems = 0;
-                    stages.forEach(stage => {
+                    filteredStages.forEach(stage => {
                       const completedTasks = stage.tasks.filter(t => t.status === 'completed').length;
                       const stageDocs = (dealDocsData || []).filter(d => d.stageId === stage.id);
                       const completedDocs = stageDocs.filter(d => d.status === 'approved' || d.status === 'uploaded').length;
                       totalItems += stage.tasks.length + stageDocs.length;
                       completedItems += completedTasks + completedDocs;
                     });
-                    const unstagedDocs = (dealDocsData || []).filter(d => !d.stageId || !stages.find(s => s.id === d.stageId));
+                    const unstagedDocs = (dealDocsData || []).filter(d => !d.stageId || !filteredStages.find(s => s.id === d.stageId));
                     totalItems += unstagedDocs.length;
                     completedItems += unstagedDocs.filter(d => d.status === 'approved' || d.status === 'uploaded').length;
                     return totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
                   })()}% Complete</span>
                 </div>
                 <div className="flex items-start justify-between relative">
-                  {stages.map((stage, i) => {
+                  {filteredStages.map((stage, i) => {
                     const completedTasks = stage.tasks.filter(t => t.status === 'completed').length;
                     const stageDocs = (dealDocsData || []).filter(d => d.stageId === stage.id);
                     const completedDocs = stageDocs.filter(d => d.status === 'approved' || d.status === 'uploaded').length;
@@ -953,7 +996,7 @@ export default function ProjectDetail() {
                             </div>
                           )}
                         </div>
-                        {i < stages.length - 1 && (
+                        {i < filteredStages.length - 1 && (
                           <div
                             className={`absolute top-6 left-[calc(50%+24px)] h-[3px] z-0 ${
                               isCompleted ? 'bg-green-300 dark:bg-green-700' : 'bg-border'
@@ -982,22 +1025,172 @@ export default function ProjectDetail() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  Borrower
+                  <Users className="h-4 w-4" />
+                  Contacts
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3 text-sm">
+              <CardContent className="space-y-4 text-sm">
                 <div>
-                  <span className="font-medium">{project.borrowerName}</span>
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Borrower</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="h-7 w-7 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center flex-shrink-0">
+                        <User className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{project.borrowerName}</div>
+                        <div className="text-xs text-muted-foreground truncate">{project.borrowerEmail}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-0.5 flex-shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => {
+                          const subject = encodeURIComponent(`RE: ${project.projectName} (DEAL-${project.id})`);
+                          window.open(`mailto:${project.borrowerEmail}?subject=${subject}`, '_blank');
+                        }}
+                        title="Send email"
+                        data-testid="button-email-borrower"
+                      >
+                        <AtSign className="h-3.5 w-3.5" />
+                      </Button>
+                      {project.borrowerPhone && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={async () => {
+                              try {
+                                await apiRequest('POST', '/api/communication/sms', {
+                                  to: project.borrowerPhone,
+                                  message: `Hi ${project.borrowerName}, this is a message regarding your loan (DEAL-${project.id}). Please check your borrower portal for updates.`,
+                                  dealId: project.id,
+                                });
+                                toast({ title: "SMS sent" });
+                              } catch {
+                                toast({ title: "Failed to send SMS", variant: "destructive" });
+                              }
+                            }}
+                            title="Send text message"
+                            data-testid="button-sms-borrower"
+                          >
+                            <Smartphone className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => window.open(`tel:${project.borrowerPhone}`, '_self')}
+                            title="Call"
+                            data-testid="button-call-borrower"
+                          >
+                            <PhoneCall className="h-3.5 w-3.5" />
+                          </Button>
+                        </>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => {
+                          const tabTrigger = document.querySelector('[data-testid="tab-messages"]') as HTMLButtonElement;
+                          if (tabTrigger) tabTrigger.click();
+                        }}
+                        title="Send internal message"
+                        data-testid="button-message-borrower"
+                      >
+                        <MessageSquare className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Mail className="h-3.5 w-3.5" />
-                  <span>{project.borrowerEmail}</span>
-                </div>
-                {project.borrowerPhone && (
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Phone className="h-3.5 w-3.5" />
-                    <span>{project.borrowerPhone}</span>
+
+                {processors && processors.length > 0 && (
+                  <div className="border-t pt-3">
+                    <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                      {processors.length === 1 ? 'Processor' : 'Team'}
+                    </div>
+                    <div className="space-y-2">
+                      {processors.map((proc) => (
+                        <div key={proc.id} className="flex items-center justify-between gap-2" data-testid={`contact-processor-${proc.id}`}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="h-7 w-7 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center flex-shrink-0">
+                              <User className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-medium truncate">{proc.user.fullName}</div>
+                              <div className="text-xs text-muted-foreground truncate">{proc.user.email}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-0.5 flex-shrink-0">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => {
+                                const subject = encodeURIComponent(`RE: ${project.projectName} (DEAL-${project.id})`);
+                                window.open(`mailto:${proc.user.email}?subject=${subject}`, '_blank');
+                              }}
+                              title="Send email"
+                              data-testid={`button-email-processor-${proc.id}`}
+                            >
+                              <AtSign className="h-3.5 w-3.5" />
+                            </Button>
+                            {proc.user.phone && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={async () => {
+                                    try {
+                                      await apiRequest('POST', '/api/communication/sms', {
+                                        to: proc.user.phone,
+                                        message: `Regarding DEAL-${project.id} (${project.projectName}): Please check the deal for updates.`,
+                                        dealId: project.id,
+                                      });
+                                      toast({ title: "SMS sent" });
+                                    } catch {
+                                      toast({ title: "Failed to send SMS", variant: "destructive" });
+                                    }
+                                  }}
+                                  title="Send text message"
+                                  data-testid={`button-sms-processor-${proc.id}`}
+                                >
+                                  <Smartphone className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => window.open(`tel:${proc.user.phone}`, '_self')}
+                                  title="Call"
+                                  data-testid={`button-call-processor-${proc.id}`}
+                                >
+                                  <PhoneCall className="h-3.5 w-3.5" />
+                                </Button>
+                              </>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => {
+                                const tabTrigger = document.querySelector('[data-testid="tab-messages"]') as HTMLButtonElement;
+                                if (tabTrigger) tabTrigger.click();
+                              }}
+                              title="Send internal message"
+                              data-testid={`button-message-processor-${proc.id}`}
+                            >
+                              <MessageSquare className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </CardContent>
@@ -1086,7 +1279,7 @@ export default function ProjectDetail() {
             </TabsList>
 
             <TabsContent value="tasks" className="space-y-4">
-              {stages.map((stage) => (
+              {filteredStages.map((stage) => (
                 <Card key={stage.id}>
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">

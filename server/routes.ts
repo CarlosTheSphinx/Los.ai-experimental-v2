@@ -3260,6 +3260,21 @@ export async function registerRoutes(
       const tasks = await storage.getTasksByProjectId(projectId);
       const activity = await storage.getActivityByProjectId(projectId);
       const documents = await storage.getDocumentsByProjectId(projectId);
+
+      const processors = await db.select({
+        id: dealProcessors.id,
+        userId: dealProcessors.userId,
+        role: dealProcessors.role,
+        assignedAt: dealProcessors.assignedAt,
+        user: {
+          id: users.id,
+          fullName: users.fullName,
+          email: users.email,
+          phone: users.phone,
+        }
+      }).from(dealProcessors)
+        .innerJoin(users, eq(dealProcessors.userId, users.id))
+        .where(eq(dealProcessors.projectId, projectId));
       
       // Group tasks by stage
       const stagesWithTasks = stages.map(stage => ({
@@ -3272,6 +3287,7 @@ export async function registerRoutes(
         stages: stagesWithTasks,
         activity,
         documents,
+        processors,
       });
     } catch (error) {
       console.error('Get project error:', error);
@@ -6153,7 +6169,14 @@ export async function registerRoutes(
 
       const visibleTasks = tasks.filter(task => {
         if (viewerRole === 'admin') return true;
-        return task.visibleToBorrower !== false;
+        const taskAssignee = (task.assignedTo || '').toLowerCase();
+        if (viewerRole === 'borrower') {
+          return task.visibleToBorrower !== false && (taskAssignee === '' || taskAssignee === 'borrower' || taskAssignee === 'all');
+        }
+        if (viewerRole === 'broker') {
+          return taskAssignee === '' || taskAssignee === 'broker' || taskAssignee === 'borrower' || taskAssignee === 'all';
+        }
+        return true;
       });
 
       const checklistItems: any[] = [];
@@ -6259,7 +6282,10 @@ export async function registerRoutes(
         return vis === 'all' || vis === 'borrower';
       });
 
-      const visibleTasks = tasks.filter(task => task.visibleToBorrower !== false);
+      const visibleTasks = tasks.filter(task => {
+        const taskAssignee = (task.assignedTo || '').toLowerCase();
+        return task.visibleToBorrower !== false && (taskAssignee === '' || taskAssignee === 'borrower' || taskAssignee === 'all');
+      });
 
       const checklistItems: any[] = [];
 
@@ -8838,6 +8864,76 @@ Respond ONLY with valid JSON in this format:
     } catch (error: any) {
       console.error('Extract rules error:', error);
       res.status(500).json({ error: 'Failed to extract rules from document' });
+    }
+  });
+
+  // ==================== COMMUNICATION ROUTES ====================
+
+  app.post('/api/communication/sms', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const { to, message, dealId } = req.body;
+      if (!to || !message) {
+        return res.status(400).json({ error: 'Phone number and message are required' });
+      }
+      const { sendCustomSms } = await import('./smsService');
+      const result = await sendCustomSms(to, message);
+      if (result.success) {
+        if (dealId) {
+          await storage.createProjectActivity({
+            projectId: dealId,
+            userId: req.user!.id,
+            activityType: 'sms_sent',
+            activityDescription: `SMS sent to ${to}`,
+            visibleToBorrower: false,
+          });
+        }
+        res.json({ success: true, messageId: result.messageId });
+      } else {
+        res.status(500).json({ error: result.error || 'Failed to send SMS' });
+      }
+    } catch (error: any) {
+      console.error('Communication SMS error:', error);
+      res.status(500).json({ error: 'Failed to send SMS' });
+    }
+  });
+
+  app.post('/api/communication/call', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const { to, dealId } = req.body;
+      if (!to) {
+        return res.status(400).json({ error: 'Phone number is required' });
+      }
+      const { getTwilioClient, getTwilioFromPhoneNumber } = await import('./smsService');
+      const client = await getTwilioClient();
+      const fromNumber = await getTwilioFromPhoneNumber();
+      if (!fromNumber) {
+        return res.status(500).json({ error: 'Twilio phone number not configured' });
+      }
+      let normalizedTo = to.replace(/\D/g, '');
+      if (!normalizedTo.startsWith('1') && normalizedTo.length === 10) {
+        normalizedTo = '1' + normalizedTo;
+      }
+      if (!normalizedTo.startsWith('+')) {
+        normalizedTo = '+' + normalizedTo;
+      }
+      const call = await client.calls.create({
+        to: normalizedTo,
+        from: fromNumber,
+        url: 'http://demo.twilio.com/docs/voice.xml',
+      });
+      if (dealId) {
+        await storage.createProjectActivity({
+          projectId: dealId,
+          userId: req.user!.id,
+          activityType: 'call_initiated',
+          activityDescription: `Call initiated to ${to}`,
+          visibleToBorrower: false,
+        });
+      }
+      res.json({ success: true, callSid: call.sid });
+    } catch (error: any) {
+      console.error('Communication call error:', error);
+      res.status(500).json({ error: 'Failed to initiate call' });
     }
   });
 
