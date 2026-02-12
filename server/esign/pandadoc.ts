@@ -714,8 +714,8 @@ export async function verifyWebhookSignature(
 ): Promise<boolean> {
   const webhookSecret = process.env.PANDADOC_WEBHOOK_SECRET;
   if (!webhookSecret) {
-    console.warn("PANDADOC_WEBHOOK_SECRET not set, skipping signature verification");
-    return true;
+    console.error("SECURITY: PANDADOC_WEBHOOK_SECRET not set. Rejecting all webhook requests until configured.");
+    return false;
   }
   
   const crypto = await import("crypto");

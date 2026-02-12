@@ -4,6 +4,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import Quotes from "@/pages/quotes";
@@ -70,7 +72,11 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     return <Redirect to="/select-role" />;
   }
 
-  return <Component />;
+  return (
+    <RouteErrorBoundary routeName={Component.displayName || Component.name || 'Route'}>
+      <Component />
+    </RouteErrorBoundary>
+  );
 }
 
 function AdminProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -97,7 +103,11 @@ function AdminProtectedRoute({ component: Component }: { component: React.Compon
     return <Redirect to="/" />;
   }
 
-  return <Component />;
+  return (
+    <RouteErrorBoundary routeName={Component.displayName || Component.name || 'Admin Route'}>
+      <Component />
+    </RouteErrorBoundary>
+  );
 }
 
 function AuthRoute({ component: Component }: { component: React.ComponentType }) {
@@ -115,58 +125,64 @@ function AuthRoute({ component: Component }: { component: React.ComponentType })
     return <Redirect to="/" />;
   }
 
-  return <Component />;
+  return (
+    <RouteErrorBoundary routeName={Component.displayName || Component.name || 'Auth Route'}>
+      <Component />
+    </RouteErrorBoundary>
+  );
 }
 
 function MainRoutes() {
   return (
-    <AppLayout>
-      <Switch>
-        <Route path="/" component={() => <ProtectedRoute component={Home} />} />
-        <Route path="/quotes" component={() => <ProtectedRoute component={Quotes} />} />
-        <Route path="/agreements" component={() => <ProtectedRoute component={Agreements} />} />
-        <Route path="/agreements/:id" component={() => <ProtectedRoute component={AgreementDetail} />} />
-        <Route path="/commissions" component={() => <ProtectedRoute component={CommissionsPage} />} />
-        <Route path="/deals" component={() => <ProtectedRoute component={Deals} />} />
-        <Route path="/deals/new" component={() => <ProtectedRoute component={NewDeal} />} />
-        <Route path="/deals/:id" component={() => <ProtectedRoute component={DealDetail} />} />
-        <Route path="/projects" component={() => <Redirect to="/deals" />} />
-        <Route path="/projects/new" component={() => <Redirect to="/deals/new" />} />
-        <Route path="/projects/:id">{(params) => <Redirect to={`/deals/${params.id}`} />}</Route>
-        <Route path="/messages" component={() => <ProtectedRoute component={MessagesPage} />} />
-        <Route path="/resources" component={() => <ProtectedRoute component={ResourcesPage} />} />
-        <Route path="/borrower-quote" component={() => <ProtectedRoute component={BorrowerQuote} />} />
-        <Route path="/borrower-quotes" component={() => <ProtectedRoute component={BorrowerQuotes} />} />
-        <Route path="/commercial/dashboard" component={() => <ProtectedRoute component={CommercialDashboard} />} />
-        <Route path="/commercial/pre-screen" component={() => <ProtectedRoute component={CommercialPreScreenPage} />} />
-        <Route path="/commercial-submission/new" component={() => <ProtectedRoute component={CommercialSubmissionPage} />} />
-        <Route path="/commercial-submission/:id/confirmation" component={() => <ProtectedRoute component={CommercialSubmissionConfirmation} />} />
-        <Route path="/commercial-submission/:id" component={() => <ProtectedRoute component={CommercialSubmissionDetail} />} />
-        
-        {/* Admin Routes */}
-        <Route path="/admin" component={() => <AdminProtectedRoute component={AdminDashboard} />} />
-        <Route path="/admin/dashboard" component={() => <AdminProtectedRoute component={AdminDashboard} />} />
-        <Route path="/admin/deals" component={() => <AdminProtectedRoute component={AdminDeals} />} />
-        <Route path="/admin/deals/:id" component={() => <AdminProtectedRoute component={AdminDealDetail} />} />
-        <Route path="/admin/partners" component={() => <AdminProtectedRoute component={AdminPartners} />} />
-        <Route path="/admin/credit-policies" component={() => <AdminProtectedRoute component={AdminCreditPolicies} />} />
-        <Route path="/admin/programs" component={() => <AdminProtectedRoute component={AdminPrograms} />} />
-        <Route path="/admin/users" component={() => <AdminProtectedRoute component={AdminUsers} />} />
-        <Route path="/admin/projects" component={() => <Redirect to="/admin/deals" />} />
-        <Route path="/admin/projects/:id">{(params) => <Redirect to={`/admin/deals/${params.id}`} />}</Route>
-        <Route path="/admin/settings" component={() => <AdminProtectedRoute component={AdminSettings} />} />
-        <Route path="/admin/onboarding" component={() => <AdminProtectedRoute component={AdminOnboarding} />} />
-        <Route path="/admin/digests" component={() => <AdminProtectedRoute component={AdminDigests} />} />
-        <Route path="/admin/document-templates" component={() => <AdminProtectedRoute component={AdminDocumentTemplates} />} />
-        <Route path="/admin/document-templates/:id" component={() => <AdminProtectedRoute component={AdminTemplateEditor} />} />
-        <Route path="/admin/ai-review" component={() => <AdminProtectedRoute component={AdminAIReview} />} />
-        <Route path="/admin/commercial-submissions" component={() => <AdminProtectedRoute component={AdminCommercialSubmissions} />} />
-        <Route path="/admin/commercial/submissions/:id" component={() => <AdminProtectedRoute component={AdminCommercialDealDetail} />} />
-        <Route path="/admin/commercial/config" component={() => <AdminProtectedRoute component={AdminCommercialConfig} />} />
-        
-        <Route component={NotFound} />
-      </Switch>
-    </AppLayout>
+    <ErrorBoundary>
+      <AppLayout>
+        <Switch>
+          <Route path="/" component={() => <ProtectedRoute component={Home} />} />
+          <Route path="/quotes" component={() => <ProtectedRoute component={Quotes} />} />
+          <Route path="/agreements" component={() => <ProtectedRoute component={Agreements} />} />
+          <Route path="/agreements/:id" component={() => <ProtectedRoute component={AgreementDetail} />} />
+          <Route path="/commissions" component={() => <ProtectedRoute component={CommissionsPage} />} />
+          <Route path="/deals" component={() => <ProtectedRoute component={Deals} />} />
+          <Route path="/deals/new" component={() => <ProtectedRoute component={NewDeal} />} />
+          <Route path="/deals/:id" component={() => <ProtectedRoute component={DealDetail} />} />
+          <Route path="/projects" component={() => <Redirect to="/deals" />} />
+          <Route path="/projects/new" component={() => <Redirect to="/deals/new" />} />
+          <Route path="/projects/:id">{(params) => <Redirect to={`/deals/${params.id}`} />}</Route>
+          <Route path="/messages" component={() => <ProtectedRoute component={MessagesPage} />} />
+          <Route path="/resources" component={() => <ProtectedRoute component={ResourcesPage} />} />
+          <Route path="/borrower-quote" component={() => <ProtectedRoute component={BorrowerQuote} />} />
+          <Route path="/borrower-quotes" component={() => <ProtectedRoute component={BorrowerQuotes} />} />
+          <Route path="/commercial/dashboard" component={() => <ProtectedRoute component={CommercialDashboard} />} />
+          <Route path="/commercial/pre-screen" component={() => <ProtectedRoute component={CommercialPreScreenPage} />} />
+          <Route path="/commercial-submission/new" component={() => <ProtectedRoute component={CommercialSubmissionPage} />} />
+          <Route path="/commercial-submission/:id/confirmation" component={() => <ProtectedRoute component={CommercialSubmissionConfirmation} />} />
+          <Route path="/commercial-submission/:id" component={() => <ProtectedRoute component={CommercialSubmissionDetail} />} />
+
+          {/* Admin Routes */}
+          <Route path="/admin" component={() => <AdminProtectedRoute component={AdminDashboard} />} />
+          <Route path="/admin/dashboard" component={() => <AdminProtectedRoute component={AdminDashboard} />} />
+          <Route path="/admin/deals" component={() => <AdminProtectedRoute component={AdminDeals} />} />
+          <Route path="/admin/deals/:id" component={() => <AdminProtectedRoute component={AdminDealDetail} />} />
+          <Route path="/admin/partners" component={() => <AdminProtectedRoute component={AdminPartners} />} />
+          <Route path="/admin/credit-policies" component={() => <AdminProtectedRoute component={AdminCreditPolicies} />} />
+          <Route path="/admin/programs" component={() => <AdminProtectedRoute component={AdminPrograms} />} />
+          <Route path="/admin/users" component={() => <AdminProtectedRoute component={AdminUsers} />} />
+          <Route path="/admin/projects" component={() => <Redirect to="/admin/deals" />} />
+          <Route path="/admin/projects/:id">{(params) => <Redirect to={`/admin/deals/${params.id}`} />}</Route>
+          <Route path="/admin/settings" component={() => <AdminProtectedRoute component={AdminSettings} />} />
+          <Route path="/admin/onboarding" component={() => <AdminProtectedRoute component={AdminOnboarding} />} />
+          <Route path="/admin/digests" component={() => <AdminProtectedRoute component={AdminDigests} />} />
+          <Route path="/admin/document-templates" component={() => <AdminProtectedRoute component={AdminDocumentTemplates} />} />
+          <Route path="/admin/document-templates/:id" component={() => <AdminProtectedRoute component={AdminTemplateEditor} />} />
+          <Route path="/admin/ai-review" component={() => <AdminProtectedRoute component={AdminAIReview} />} />
+          <Route path="/admin/commercial-submissions" component={() => <AdminProtectedRoute component={AdminCommercialSubmissions} />} />
+          <Route path="/admin/commercial/submissions/:id" component={() => <AdminProtectedRoute component={AdminCommercialDealDetail} />} />
+          <Route path="/admin/commercial/config" component={() => <AdminProtectedRoute component={AdminCommercialConfig} />} />
+
+          <Route component={NotFound} />
+        </Switch>
+      </AppLayout>
+    </ErrorBoundary>
   );
 }
 

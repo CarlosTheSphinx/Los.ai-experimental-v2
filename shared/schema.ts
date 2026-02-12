@@ -1,5 +1,4 @@
-
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb, real, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb, real, varchar, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -504,7 +503,7 @@ export type InsertProjectWebhook = z.infer<typeof insertProjectWebhookSchema>;
 // Deal documents - required documents checklist per deal based on loan type
 export const dealDocuments = pgTable("deal_documents", {
   id: serial("id").primaryKey(),
-  dealId: integer("deal_id").notNull(),
+  dealId: integer("deal_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
   stageId: integer("stage_id").references(() => projectStages.id, { onDelete: 'set null' }),
   programDocumentTemplateId: integer("program_document_template_id"),
   dealPropertyId: integer("deal_property_id").references(() => dealProperties.id, { onDelete: 'set null' }),
@@ -566,7 +565,7 @@ export type DealDocumentFile = typeof dealDocumentFiles.$inferSelect;
 
 export const dealProperties = pgTable("deal_properties", {
   id: serial("id").primaryKey(),
-  dealId: integer("deal_id").notNull(),
+  dealId: integer("deal_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
   address: text("address").notNull(),
   city: varchar("city", { length: 100 }),
   state: varchar("state", { length: 50 }),
@@ -586,8 +585,8 @@ export type InsertDealProperty = z.infer<typeof insertDealPropertySchema>;
 // Deal tasks - tasks assigned to team members for a deal
 export const dealTasks = pgTable("deal_tasks", {
   id: serial("id").primaryKey(),
-  dealId: integer("deal_id").notNull(),
-  
+  dealId: integer("deal_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+
   taskName: varchar("task_name", { length: 255 }).notNull(),
   taskDescription: text("task_description"),
   

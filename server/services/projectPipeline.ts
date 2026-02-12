@@ -1,9 +1,11 @@
 import { db } from "../db";
-import { 
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import {
   projects, projectStages, projectTasks, dealDocuments,
   loanPrograms, programWorkflowSteps, workflowStepDefinitions,
   programTaskTemplates, programDocumentTemplates
 } from "@shared/schema";
+import type * as schemaTypes from "@shared/schema";
 import { eq, and, asc, isNull, isNotNull, inArray } from "drizzle-orm";
 import { storage } from "../storage";
 
@@ -18,23 +20,26 @@ interface PipelineResult {
 export async function buildProjectPipelineFromProgram(
   projectId: number,
   programId: number | null | undefined,
-  _quoteId?: number
+  _quoteId?: number,
+  tx?: NodePgDatabase<typeof schemaTypes>
 ): Promise<PipelineResult> {
+  const dbOrTx = tx || db;
+
   if (!programId) {
-    return buildProjectPipelineFromLegacyTemplate(projectId);
+    return buildProjectPipelineFromLegacyTemplate(projectId, tx);
   }
 
-  const [program] = await db.select()
+  const [program] = await dbOrTx.select()
     .from(loanPrograms)
     .where(eq(loanPrograms.id, programId))
     .limit(1);
 
   if (!program) {
     console.warn(`Program ${programId} not found, falling back to legacy template`);
-    return buildProjectPipelineFromLegacyTemplate(projectId);
+    return buildProjectPipelineFromLegacyTemplate(projectId, tx);
   }
 
-  const workflowSteps = await db.select({
+  const workflowSteps = await dbOrTx.select({
     stepId: programWorkflowSteps.id,
     stepOrder: programWorkflowSteps.stepOrder,
     isRequired: programWorkflowSteps.isRequired,
@@ -51,7 +56,7 @@ export async function buildProjectPipelineFromProgram(
 
   if (workflowSteps.length === 0) {
     console.warn(`No workflow steps for program ${programId}, falling back to legacy template`);
-    return buildProjectPipelineFromLegacyTemplate(projectId);
+    return buildProjectPipelineFromLegacyTemplate(projectId, tx);
   }
 
   let stagesCreated = 0;
@@ -62,7 +67,7 @@ export async function buildProjectPipelineFromProgram(
   const stageIdByStepId = new Map<number, number>();
 
   for (const step of workflowSteps) {
-    const stage = await storage.createProjectStage({
+    const [stage] = await dbOrTx.insert(projectStages).values({
       projectId,
       programStepId: step.stepId,
       stageName: step.defName,
@@ -73,12 +78,12 @@ export async function buildProjectPipelineFromProgram(
       status: step.stepOrder === 1 ? 'in_progress' : 'pending',
       visibleToBorrower: true,
       startedAt: step.stepOrder === 1 ? new Date() : null,
-    });
+    }).returning();
     stageIdByOrder.set(step.stepOrder, stage.id);
     stageIdByStepId.set(step.stepId, stage.id);
     stagesCreated++;
 
-    const tasks = await db.select()
+    const tasks = await dbOrTx.select()
       .from(programTaskTemplates)
       .where(and(
         eq(programTaskTemplates.programId, programId),
@@ -89,7 +94,7 @@ export async function buildProjectPipelineFromProgram(
     for (const task of tasks) {
       const taskVisibility = task.visibility || 'all';
       const isBorrowerVisible = taskVisibility === 'all' || taskVisibility === 'borrower';
-      await storage.createProjectTask({
+      await dbOrTx.insert(projectTasks).values({
         projectId,
         stageId: stage.id,
         programTaskTemplateId: task.id,
@@ -106,7 +111,7 @@ export async function buildProjectPipelineFromProgram(
     }
   }
 
-  const docTemplates = await db.select()
+  const docTemplates = await dbOrTx.select()
     .from(programDocumentTemplates)
     .where(eq(programDocumentTemplates.programId, programId))
     .orderBy(asc(programDocumentTemplates.sortOrder));
@@ -126,7 +131,7 @@ export async function buildProjectPipelineFromProgram(
       stageId: doc.stepId ? (stageIdByStepId.get(doc.stepId) || stageIdByOrder.get(doc.stepId) || null) : null,
     }));
 
-    await db.insert(dealDocuments).values(newDocuments);
+    await dbOrTx.insert(dealDocuments).values(newDocuments);
     documentsCreated = newDocuments.length;
   }
 
@@ -141,23 +146,30 @@ export async function buildProjectPipelineFromProgram(
 
 export async function rebuildProjectPipelineFromProgram(
   projectId: number,
-  programId: number
+  programId: number,
+  tx?: NodePgDatabase<typeof schemaTypes>
 ): Promise<PipelineResult> {
-  await db.delete(projectTasks).where(eq(projectTasks.projectId, projectId));
-  await db.delete(projectStages).where(eq(projectStages.projectId, projectId));
-  await db.delete(dealDocuments).where(eq(dealDocuments.dealId, projectId));
+  const dbOrTx = tx || db;
 
-  return buildProjectPipelineFromProgram(projectId, programId, projectId);
+  await dbOrTx.delete(projectTasks).where(eq(projectTasks.projectId, projectId));
+  await dbOrTx.delete(projectStages).where(eq(projectStages.projectId, projectId));
+  await dbOrTx.delete(dealDocuments).where(eq(dealDocuments.dealId, projectId));
+
+  return buildProjectPipelineFromProgram(projectId, programId, projectId, tx);
 }
 
-async function buildProjectPipelineFromLegacyTemplate(projectId: number): Promise<PipelineResult> {
+async function buildProjectPipelineFromLegacyTemplate(
+  projectId: number,
+  tx?: NodePgDatabase<typeof schemaTypes>
+): Promise<PipelineResult> {
   const { LOAN_CLOSING_STAGES } = await import('../config/loanStages');
+  const dbOrTx = tx || db;
 
   let stagesCreated = 0;
   let tasksCreated = 0;
 
   for (const stageTemplate of LOAN_CLOSING_STAGES) {
-    const stage = await storage.createProjectStage({
+    const [stage] = await dbOrTx.insert(projectStages).values({
       projectId,
       stageName: stageTemplate.stage_name,
       stageKey: stageTemplate.stage_key,
@@ -167,11 +179,11 @@ async function buildProjectPipelineFromLegacyTemplate(projectId: number): Promis
       status: stageTemplate.stage_order === 1 ? 'in_progress' : 'pending',
       visibleToBorrower: stageTemplate.visible_to_borrower,
       startedAt: stageTemplate.stage_order === 1 ? new Date() : null,
-    });
+    }).returning();
     stagesCreated++;
 
     for (const taskTemplate of stageTemplate.tasks) {
-      await storage.createProjectTask({
+      await dbOrTx.insert(projectTasks).values({
         projectId,
         stageId: stage.id,
         taskTitle: taskTemplate.task_title,
@@ -194,8 +206,13 @@ async function buildProjectPipelineFromLegacyTemplate(projectId: number): Promis
   };
 }
 
-export async function syncProgramToProjects(programId: number): Promise<{ projectsSynced: number }> {
-  const linkedProjects = await db.select({ id: projects.id })
+export async function syncProgramToProjects(
+  programId: number,
+  tx?: NodePgDatabase<typeof schemaTypes>
+): Promise<{ projectsSynced: number }> {
+  const dbOrTx = tx || db;
+
+  const linkedProjects = await dbOrTx.select({ id: projects.id })
     .from(projects)
     .where(eq(projects.programId, programId));
 
@@ -203,7 +220,7 @@ export async function syncProgramToProjects(programId: number): Promise<{ projec
     return { projectsSynced: 0 };
   }
 
-  const workflowSteps = await db.select({
+  const workflowSteps = await dbOrTx.select({
     stepId: programWorkflowSteps.id,
     stepOrder: programWorkflowSteps.stepOrder,
     isRequired: programWorkflowSteps.isRequired,
@@ -217,18 +234,18 @@ export async function syncProgramToProjects(programId: number): Promise<{ projec
     .where(eq(programWorkflowSteps.programId, programId))
     .orderBy(asc(programWorkflowSteps.stepOrder));
 
-  const docTemplates = await db.select()
+  const docTemplates = await dbOrTx.select()
     .from(programDocumentTemplates)
     .where(eq(programDocumentTemplates.programId, programId))
     .orderBy(asc(programDocumentTemplates.sortOrder));
 
-  const taskTemplates = await db.select()
+  const taskTemplates = await dbOrTx.select()
     .from(programTaskTemplates)
     .where(eq(programTaskTemplates.programId, programId))
     .orderBy(asc(programTaskTemplates.sortOrder));
 
   for (const project of linkedProjects) {
-    await syncSingleProject(project.id, workflowSteps, docTemplates, taskTemplates);
+    await syncSingleProject(project.id, workflowSteps, docTemplates, taskTemplates, tx);
   }
 
   return { projectsSynced: linkedProjects.length };
@@ -238,9 +255,12 @@ async function syncSingleProject(
   projectId: number,
   workflowSteps: Array<{ stepId: number; stepOrder: number; isRequired: boolean | null; estimatedDays: number | null; defName: string; defKey: string; defDescription: string | null }>,
   docTemplates: Array<any>,
-  taskTemplates: Array<any>
+  taskTemplates: Array<any>,
+  tx?: NodePgDatabase<typeof schemaTypes>
 ) {
-  const existingStages = await db.select()
+  const dbOrTx = tx || db;
+
+  const existingStages = await dbOrTx.select()
     .from(projectStages)
     .where(eq(projectStages.projectId, projectId));
 
@@ -259,7 +279,7 @@ async function syncSingleProject(
   for (const step of workflowSteps) {
     let existingStage = stageByProgramStepId.get(step.stepId) || stageByKey.get(step.defKey);
     if (existingStage) {
-      await db.update(projectStages)
+      await dbOrTx.update(projectStages)
         .set({
           programStepId: step.stepId,
           stageName: step.defName,
@@ -271,7 +291,7 @@ async function syncSingleProject(
         .where(eq(projectStages.id, existingStage.id));
       newStageIdByStepId.set(step.stepId, existingStage.id);
     } else {
-      const stage = await storage.createProjectStage({
+      const [stage] = await dbOrTx.insert(projectStages).values({
         projectId,
         programStepId: step.stepId,
         stageName: step.defName,
@@ -282,7 +302,7 @@ async function syncSingleProject(
         status: 'pending',
         visibleToBorrower: true,
         startedAt: null,
-      });
+      }).returning();
       newStageIdByStepId.set(step.stepId, stage.id);
     }
   }
@@ -291,14 +311,14 @@ async function syncSingleProject(
   for (const stage of existingStages) {
     if (stage.programStepId && !currentStepIds.has(stage.programStepId)) {
       if (stage.status !== 'completed') {
-        await db.update(projectStages)
+        await dbOrTx.update(projectStages)
           .set({ status: 'skipped' })
           .where(eq(projectStages.id, stage.id));
       }
     }
   }
 
-  const existingTasks = await db.select()
+  const existingTasks = await dbOrTx.select()
     .from(projectTasks)
     .where(eq(projectTasks.projectId, projectId));
 
@@ -341,14 +361,14 @@ async function syncSingleProject(
       if (existingTask.priority !== (template.priority || 'medium')) updates.priority = template.priority || 'medium';
 
       if (Object.keys(updates).length > 0) {
-        await db.update(projectTasks)
+        await dbOrTx.update(projectTasks)
           .set(updates)
           .where(eq(projectTasks.id, existingTask.id));
       }
     } else {
       const taskVis = template.visibility || 'all';
       const borrowerVis = taskVis === 'all' || taskVis === 'borrower';
-      await storage.createProjectTask({
+      await dbOrTx.insert(projectTasks).values({
         projectId,
         stageId,
         programTaskTemplateId: template.id,
@@ -367,14 +387,14 @@ async function syncSingleProject(
   for (const task of existingTasks) {
     if (task.programTaskTemplateId && !currentTaskTemplateIds.has(task.programTaskTemplateId)) {
       if (task.status !== 'completed') {
-        await db.update(projectTasks)
+        await dbOrTx.update(projectTasks)
           .set({ status: 'not_applicable' })
           .where(eq(projectTasks.id, task.id));
       }
     }
   }
 
-  const existingDocs = await db.select()
+  const existingDocs = await dbOrTx.select()
     .from(dealDocuments)
     .where(eq(dealDocuments.dealId, projectId));
 
@@ -420,12 +440,12 @@ async function syncSingleProject(
       if (existingDoc.stageId !== stageId) updates.stageId = stageId;
 
       if (Object.keys(updates).length > 0) {
-        await db.update(dealDocuments)
+        await dbOrTx.update(dealDocuments)
           .set(updates)
           .where(eq(dealDocuments.id, existingDoc.id));
       }
     } else {
-      await db.insert(dealDocuments).values({
+      await dbOrTx.insert(dealDocuments).values({
         dealId: projectId,
         programDocumentTemplateId: template.id,
         documentName: template.documentName,
@@ -444,7 +464,7 @@ async function syncSingleProject(
   for (const doc of existingDocs) {
     if (doc.programDocumentTemplateId && !currentDocTemplateIds.has(doc.programDocumentTemplateId)) {
       if (!doc.filePath) {
-        await db.update(dealDocuments)
+        await dbOrTx.update(dealDocuments)
           .set({ status: 'not_applicable', isRequired: false })
           .where(eq(dealDocuments.id, doc.id));
       }

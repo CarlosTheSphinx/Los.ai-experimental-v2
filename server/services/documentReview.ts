@@ -6,8 +6,13 @@ import { db } from "../db";
 import { loanPrograms, dealDocuments, dealDocumentFiles, dealProperties, projects, savedQuotes, programReviewRules, programDocumentTemplates } from "@shared/schema";
 import { eq, and, or, asc } from "drizzle-orm";
 
+const aiApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+if (!aiApiKey) {
+  console.warn('⚠️  AI_INTEGRATIONS_OPENAI_API_KEY not set. Document AI review features will be disabled.');
+}
+
 const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  apiKey: aiApiKey || 'disabled',
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
@@ -170,6 +175,10 @@ export async function reviewDocument(
   projectId: number,
   userId: number
 ): Promise<{ success: boolean; result?: any; error?: string }> {
+  if (!aiApiKey) {
+    throw new Error('AI document review is not available. AI_INTEGRATIONS_OPENAI_API_KEY is not configured.');
+  }
+
   try {
     const [doc] = await db.select().from(dealDocuments).where(eq(dealDocuments.id, documentId));
     if (!doc) {

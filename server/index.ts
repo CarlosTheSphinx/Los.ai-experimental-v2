@@ -3,7 +3,9 @@ import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { apiLimiter, authLimiter, pricingLimiter, uploadLimiter } from "./middleware/rateLimiter";
 
+import { validateConfig } from "./utils/validateConfig";
 const app = express();
 app.set('trust proxy', 1);
 const httpServer = createServer(app);
@@ -16,15 +18,45 @@ declare module "http" {
 
 app.use(
   express.json({
-    limit: '50mb',
+    limit: '10mb',
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
   }),
 );
 
-app.use(express.urlencoded({ extended: false, limit: '50mb' }));
+app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 app.use(cookieParser());
+
+// Security headers
+app.use((_req: Request, res: Response, next: NextFunction) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  next();
+});
+
+// Rate limiting - applied globally to all /api routes
+app.use('/api/', apiLimiter);
+// Stricter limits on auth endpoints (brute force protection)
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/forgot-password', authLimiter);
+// Stricter limits on pricing (expensive compute)
+app.use('/api/pricing/', pricingLimiter);
+// Upload rate limiting
+app.use('/api/*/upload*', uploadLimiter);
+
+// Health check endpoint (no auth required)
+app.get('/health', (_req: Request, res: Response) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -53,7 +85,21 @@ app.use((req, res, next) => {
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        // Sanitize sensitive data from logs
+        const sanitized = { ...capturedJsonResponse };
+        const sensitiveKeys = ['token', 'password', 'passwordHash', 'secret', 'googleAccessToken', 'googleRefreshToken', 'apiKey'];
+        for (const key of sensitiveKeys) {
+          if (key in sanitized) sanitized[key] = '[REDACTED]';
+        }
+        if (sanitized.user && typeof sanitized.user === 'object') {
+          const sanitizedUser = { ...sanitized.user };
+          for (const key of sensitiveKeys) {
+            if (key in sanitizedUser) (sanitizedUser as any)[key] = '[REDACTED]';
+          }
+          sanitized.user = sanitizedUser;
+        }
+        const jsonStr = JSON.stringify(sanitized);
+        logLine += ` :: ${jsonStr.length > 500 ? jsonStr.substring(0, 500) + '...[truncated]' : jsonStr}`;
       }
 
       log(logLine);
@@ -64,6 +110,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Validate environment configuration before starting
+  validateConfig();
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
@@ -83,6 +132,11 @@ app.use((req, res, next) => {
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
+    // Cache static assets with versioned filenames
+    app.use('/assets', (_req: Request, res: Response, next: NextFunction) => {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      next();
+    });
     serveStatic(app);
   } else {
     const { setupVite } = await import("./vite");

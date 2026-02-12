@@ -440,6 +440,7 @@ export default function AdminDealDetail() {
   
   const { data: teamData } = useQuery<{ teamMembers: TeamMember[] }>({
     queryKey: ['/api/admin/team-members'],
+    staleTime: 5 * 60 * 1000, // Team members rarely change — cache 5 min
   });
 
   // Deal ID is now the project ID directly (deals are projects)
@@ -464,6 +465,7 @@ export default function AdminDealDetail() {
 
   const { data: availableProcessors } = useQuery<any[]>({
     queryKey: ['/api/admin/processors'],
+    staleTime: 5 * 60 * 1000, // Processor list rarely changes — cache 5 min
   });
 
   const addProcessorMutation = useMutation({
@@ -867,6 +869,7 @@ export default function AdminDealDetail() {
 
   const { data: loanProgramsData } = useQuery<any[]>({
     queryKey: ['/api/admin/programs'],
+    staleTime: 5 * 60 * 1000, // Programs list rarely changes — cache 5 min
   });
 
   const rebuildPipelineMutation = useMutation({

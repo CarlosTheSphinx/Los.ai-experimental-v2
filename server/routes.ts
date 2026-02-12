@@ -26,16 +26,21 @@ import {
   clearAuthCookie,
   type AuthRequest 
 } from './auth';
-import { 
-  runDigestJob, 
-  sendTestDigest, 
-  logLoanUpdate, 
-  getOutstandingDocuments, 
-  getRecentUpdates 
+import {
+  runDigestJob,
+  sendTestDigest,
+  logLoanUpdate,
+  getOutstandingDocuments,
+  getRecentUpdates
 } from './digestService';
 import { loanDigestConfigs, loanDigestRecipients, loanUpdates, digestHistory, digestState, partnerBroadcasts, partnerBroadcastRecipients, inboundSmsMessages, scheduledDigestDrafts, esignEnvelopes, esignEvents } from '@shared/schema';
 import { sendPartnerBroadcast, handleIncomingSms, getInboundMessages, markMessageRead, getBroadcastHistory } from './broadcastService';
 import { registerObjectStorageRoutes, ObjectStorageService } from './replit_integrations/object_storage';
+import { encryptToken } from './utils/encryption';
+import { registerAuthRoutes } from './routes/auth';
+import { registerMessagingRoutes } from './routes/messaging';
+import { registerPortalRoutes } from './routes/portal';
+import { registerAdminProgramsRoutes } from './routes/admin-programs';
 
 // Initialize Apify client
 const APIFY_TOKEN = process.env.APIFY_TOKEN;
@@ -70,429 +75,10 @@ export async function registerRoutes(
   registerObjectStorageRoutes(app);
   const objectStorageService = new ObjectStorageService();
 
-  // ==================== ADDRESS AUTOCOMPLETE (PUBLIC) ====================
-  
-  app.get('/api/address/autocomplete', async (req: Request, res: Response) => {
-    try {
-      const { text } = req.query;
-      
-      if (!text || typeof text !== 'string' || text.length < 3) {
-        return res.json({ features: [] });
-      }
-      
-      const apiKey = process.env.GEOAPIFY_API_KEY;
-      if (!apiKey) {
-        console.error('GEOAPIFY_API_KEY not configured');
-        return res.status(500).json({ error: 'Address service not configured' });
-      }
-      
-      const response = await fetch(
-        `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(text)}&filter=countrycode:us&format=json&apiKey=${apiKey}`
-      );
-      
-      if (!response.ok) {
-        throw new Error('Geoapify API error');
-      }
-      
-      const data = await response.json();
-      
-      // Transform to match expected format
-      const features = (data.results || []).map((result: any) => ({
-        formatted: result.formatted,
-        properties: {
-          formatted: result.formatted,
-          address_line1: result.address_line1,
-          address_line2: result.address_line2,
-          city: result.city,
-          state: result.state,
-          postcode: result.postcode,
-          country: result.country,
-        }
-      }));
-      
-      res.json({ features });
-    } catch (error) {
-      console.error('Address autocomplete error:', error);
-      res.status(500).json({ error: 'Failed to fetch address suggestions' });
-    }
-  });
+  // ==================== ROUTE MODULES ====================
 
-  // ==================== AUTH ROUTES (PUBLIC) ====================
-  
-  // One-time admin setup endpoint for production
-  app.post('/api/setup-admins', async (req: Request, res: Response) => {
-    try {
-      const secretKey = req.body.secret;
-      if (secretKey !== 'sphinx-admin-setup-2026') {
-        return res.status(403).json({ error: 'Forbidden' });
-      }
-      
-      const passwordHash = '$2b$10$rrnPzuttDnKhnHD8LNnvjO7.xtiA.AmauqsYLzlSp9PudapVXWore';
-      
-      // Update or create lance@sphinxcap.com
-      const lance = await storage.getUserByEmail('lance@sphinxcap.com');
-      if (lance) {
-        await db.update(users).set({ role: 'admin', passwordHash }).where(eq(users.email, 'lance@sphinxcap.com'));
-      } else {
-        await db.insert(users).values({
-          email: 'lance@sphinxcap.com',
-          passwordHash,
-          fullName: 'Lance',
-          role: 'admin'
-        });
-      }
-      
-      // Update or create carlos@sphinxcap.com
-      const carlos = await storage.getUserByEmail('carlos@sphinxcap.com');
-      if (carlos) {
-        await db.update(users).set({ role: 'admin', passwordHash }).where(eq(users.email, 'carlos@sphinxcap.com'));
-      } else {
-        await db.insert(users).values({
-          email: 'carlos@sphinxcap.com',
-          passwordHash,
-          fullName: 'Carlos',
-          role: 'admin'
-        });
-      }
-      
-      res.json({ success: true, message: 'Admin accounts created/updated' });
-    } catch (error) {
-      console.error('Admin setup error:', error);
-      res.status(500).json({ error: 'Failed to setup admin accounts' });
-    }
-  });
-
-  // Register
-  app.post('/api/auth/register', async (req: Request, res: Response) => {
-    try {
-      const { email, password, fullName, firstName, lastName, companyName, phone, userType } = req.body;
-      
-      // Support both fullName and firstName/lastName
-      const resolvedFullName = fullName || (firstName && lastName ? `${firstName} ${lastName}` : null);
-      
-      if (!email || !password || !resolvedFullName) {
-        return res.status(400).json({ error: 'Email, password, and name are required' });
-      }
-      
-      if (password.length < 8) {
-        return res.status(400).json({ error: 'Password must be at least 8 characters' });
-      }
-      
-      // Validate userType - default to broker if not provided
-      const validUserType = userType === 'broker' || userType === 'borrower' ? userType : 'broker';
-      
-      const existingUser = await storage.getUserByEmail(email.toLowerCase());
-      if (existingUser) {
-        return res.status(409).json({ error: 'Email already registered' });
-      }
-      
-      const passwordHash = await hashPassword(password);
-      
-      // Borrowers don't need onboarding, brokers do
-      const onboardingCompleted = validUserType === 'borrower';
-      
-      const user = await storage.createUser({
-        email: email.toLowerCase(),
-        passwordHash,
-        fullName: resolvedFullName,
-        companyName: companyName || null,
-        phone: phone || null,
-        emailVerified: false,
-        isActive: true,
-        passwordResetToken: null,
-        passwordResetExpires: null,
-        userType: validUserType,
-        onboardingCompleted
-      });
-      
-      const token = generateToken(user.id, user.email);
-      setAuthCookie(res, token);
-      
-      // Parse firstName and lastName from fullName for response
-      const respNameParts = user.fullName?.split(' ') || [];
-      const respFirstName = respNameParts[0] || '';
-      const respLastName = respNameParts.slice(1).join(' ') || '';
-      
-      res.status(201).json({
-        success: true,
-        user: {
-          id: user.id,
-          email: user.email,
-          firstName: respFirstName,
-          lastName: respLastName,
-          fullName: user.fullName,
-          companyName: user.companyName,
-          userType: user.userType,
-          onboardingCompleted: user.onboardingCompleted
-        },
-        token
-      });
-    } catch (error) {
-      console.error('Registration error:', error);
-      res.status(500).json({ error: 'Registration failed' });
-    }
-  });
-
-  // Login
-  app.post('/api/auth/login', async (req: Request, res: Response) => {
-    try {
-      const { email, password } = req.body;
-      
-      if (!email || !password) {
-        return res.status(400).json({ error: 'Email and password are required' });
-      }
-      
-      const user = await storage.getUserByEmail(email.toLowerCase());
-      
-      if (!user) {
-        return res.status(401).json({ error: 'Invalid email or password' });
-      }
-      
-      if (!user.isActive) {
-        return res.status(403).json({ error: 'Account has been deactivated' });
-      }
-      
-      if (!user.passwordHash) {
-        return res.status(401).json({ error: 'This account uses Google login. Please sign in with Google.' });
-      }
-
-      const isValid = await comparePassword(password, user.passwordHash);
-      
-      if (!isValid) {
-        return res.status(401).json({ error: 'Invalid email or password' });
-      }
-      
-      await storage.updateUser(user.id, { lastLoginAt: new Date() });
-      
-      const token = generateToken(user.id, user.email);
-      setAuthCookie(res, token);
-      
-      // Parse firstName and lastName from fullName
-      const nameParts = user.fullName?.split(' ') || [];
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.slice(1).join(' ') || '';
-      
-      res.json({
-        success: true,
-        user: {
-          id: user.id,
-          email: user.email,
-          firstName,
-          lastName,
-          fullName: user.fullName,
-          companyName: user.companyName
-        },
-        token
-      });
-    } catch (error) {
-      console.error('Login error:', error);
-      res.status(500).json({ error: 'Login failed' });
-    }
-  });
-
-  // Logout
-  app.post('/api/auth/logout', (_req: Request, res: Response) => {
-    clearAuthCookie(res);
-    res.json({ success: true, message: 'Logged out successfully' });
-  });
-
-  function getOAuthBaseUrl(req: Request): string {
-    const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
-    const host = (req.headers['x-forwarded-host'] as string) || req.headers.host || req.get('host') || '';
-    if (host) {
-      return `${proto}://${host}`;
-    }
-    if (process.env.REPLIT_DEV_DOMAIN) {
-      return `https://${process.env.REPLIT_DEV_DOMAIN}`;
-    }
-    return `https://${host}`;
-  }
-
-  // Google OAuth - initiate flow
-  app.get('/api/auth/google', (req: Request, res: Response) => {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    if (!clientId) {
-      console.error('Google OAuth: GOOGLE_CLIENT_ID not configured');
-      return res.redirect('/login?error=google_not_configured');
-    }
-
-    const baseUrl = getOAuthBaseUrl(req);
-    const redirectUri = `${baseUrl}/api/auth/google/callback`;
-    console.log('Google OAuth: Initiating flow with redirect URI:', redirectUri);
-    console.log('Google OAuth: Request host:', req.get('host'), 'x-forwarded-host:', req.headers['x-forwarded-host'], 'x-forwarded-proto:', req.headers['x-forwarded-proto']);
-    const googleOAuth = new OAuth2Client(clientId, process.env.GOOGLE_CLIENT_SECRET, redirectUri);
-
-    const authorizeUrl = googleOAuth.generateAuthUrl({
-      access_type: 'offline',
-      scope: [
-        'openid',
-        'email',
-        'profile',
-        'https://www.googleapis.com/auth/drive.file',
-      ],
-      prompt: 'consent',
-    });
-
-    res.redirect(authorizeUrl);
-  });
-
-  // Google OAuth - callback handler
-  app.get('/api/auth/google/callback', async (req: Request, res: Response) => {
-    console.log('Google OAuth callback hit. Query params:', JSON.stringify(req.query));
-    try {
-      const { code } = req.query;
-      if (!code || typeof code !== 'string') {
-        console.error('Google OAuth callback: No code provided. Query:', JSON.stringify(req.query));
-        return res.redirect('/login?error=google_auth_failed');
-      }
-
-      const clientId = process.env.GOOGLE_CLIENT_ID;
-      const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-      if (!clientId || !clientSecret) {
-        return res.redirect('/login?error=google_not_configured');
-      }
-
-      const baseUrl = getOAuthBaseUrl(req);
-      const redirectUri = `${baseUrl}/api/auth/google/callback`;
-      console.log('Google OAuth callback: Using redirect URI for token exchange:', redirectUri);
-      const googleOAuth = new OAuth2Client(clientId, clientSecret, redirectUri);
-
-      console.log('Google OAuth callback: Exchanging code for tokens...');
-      const { tokens } = await googleOAuth.getToken(code);
-      console.log('Google OAuth callback: Token exchange successful, verifying id_token...');
-      googleOAuth.setCredentials(tokens);
-
-      const ticket = await googleOAuth.verifyIdToken({
-        idToken: tokens.id_token!,
-        audience: clientId,
-      });
-      console.log('Google OAuth callback: id_token verified successfully');
-
-      const payload = ticket.getPayload();
-      if (!payload || !payload.email) {
-        return res.redirect('/login?error=google_auth_failed');
-      }
-
-      const googleId = payload.sub;
-      const email = payload.email.toLowerCase();
-      const fullName = payload.name || email.split('@')[0];
-      const avatarUrl = payload.picture || null;
-
-      let user = await storage.getUserByEmail(email);
-
-      const tokenUpdates: Record<string, unknown> = {};
-      if (tokens.refresh_token) {
-        tokenUpdates.googleRefreshToken = tokens.refresh_token;
-      }
-      if (tokens.access_token) {
-        tokenUpdates.googleAccessToken = tokens.access_token;
-      }
-      if (tokens.expiry_date) {
-        tokenUpdates.googleTokenExpiresAt = new Date(tokens.expiry_date);
-      }
-
-      if (user) {
-        if (!user.googleId) {
-          await storage.updateUser(user.id, { googleId, avatarUrl: avatarUrl || user.avatarUrl, ...tokenUpdates });
-        } else {
-          await storage.updateUser(user.id, { ...tokenUpdates });
-        }
-        if (!user.isActive) {
-          return res.redirect('/login?error=account_deactivated');
-        }
-        await storage.updateUser(user.id, { lastLoginAt: new Date(), emailVerified: true });
-      } else {
-        user = await storage.createUser({
-          email,
-          passwordHash: null,
-          fullName,
-          googleId,
-          avatarUrl,
-          emailVerified: true,
-          isActive: true,
-          userType: null,
-          onboardingCompleted: false,
-          companyName: null,
-          phone: null,
-          passwordResetToken: null,
-          passwordResetExpires: null,
-        });
-      }
-
-      const token = generateToken(user.id, user.email);
-      setAuthCookie(res, token);
-
-      if (!user.userType) {
-        res.redirect('/select-role');
-      } else {
-        res.redirect('/');
-      }
-    } catch (error) {
-      console.error('Google OAuth callback error:', error);
-      res.redirect('/login?error=google_auth_failed');
-    }
-  });
-
-  // Get current user
-  app.get('/api/auth/me', authenticateUser, async (req: AuthRequest, res: Response) => {
-    try {
-      const user = await storage.getUserById(req.user!.id);
-      
-      if (!user) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-      
-      // Parse firstName and lastName from fullName
-      const nameParts = user.fullName?.split(' ') || [];
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.slice(1).join(' ') || '';
-      
-      res.json({
-        user: {
-          id: user.id,
-          email: user.email,
-          firstName,
-          lastName,
-          fullName: user.fullName,
-          companyName: user.companyName,
-          phone: user.phone,
-          role: user.role,
-          userType: user.userType,
-          onboardingCompleted: user.onboardingCompleted,
-          createdAt: user.createdAt
-        }
-      });
-    } catch (error) {
-      console.error('Get user error:', error);
-      res.status(500).json({ error: 'Failed to get user' });
-    }
-  });
-
-  // Select user type (for Google OAuth users who haven't chosen yet)
-  app.post('/api/auth/select-user-type', authenticateUser, async (req: AuthRequest, res: Response) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({ error: 'Authentication required' });
-      }
-      const { userType } = req.body;
-      if (userType !== 'broker' && userType !== 'borrower') {
-        return res.status(400).json({ error: 'Invalid user type. Must be broker or borrower.' });
-      }
-      const user = await storage.getUserById(req.user.id);
-      if (!user) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-      if (user.userType) {
-        return res.status(400).json({ error: 'User type already set' });
-      }
-      await storage.updateUser(user.id, { userType });
-      const updatedUser = await storage.getUserById(user.id);
-      res.json({ success: true, user: updatedUser });
-    } catch (error) {
-      console.error('Select user type error:', error);
-      res.status(500).json({ error: 'Failed to update user type' });
-    }
-  });
+  // Register auth routes (address autocomplete, registration, login, OAuth, password reset)
+  registerAuthRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
 
   // Admin authentication middleware - requires admin, staff, or super_admin role
   const requireAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -1440,71 +1026,77 @@ export async function registerRoutes(
       const borrowerName = `${quote.customerFirstName || ''} ${quote.customerLastName || ''}`.trim() || user.fullName || user.email;
       const borrowerEmail = user.email || '';
 
-      const project = await storage.createProject({
-        userId,
-        projectName: `${borrowerName} — ${quote.propertyAddress || 'New Loan'}`,
-        projectNumber,
-        loanAmount: loanAmount || null,
-        interestRate: !isNaN(rateNum) ? rateNum : null,
-        loanTermMonths: loanData?.loanTermMonths ? parseInt(loanData.loanTermMonths) : null,
-        loanType: loanData?.loanType || (isRTLQuote ? 'fix_and_flip' : 'dscr'),
-        programId: quote.programId || null,
-        propertyAddress: quote.propertyAddress || null,
-        propertyType: loanData?.propertyType || null,
-        borrowerName,
-        borrowerEmail,
-        borrowerPhone: user.phone || null,
-        status: 'active',
-        currentStage: 'documentation',
-        progressPercentage: 0,
-        applicationDate: new Date(),
-        targetCloseDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
-        borrowerPortalToken: borrowerToken,
-        borrowerPortalEnabled: true,
-        sourceDocumentId: quoteId,
-        notes: `Accepted from borrower quote #${quoteId}`,
-      });
+      const { project, projectNumber: pn } = await db.transaction(async (tx) => {
+        const [proj] = await tx.insert(projects).values({
+          userId,
+          projectName: `${borrowerName} — ${quote.propertyAddress || 'New Loan'}`,
+          projectNumber,
+          loanAmount: loanAmount || null,
+          interestRate: !isNaN(rateNum) ? rateNum : null,
+          loanTermMonths: loanData?.loanTermMonths ? parseInt(loanData.loanTermMonths) : null,
+          loanType: loanData?.loanType || (isRTLQuote ? 'fix_and_flip' : 'dscr'),
+          programId: quote.programId || null,
+          propertyAddress: quote.propertyAddress || null,
+          propertyType: loanData?.propertyType || null,
+          borrowerName,
+          borrowerEmail,
+          borrowerPhone: user.phone || null,
+          status: 'active',
+          currentStage: 'documentation',
+          progressPercentage: 0,
+          applicationDate: new Date(),
+          targetCloseDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+          borrowerPortalToken: borrowerToken,
+          borrowerPortalEnabled: true,
+          sourceDocumentId: quoteId,
+          notes: `Accepted from borrower quote #${quoteId}`,
+        }).returning();
 
-      if (quote.propertyAddress) {
-        const ld = quote.loanData as Record<string, any>;
-        await db.insert(dealProperties).values({
-          dealId: project.id,
-          address: quote.propertyAddress,
-          propertyType: ld?.propertyType || null,
-          estimatedValue: ld?.propertyValue || ld?.asIsValue || null,
-          isPrimary: true,
-          sortOrder: 0,
-        });
-        const additionalProps = (ld?.additionalProperties || []) as Array<Record<string, any>>;
-        for (let i = 0; i < additionalProps.length; i++) {
-          const ap = additionalProps[i];
-          if (ap.address) {
-            await db.insert(dealProperties).values({
-              dealId: project.id,
-              address: ap.address,
-              propertyType: ap.propertyType || null,
-              estimatedValue: ap.estimatedValue || null,
-              isPrimary: false,
-              sortOrder: i + 1,
-            });
+        if (quote.propertyAddress) {
+          const ld = quote.loanData as Record<string, any>;
+          await tx.insert(dealProperties).values({
+            dealId: proj.id,
+            address: quote.propertyAddress,
+            propertyType: ld?.propertyType || null,
+            estimatedValue: ld?.propertyValue || ld?.asIsValue || null,
+            isPrimary: true,
+            sortOrder: 0,
+          });
+          const additionalProps = (ld?.additionalProperties || []) as Array<Record<string, any>>;
+          for (let i = 0; i < additionalProps.length; i++) {
+            const ap = additionalProps[i];
+            if (ap.address) {
+              await tx.insert(dealProperties).values({
+                dealId: proj.id,
+                address: ap.address,
+                propertyType: ap.propertyType || null,
+                estimatedValue: ap.estimatedValue || null,
+                isPrimary: false,
+                sortOrder: i + 1,
+              });
+            }
           }
         }
-      }
 
-      // Create stages/tasks/documents from program template
-      const { buildProjectPipelineFromProgram } = await import('./services/projectPipeline');
-      const pipelineResult = await buildProjectPipelineFromProgram(
-        project.id,
-        quote.programId || null
-      );
-      console.log(`Borrower quote accepted → Project ${projectNumber} created: ${pipelineResult.stagesCreated} stages, ${pipelineResult.tasksCreated} tasks, ${pipelineResult.documentsCreated} documents`);
+        // Create stages/tasks/documents from program template
+        const { buildProjectPipelineFromProgram } = await import('./services/projectPipeline');
+        const pipelineResult = await buildProjectPipelineFromProgram(
+          proj.id,
+          quote.programId || null,
+          undefined,
+          tx
+        );
+        console.log(`Borrower quote accepted → Project ${projectNumber} created: ${pipelineResult.stagesCreated} stages, ${pipelineResult.tasksCreated} tasks, ${pipelineResult.documentsCreated} documents`);
 
-      await storage.createProjectActivity({
-        projectId: project.id,
-        userId,
-        activityType: 'project_created',
-        activityDescription: `Loan application submitted by borrower from quote #${quoteId}`,
-        visibleToBorrower: true,
+        await tx.insert(projectActivity).values({
+          projectId: proj.id,
+          userId,
+          activityType: 'project_created',
+          activityDescription: `Loan application submitted by borrower from quote #${quoteId}`,
+          visibleToBorrower: true,
+        });
+
+        return { project: proj, projectNumber: proj.projectNumber };
       });
 
       // Trigger webhook
@@ -3113,23 +2705,34 @@ export async function registerRoutes(
       const { status, archived } = req.query;
       
       const projectsList = await storage.getProjects(
-        userId, 
-        status as string | undefined, 
+        userId,
+        status as string | undefined,
         archived !== undefined ? archived === 'true' : undefined
       );
-      
-      // Get task stats for each project
-      const projectsWithStats = await Promise.all(
-        projectsList.map(async (project) => {
-          const stats = await storage.getProjectTaskStats(project.id);
-          return {
-            ...project,
-            completedTasks: stats.completed,
-            totalTasks: stats.total,
-          };
-        })
-      );
-      
+
+      // Batch-fetch task stats for all projects to avoid N+1
+      const projectIds = projectsList.map(p => p.id);
+      const taskStatsMap = new Map<number, { completed: number; total: number }>();
+      if (projectIds.length > 0) {
+        const allTasks = await db.select({
+          projectId: projectTasks.projectId,
+          status: projectTasks.status,
+        }).from(projectTasks).where(inArray(projectTasks.projectId, projectIds));
+
+        for (const task of allTasks) {
+          const existing = taskStatsMap.get(task.projectId) || { completed: 0, total: 0 };
+          existing.total++;
+          if (task.status === 'completed') existing.completed++;
+          taskStatsMap.set(task.projectId, existing);
+        }
+      }
+
+      const projectsWithStats = projectsList.map(project => ({
+        ...project,
+        completedTasks: taskStatsMap.get(project.id)?.completed || 0,
+        totalTasks: taskStatsMap.get(project.id)?.total || 0,
+      }));
+
       res.json({ projects: projectsWithStats });
     } catch (error) {
       console.error('Get projects error:', error);
@@ -3565,7 +3168,7 @@ export async function registerRoutes(
         return res.status(404).json({ error: 'Project not found' });
       }
 
-      if (!objectPath) {
+      if (!objectPath || objectPath.includes('..')) {
         return res.status(400).json({ error: 'Object path is required' });
       }
 
@@ -3662,7 +3265,7 @@ export async function registerRoutes(
 
       const { objectPath, fileName, fileSize, mimeType } = req.body;
 
-      if (!objectPath) return res.status(400).json({ error: 'Object path is required' });
+      if (!objectPath || objectPath.includes('..')) return res.status(400).json({ error: 'Object path is required' });
 
       const existingFiles = await db.select().from(dealDocumentFiles)
         .where(eq(dealDocumentFiles.documentId, docId));
@@ -3878,245 +3481,18 @@ export async function registerRoutes(
   // ==================== BORROWER PORTAL (PUBLIC) ====================
 
   // Get borrower portal view (no auth required)
-  app.get('/api/portal/:token', async (req: Request, res: Response) => {
-    try {
-      const { token } = req.params;
-      
-      const project = await storage.getProjectByToken(token);
-      if (!project) {
-        return res.status(404).json({ error: 'Project not found or link is invalid' });
-      }
-      
-      if (!project.borrowerPortalEnabled) {
-        return res.status(403).json({ error: 'Borrower portal is disabled for this project' });
-      }
-      
-      // Update last viewed timestamp
-      await storage.updateProject(project.id, project.userId!, {
-        borrowerPortalLastViewed: new Date(),
-      });
-      
-      // Fetch program name
-      let programName: string | null = null;
-      if (project.programId) {
-        const [program] = await db.select({ name: loanPrograms.name }).from(loanPrograms).where(eq(loanPrograms.id, project.programId));
-        if (program) programName = program.name;
-      }
-
-      // Get stages with visible tasks only
-      const stages = await storage.getStagesByProjectId(project.id);
-      const tasks = await storage.getTasksByProjectId(project.id);
-      const activity = await storage.getActivityByProjectId(project.id, true); // Only borrower-visible
-      
-      // Filter to borrower-visible stages and tasks
-      const visibleStages = stages.filter(s => s.visibleToBorrower).map(stage => ({
-        ...stage,
-        tasks: tasks.filter(t => t.stageId === stage.id && t.visibleToBorrower),
-      }));
-      
-      // Return limited project data
-      res.json({
-        project: {
-          id: project.id,
-          programName,
-          projectName: project.projectName,
-          borrowerName: project.borrowerName,
-          loanAmount: project.loanAmount,
-          interestRate: project.interestRate,
-          loanTermMonths: project.loanTermMonths,
-          loanType: project.loanType,
-          propertyAddress: project.propertyAddress,
-          status: project.status,
-          currentStage: project.currentStage,
-          progressPercentage: project.progressPercentage,
-          targetCloseDate: project.targetCloseDate,
-          applicationDate: project.applicationDate,
-          notes: project.notes,
-        },
-        stages: visibleStages,
-        activity,
-      });
-    } catch (error) {
-      console.error('Borrower portal error:', error);
-      res.status(500).json({ error: 'Failed to load borrower portal' });
-    }
-  });
-
-  // ==================== BORROWER PORTAL DOCUMENT ENDPOINTS ====================
-
-  app.get('/api/portal/:token/documents', async (req: Request, res: Response) => {
-    try {
-      const { token } = req.params;
-      const project = await storage.getProjectByToken(token);
-      if (!project) return res.status(404).json({ error: 'Project not found' });
-      if (!project.borrowerPortalEnabled) return res.status(403).json({ error: 'Portal disabled' });
-
-      const docs = await db.select().from(dealDocuments)
-        .where(eq(dealDocuments.dealId, project.id))
-        .orderBy(asc(dealDocuments.sortOrder));
-
-      const stages = await db.select().from(projectStages)
-        .where(eq(projectStages.projectId, project.id))
-        .orderBy(asc(projectStages.stageOrder));
-
-      const docsWithFiles = await Promise.all(docs.map(async (doc) => {
-        const files = await db.select().from(dealDocumentFiles)
-          .where(eq(dealDocumentFiles.documentId, doc.id))
-          .orderBy(asc(dealDocumentFiles.sortOrder));
-        return { ...doc, files };
-      }));
-
-      res.json({ documents: docsWithFiles, stages });
-    } catch (error) {
-      console.error('Portal documents error:', error);
-      res.status(500).json({ error: 'Failed to load documents' });
-    }
-  });
-
-  app.post('/api/portal/:token/documents/:docId/upload-url', async (req: Request, res: Response) => {
-    try {
-      const { token } = req.params;
-      const docId = parseInt(req.params.docId);
-      const { name, size, contentType } = req.body;
-      
-      const project = await storage.getProjectByToken(token);
-      if (!project) return res.status(404).json({ error: 'Project not found' });
-      if (!project.borrowerPortalEnabled) return res.status(403).json({ error: 'Portal disabled' });
-
-      const [doc] = await db.select().from(dealDocuments)
-        .where(and(eq(dealDocuments.id, docId), eq(dealDocuments.dealId, project.id)));
-      if (!doc) return res.status(404).json({ error: 'Document not found' });
-
-      if (!name) return res.status(400).json({ error: 'File name is required' });
-
-      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
-
-      res.json({ uploadURL, objectPath, docId, metadata: { name, size, contentType } });
-    } catch (error) {
-      console.error('Portal upload URL error:', error);
-      res.status(500).json({ error: 'Failed to generate upload URL' });
-    }
-  });
-
-  app.post('/api/portal/:token/documents/:docId/upload-complete', async (req: Request, res: Response) => {
-    try {
-      const { token } = req.params;
-      const docId = parseInt(req.params.docId);
-      const { objectPath, fileName, fileSize, mimeType } = req.body;
-      
-      const project = await storage.getProjectByToken(token);
-      if (!project) return res.status(404).json({ error: 'Project not found' });
-      if (!project.borrowerPortalEnabled) return res.status(403).json({ error: 'Portal disabled' });
-
-      const [doc] = await db.select().from(dealDocuments)
-        .where(and(eq(dealDocuments.id, docId), eq(dealDocuments.dealId, project.id)));
-      if (!doc) return res.status(404).json({ error: 'Document not found' });
-
-      if (!objectPath) return res.status(400).json({ error: 'Object path is required' });
-
-      const existingFiles = await db.select().from(dealDocumentFiles)
-        .where(eq(dealDocumentFiles.documentId, docId));
-      const nextSortOrder = existingFiles.length;
-
-      const [newFile] = await db.insert(dealDocumentFiles).values({
-        documentId: docId,
-        filePath: objectPath,
-        fileName: fileName || null,
-        fileSize: fileSize || null,
-        mimeType: mimeType || null,
-        uploadedAt: new Date(),
-        sortOrder: nextSortOrder,
-      }).returning();
-
-      const [updated] = await db.update(dealDocuments)
-        .set({
-          filePath: objectPath,
-          fileName: fileName || null,
-          fileSize: fileSize || null,
-          mimeType: mimeType || null,
-          status: 'uploaded',
-          uploadedAt: new Date(),
-        })
-        .where(eq(dealDocuments.id, docId))
-        .returning();
-
-      await db.insert(projectActivity).values({
-        projectId: project.id,
-        activityType: 'document_uploaded',
-        activityDescription: `Borrower uploaded: ${updated?.documentName || fileName || 'Document'}`,
-        visibleToBorrower: true,
-      });
-
-      try {
-        const { isDriveIntegrationEnabled, syncDealDocumentToDrive } = await import('./services/googleDrive');
-        const driveEnabled = await isDriveIntegrationEnabled();
-        if (driveEnabled && updated && newFile) {
-          syncDealDocumentToDrive(updated.id, newFile.id).catch((err: any) => {
-            console.error(`Drive sync failed for portal doc ${updated.id}:`, err.message);
-          });
-        }
-      } catch (driveErr: any) {
-        console.error('Drive sync check error:', driveErr.message);
-      }
-
-      res.json({ document: updated, file: newFile });
-    } catch (error) {
-      console.error('Portal upload complete error:', error);
-      res.status(500).json({ error: 'Failed to complete upload' });
-    }
-  });
+  // ==================== BORROWER PORTAL ROUTES ====================
+  registerPortalRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
 
   // ==================== MESSAGING ROUTES ====================
-  
-  const isAdminRole = (role: string | undefined) => role === 'admin' || role === 'super_admin' || role === 'staff';
+  registerMessagingRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
 
-  // Get all threads (admin sees all, user sees only their own)
-  app.get('/api/messages/threads', authenticateUser, async (req: AuthRequest, res: Response) => {
-    try {
-      const userId = req.user!.id;
-      const role = req.user!.role;
-      const { dealId, userId: filterUserId } = req.query;
+  // ==================== ADMIN ROUTES ====================
 
-      let threads;
-      if (isAdminRole(role)) {
-        // Admin can see all threads or filter by query params
-        if (dealId) {
-          threads = await db.select().from(messageThreads)
-            .where(eq(messageThreads.dealId, parseInt(dealId as string)))
-            .orderBy(desc(messageThreads.lastMessageAt))
-            .limit(100);
-        } else if (filterUserId) {
-          threads = await db.select().from(messageThreads)
-            .where(eq(messageThreads.userId, parseInt(filterUserId as string)))
-            .orderBy(desc(messageThreads.lastMessageAt))
-            .limit(100);
-        } else {
-          threads = await db.select().from(messageThreads)
-            .orderBy(desc(messageThreads.lastMessageAt))
-            .limit(100);
-        }
-      } else {
-        // User sees only their threads
-        threads = await db.select().from(messageThreads)
-          .where(eq(messageThreads.userId, userId))
-          .orderBy(desc(messageThreads.lastMessageAt))
-          .limit(100);
-      }
+  // Register admin programs routes
+  registerAdminProgramsRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
 
-      // Get user info for each thread
-      const threadsWithUsers = await Promise.all(threads.map(async (thread) => {
-        const user = await db.select({ fullName: users.fullName, email: users.email })
-          .from(users).where(eq(users.id, thread.userId)).limit(1);
-        return { ...thread, userName: user[0]?.fullName || user[0]?.email || 'Unknown' };
-      }));
-
-      res.json({ threads: threadsWithUsers });
-    } catch (error) {
-      console.error('Get threads error:', error);
-      res.status(500).json({ error: 'Failed to get threads' });
-    }
-  });
+  // Note: Old messaging routes code has been moved to routes/messaging.ts
 
   // Get single thread with messages
   app.get('/api/messages/threads/:id', authenticateUser, async (req: AuthRequest, res: Response) => {
@@ -4857,23 +4233,33 @@ export async function registerRoutes(
       const stage = req.query.stage as string | undefined;
       const userId = req.query.userId ? parseInt(req.query.userId as string) : undefined;
       
+      const limit = Math.min(parseInt(req.query.limit as string) || 200, 500);
+      const offset = parseInt(req.query.offset as string) || 0;
+
       const projectsList = await storage.getAllProjects({ status, stage, userId });
-      
-      // Get owner info for each project
-      const projectsWithOwners = await Promise.all(projectsList.map(async (p) => {
-        let ownerName = 'Unknown';
-        let ownerEmail = '';
-        if (p.userId) {
-          const owner = await storage.getUserById(p.userId);
-          if (owner) {
-            ownerName = owner.fullName || owner.email;
-            ownerEmail = owner.email;
-          }
+
+      // Batch-fetch all unique owner IDs to avoid N+1 queries
+      const ownerIds = [...new Set(projectsList.map(p => p.userId).filter((id): id is number => id !== null && id !== undefined))];
+      const ownerMap = new Map<number, { fullName: string | null; email: string }>();
+      if (ownerIds.length > 0) {
+        const owners = await db.select({ id: users.id, fullName: users.fullName, email: users.email })
+          .from(users)
+          .where(inArray(users.id, ownerIds));
+        for (const owner of owners) {
+          ownerMap.set(owner.id, { fullName: owner.fullName, email: owner.email });
         }
-        return { ...p, ownerName, ownerEmail };
-      }));
-      
-      res.json({ projects: projectsWithOwners });
+      }
+
+      const projectsWithOwners = projectsList.map(p => {
+        const owner = p.userId ? ownerMap.get(p.userId) : undefined;
+        return {
+          ...p,
+          ownerName: owner?.fullName || owner?.email || 'Unknown',
+          ownerEmail: owner?.email || '',
+        };
+      });
+
+      res.json({ projects: projectsWithOwners.slice(offset, offset + limit), total: projectsWithOwners.length });
     } catch (error) {
       console.error('Admin projects error:', error);
       res.status(500).json({ error: 'Failed to load projects' });
@@ -6676,8 +6062,8 @@ export async function registerRoutes(
       const dealId = parseInt(req.params.dealId);
       const docId = parseInt(req.params.docId);
       const { objectPath, fileName, fileSize, mimeType } = req.body;
-      
-      if (!objectPath) {
+
+      if (!objectPath || objectPath.includes('..')) {
         return res.status(400).json({ error: 'Object path is required' });
       }
 
@@ -11041,7 +10427,11 @@ Respond ONLY with valid JSON in this format:
     try {
       // Simple API key auth for cron
       const cronKey = req.headers['x-cron-key'];
-      const expectedKey = process.env.CRON_SECRET_KEY || 'sphinx-cron-2026';
+      const expectedKey = process.env.CRON_SECRET_KEY;
+      if (!expectedKey) {
+        console.error('CRON_SECRET_KEY env var not set. Cron endpoint disabled.');
+        return res.status(503).json({ error: 'Cron endpoint not configured' });
+      }
       
       if (cronKey !== expectedKey) {
         return res.status(401).json({ error: 'Unauthorized' });

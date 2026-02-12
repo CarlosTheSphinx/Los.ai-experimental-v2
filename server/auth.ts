@@ -7,7 +7,10 @@ import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 
 const SALT_ROUNDS = 10;
-const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET || 'your-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('CRITICAL: JWT_SECRET or SESSION_SECRET environment variable must be set. Server cannot start without a secure signing key.');
+}
 const JWT_EXPIRES_IN = '7d';
 
 export interface JWTPayload {
@@ -119,7 +122,7 @@ export const setAuthCookie = (res: Response, token: string): void => {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    sameSite: 'lax'
+    sameSite: 'strict'
   });
 };
 
