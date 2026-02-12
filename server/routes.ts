@@ -3,7 +3,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, documentReviewResults, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema } from "@shared/schema";
+import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, documentReviewResults, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema, projectActivity } from "@shared/schema";
 import { priceQuote, validateRuleset, SAMPLE_RTL_RULESET, SAMPLE_DSCR_RULESET, type PricingInputs, analyzeGuidelines, refineProposal } from "./pricing";
 import { getDocumentTemplatesForLoanType } from "./document-templates";
 import { eq, desc, asc, inArray, and, gt, gte, lte, sql, isNull, or } from "drizzle-orm";
@@ -3853,6 +3853,131 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Borrower portal error:', error);
       res.status(500).json({ error: 'Failed to load borrower portal' });
+    }
+  });
+
+  // ==================== BORROWER PORTAL DOCUMENT ENDPOINTS ====================
+
+  app.get('/api/portal/:token/documents', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const project = await storage.getProjectByToken(token);
+      if (!project) return res.status(404).json({ error: 'Project not found' });
+      if (!project.borrowerPortalEnabled) return res.status(403).json({ error: 'Portal disabled' });
+
+      const docs = await db.select().from(dealDocuments)
+        .where(eq(dealDocuments.dealId, project.id))
+        .orderBy(asc(dealDocuments.sortOrder));
+
+      const stages = await db.select().from(projectStages)
+        .where(eq(projectStages.projectId, project.id))
+        .orderBy(asc(projectStages.stageOrder));
+
+      const docsWithFiles = await Promise.all(docs.map(async (doc) => {
+        const files = await db.select().from(dealDocumentFiles)
+          .where(eq(dealDocumentFiles.documentId, doc.id))
+          .orderBy(asc(dealDocumentFiles.sortOrder));
+        return { ...doc, files };
+      }));
+
+      res.json({ documents: docsWithFiles, stages });
+    } catch (error) {
+      console.error('Portal documents error:', error);
+      res.status(500).json({ error: 'Failed to load documents' });
+    }
+  });
+
+  app.post('/api/portal/:token/documents/:docId/upload-url', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const docId = parseInt(req.params.docId);
+      const { name, size, contentType } = req.body;
+      
+      const project = await storage.getProjectByToken(token);
+      if (!project) return res.status(404).json({ error: 'Project not found' });
+      if (!project.borrowerPortalEnabled) return res.status(403).json({ error: 'Portal disabled' });
+
+      const [doc] = await db.select().from(dealDocuments)
+        .where(and(eq(dealDocuments.id, docId), eq(dealDocuments.dealId, project.id)));
+      if (!doc) return res.status(404).json({ error: 'Document not found' });
+
+      if (!name) return res.status(400).json({ error: 'File name is required' });
+
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+
+      res.json({ uploadURL, objectPath, docId, metadata: { name, size, contentType } });
+    } catch (error) {
+      console.error('Portal upload URL error:', error);
+      res.status(500).json({ error: 'Failed to generate upload URL' });
+    }
+  });
+
+  app.post('/api/portal/:token/documents/:docId/upload-complete', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const docId = parseInt(req.params.docId);
+      const { objectPath, fileName, fileSize, mimeType } = req.body;
+      
+      const project = await storage.getProjectByToken(token);
+      if (!project) return res.status(404).json({ error: 'Project not found' });
+      if (!project.borrowerPortalEnabled) return res.status(403).json({ error: 'Portal disabled' });
+
+      const [doc] = await db.select().from(dealDocuments)
+        .where(and(eq(dealDocuments.id, docId), eq(dealDocuments.dealId, project.id)));
+      if (!doc) return res.status(404).json({ error: 'Document not found' });
+
+      if (!objectPath) return res.status(400).json({ error: 'Object path is required' });
+
+      const existingFiles = await db.select().from(dealDocumentFiles)
+        .where(eq(dealDocumentFiles.documentId, docId));
+      const nextSortOrder = existingFiles.length;
+
+      const [newFile] = await db.insert(dealDocumentFiles).values({
+        documentId: docId,
+        filePath: objectPath,
+        fileName: fileName || null,
+        fileSize: fileSize || null,
+        mimeType: mimeType || null,
+        uploadedAt: new Date(),
+        sortOrder: nextSortOrder,
+      }).returning();
+
+      const [updated] = await db.update(dealDocuments)
+        .set({
+          filePath: objectPath,
+          fileName: fileName || null,
+          fileSize: fileSize || null,
+          mimeType: mimeType || null,
+          status: 'uploaded',
+          uploadedAt: new Date(),
+        })
+        .where(eq(dealDocuments.id, docId))
+        .returning();
+
+      await db.insert(projectActivity).values({
+        projectId: project.id,
+        activityType: 'document_uploaded',
+        activityDescription: `Borrower uploaded: ${updated?.documentName || fileName || 'Document'}`,
+        visibleToBorrower: true,
+      });
+
+      try {
+        const { isDriveIntegrationEnabled, syncDealDocumentToDrive } = await import('./services/googleDrive');
+        const driveEnabled = await isDriveIntegrationEnabled();
+        if (driveEnabled && updated && newFile) {
+          syncDealDocumentToDrive(updated.id, newFile.id).catch((err: any) => {
+            console.error(`Drive sync failed for portal doc ${updated.id}:`, err.message);
+          });
+        }
+      } catch (driveErr: any) {
+        console.error('Drive sync check error:', driveErr.message);
+      }
+
+      res.json({ document: updated, file: newFile });
+    } catch (error) {
+      console.error('Portal upload complete error:', error);
+      res.status(500).json({ error: 'Failed to complete upload' });
     }
   });
 
