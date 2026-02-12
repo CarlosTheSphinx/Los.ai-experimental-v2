@@ -1,0 +1,91 @@
+Copy/paste this into Replit. It’s scoped to exactly what you described: kill “projects” in the borrower/broker portal and make their Loans section point to the same Deal/Loan records as the admin pipeline (Deal 27). One source of truth.
+
+We found the root issue:
+
+Borrower/Broker portal is showing “Projects” (ex: PRJ-2026-0002) when viewing Loans, but Admin pipeline uses “Deals” (ex: Deal 27) where the loan program, required documents, tasks, checklist, and pipeline statuses live.
+
+Projects are irrelevant and must be removed from the app logic. The Borrower/Broker portal must show the SAME “Deals” records as Admin, filtered by borrower/broker access.
+
+GOAL:
+Borrower/Broker Loans sidebar should list Deals (admin pipeline deals) and clicking a deal should open /deals/:id (NOT /projects/:id). Everything (program, tasks, docs, statuses) must be read from the same deal/loan tables.
+
+A) Data model + mapping (single source of truth)
+1) Identify where “projects” are being used:
+- frontend routes: /projects/:id, /deals/:id
+- api endpoints: /api/projects, /api/deals
+- db tables: projects table and any foreign keys
+2) Establish canonical entity:
+- “Deal” (or “Loan”) is canonical for the workflow checklist.
+- Borrower portal must reference deals.id.
+
+3) Ensure deals are associated with borrower/broker:
+- deals.borrower_id (or borrower_user_id)
+- deals.broker_id (or broker_user_id)
+- OR deals.quote_id that links to borrower/broker
+Implement the relationship if missing.
+
+B) Backend API changes
+1) Create a borrower/broker endpoint that returns deals they are allowed to see:
+GET /api/portal/deals
+- If role = borrower: return deals where borrower_id = current user
+- If role = broker: return deals where broker_id = current user OR broker firm rules
+Return: deal id, borrower name, property address, status, program_id/program_name, progress, created_at
+
+2) Update borrower/broker deal detail endpoint:
+GET /api/portal/deals/:dealId
+- Must load the SAME data admin uses (program, checklist, docs, tasks) from deal/loan tables
+- No project data allowed
+
+3) Deprecate projects endpoints in portal context:
+- Remove /api/portal/projects routes or make them return 410 Gone
+- Add a DB safety check: portal never queries projects.
+
+C) Frontend routing changes (portal)
+1) Update sidebar “Loans” menu:
+- It should list Deals from GET /api/portal/deals
+- Clicking a row goes to /deals/:id (portal version) using the deal id
+
+2) Remove/disable “Project” pages:
+- Remove routes/components that render /projects/:id in portal
+- If you must keep for now, redirect:
+  /projects/:projectId -> find mapped dealId -> redirect /deals/:dealId
+But preferred: delete project navigation entirely.
+
+3) Update the borrower/broker deal detail page to render:
+- Loan Program (from deals.program_id joined to loan_programs)
+- Shared checklist: required docs/tasks from the same checklist items the admin pipeline uses
+- Document uploads update the SAME records admin sees
+- Approvals/denials propagate both ways automatically (because shared tables)
+
+D) Migration plan for existing records (map projects to deals)
+If borrower portal currently only knows project_id:
+1) Add mapping field if needed:
+- projects.deal_id OR deals.project_id temporarily
+2) Write a one-time migration:
+- For each project, find corresponding deal (by quote_id, borrower, property address, created_at proximity)
+- Populate projects.deal_id
+3) After migration:
+- Borrower portal uses deals only
+- Remove project references from portal UI
+
+E) Acceptance criteria
+- Borrower portal “Loans” list shows Deal 27 (same ID as admin)
+- Borrower portal deal detail page shows the same documents/tasks/checklist as admin pipeline for that deal
+- Submitting a doc in borrower portal immediately shows in admin pipeline for that deal
+- No “project number PRJ-2026-0002” appears anywhere in borrower portal loan flows
+- Projects are not queried/used for loan workflow anywhere
+
+Deliverables:
+- Files changed for routes + UI
+- Migration script if needed
+- Confirm Deal 27 is visible in portal for Sam Bove and matches admin checklist exactly
+
+Optional (but smart) hard guardrail
+
+If you want to ensure projects can’t creep back in, append this:
+
+Hard rule:
+- Delete or block any portal route/component/api that fetches “projects” for the Loans area.
+- Add a lint/grep check in the repo: no portal code imports ProjectsService or calls /api/projects.
+
+If you want, paste the names of the borrower portal pages/routes (/deals/27 vs /projects/...) and the DB table names (deals, loans, projects) and I’ll tighten the prompt so Replit edits the exact files instead of “searching and refactoring too much.”
