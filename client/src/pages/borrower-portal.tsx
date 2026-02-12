@@ -3,8 +3,6 @@ import { useRoute } from "wouter";
 import { useState, useRef, type ChangeEvent } from "react";
 import { 
   CheckCircle2, 
-  Circle, 
-  Clock, 
   Building2,
   Calendar,
   DollarSign,
@@ -21,7 +19,6 @@ import {
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { LoanChecklist } from "@/components/LoanChecklist";
@@ -56,7 +53,7 @@ interface ActivityItem {
 
 interface Project {
   id: number;
-  projectNumber: string;
+  programName?: string | null;
   projectName: string;
   borrowerName: string;
   status: string;
@@ -228,13 +225,6 @@ export default function BorrowerPortal() {
     });
   };
 
-  const getStageIcon = (status: string) => {
-    switch (status) {
-      case 'completed': return <CheckCircle2 className="h-5 w-5 text-green-500" />;
-      case 'in_progress': return <Clock className="h-5 w-5 text-blue-500" />;
-      default: return <Circle className="h-5 w-5 text-muted-foreground" />;
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
@@ -251,8 +241,15 @@ export default function BorrowerPortal() {
         <div className="max-w-4xl mx-auto px-4 md:px-6 py-3 md:py-4">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <div className="text-xs md:text-sm text-muted-foreground font-mono truncate">{project.projectNumber}</div>
-              <h1 className="text-lg md:text-xl font-semibold truncate">{project.projectName}</h1>
+              <div className="text-xs md:text-sm text-muted-foreground font-mono truncate">DEAL-{project.id}</div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-lg md:text-xl font-semibold truncate">{project.projectName}</h1>
+                {project.programName && (
+                  <Badge variant="outline" className="text-xs shrink-0" data-testid="badge-program-name">
+                    {project.programName}
+                  </Badge>
+                )}
+              </div>
             </div>
             <Badge variant={project.status === 'active' ? 'default' : 'secondary'} className="shrink-0" data-testid="badge-deal-status">
               {project.status}
@@ -262,37 +259,85 @@ export default function BorrowerPortal() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 md:px-6 py-4 md:py-8 space-y-4 md:space-y-6">
-        <Card>
-          <CardHeader className="pb-3 p-4 md:p-6 md:pb-3">
-            <div className="flex items-start md:items-center justify-between gap-3 flex-wrap">
-              <div className="min-w-0">
-                <CardTitle className="text-base md:text-lg truncate">Welcome, {project.borrowerName}</CardTitle>
-                <CardDescription className="text-xs md:text-sm">Track your loan progress</CardDescription>
-              </div>
-              <div className="text-right shrink-0">
-                <div className="text-2xl md:text-3xl font-bold text-primary">{project.progressPercentage}%</div>
-                <div className="text-xs text-muted-foreground">Complete</div>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4 p-4 md:p-6 pt-0 md:pt-0">
-            <Progress value={project.progressPercentage} className="h-2 md:h-3" />
-            
-            <div className="flex flex-wrap gap-1 overflow-x-auto">
-              {stages.map((stage, i) => (
-                <div key={stage.id} className="flex items-center gap-1">
-                  {getStageIcon(stage.status)}
-                  <span className={`text-[10px] md:text-xs whitespace-nowrap ${stage.status === 'in_progress' ? 'font-medium text-blue-600' : stage.status === 'completed' ? 'text-green-600' : 'text-muted-foreground'}`}>
-                    {stage.stageName}
-                  </span>
-                  {i < stages.length - 1 && (
-                    <div className={`h-px w-2 md:w-4 ${stage.status === 'completed' ? 'bg-green-300' : 'bg-muted'}`} />
-                  )}
+        {stages.length > 0 && (
+          <Card data-testid="card-loan-progress">
+            <CardContent className="p-4 md:p-6">
+              <div className="flex items-center justify-between mb-4 gap-2">
+                <div className="min-w-0">
+                  <h3 className="text-base font-semibold">Loan Progress</h3>
+                  <p className="text-xs text-muted-foreground">Welcome, {project.borrowerName}</p>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                <span className="text-xl md:text-2xl font-bold shrink-0" data-testid="text-overall-progress">
+                  {(() => {
+                    let totalItems = 0;
+                    let completedItems = 0;
+                    stages.forEach(stage => {
+                      const completedTasks = (stage.tasks || []).filter((t: Task) => t.status === 'completed').length;
+                      totalItems += (stage.tasks || []).length;
+                      completedItems += completedTasks;
+                    });
+                    return totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+                  })()}% Complete
+                </span>
+              </div>
+              <div className="flex items-start justify-between relative">
+                {stages.map((stage, i) => {
+                  const completedTasks = (stage.tasks || []).filter((t: Task) => t.status === 'completed').length;
+                  const totalItems = (stage.tasks || []).length;
+                  const isCompleted = totalItems > 0 && completedTasks >= totalItems;
+                  const isActive = stage.status === 'in_progress';
+                  return (
+                    <div key={stage.id} className="flex flex-col items-center relative flex-1" data-testid={`progress-stage-${stage.id}`}>
+                      <div
+                        className={`h-10 w-10 md:h-12 md:w-12 rounded-full flex items-center justify-center text-xs md:text-sm font-semibold border-[3px] flex-shrink-0 transition-all z-10 ${
+                          isCompleted ? 'bg-green-500 border-green-500 text-white' :
+                          isActive ? 'bg-blue-500 border-blue-500 text-white' :
+                          'bg-muted border-border text-muted-foreground'
+                        }`}
+                        data-testid={`stage-indicator-${stage.id}`}
+                      >
+                        {isCompleted ? <CheckCircle2 className="h-4 w-4 md:h-5 md:w-5" /> : i + 1}
+                      </div>
+                      <div className="mt-2 md:mt-3 text-center max-w-[80px] md:max-w-[120px]">
+                        <div className={`text-[10px] md:text-[13px] font-medium leading-tight ${
+                          isCompleted ? 'text-green-600 dark:text-green-400' :
+                          isActive ? 'text-blue-600 dark:text-blue-400 font-semibold' :
+                          'text-muted-foreground'
+                        }`}>
+                          {stage.stageName}
+                        </div>
+                        {totalItems > 0 && (
+                          <div className="text-[10px] md:text-xs text-muted-foreground mt-0.5 md:mt-1">
+                            {completedTasks}/{totalItems}
+                          </div>
+                        )}
+                      </div>
+                      {i < stages.length - 1 && (
+                        <div
+                          className={`absolute top-5 md:top-6 left-[calc(50%+20px)] md:left-[calc(50%+24px)] h-[2px] md:h-[3px] z-0 ${
+                            isCompleted ? 'bg-green-300 dark:bg-green-700' : 'bg-border'
+                          }`}
+                          style={{ width: 'calc(100% - 40px)' }}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {project.programName && (
+                <div className="border-t mt-4 md:mt-5 pt-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Loan Program</span>
+                    </div>
+                    <span className="text-sm font-medium" data-testid="text-program-name">{project.programName}</span>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 md:gap-4">
           <Card className="p-3 md:p-4">

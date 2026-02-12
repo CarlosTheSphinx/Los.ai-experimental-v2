@@ -142,6 +142,8 @@ interface Project {
   googleDriveFolderId: string | null;
   googleDriveFolderUrl: string | null;
   driveSyncStatus: string;
+  programId?: number | null;
+  programName?: string | null;
 }
 
 interface MessageThread {
@@ -475,12 +477,19 @@ export default function ProjectDetail() {
         </Link>
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground font-mono">{project.projectNumber}</span>
+            <span className="text-sm text-muted-foreground font-mono">DEAL-{project.id}</span>
             <Badge variant={project.status === 'active' ? 'default' : 'secondary'}>
               {project.status}
             </Badge>
           </div>
-          <h1 className="text-xl font-semibold" data-testid="text-deal-name">{project.projectName}</h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-xl font-semibold" data-testid="text-deal-name">{project.projectName}</h1>
+            {project.programName && (
+              <Badge variant="outline" data-testid="badge-program-name">
+                {project.programName}
+              </Badge>
+            )}
+          </div>
           {!isBorrower && project.driveSyncStatus === 'OK' && project.googleDriveFolderId && (
             <a 
               href={`https://drive.google.com/drive/folders/${project.googleDriveFolderId}`} 
@@ -548,52 +557,90 @@ export default function ProjectDetail() {
 
       {isBorrower ? (
         <>
-          {(() => {
-            const totalStages = stages.length;
-            if (totalStages === 0) return null;
+          {stages.length > 0 && (() => {
+            const computeStageProgress = (stage: Stage) => {
+              const completedTasks = stage.tasks.filter(t => t.status === 'completed').length;
+              const totalTasks = stage.tasks.length;
+              const stageDocs = (dealDocsData || []).filter(d => d.stageId === stage.id);
+              const completedDocs = stageDocs.filter(d => d.status === 'approved' || d.status === 'uploaded').length;
+              const totalItems = totalTasks + stageDocs.length;
+              const completedItems = completedTasks + completedDocs;
+              return { completedItems, totalItems };
+            };
             
-            const completedStages = stages.filter(s => s.status === 'completed').length;
-            const currentStage = stages.find(s => s.status === 'in_progress');
-            let currentStageProgress = 0;
-            
-            if (currentStage) {
-              const allTasks = currentStage.tasks;
-              if (allTasks.length > 0) {
-                const completedTasks = allTasks.filter(t => t.status === 'completed').length;
-                currentStageProgress = completedTasks / allTasks.length;
-              }
-            }
-            
-            const progressRaw = ((completedStages + currentStageProgress) / totalStages) * 100;
-            const progressPercent = progressRaw % 1 === 0 ? progressRaw : parseFloat(progressRaw.toFixed(1));
-            const approvedDocs = (dealDocsData || []).filter(d => d.status === 'approved').length;
-            const totalRequiredDocs = (dealDocsData || []).filter(d => d.isRequired).length;
+            let totalItems = 0;
+            let completedItems = 0;
+            stages.forEach(stage => {
+              const progress = computeStageProgress(stage);
+              totalItems += progress.totalItems;
+              completedItems += progress.completedItems;
+            });
+            const unstagedDocs = (dealDocsData || []).filter(d => !d.stageId || !stages.find(s => s.id === d.stageId));
+            totalItems += unstagedDocs.length;
+            completedItems += unstagedDocs.filter(d => d.status === 'approved' || d.status === 'uploaded').length;
+            const overallPercent = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
             
             return (
-              <Card>
-                <CardContent className="pt-6 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-sm text-muted-foreground">Closing Progress</div>
-                      <div className="text-3xl font-bold" data-testid="text-progress-percent">{progressPercent}%</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm text-muted-foreground">Current Stage</div>
-                      <div className="text-sm font-medium" data-testid="text-current-stage">
-                        {currentStage?.stageName || (completedStages === totalStages ? 'Complete' : stages[0]?.stageName || '—')}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        Stage {completedStages + (currentStage ? 1 : 0)} of {totalStages}
-                      </div>
-                    </div>
+              <Card data-testid="card-loan-progress">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between mb-5">
+                    <h3 className="text-base font-semibold">Loan Progress</h3>
+                    <span className="text-2xl font-bold" data-testid="text-overall-progress">{overallPercent}% Complete</span>
                   </div>
-                  <Progress value={progressPercent} className="h-3" data-testid="progress-bar-closing" />
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>{approvedDocs} of {totalRequiredDocs} required documents approved</span>
-                    {project.targetCloseDate && (
-                      <span>Target close: {formatDate(project.targetCloseDate)}</span>
-                    )}
+                  <div className="flex items-start justify-between relative">
+                    {stages.map((stage, i) => {
+                      const progress = computeStageProgress(stage);
+                      const isCompleted = progress.totalItems > 0 && progress.completedItems >= progress.totalItems;
+                      const isActive = stage.status === 'in_progress';
+                      return (
+                        <div key={stage.id} className="flex flex-col items-center relative flex-1" data-testid={`progress-stage-${stage.id}`}>
+                          <div
+                            className={`h-12 w-12 rounded-full flex items-center justify-center text-sm font-semibold border-[3px] flex-shrink-0 transition-all z-10 ${
+                              isCompleted ? 'bg-green-500 border-green-500 text-white' :
+                              isActive ? 'bg-blue-500 border-blue-500 text-white' :
+                              'bg-muted border-border text-muted-foreground'
+                            }`}
+                            data-testid={`stage-indicator-${stage.id}`}
+                          >
+                            {isCompleted ? <CheckCircle2 className="h-5 w-5" /> : i + 1}
+                          </div>
+                          <div className="mt-3 text-center max-w-[120px]">
+                            <div className={`text-[13px] font-medium leading-tight ${
+                              isCompleted ? 'text-green-600 dark:text-green-400' :
+                              isActive ? 'text-blue-600 dark:text-blue-400 font-semibold' :
+                              'text-muted-foreground'
+                            }`}>
+                              {stage.stageName}
+                            </div>
+                            {progress.totalItems > 0 && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {progress.completedItems}/{progress.totalItems}
+                              </div>
+                            )}
+                          </div>
+                          {i < stages.length - 1 && (
+                            <div
+                              className={`absolute top-6 left-[calc(50%+24px)] h-[3px] z-0 ${
+                                isCompleted ? 'bg-green-300 dark:bg-green-700' : 'bg-border'
+                              }`}
+                              style={{ width: 'calc(100% - 48px)' }}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
+                  {project.programName && (
+                    <div className="border-t mt-5 pt-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Loan Program</span>
+                        </div>
+                        <span className="text-sm font-medium" data-testid="text-program-name">{project.programName}</span>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );
@@ -851,32 +898,84 @@ export default function ProjectDetail() {
       ) : (
         <>
           <div className="grid gap-6 md:grid-cols-3">
-            <Card className="md:col-span-2">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">Loan Progress</CardTitle>
-                  <span className="text-2xl font-bold">{project.progressPercentage}%</span>
+            <Card className="md:col-span-2" data-testid="card-loan-progress">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="text-base font-semibold">Loan Progress</h3>
+                  <span className="text-2xl font-bold" data-testid="text-overall-progress">{(() => {
+                    let totalItems = 0;
+                    let completedItems = 0;
+                    stages.forEach(stage => {
+                      const completedTasks = stage.tasks.filter(t => t.status === 'completed').length;
+                      const stageDocs = (dealDocsData || []).filter(d => d.stageId === stage.id);
+                      const completedDocs = stageDocs.filter(d => d.status === 'approved' || d.status === 'uploaded').length;
+                      totalItems += stage.tasks.length + stageDocs.length;
+                      completedItems += completedTasks + completedDocs;
+                    });
+                    const unstagedDocs = (dealDocsData || []).filter(d => !d.stageId || !stages.find(s => s.id === d.stageId));
+                    totalItems += unstagedDocs.length;
+                    completedItems += unstagedDocs.filter(d => d.status === 'approved' || d.status === 'uploaded').length;
+                    return totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+                  })()}% Complete</span>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Progress value={project.progressPercentage} className="h-3" />
-                
-                <div className="flex flex-wrap gap-1">
-                  {stages.map((stage, i) => (
-                    <div 
-                      key={stage.id} 
-                      className="flex items-center gap-1"
-                    >
-                      {getStageIcon(stage.status)}
-                      <span className={`text-xs ${stage.status === 'in_progress' ? 'font-medium text-blue-600' : stage.status === 'completed' ? 'text-green-600' : 'text-muted-foreground'}`}>
-                        {stage.stageName}
-                      </span>
-                      {i < stages.length - 1 && (
-                        <div className={`h-px w-4 ${stage.status === 'completed' ? 'bg-green-300' : 'bg-muted'}`} />
-                      )}
+                <div className="flex items-start justify-between relative">
+                  {stages.map((stage, i) => {
+                    const completedTasks = stage.tasks.filter(t => t.status === 'completed').length;
+                    const stageDocs = (dealDocsData || []).filter(d => d.stageId === stage.id);
+                    const completedDocs = stageDocs.filter(d => d.status === 'approved' || d.status === 'uploaded').length;
+                    const totalItems = stage.tasks.length + stageDocs.length;
+                    const completedItemsCount = completedTasks + completedDocs;
+                    const isCompleted = totalItems > 0 && completedItemsCount >= totalItems;
+                    const isActive = stage.status === 'in_progress';
+                    return (
+                      <div key={stage.id} className="flex flex-col items-center relative flex-1" data-testid={`progress-stage-${stage.id}`}>
+                        <div
+                          className={`h-12 w-12 rounded-full flex items-center justify-center text-sm font-semibold border-[3px] flex-shrink-0 transition-all z-10 ${
+                            isCompleted ? 'bg-green-500 border-green-500 text-white' :
+                            isActive ? 'bg-blue-500 border-blue-500 text-white' :
+                            'bg-muted border-border text-muted-foreground'
+                          }`}
+                          data-testid={`stage-indicator-${stage.id}`}
+                        >
+                          {isCompleted ? <CheckCircle2 className="h-5 w-5" /> : i + 1}
+                        </div>
+                        <div className="mt-3 text-center max-w-[120px]">
+                          <div className={`text-[13px] font-medium leading-tight ${
+                            isCompleted ? 'text-green-600 dark:text-green-400' :
+                            isActive ? 'text-blue-600 dark:text-blue-400 font-semibold' :
+                            'text-muted-foreground'
+                          }`}>
+                            {stage.stageName}
+                          </div>
+                          {totalItems > 0 && (
+                            <div className="text-xs text-muted-foreground mt-1">
+                              {completedItemsCount}/{totalItems}
+                            </div>
+                          )}
+                        </div>
+                        {i < stages.length - 1 && (
+                          <div
+                            className={`absolute top-6 left-[calc(50%+24px)] h-[3px] z-0 ${
+                              isCompleted ? 'bg-green-300 dark:bg-green-700' : 'bg-border'
+                            }`}
+                            style={{ width: 'calc(100% - 48px)' }}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {project.programName && (
+                  <div className="border-t mt-5 pt-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Loan Program</span>
+                      </div>
+                      <span className="text-sm font-medium" data-testid="text-program-name">{project.programName}</span>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -962,7 +1061,7 @@ export default function ProjectDetail() {
             </Card>
           )}
 
-          <Tabs defaultValue="tasks" className="space-y-4">
+          <Tabs defaultValue="checklist" className="space-y-4">
             <TabsList>
               <TabsTrigger value="tasks" data-testid="tab-tasks">
                 <CheckSquare className="h-4 w-4 mr-2" />

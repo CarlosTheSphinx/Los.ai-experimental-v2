@@ -56,7 +56,7 @@ A "single source of truth" checklist system where admin, broker, and borrower vi
 -   When a borrower uploads a document, admin sees it immediately via polling; when admin approves/rejects, borrower/broker see it immediately.
 
 **Terminology Note**:
-The database still uses `projects` as the table name, but the entire UI refers to these entities as "Deals" or "Loans" (used interchangeably). Frontend routes use `/deals/*` and `/api/deals/*` with URL rewriting middleware on the backend mapping to the underlying `/api/projects/*` handlers. Internal TypeScript variable names may still reference `project` but all user-facing text says "Deal" or "Loan".
+The database still uses `projects` as the table name, but the entire UI refers to these entities as "Deals" or "Loans" (used interchangeably). Frontend routes use `/deals/*` and `/api/deals/*` with URL rewriting middleware on the backend mapping to the underlying `/api/projects/*` handlers. Internal TypeScript variable names may still reference `project` but all user-facing text says "Deal" or "Loan". User-facing identifiers use `DEAL-{id}` format (e.g., `DEAL-27`) instead of the old `PRJ-YYYY-NNNN` project number format. All views (admin, broker, borrower portal) now display consistent deal identifiers, loan program names, and numbered-stage progress with document/task counts.
 
 ## External Dependencies
 

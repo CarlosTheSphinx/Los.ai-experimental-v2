@@ -3249,6 +3249,12 @@ export async function registerRoutes(
       if (!project) {
         return res.status(404).json({ error: 'Project not found' });
       }
+
+      let programName: string | null = null;
+      if (project.programId) {
+        const [program] = await db.select({ name: loanPrograms.name }).from(loanPrograms).where(eq(loanPrograms.id, project.programId));
+        if (program) programName = program.name;
+      }
       
       const stages = await storage.getStagesByProjectId(projectId);
       const tasks = await storage.getTasksByProjectId(projectId);
@@ -3262,7 +3268,7 @@ export async function registerRoutes(
       }));
       
       res.json({
-        project,
+        project: { ...project, programName },
         stages: stagesWithTasks,
         activity,
         documents,
@@ -3836,6 +3842,13 @@ export async function registerRoutes(
         borrowerPortalLastViewed: new Date(),
       });
       
+      // Fetch program name
+      let programName: string | null = null;
+      if (project.programId) {
+        const [program] = await db.select({ name: loanPrograms.name }).from(loanPrograms).where(eq(loanPrograms.id, project.programId));
+        if (program) programName = program.name;
+      }
+
       // Get stages with visible tasks only
       const stages = await storage.getStagesByProjectId(project.id);
       const tasks = await storage.getTasksByProjectId(project.id);
@@ -3851,7 +3864,7 @@ export async function registerRoutes(
       res.json({
         project: {
           id: project.id,
-          projectNumber: project.projectNumber,
+          programName,
           projectName: project.projectName,
           borrowerName: project.borrowerName,
           loanAmount: project.loanAmount,
