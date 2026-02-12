@@ -453,11 +453,11 @@ function DraggableResizableField({ field, index, signer, onUpdate, onRemove, con
       {displayContent()}
       
       <button
-        className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+        className="absolute -top-2 -right-2 w-5 h-5 bg-destructive text-white rounded-full flex items-center justify-center hover:bg-destructive/90 transition-colors"
         style={{ zIndex: 1001 }}
-        onClick={(e) => { 
-          e.stopPropagation(); 
-          onRemove(index); 
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove(index);
         }}
         onMouseDown={(e) => e.stopPropagation()}
         data-testid={`remove-field-${index}`}
@@ -1172,7 +1172,7 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
                         )}
                       </div>
                       {templateFieldsLoaded && (
-                        <p className="text-xs text-green-600 flex items-center gap-1">
+                        <p className="text-xs text-success flex items-center gap-1">
                           <Check className="w-3 h-3" />
                           Template loaded with pre-positioned fields
                         </p>
@@ -1190,7 +1190,7 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
                     )}
 
                     <div className="text-center space-y-4">
-                      <div 
+                      <div
                         className="border-2 border-dashed rounded-lg p-8 hover:bg-muted/50 cursor-pointer transition-colors"
                         onClick={() => fileInputRef.current?.click()}
                         data-testid="upload-area"
@@ -1225,7 +1225,7 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
 
                       {pdfData && pdfUploaded && (
                         <div className="space-y-4">
-                          <div className="flex items-center justify-center gap-2 text-green-600">
+                          <div className="flex items-center justify-center gap-2 text-success">
                             <Check className="w-5 h-5" />
                             <span>{fileName}</span>
                           </div>
@@ -1455,8 +1455,8 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
                 </div>
               </div>
               
-              <div 
-                className="flex-1 border rounded-lg bg-slate-100 min-h-0 overflow-auto"
+              <div
+                className="flex-1 border rounded-lg bg-muted/20 min-h-0 overflow-auto"
                 style={{ maxHeight: 'calc(100vh - 220px)' }}
               >
                 <div className="p-4 inline-block min-w-full">
@@ -1507,7 +1507,7 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
                         />
                       </PDFDocument>
                     ) : (
-                      <div className="flex items-center justify-center text-slate-400 w-full h-full">
+                      <div className="flex items-center justify-center text-muted-foreground w-full h-full">
                         <div className="text-center">
                           <FileText className="w-16 h-16 mx-auto mb-2 opacity-50" />
                           <p>PDF Preview Area</p>
@@ -1593,7 +1593,7 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
                   <div className="space-y-3">
                     <div className="border rounded-lg p-4 bg-muted/30 space-y-2">
                       <div className="flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 shrink-0" />
+                        <AlertTriangle className="w-4 h-4 text-warning shrink-0" />
                         <p className="text-sm font-medium">Document created — manual send required</p>
                       </div>
                       {pandadocFallbackReason && (

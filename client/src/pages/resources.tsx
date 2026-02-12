@@ -100,7 +100,7 @@ export default function ResourcesPage() {
           <div className="flex items-center gap-2">
             <p className="font-medium truncate">{doc.title}</p>
             {doc.progress?.status === 'completed' && (
-              <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+              <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
             )}
           </div>
           {doc.description && (
@@ -176,7 +176,7 @@ export default function ResourcesPage() {
                     )}
                   </div>
                   {status.agreementSigned && (
-                    <Badge variant="default" className="bg-green-500">
+                    <Badge variant="default" className="bg-success">
                       <CheckCircle2 className="h-3 w-3 mr-1" />
                       Signed
                     </Badge>
@@ -185,11 +185,11 @@ export default function ResourcesPage() {
               </CardHeader>
               <CardContent>
                 {status.agreementSigned && (
-                  <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-950 rounded-lg mb-4">
-                    <CheckCircle2 className="h-6 w-6 text-green-500" />
+                  <div className="flex items-center gap-3 p-4 bg-success/10 rounded-lg mb-4">
+                    <CheckCircle2 className="h-6 w-6 text-success" />
                     <div>
-                      <p className="font-medium text-green-700 dark:text-green-300">Agreement Signed</p>
-                      <p className="text-sm text-green-600 dark:text-green-400">
+                      <p className="font-medium text-success">Agreement Signed</p>
+                      <p className="text-sm text-success/80">
                         Signed on {new Date(status.user.partnershipAgreementSignedAt!).toLocaleDateString()}
                       </p>
                     </div>

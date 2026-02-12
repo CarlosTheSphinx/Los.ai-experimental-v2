@@ -169,10 +169,10 @@ export default function SignPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 flex items-center justify-center">
+      <div className="min-h-screen bg-muted flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-slate-600">Loading document...</p>
+          <p className="text-muted-foreground">Loading document...</p>
         </div>
       </div>
     );
@@ -180,12 +180,12 @@ export default function SignPage() {
 
   if (error || !data?.success) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-muted flex items-center justify-center p-4">
         <Card className="max-w-md w-full">
           <CardContent className="p-8 text-center">
-            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-bold text-slate-800 mb-2">Unable to Access Document</h2>
-            <p className="text-slate-600">{data?.error || "This signing link may be invalid or expired."}</p>
+            <AlertCircle className="w-16 h-16 text-destructive mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-foreground mb-2">Unable to Access Document</h2>
+            <p className="text-muted-foreground">{data?.error || "This signing link may be invalid or expired."}</p>
           </CardContent>
         </Card>
       </div>
@@ -194,17 +194,17 @@ export default function SignPage() {
 
   if (signingComplete) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-muted flex items-center justify-center p-4">
         <Card className="max-w-md w-full">
           <CardContent className="p-8 text-center">
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Check className="w-10 h-10 text-green-600" />
+            <div className="w-20 h-20 bg-success/10 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Check className="w-10 h-10 text-success" />
             </div>
-            <h2 className="text-2xl font-bold text-slate-800 mb-2">Document Signed!</h2>
-            <p className="text-slate-600 mb-6">
+            <h2 className="text-2xl font-bold text-foreground mb-2 tracking-tight">Document Signed!</h2>
+            <p className="text-muted-foreground mb-6">
               Thank you for signing. You will receive a copy of the completed document via email once all parties have signed.
             </p>
-            <p className="text-sm text-slate-500">You can close this window now.</p>
+            <p className="text-sm text-muted-foreground">You can close this window now.</p>
           </CardContent>
         </Card>
       </div>
@@ -217,22 +217,22 @@ export default function SignPage() {
   const currentPageFields = fields?.filter(f => f.pageNumber === currentPage) || [];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+    <div className="min-h-screen bg-muted">
+      <header className="bg-background border-b border-border sticky top-0 z-50 shadow-sm">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
               <FileText className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h1 className="font-bold text-slate-800">{doc?.name}</h1>
-              <p className="text-sm text-slate-500">Signing as: {signer?.name}</p>
+              <h1 className="font-bold text-foreground">{doc?.name}</h1>
+              <p className="text-sm text-muted-foreground">Signing as: {signer?.name}</p>
             </div>
           </div>
           <Button
             onClick={() => completeMutation.mutate()}
             disabled={!allFieldsFilled || completeMutation.isPending}
-            className="bg-green-600 hover:bg-green-700"
+            className="bg-success hover:bg-success/90"
             data-testid="button-complete-signing"
           >
             {completeMutation.isPending ? (
@@ -253,7 +253,7 @@ export default function SignPage() {
       <main className="flex-1 overflow-auto p-4">
         <div className="max-w-4xl mx-auto">
           {/* Page Navigation */}
-          <div className="flex items-center justify-center gap-4 mb-4 bg-white rounded-lg p-3 shadow-sm">
+          <div className="flex items-center justify-center gap-4 mb-4 bg-background rounded-lg p-3 shadow-sm">
             <Button
               variant="outline"
               size="sm"
@@ -263,7 +263,7 @@ export default function SignPage() {
             >
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            <span className="text-sm text-slate-600">
+            <span className="text-sm text-muted-foreground">
               Page {currentPage} of {numPages}
             </span>
             <Button
@@ -278,8 +278,8 @@ export default function SignPage() {
           </div>
 
           {/* PDF Document with Fields */}
-          <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-            <div ref={pdfContainerRef} className="relative flex justify-center p-4 bg-slate-100">
+          <div className="bg-background rounded-lg shadow-lg overflow-hidden">
+            <div ref={pdfContainerRef} className="relative flex justify-center p-4 bg-muted">
               {doc?.fileData && (
                 <Document
                   file={doc.fileData}
@@ -340,13 +340,13 @@ export default function SignPage() {
                         >
                           {hasValue ? (
                             field.fieldType === 'signature' || field.fieldType === 'initial' ? (
-                              <img 
-                                src={fieldValues[field.id]} 
-                                alt="Signature" 
+                              <img
+                                src={fieldValues[field.id]}
+                                alt="Signature"
                                 className="w-full h-full object-contain"
                               />
                             ) : (
-                              <span className={`text-xs font-medium px-1 truncate ${isPreFilled ? 'text-slate-700' : ''}`}>
+                              <span className={`text-xs font-medium px-1 truncate ${isPreFilled ? 'text-foreground' : ''}`}>
                                 {fieldValues[field.id]}
                               </span>
                             )
@@ -369,7 +369,7 @@ export default function SignPage() {
 
           {/* Field Summary Panel */}
           <Card className="mt-6">
-            <CardHeader className="bg-slate-50 border-b py-3">
+            <CardHeader className="bg-muted border-b border-border py-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <PenTool className="w-4 h-4 text-primary" />
                 Fields to Complete ({fields?.filter(f => !preFilledFieldIds.has(f.id) && fieldValues[f.id]).length || 0}/{fields?.filter(f => !preFilledFieldIds.has(f.id)).length || 0})
@@ -385,10 +385,10 @@ export default function SignPage() {
                     <div
                       key={field.id}
                       className={`p-3 rounded-lg border-2 transition-all ${
-                        isPreFilled 
-                          ? 'bg-slate-50 border-slate-300'
-                          : hasValue 
-                            ? 'bg-green-50 border-green-300' 
+                        isPreFilled
+                          ? 'bg-muted border-border'
+                          : hasValue
+                            ? 'bg-success/10 border-success/20'
                             : ''
                       }`}
                       style={{ 
@@ -399,18 +399,18 @@ export default function SignPage() {
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                           {isPreFilled ? (
-                            <Check className="w-4 h-4 text-slate-500" />
+                            <Check className="w-4 h-4 text-muted-foreground" />
                           ) : hasValue ? (
-                            <Check className="w-4 h-4 text-green-600" />
+                            <Check className="w-4 h-4 text-success" />
                           ) : (
                             <AlertCircle className="w-4 h-4" style={{ color: signer?.color }} />
                           )}
-                          <span className={`text-sm font-medium capitalize ${isPreFilled ? 'text-slate-500' : ''}`}>
+                          <span className={`text-sm font-medium capitalize ${isPreFilled ? 'text-muted-foreground' : ''}`}>
                             {field.fieldType}
-                            {field.label && <span className="text-slate-500 ml-1">({field.label})</span>}
-                            {isPreFilled && <span className="text-slate-400 ml-1">(pre-filled)</span>}
+                            {field.label && <span className="text-muted-foreground ml-1">({field.label})</span>}
+                            {isPreFilled && <span className="text-muted-foreground ml-1">(pre-filled)</span>}
                           </span>
-                          <span className="text-xs text-slate-400">Page {field.pageNumber}</span>
+                          <span className="text-xs text-muted-foreground">Page {field.pageNumber}</span>
                         </div>
                         
                         {field.fieldType === 'text' && !hasValue && !isPreFilled && (
@@ -449,7 +449,7 @@ export default function SignPage() {
                       
                       {/* Show pre-filled value for display */}
                       {isPreFilled && hasValue && (
-                        <span className="text-xs text-slate-600 truncate max-w-[150px]">
+                        <span className="text-xs text-muted-foreground truncate max-w-[150px]">
                           {fieldValues[field.id]}
                         </span>
                       )}
@@ -460,7 +460,7 @@ export default function SignPage() {
               </div>
 
               {!allFieldsFilled && (
-                <p className="text-sm text-amber-600 mt-4 flex items-center gap-2">
+                <p className="text-sm text-warning mt-4 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4" />
                   Please complete all fields before submitting
                 </p>
@@ -477,7 +477,7 @@ export default function SignPage() {
               <CardTitle>Draw Your {fields?.find(f => f.id === activeSignatureField)?.fieldType === 'initial' ? 'Initials' : 'Signature'}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="border-2 border-slate-300 rounded-lg overflow-hidden bg-white">
+              <div className="border-2 border-border rounded-lg overflow-hidden bg-background">
                 <canvas
                   ref={canvasRef}
                   width={450}

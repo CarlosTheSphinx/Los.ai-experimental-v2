@@ -100,14 +100,14 @@ function QuoteDocumentStatus({ quoteId }: { quoteId: number }) {
     switch (effectiveStatus) {
       case 'pending':
         return (
-          <Badge className="bg-amber-100 text-amber-700 border-amber-200">
+          <Badge className="bg-warning/10 text-warning border-border">
             <Clock className="w-3 h-3 mr-1" />
             Awaiting Signature
           </Badge>
         );
       case 'completed':
         return (
-          <Badge className="bg-green-100 text-green-700 border-green-200">
+          <Badge className="bg-success/10 text-success border-border">
             <CheckCircle className="w-3 h-3 mr-1" />
             Signed
           </Badge>
@@ -125,16 +125,16 @@ function QuoteDocumentStatus({ quoteId }: { quoteId: number }) {
   };
 
   return (
-    <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-100">
+    <div className="mt-4 p-4 bg-info/5 rounded-lg border border-info/20">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3 flex-wrap">
           {getStatusBadge()}
-          <span className="text-sm text-slate-600 flex items-center gap-1">
+          <span className="text-sm text-foreground flex items-center gap-1">
             <Calendar className="w-3.5 h-3.5" />
             Sent: {sentDate.toLocaleDateString()}
           </span>
           {expirationDate && (
-            <span className={`text-sm flex items-center gap-1 ${isExpired ? 'text-red-500' : 'text-slate-500'}`}>
+            <span className={`text-sm flex items-center gap-1 ${isExpired ? 'text-destructive' : 'text-muted-foreground'}`}>
               <Clock className="w-3.5 h-3.5" />
               {isExpired ? 'Expired' : 'Expires'}: {expirationDate.toLocaleDateString()}
             </span>
@@ -201,11 +201,11 @@ function QuoteEsignStatus({ quoteId }: { quoteId: number }) {
       case 'draft':
         return <Badge variant="secondary"><Edit className="w-3 h-3 mr-1" />Draft</Badge>;
       case 'sent':
-        return <Badge className="bg-amber-100 text-amber-700 border-amber-200"><Clock className="w-3 h-3 mr-1" />Sent</Badge>;
+        return <Badge className="bg-warning/10 text-warning border-border"><Clock className="w-3 h-3 mr-1" />Sent</Badge>;
       case 'viewed':
-        return <Badge className="bg-blue-100 text-blue-700 border-blue-200"><FileText className="w-3 h-3 mr-1" />Viewed</Badge>;
+        return <Badge className="bg-info/10 text-info border-border"><FileText className="w-3 h-3 mr-1" />Viewed</Badge>;
       case 'completed':
-        return <Badge className="bg-green-100 text-green-700 border-green-200"><CheckCircle className="w-3 h-3 mr-1" />Completed</Badge>;
+        return <Badge className="bg-success/10 text-success border-border"><CheckCircle className="w-3 h-3 mr-1" />Completed</Badge>;
       case 'declined':
         return <Badge variant="destructive">Declined</Badge>;
       default:
@@ -216,12 +216,12 @@ function QuoteEsignStatus({ quoteId }: { quoteId: number }) {
   return (
     <div className="mt-3 space-y-2">
       {data.envelopes.map(envelope => (
-        <div key={envelope.id} className="p-3 bg-purple-50 rounded-lg border border-purple-100">
+        <div key={envelope.id} className="p-3 bg-primary/5 rounded-lg border border-primary/20">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-3 flex-wrap">
-              <Badge variant="outline" className="text-purple-600 border-purple-300">PandaDoc</Badge>
+              <Badge variant="outline" className="text-primary border-primary/30">PandaDoc</Badge>
               {getStatusBadge(envelope.status)}
-              <span className="text-sm text-slate-600">{envelope.documentName}</span>
+              <span className="text-sm text-muted-foreground">{envelope.documentName}</span>
             </div>
             <div className="flex items-center gap-2">
               {envelope.sentAt && (
@@ -321,8 +321,8 @@ export default function Quotes() {
           <div className="flex items-center gap-2 md:gap-3">
             <FileText className="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" />
             <div className="min-w-0">
-              <h1 className="text-lg md:text-xl font-bold text-primary truncate">Saved Quotes</h1>
-              <p className="text-xs md:text-sm text-slate-500 hidden sm:block">View your commission details</p>
+              <h1 className="text-lg md:text-xl font-bold text-primary truncate tracking-tight">Saved Quotes</h1>
+              <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">View your commission details</p>
             </div>
           </div>
         </div>
@@ -336,9 +336,9 @@ export default function Quotes() {
         ) : quotes.length === 0 ? (
           <Card className="text-center py-12">
             <CardContent>
-              <FileText className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-              <h3 className="text-xl font-semibold text-slate-600 mb-2">No Saved Quotes</h3>
-              <p className="text-slate-400">Generate a loan pricing quote and save it to see it here.</p>
+              <FileText className="w-16 h-16 mx-auto text-muted-foreground/30 mb-4" />
+              <h3 className="text-xl font-semibold text-foreground mb-2">No Saved Quotes</h3>
+              <p className="text-muted-foreground">Generate a loan pricing quote and save it to see it here.</p>
             </CardContent>
           </Card>
         ) : (
@@ -373,7 +373,7 @@ export default function Quotes() {
               
               return (
                 <Card key={quote.id} className="overflow-hidden" data-testid={`card-quote-${quote.id}`}>
-                  <CardHeader className="bg-slate-50 border-b border-slate-100 py-3 md:py-4 px-4 md:px-6">
+                  <CardHeader className="bg-muted/50 border-b border-border py-3 md:py-4 px-4 md:px-6">
                     <div className="flex items-start md:items-center justify-between gap-3 flex-wrap">
                       <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
                         <div className="h-8 w-8 md:h-10 md:w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
@@ -383,7 +383,7 @@ export default function Quotes() {
                           <CardTitle className="text-base md:text-lg truncate">
                             {quote.customerFirstName} {quote.customerLastName}
                           </CardTitle>
-                          <div className="flex items-center gap-1 text-xs md:text-sm text-slate-500 truncate">
+                          <div className="flex items-center gap-1 text-xs md:text-sm text-muted-foreground truncate">
                             <MapPin className="w-3 h-3 shrink-0" />
                             <span className="truncate">{quote.propertyAddress}</span>
                           </div>
@@ -391,7 +391,7 @@ export default function Quotes() {
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <div className="text-right">
-                          <div className="text-xs text-slate-400 flex items-center gap-1">
+                          <div className="text-xs text-muted-foreground flex items-center gap-1">
                             <Calendar className="w-3 h-3" />
                             {createdAt}
                           </div>
@@ -401,7 +401,7 @@ export default function Quotes() {
                           size="icon"
                           onClick={() => deleteMutation.mutate(quote.id)}
                           disabled={deleteMutation.isPending}
-                          className="text-red-500 hover:text-red-600 hover:bg-red-50 h-8 w-8"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8"
                           data-testid={`button-delete-quote-${quote.id}`}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -412,96 +412,96 @@ export default function Quotes() {
                   <CardContent className="p-4 md:p-5">
                     <div className="grid grid-cols-2 gap-3 md:gap-4 mb-4">
                       <div>
-                        <div className="text-xs text-slate-400 uppercase tracking-wide">Interest Rate</div>
+                        <div className="text-xs text-muted-foreground uppercase tracking-wide">Interest Rate</div>
                         <div className="text-xl font-bold text-primary">{quote.interestRate}</div>
                       </div>
                       <div>
-                        <div className="text-xs text-slate-400 uppercase tracking-wide">{isRTLQuote ? 'Total Cost' : 'Loan Amount'}</div>
+                        <div className="text-xs text-muted-foreground uppercase tracking-wide">{isRTLQuote ? 'Total Cost' : 'Loan Amount'}</div>
                         <div className="font-semibold">${displayLoanAmount?.toLocaleString() || 'N/A'}</div>
                       </div>
                       <div>
-                        <div className="text-xs text-slate-400 uppercase tracking-wide">Points</div>
+                        <div className="text-xs text-muted-foreground uppercase tracking-wide">Points</div>
                         <div className="font-semibold flex items-center gap-1">
-                          <Percent className="w-3 h-3 text-slate-400" />
+                          <Percent className="w-3 h-3 text-muted-foreground" />
                           {quote.pointsCharged?.toFixed(2)}
                         </div>
                       </div>
                       <div>
-                        <div className="text-xs text-slate-400 uppercase tracking-wide">Program</div>
+                        <div className="text-xs text-muted-foreground uppercase tracking-wide">Program</div>
                         <div className="font-semibold">{displayProgram || 'N/A'}</div>
                       </div>
                     </div>
 
                     {isRTLQuote ? (
-                      <div className="bg-slate-50 rounded-lg p-4 border border-slate-100">
+                      <div className="bg-muted/50 rounded-lg p-4 border border-border">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                           <div>
-                            <div className="text-slate-500">As-Is Value</div>
+                            <div className="text-muted-foreground">As-Is Value</div>
                             <div className="font-medium">${asIsValue.toLocaleString()}</div>
                           </div>
                           <div>
-                            <div className="text-slate-500">ARV</div>
+                            <div className="text-muted-foreground">ARV</div>
                             <div className="font-medium">${arv.toLocaleString()}</div>
                           </div>
                           <div>
-                            <div className="text-slate-500">Rehab Budget</div>
+                            <div className="text-muted-foreground">Rehab Budget</div>
                             <div className="font-medium">${rehabBudget.toLocaleString()}</div>
                           </div>
                           <div>
-                            <div className="text-slate-500">Total Loan Amount</div>
+                            <div className="text-muted-foreground">Total Loan Amount</div>
                             <div className="font-semibold text-primary">${totalCost.toLocaleString()}</div>
                           </div>
                         </div>
-                        <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-2 gap-4 text-sm">
+                        <div className="mt-3 pt-3 border-t border-border grid grid-cols-2 gap-4 text-sm">
                           <div>
-                            <div className="text-slate-500">Additional Points (above 2 min)</div>
+                            <div className="text-muted-foreground">Additional Points (above 2 min)</div>
                             <div className="font-medium">{additionalPoints.toFixed(2)}</div>
                           </div>
                           <div>
-                            <div className="text-slate-500">Points Amount</div>
-                            <div className="font-semibold text-green-600">${rtlCommission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                            <div className="text-muted-foreground">Points Amount</div>
+                            <div className="font-semibold text-success">${rtlCommission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                           </div>
                         </div>
                       </div>
                     ) : (
-                      <div className="bg-slate-50 rounded-lg p-4 border border-slate-100">
+                      <div className="bg-muted/50 rounded-lg p-4 border border-border">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                           <div>
-                            <div className="text-slate-500">Loan Amount</div>
+                            <div className="text-muted-foreground">Loan Amount</div>
                             <div className="font-semibold text-primary">${dscrLoanAmount.toLocaleString()}</div>
                           </div>
                           <div>
-                            <div className="text-slate-500">Points Charged</div>
+                            <div className="text-muted-foreground">Points Charged</div>
                             <div className="font-medium">{quote.pointsCharged?.toFixed(2) || '0.00'}</div>
                           </div>
                           <div>
-                            <div className="text-slate-500">TPO Premium</div>
+                            <div className="text-muted-foreground">TPO Premium</div>
                             <div className="font-medium">${(quote.tpoPremiumAmount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                           </div>
                           <div>
-                            <div className="text-slate-500">Total Revenue</div>
+                            <div className="text-muted-foreground">Total Revenue</div>
                             <div className="font-medium">${(quote.totalRevenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                           </div>
                         </div>
-                        <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-2 gap-4 text-sm">
+                        <div className="mt-3 pt-3 border-t border-border grid grid-cols-2 gap-4 text-sm">
                           <div>
-                            <div className="text-slate-500">Additional Points (above 1 min)</div>
+                            <div className="text-muted-foreground">Additional Points (above 1 min)</div>
                             <div className="font-medium">{dscrAdditionalPoints.toFixed(2)}</div>
                           </div>
                           <div>
-                            <div className="text-slate-500">Your Earnings</div>
-                            <div className="font-semibold text-green-600">${dscrCommission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                            <div className="text-muted-foreground">Your Earnings</div>
+                            <div className="font-semibold text-success">${dscrCommission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                           </div>
                         </div>
                       </div>
                     )}
 
-                    <div className="mt-4 bg-green-50 rounded-lg p-4 border border-green-200 flex items-center justify-between">
-                      <span className="font-semibold text-green-700 flex items-center gap-2">
+                    <div className="mt-4 bg-success/10 rounded-lg p-4 border border-success/20 flex items-center justify-between">
+                      <span className="font-semibold text-success flex items-center gap-2">
                         <DollarSign className="w-5 h-5" />
                         Your Commission
                       </span>
-                      <span className="text-2xl font-bold text-green-600" data-testid={`text-commission-${quote.id}`}>
+                      <span className="text-2xl font-bold text-success" data-testid={`text-commission-${quote.id}`}>
                         ${isRTLQuote 
                           ? rtlCommission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                           : dscrCommission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -512,7 +512,7 @@ export default function Quotes() {
                     <QuoteDocumentStatus quoteId={quote.id} />
                     <QuoteEsignStatus quoteId={quote.id} />
 
-                    <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-2">
+                    <div className="mt-4 pt-4 border-t border-border flex flex-col gap-2">
                       <div className="flex gap-2">
                         <Button
                           variant="outline"

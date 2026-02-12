@@ -79,17 +79,17 @@ interface ProjectDetail {
 }
 
 const statusColors: Record<string, string> = {
-  pending: "bg-slate-100 text-slate-700",
-  in_progress: "bg-blue-100 text-blue-700",
-  completed: "bg-green-100 text-green-700",
-  blocked: "bg-red-100 text-red-700",
+  pending: "bg-muted text-muted-foreground",
+  in_progress: "bg-info/10 text-info",
+  completed: "bg-success/10 text-success",
+  blocked: "bg-destructive/10 text-destructive",
 };
 
 const priorityColors: Record<string, string> = {
-  low: "bg-slate-100 text-slate-700",
-  medium: "bg-yellow-100 text-yellow-700",
-  high: "bg-orange-100 text-orange-700",
-  critical: "bg-red-100 text-red-700",
+  low: "bg-muted text-muted-foreground",
+  medium: "bg-warning/10 text-warning",
+  high: "bg-warning/10 text-warning",
+  critical: "bg-destructive/10 text-destructive",
 };
 
 export default function AdminProjectDetail() {
@@ -301,9 +301,9 @@ export default function AdminProjectDetail() {
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
                               {task.status === "completed" ? (
-                                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                <CheckCircle2 className="h-4 w-4 text-success" />
                               ) : task.status === "blocked" ? (
-                                <AlertCircle className="h-4 w-4 text-red-600" />
+                                <AlertCircle className="h-4 w-4 text-destructive" />
                               ) : (
                                 <Clock className="h-4 w-4 text-muted-foreground" />
                               )}
@@ -361,7 +361,7 @@ export default function AdminProjectDetail() {
                           {stageTasks.map((task) => (
                             <div key={task.id} className="flex items-center gap-2 text-sm">
                               {task.status === "completed" ? (
-                                <CheckCircle2 className="h-3 w-3 text-green-600" />
+                                <CheckCircle2 className="h-3 w-3 text-success" />
                               ) : (
                                 <Clock className="h-3 w-3 text-muted-foreground" />
                               )}

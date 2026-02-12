@@ -153,15 +153,15 @@ export default function BorrowerQuote() {
 
   return (
     <div className="min-h-screen">
-      <header className="bg-white/80 dark:bg-background/80 backdrop-blur-md border-b border-primary/10 sticky top-0 z-40">
+      <header className="bg-white/80 backdrop-blur-md border-b border-primary/10 sticky top-0 z-40">
         <div className="px-4 md:px-6 py-3 md:py-4">
           <div className="flex items-center gap-2 md:gap-3 min-w-0">
             <Calculator className="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" />
             <div className="min-w-0">
-              <h1 className="text-lg md:text-xl font-bold text-primary truncate" data-testid="text-page-title">
+              <h1 className="text-lg md:text-xl font-bold text-primary truncate tracking-tight" data-testid="text-page-title">
                 Get a Quote
               </h1>
-              <p className="text-xs md:text-sm text-slate-500 hidden sm:block">
+              <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">
                 Get instant loan pricing
               </p>
             </div>
@@ -389,15 +389,15 @@ function BorrowerDSCRResult({
 }) {
   if (result.error || !result.success) {
     return (
-      <Card className="border-red-100 bg-red-50/50">
-        <CardHeader className="text-red-700">
+      <Card className="border-destructive/20 bg-destructive/10">
+        <CardHeader className="text-destructive">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-6 h-6" />
             <CardTitle>Pricing Error</CardTitle>
           </div>
         </CardHeader>
         <CardContent>
-          <p className="text-red-600 mb-4" data-testid="text-pricing-error">
+          <p className="text-destructive mb-4" data-testid="text-pricing-error">
             {result.message || result.error || "An unknown error occurred."}
           </p>
         </CardContent>
@@ -446,16 +446,16 @@ function BorrowerDSCRResult({
 
   return (
     <div className="space-y-4">
-      <Card className="border-green-200 bg-green-50/50 dark:bg-green-950/20">
+      <Card className="border-success/30 bg-success/5">
         <CardHeader>
-          <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+          <div className="flex items-center gap-2 text-success">
             <CheckCircle2 className="w-6 h-6" />
             <CardTitle>Your Qualified Rate</CardTitle>
           </div>
         </CardHeader>
         <CardContent>
           <div className="text-center py-4">
-            <p className="text-5xl font-bold text-green-700 dark:text-green-400" data-testid="text-interest-rate">
+            <p className="text-5xl font-bold text-success" data-testid="text-interest-rate">
               {formattedRate}
             </p>
             <p className="text-sm text-muted-foreground mt-2">Interest Rate</p>
@@ -570,8 +570,8 @@ function BorrowerRTLResult({
 }) {
   if (!result.eligible) {
     return (
-      <Card className="border-red-100 bg-red-50/50">
-        <CardHeader className="text-red-700">
+      <Card className="border-destructive/20 bg-destructive/10">
+        <CardHeader className="text-destructive">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-6 h-6" />
             <CardTitle>Not Eligible</CardTitle>
@@ -579,7 +579,7 @@ function BorrowerRTLResult({
         </CardHeader>
         <CardContent>
           {result.disqualifiers && result.disqualifiers.length > 0 && (
-            <ul className="text-sm text-red-600 list-disc list-inside space-y-1" data-testid="text-disqualifiers">
+            <ul className="text-sm text-destructive list-disc list-inside space-y-1" data-testid="text-disqualifiers">
               {result.disqualifiers.map((d, i) => (
                 <li key={i}>{d.message || d.reason}</li>
               ))}
@@ -647,16 +647,16 @@ function BorrowerRTLResult({
 
   return (
     <div className="space-y-4">
-      <Card className="border-green-200 bg-green-50/50 dark:bg-green-950/20">
+      <Card className="border-success/30 bg-success/5">
         <CardHeader>
-          <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+          <div className="flex items-center gap-2 text-success">
             <CheckCircle2 className="w-6 h-6" />
             <CardTitle>Your Qualified Rate</CardTitle>
           </div>
         </CardHeader>
         <CardContent>
           <div className="text-center py-4">
-            <p className="text-5xl font-bold text-green-700 dark:text-green-400" data-testid="text-interest-rate">
+            <p className="text-5xl font-bold text-success" data-testid="text-interest-rate">
               {formattedRate}
             </p>
             <p className="text-sm text-muted-foreground mt-2">Interest Rate</p>

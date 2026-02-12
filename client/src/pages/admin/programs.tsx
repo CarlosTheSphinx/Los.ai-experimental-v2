@@ -1576,9 +1576,9 @@ const ruleTypeOptions = [
 ];
 
 const severityOptions = [
-  { value: "fail", label: "Fail", icon: AlertTriangle, color: "text-red-600" },
-  { value: "warn", label: "Warning", icon: AlertTriangle, color: "text-amber-600" },
-  { value: "info", label: "Info", icon: Info, color: "text-blue-600" },
+  { value: "fail", label: "Fail", icon: AlertTriangle, color: "text-destructive" },
+  { value: "warn", label: "Warning", icon: AlertTriangle, color: "text-warning" },
+  { value: "info", label: "Info", icon: Info, color: "text-info" },
 ];
 
 function DocumentRulesEditor({ templateId, programId, documentName }: { templateId: number; programId: number; documentName: string }) {

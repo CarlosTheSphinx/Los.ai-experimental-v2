@@ -449,8 +449,8 @@ export default function ProjectDetail() {
 
   const getStageIcon = (status: string) => {
     switch (status) {
-      case 'completed': return <CheckCircle2 className="h-5 w-5 text-green-500" />;
-      case 'in_progress': return <Clock className="h-5 w-5 text-blue-500" />;
+      case 'completed': return <CheckCircle2 className="h-5 w-5 text-success" />;
+      case 'in_progress': return <Clock className="h-5 w-5 text-info" />;
       default: return <Circle className="h-5 w-5 text-muted-foreground" />;
     }
   };
@@ -458,7 +458,7 @@ export default function ProjectDetail() {
   const getPriorityBadge = (priority: string) => {
     switch (priority) {
       case 'critical': return <Badge variant="destructive" className="text-xs">Critical</Badge>;
-      case 'high': return <Badge variant="secondary" className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 text-xs">High</Badge>;
+      case 'high': return <Badge variant="secondary" className="bg-warning/10 text-warning text-xs">High</Badge>;
       case 'medium': return <Badge variant="secondary" className="text-xs">Medium</Badge>;
       default: return null;
     }
@@ -466,8 +466,8 @@ export default function ProjectDetail() {
 
   const getDealDocStatusBadge = (status: string) => {
     switch (status) {
-      case 'approved': return <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-xs">Approved</Badge>;
-      case 'uploaded': return <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 text-xs">Uploaded</Badge>;
+      case 'approved': return <Badge className="bg-success/10 text-success text-xs">Approved</Badge>;
+      case 'uploaded': return <Badge className="bg-info/10 text-info text-xs">Uploaded</Badge>;
       case 'rejected': return <Badge variant="destructive" className="text-xs">Rejected</Badge>;
       case 'not_applicable': return <Badge variant="secondary" className="text-xs">N/A</Badge>;
       default: return <Badge variant="outline" className="text-xs">Pending</Badge>;
@@ -520,13 +520,13 @@ export default function ProjectDetail() {
         </Link>
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground font-mono">DEAL-{project.id}</span>
+            <span className="text-sm text-muted-foreground font-mono tracking-tight">DEAL-{project.id}</span>
             <Badge variant={project.status === 'active' ? 'default' : 'secondary'}>
               {project.status}
             </Badge>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl font-semibold" data-testid="text-deal-name">{project.projectName}</h1>
+            <h1 className="text-xl font-semibold tracking-tight" data-testid="text-deal-name">{project.projectName}</h1>
             {project.programName && (
               <Badge variant="outline" data-testid="badge-program-name">
                 {project.programName}
@@ -639,8 +639,8 @@ export default function ProjectDetail() {
                         <div key={stage.id} className="flex flex-col items-center relative flex-1" data-testid={`progress-stage-${stage.id}`}>
                           <div
                             className={`h-12 w-12 rounded-full flex items-center justify-center text-sm font-semibold border-[3px] flex-shrink-0 transition-all z-10 ${
-                              isCompleted ? 'bg-green-500 border-green-500 text-white' :
-                              isActive ? 'bg-blue-500 border-blue-500 text-white' :
+                              isCompleted ? 'bg-success border-success text-white' :
+                              isActive ? 'bg-primary border-primary text-white' :
                               'bg-muted border-border text-muted-foreground'
                             }`}
                             data-testid={`stage-indicator-${stage.id}`}
@@ -649,8 +649,8 @@ export default function ProjectDetail() {
                           </div>
                           <div className="mt-3 text-center max-w-[120px]">
                             <div className={`text-[13px] font-medium leading-tight ${
-                              isCompleted ? 'text-green-600 dark:text-green-400' :
-                              isActive ? 'text-blue-600 dark:text-blue-400 font-semibold' :
+                              isCompleted ? 'text-success' :
+                              isActive ? 'text-primary font-semibold' :
                               'text-muted-foreground'
                             }`}>
                               {stage.stageName}
@@ -664,7 +664,7 @@ export default function ProjectDetail() {
                           {i < filteredStages.length - 1 && (
                             <div
                               className={`absolute top-6 left-[calc(50%+24px)] h-[3px] z-0 ${
-                                isCompleted ? 'bg-green-300 dark:bg-green-700' : 'bg-border'
+                                isCompleted ? 'bg-success/50' : 'bg-border'
                               }`}
                               style={{ width: 'calc(100% - 48px)' }}
                             />
@@ -692,8 +692,8 @@ export default function ProjectDetail() {
           <div className="grid md:grid-cols-4 gap-4">
             <Card className="p-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-green-100 dark:bg-green-900 flex items-center justify-center">
-                  <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
+                <div className="h-10 w-10 rounded-lg bg-success/10 flex items-center justify-center">
+                  <DollarSign className="h-5 w-5 text-success" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Loan Amount</div>
@@ -703,8 +703,8 @@ export default function ProjectDetail() {
             </Card>
             <Card className="p-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                  <span className="text-blue-600 dark:text-blue-400 font-semibold text-sm">%</span>
+                <div className="h-10 w-10 rounded-lg bg-info/10 flex items-center justify-center">
+                  <span className="text-info font-semibold text-sm">%</span>
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Interest Rate</div>
@@ -714,8 +714,8 @@ export default function ProjectDetail() {
             </Card>
             <Card className="p-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-purple-100 dark:bg-purple-900 flex items-center justify-center">
-                  <Calendar className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Calendar className="h-5 w-5 text-primary" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Term</div>
@@ -725,8 +725,8 @@ export default function ProjectDetail() {
             </Card>
             <Card className="p-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-orange-100 dark:bg-orange-900 flex items-center justify-center">
-                  <Building2 className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                <div className="h-10 w-10 rounded-lg bg-warning/10 flex items-center justify-center">
+                  <Building2 className="h-5 w-5 text-warning" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Property</div>
@@ -974,8 +974,8 @@ export default function ProjectDetail() {
                       <div key={stage.id} className="flex flex-col items-center relative flex-1" data-testid={`progress-stage-${stage.id}`}>
                         <div
                           className={`h-12 w-12 rounded-full flex items-center justify-center text-sm font-semibold border-[3px] flex-shrink-0 transition-all z-10 ${
-                            isCompleted ? 'bg-green-500 border-green-500 text-white' :
-                            isActive ? 'bg-blue-500 border-blue-500 text-white' :
+                            isCompleted ? 'bg-success border-success text-white' :
+                            isActive ? 'bg-primary border-primary text-white' :
                             'bg-muted border-border text-muted-foreground'
                           }`}
                           data-testid={`stage-indicator-${stage.id}`}
@@ -984,8 +984,8 @@ export default function ProjectDetail() {
                         </div>
                         <div className="mt-3 text-center max-w-[120px]">
                           <div className={`text-[13px] font-medium leading-tight ${
-                            isCompleted ? 'text-green-600 dark:text-green-400' :
-                            isActive ? 'text-blue-600 dark:text-blue-400 font-semibold' :
+                            isCompleted ? 'text-success' :
+                            isActive ? 'text-primary font-semibold' :
                             'text-muted-foreground'
                           }`}>
                             {stage.stageName}
@@ -999,7 +999,7 @@ export default function ProjectDetail() {
                         {i < filteredStages.length - 1 && (
                           <div
                             className={`absolute top-6 left-[calc(50%+24px)] h-[3px] z-0 ${
-                              isCompleted ? 'bg-green-300 dark:bg-green-700' : 'bg-border'
+                              isCompleted ? 'bg-success/50' : 'bg-border'
                             }`}
                             style={{ width: 'calc(100% - 48px)' }}
                           />
@@ -1034,8 +1034,8 @@ export default function ProjectDetail() {
                   <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Borrower</div>
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
-                      <div className="h-7 w-7 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center flex-shrink-0">
-                        <User className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                      <div className="h-7 w-7 rounded-full bg-info/10 flex items-center justify-center flex-shrink-0">
+                        <User className="h-3.5 w-3.5 text-info" />
                       </div>
                       <div className="min-w-0">
                         <div className="font-medium truncate">{project.borrowerName}</div>
@@ -1117,8 +1117,8 @@ export default function ProjectDetail() {
                       {processors.map((proc) => (
                         <div key={proc.id} className="flex items-center justify-between gap-2" data-testid={`contact-processor-${proc.id}`}>
                           <div className="flex items-center gap-2 min-w-0">
-                            <div className="h-7 w-7 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center flex-shrink-0">
-                              <User className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                            <div className="h-7 w-7 rounded-full bg-success/10 flex items-center justify-center flex-shrink-0">
+                              <User className="h-3.5 w-3.5 text-success" />
                             </div>
                             <div className="min-w-0">
                               <div className="font-medium truncate">{proc.user.fullName}</div>
@@ -1200,8 +1200,8 @@ export default function ProjectDetail() {
           <div className="grid md:grid-cols-4 gap-4">
             <Card className="p-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-green-100 dark:bg-green-900 flex items-center justify-center">
-                  <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
+                <div className="h-10 w-10 rounded-lg bg-success/10 flex items-center justify-center">
+                  <DollarSign className="h-5 w-5 text-success" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Loan Amount</div>
@@ -1211,8 +1211,8 @@ export default function ProjectDetail() {
             </Card>
             <Card className="p-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                  <span className="text-blue-600 dark:text-blue-400 font-semibold text-sm">%</span>
+                <div className="h-10 w-10 rounded-lg bg-info/10 flex items-center justify-center">
+                  <span className="text-info font-semibold text-sm">%</span>
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Interest Rate</div>
@@ -1222,8 +1222,8 @@ export default function ProjectDetail() {
             </Card>
             <Card className="p-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-purple-100 dark:bg-purple-900 flex items-center justify-center">
-                  <Calendar className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Calendar className="h-5 w-5 text-primary" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Term</div>
@@ -1233,8 +1233,8 @@ export default function ProjectDetail() {
             </Card>
             <Card className="p-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-orange-100 dark:bg-orange-900 flex items-center justify-center">
-                  <Building2 className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                <div className="h-10 w-10 rounded-lg bg-warning/10 flex items-center justify-center">
+                  <Building2 className="h-5 w-5 text-warning" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Property</div>
@@ -1454,7 +1454,7 @@ export default function ProjectDetail() {
                                 title="View in Google Drive"
                                 data-testid={`button-drive-view-${doc.id}`}
                               >
-                                <HardDrive className="h-4 w-4 text-green-600" />
+                                <HardDrive className="h-4 w-4 text-success" />
                               </Button>
                             )}
                             {doc.driveUploadStatus === 'PENDING' && (
@@ -1540,9 +1540,9 @@ export default function ProjectDetail() {
                               data-testid={`deal-doc-row-${doc.id}`}
                             >
                               {doc.status === 'approved' ? (
-                                <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
+                                <CheckCircle2 className="h-5 w-5 text-success shrink-0" />
                               ) : doc.status === 'uploaded' ? (
-                                <Clock className="h-5 w-5 text-blue-500 shrink-0" />
+                                <Clock className="h-5 w-5 text-info shrink-0" />
                               ) : doc.status === 'rejected' ? (
                                 <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
                               ) : (
@@ -1613,9 +1613,9 @@ export default function ProjectDetail() {
                               data-testid={`deal-doc-row-${doc.id}`}
                             >
                               {doc.status === 'approved' ? (
-                                <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
+                                <CheckCircle2 className="h-5 w-5 text-success shrink-0" />
                               ) : doc.status === 'uploaded' ? (
-                                <Clock className="h-5 w-5 text-blue-500 shrink-0" />
+                                <Clock className="h-5 w-5 text-info shrink-0" />
                               ) : (
                                 <Circle className="h-5 w-5 text-muted-foreground shrink-0" />
                               )}

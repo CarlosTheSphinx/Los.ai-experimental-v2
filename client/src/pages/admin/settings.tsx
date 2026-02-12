@@ -90,17 +90,17 @@ const COLOR_OPTIONS = [
 ];
 
 const stageColorMap: Record<string, string> = {
-  gray: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
-  yellow: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-  orange: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
-  blue: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  emerald: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
-  cyan: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200",
-  indigo: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
-  teal: "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200",
-  green: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  red: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-  slate: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+  gray: "bg-muted text-muted-foreground",
+  yellow: "bg-warning/10 text-warning",
+  orange: "bg-warning/10 text-warning",
+  blue: "bg-primary/10 text-primary",
+  emerald: "bg-success/10 text-success",
+  cyan: "bg-info/10 text-info",
+  indigo: "bg-primary/10 text-primary",
+  teal: "bg-info/10 text-info",
+  green: "bg-success/10 text-success",
+  red: "bg-destructive/10 text-destructive",
+  slate: "bg-muted text-muted-foreground",
 };
 
 const CONFIG_TABS = [
@@ -784,8 +784,8 @@ export default function AdminSettings() {
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900">
-                          <FileStack className="h-5 w-5 text-blue-600 dark:text-blue-300" />
+                        <div className="p-2 rounded-lg bg-primary/10">
+                          <FileStack className="h-5 w-5 text-primary" />
                         </div>
                         <div>
                           <CardTitle className="text-lg">Document Templates</CardTitle>
@@ -830,7 +830,7 @@ export default function AdminSettings() {
                       <div className="border rounded-lg p-4 space-y-3" data-testid="integration-twilio">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <Phone className="h-5 w-5 text-blue-500" />
+                            <Phone className="h-5 w-5 text-primary" />
                             <span className="font-medium">Twilio SMS</span>
                           </div>
                           {integrationsData?.integrations.twilio?.connected ? (
@@ -858,7 +858,7 @@ export default function AdminSettings() {
                       <div className="border rounded-lg p-4 space-y-3" data-testid="integration-resend">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <Mail className="h-5 w-5 text-purple-500" />
+                            <Mail className="h-5 w-5 text-primary" />
                             <span className="font-medium">Resend Email</span>
                           </div>
                           {integrationsData?.integrations.resend?.connected ? (
@@ -886,7 +886,7 @@ export default function AdminSettings() {
                       <div className="border rounded-lg p-4 space-y-3" data-testid="integration-openai">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <Brain className="h-5 w-5 text-green-500" />
+                            <Brain className="h-5 w-5 text-success" />
                             <span className="font-medium">OpenAI</span>
                           </div>
                           {integrationsData?.integrations.openai?.connected ? (
@@ -909,7 +909,7 @@ export default function AdminSettings() {
                       <div className="border rounded-lg p-4 space-y-3" data-testid="integration-apify">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <Bot className="h-5 w-5 text-orange-500" />
+                            <Bot className="h-5 w-5 text-warning" />
                             <span className="font-medium">Apify Scraper</span>
                           </div>
                           {integrationsData?.integrations.apify?.connected ? (
@@ -932,7 +932,7 @@ export default function AdminSettings() {
                       <div className="border rounded-lg p-4 space-y-3" data-testid="integration-geoapify">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <MapPin className="h-5 w-5 text-red-500" />
+                            <MapPin className="h-5 w-5 text-destructive" />
                             <span className="font-medium">Geoapify</span>
                           </div>
                           {integrationsData?.integrations.geoapify?.connected ? (
@@ -955,7 +955,7 @@ export default function AdminSettings() {
                   )}
                   <div className="mt-6 border rounded-lg p-4 space-y-3" data-testid="integration-pandadoc-webhook">
                     <div className="flex items-center gap-2">
-                      <FileText className="h-5 w-5 text-blue-500" />
+                      <FileText className="h-5 w-5 text-primary" />
                       <span className="font-medium">PandaDoc Webhook URL</span>
                     </div>
                     <p className="text-sm text-muted-foreground">
@@ -1052,7 +1052,7 @@ export default function AdminSettings() {
                   {COLOR_OPTIONS.map((color) => (
                     <SelectItem key={color.value} value={color.value}>
                       <div className="flex items-center gap-2">
-                        <div className={`w-4 h-4 rounded ${stageColorMap[color.value]?.split(" ")[0] || "bg-gray-100"}`} />
+                        <div className={`w-4 h-4 rounded ${stageColorMap[color.value]?.split(" ")[0] || "bg-muted"}`} />
                         {color.label}
                       </div>
                     </SelectItem>

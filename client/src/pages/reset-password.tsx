@@ -71,9 +71,9 @@ export default function ResetPasswordPage() {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <div className="flex justify-center mb-4">
-              <CheckCircle className="h-12 w-12 text-green-500" />
+              <CheckCircle className="h-12 w-12 text-success" />
             </div>
-            <CardTitle className="text-2xl">Password Reset Complete</CardTitle>
+            <CardTitle className="text-2xl tracking-tight">Password Reset Complete</CardTitle>
             <CardDescription>
               Your password has been successfully reset.
             </CardDescription>
@@ -95,7 +95,7 @@ export default function ResetPasswordPage() {
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Invalid Link</CardTitle>
+            <CardTitle className="text-2xl tracking-tight">Invalid Link</CardTitle>
             <CardDescription>
               This password reset link is invalid or has expired.
             </CardDescription>
@@ -116,7 +116,7 @@ export default function ResetPasswordPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Reset Password</CardTitle>
+          <CardTitle className="text-2xl tracking-tight">Reset Password</CardTitle>
           <CardDescription>Enter your new password</CardDescription>
         </CardHeader>
         <CardContent>

@@ -141,31 +141,31 @@ interface SubmissionNote {
 
 function getStatusBadgeClass(status: string): string {
   const colors: Record<string, string> = {
-    NEW: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-    UNDER_REVIEW: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-    IN_REVIEW: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-    NEEDS_INFO: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
-    DECLINED: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-    APPROVED: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+    NEW: "bg-primary/10 text-primary",
+    UNDER_REVIEW: "bg-warning/10 text-warning",
+    IN_REVIEW: "bg-warning/10 text-warning",
+    NEEDS_INFO: "bg-warning/10 text-warning",
+    DECLINED: "bg-destructive/10 text-destructive",
+    APPROVED: "bg-success/10 text-success",
   };
-  return colors[status] || "bg-gray-100 text-gray-800";
+  return colors[status] || "bg-muted text-muted-foreground";
 }
 
 function getAiDecisionBadgeClass(decision: string | null): string {
-  if (!decision) return "bg-gray-100 text-gray-800";
+  if (!decision) return "bg-muted text-muted-foreground";
   const colors: Record<string, string> = {
-    auto_approved: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-    needs_review: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-    auto_declined: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+    auto_approved: "bg-success/10 text-success",
+    needs_review: "bg-warning/10 text-warning",
+    auto_declined: "bg-destructive/10 text-destructive",
   };
-  return colors[decision] || "bg-gray-100 text-gray-800";
+  return colors[decision] || "bg-muted text-muted-foreground";
 }
 
 function getScoreColor(score: number | null): string {
-  if (score == null) return "bg-gray-100 text-gray-800";
-  if (score < 30) return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
-  if (score <= 70) return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
-  return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+  if (score == null) return "bg-muted text-muted-foreground";
+  if (score < 30) return "bg-destructive/10 text-destructive";
+  if (score <= 70) return "bg-warning/10 text-warning";
+  return "bg-success/10 text-success";
 }
 
 function formatCurrency(amount: number | null | undefined): string {
@@ -684,8 +684,8 @@ export default function AdminCommercialDealDetail() {
                             strokeWidth="3"
                             strokeDasharray={`${latestReview.score}, 100`}
                             className={
-                              latestReview.score < 30 ? "text-red-500" :
-                              latestReview.score <= 70 ? "text-yellow-500" : "text-green-500"
+                              latestReview.score < 30 ? "text-destructive" :
+                              latestReview.score <= 70 ? "text-warning" : "text-success"
                             }
                           />
                         </svg>
@@ -706,7 +706,7 @@ export default function AdminCommercialDealDetail() {
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg flex items-center gap-2">
-                        <AlertTriangle className="h-5 w-5 text-red-500" />
+                        <AlertTriangle className="h-5 w-5 text-destructive" />
                         Risk Factors
                       </CardTitle>
                     </CardHeader>
@@ -714,7 +714,7 @@ export default function AdminCommercialDealDetail() {
                       <ul className="space-y-2" data-testid="list-risk-factors">
                         {latestReview.riskFactors.map((factor, i) => (
                           <li key={i} className="flex items-start gap-2 text-sm">
-                            <X className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                            <X className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
                             {factor}
                           </li>
                         ))}
@@ -727,7 +727,7 @@ export default function AdminCommercialDealDetail() {
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg flex items-center gap-2">
-                        <CheckCircle className="h-5 w-5 text-green-500" />
+                        <CheckCircle className="h-5 w-5 text-success" />
                         Strengths
                       </CardTitle>
                     </CardHeader>
@@ -735,7 +735,7 @@ export default function AdminCommercialDealDetail() {
                       <ul className="space-y-2" data-testid="list-strengths">
                         {latestReview.strengths.map((strength, i) => (
                           <li key={i} className="flex items-start gap-2 text-sm">
-                            <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                            <Check className="h-4 w-4 text-success mt-0.5 flex-shrink-0" />
                             {strength}
                           </li>
                         ))}
@@ -888,7 +888,7 @@ export default function AdminCommercialDealDetail() {
             <CardContent>
               <div className="space-y-4" data-testid="activity-timeline">
                 <div className="flex items-start gap-3">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0" />
+                  <div className="w-2 h-2 bg-primary rounded-full mt-2 flex-shrink-0" />
                   <div>
                     <p className="text-sm font-medium">Submission Created</p>
                     <p className="text-xs text-muted-foreground">{formatDate(submission.createdAt)}</p>
@@ -896,7 +896,7 @@ export default function AdminCommercialDealDetail() {
                 </div>
                 {submission.submittedAt && (
                   <div className="flex items-start gap-3">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0" />
+                    <div className="w-2 h-2 bg-primary rounded-full mt-2 flex-shrink-0" />
                     <div>
                       <p className="text-sm font-medium">Submitted for Review</p>
                       <p className="text-xs text-muted-foreground">{formatDate(submission.submittedAt)}</p>
@@ -905,7 +905,7 @@ export default function AdminCommercialDealDetail() {
                 )}
                 {submission.reviewedAt && (
                   <div className="flex items-start gap-3">
-                    <div className="w-2 h-2 bg-yellow-500 rounded-full mt-2 flex-shrink-0" />
+                    <div className="w-2 h-2 bg-warning rounded-full mt-2 flex-shrink-0" />
                     <div>
                       <p className="text-sm font-medium">AI Review Completed</p>
                       <p className="text-xs text-muted-foreground">{formatDate(submission.reviewedAt)}</p>
@@ -914,7 +914,7 @@ export default function AdminCommercialDealDetail() {
                 )}
                 {(submission.status === "APPROVED" || submission.status === "DECLINED") && (
                   <div className="flex items-start gap-3">
-                    <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${submission.status === "APPROVED" ? "bg-green-500" : "bg-red-500"}`} />
+                    <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${submission.status === "APPROVED" ? "bg-success" : "bg-destructive"}`} />
                     <div>
                       <p className="text-sm font-medium">
                         {submission.status === "APPROVED" ? "Approved" : "Declined"}

@@ -41,14 +41,14 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="flex items-center justify-center min-h-[400px] p-8">
           <div className="max-w-md w-full text-center space-y-4">
             <div className="flex justify-center">
-              <AlertTriangle className="h-12 w-12 text-amber-500" />
+              <AlertTriangle className="h-12 w-12 text-warning" />
             </div>
-            <h2 className="text-xl font-semibold text-gray-900">Something went wrong</h2>
-            <p className="text-gray-500 text-sm">
+            <h2 className="text-xl font-semibold text-foreground">Something went wrong</h2>
+            <p className="text-muted-foreground text-sm">
               An unexpected error occurred. Please try refreshing the page or contact support if the problem persists.
             </p>
             {process.env.NODE_ENV !== 'production' && this.state.error && (
-              <pre className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 text-left overflow-auto max-h-32">
+              <pre className="mt-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-xs text-destructive text-left overflow-auto max-h-32">
                 {this.state.error.message}
               </pre>
             )}
@@ -62,7 +62,7 @@ export class ErrorBoundary extends Component<Props, State> {
               </button>
               <button
                 onClick={() => window.location.reload()}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 text-sm font-medium"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-muted text-foreground rounded-md hover:bg-muted/80 text-sm font-medium"
               >
                 Reload Page
               </button>

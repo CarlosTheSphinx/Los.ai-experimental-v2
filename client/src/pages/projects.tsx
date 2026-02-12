@@ -98,10 +98,10 @@ function StatsCard({
 
 function PipelineByStage({ stageStats }: { stageStats: StageInfo[] }) {
   const stageColors: Record<string, string> = {
-    "active": "bg-green-500",
-    "on_hold": "bg-yellow-500",
-    "cancelled": "bg-red-500",
-    "completed": "bg-blue-500",
+    "active": "bg-success",
+    "on_hold": "bg-warning",
+    "cancelled": "bg-destructive",
+    "completed": "bg-info",
   };
 
   return (
@@ -121,7 +121,7 @@ function PipelineByStage({ stageStats }: { stageStats: StageInfo[] }) {
                 <div
                   className={cn(
                     "h-2 flex-1 rounded-full",
-                    stageColors[stageInfo.stage] || "bg-gray-400"
+                    stageColors[stageInfo.stage] || "bg-muted"
                   )}
                   style={{ opacity: stageInfo.count > 0 ? 1 : 0.3 }}
                 />
@@ -157,13 +157,13 @@ function formatDate(dateStr: string | null) {
 function getStatusBadge(status: string) {
   switch (status) {
     case 'completed':
-      return <Badge variant="secondary" className="bg-green-100 text-green-700">Completed</Badge>;
+      return <Badge variant="secondary" className="bg-success/10 text-success">Completed</Badge>;
     case 'active':
-      return <Badge variant="secondary" className="bg-blue-100 text-blue-700">Active</Badge>;
+      return <Badge variant="secondary" className="bg-info/10 text-info">Active</Badge>;
     case 'on_hold':
-      return <Badge variant="secondary" className="bg-yellow-100 text-yellow-700">On Hold</Badge>;
+      return <Badge variant="secondary" className="bg-warning/10 text-warning">On Hold</Badge>;
     case 'cancelled':
-      return <Badge variant="secondary" className="bg-red-100 text-red-700">Cancelled</Badge>;
+      return <Badge variant="secondary" className="bg-destructive/10 text-destructive">Cancelled</Badge>;
     default:
       return <Badge variant="secondary">{status}</Badge>;
   }
@@ -171,12 +171,12 @@ function getStatusBadge(status: string) {
 
 function getStatusColor(status: string): string {
   const colors: Record<string, string> = {
-    "active": "bg-green-100 text-green-800",
-    "on_hold": "bg-yellow-100 text-yellow-800",
-    "cancelled": "bg-red-100 text-red-800",
-    "completed": "bg-blue-100 text-blue-800",
+    "active": "bg-success/10 text-success",
+    "on_hold": "bg-warning/10 text-warning",
+    "cancelled": "bg-destructive/10 text-destructive",
+    "completed": "bg-info/10 text-info",
   };
-  return colors[status] || "bg-gray-100 text-gray-800";
+  return colors[status] || "bg-muted text-muted-foreground";
 }
 
 function formatStage(stage: string | null) {
@@ -244,7 +244,7 @@ export default function Projects() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">Loans Dashboard</h1>
+          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Loans Dashboard</h1>
           <p className="text-muted-foreground">Overview of all your loans</p>
         </div>
         <Link href="/deals/new">
@@ -290,12 +290,12 @@ export default function Projects() {
       <div className="space-y-4">
         <div className="flex flex-row flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold">All Loans</h2>
+            <h2 className="text-xl font-bold tracking-tight">All Loans</h2>
             <p className="text-muted-foreground text-sm">Your submitted loan applications</p>
           </div>
           <div className="flex items-center gap-2">
             <div className="relative w-full max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
               <Input
                 placeholder="Search by borrower, address, or deal..."
                 className="pl-10"
@@ -346,7 +346,7 @@ export default function Projects() {
           <Card className="p-12 text-center">
             <CardContent>
               <div className="flex flex-col items-center gap-4">
-                <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
+                <div className="h-16 w-16 rounded-full bg-muted/50 flex items-center justify-center">
                   <FolderKanban className="h-8 w-8 text-muted-foreground" />
                 </div>
                 <div>

@@ -45,25 +45,25 @@ const STATUS_OPTIONS = [
 
 function getStatusBadgeClass(status: string): string {
   const colors: Record<string, string> = {
-    DRAFT: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
-    NEW: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-    SUBMITTED: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-    UNDER_REVIEW: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-    APPROVED: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-    DECLINED: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-    EXPIRED: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
+    DRAFT: "bg-muted text-muted-foreground",
+    NEW: "bg-info/10 text-info",
+    SUBMITTED: "bg-info/10 text-info",
+    UNDER_REVIEW: "bg-warning/10 text-warning",
+    APPROVED: "bg-success/10 text-success",
+    DECLINED: "bg-destructive/10 text-destructive",
+    EXPIRED: "bg-muted text-muted-foreground",
   };
-  return colors[status] || "bg-gray-100 text-gray-800";
+  return colors[status] || "bg-muted text-muted-foreground";
 }
 
 function getAiDecisionBadgeClass(decision: string | null): string {
   if (!decision) return "";
   const colors: Record<string, string> = {
-    auto_approved: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-    needs_review: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-    auto_declined: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+    auto_approved: "bg-success/10 text-success",
+    needs_review: "bg-warning/10 text-warning",
+    auto_declined: "bg-destructive/10 text-destructive",
   };
-  return colors[decision] || "bg-gray-100 text-gray-800";
+  return colors[decision] || "bg-muted text-muted-foreground";
 }
 
 function formatCurrency(amount: number): string {
@@ -100,7 +100,7 @@ export default function CommercialDashboard() {
     <div className="p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">
+          <h1 className="text-3xl font-bold tracking-tight" data-testid="text-page-title">
             My Commercial Deals
           </h1>
           <p className="text-muted-foreground">

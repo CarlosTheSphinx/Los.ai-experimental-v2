@@ -216,7 +216,7 @@ export default function OnboardingPage() {
             }`}>
               {status.agreementSigned ? <CheckCircle2 className="h-5 w-5" /> : '1'}
             </div>
-            <span className={status.agreementSigned ? 'font-medium' : 'text-muted-foreground'}>
+            <span className={status.agreementSigned ? 'font-medium text-foreground' : 'text-muted-foreground'}>
               Partnership Agreement
             </span>
           </div>
@@ -227,7 +227,7 @@ export default function OnboardingPage() {
             }`}>
               {status.trainingCompleted ? <CheckCircle2 className="h-5 w-5" /> : '2'}
             </div>
-            <span className={status.trainingCompleted ? 'font-medium' : 'text-muted-foreground'}>
+            <span className={status.trainingCompleted ? 'font-medium text-foreground' : 'text-muted-foreground'}>
               Training Materials
             </span>
           </div>
@@ -238,7 +238,7 @@ export default function OnboardingPage() {
             }`}>
               {status.canProceed ? <CheckCircle2 className="h-5 w-5" /> : '3'}
             </div>
-            <span className={status.canProceed ? 'font-medium' : 'text-muted-foreground'}>
+            <span className={status.canProceed ? 'font-medium text-foreground' : 'text-muted-foreground'}>
               Get Started
             </span>
           </div>
@@ -249,12 +249,12 @@ export default function OnboardingPage() {
             <TabsTrigger value="agreement" className="flex items-center gap-2">
               <Shield className="h-4 w-4" />
               Partnership Agreement
-              {status.agreementSigned && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+              {status.agreementSigned && <CheckCircle2 className="h-4 w-4 text-success" />}
             </TabsTrigger>
             <TabsTrigger value="training" className="flex items-center gap-2" disabled={!status.agreementSigned && !!partnershipAgreement}>
               <BookOpen className="h-4 w-4" />
               Training Materials
-              {status.trainingCompleted && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+              {status.trainingCompleted && <CheckCircle2 className="h-4 w-4 text-success" />}
             </TabsTrigger>
           </TabsList>
 
@@ -272,11 +272,11 @@ export default function OnboardingPage() {
                 </CardHeader>
                 <CardContent>
                   {status.agreementSigned ? (
-                    <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-950 rounded-lg">
-                      <CheckCircle2 className="h-6 w-6 text-green-500" />
+                    <div className="flex items-center gap-3 p-4 bg-success/10 rounded-lg">
+                      <CheckCircle2 className="h-6 w-6 text-success" />
                       <div>
-                        <p className="font-medium text-green-700 dark:text-green-300">Agreement Signed</p>
-                        <p className="text-sm text-green-600 dark:text-green-400">
+                        <p className="font-medium text-success">Agreement Signed</p>
+                        <p className="text-sm text-success/80">
                           Signed on {new Date(status.user.partnershipAgreementSignedAt!).toLocaleDateString()}
                         </p>
                       </div>
@@ -295,7 +295,7 @@ export default function OnboardingPage() {
                         </Button>
                       )}
                       
-                      <div className="border rounded-lg p-4 bg-muted/50">
+                      <div className="border border-border rounded-lg p-4 bg-muted/50">
                         <h4 className="font-medium mb-4">Agreement Summary</h4>
                         <ul className="space-y-2 text-sm text-muted-foreground">
                           <li>By signing, you agree to refer loans to Sphinx Capital in accordance with our guidelines</li>
@@ -342,7 +342,7 @@ export default function OnboardingPage() {
             ) : (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
-                  <CheckCircle2 className="h-12 w-12 text-green-500 mb-4" />
+                  <CheckCircle2 className="h-12 w-12 text-success mb-4" />
                   <p className="text-lg font-medium">No Partnership Agreement Required</p>
                   <p className="text-muted-foreground">Please proceed to the training materials.</p>
                 </CardContent>
@@ -374,7 +374,7 @@ export default function OnboardingPage() {
               <CardContent>
                 {trainingDocs.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-8">
-                    <CheckCircle2 className="h-12 w-12 text-green-500 mb-4" />
+                    <CheckCircle2 className="h-12 w-12 text-success mb-4" />
                     <p className="text-lg font-medium">No Training Required</p>
                     <p className="text-muted-foreground">You can proceed to use the platform.</p>
                   </div>
@@ -392,8 +392,8 @@ export default function OnboardingPage() {
                           <div className="flex items-center gap-4 p-4">
                             <div className="flex-shrink-0">
                               {doc.progress?.status === 'completed' || doc.progress?.status === 'viewed' ? (
-                                <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
-                                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                                <div className="h-10 w-10 rounded-full bg-success/10 flex items-center justify-center">
+                                  <CheckCircle2 className="h-5 w-5 text-success" />
                                 </div>
                               ) : (
                                 <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
@@ -414,7 +414,7 @@ export default function OnboardingPage() {
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0">
                               {doc.progress?.status === 'completed' ? (
-                                <Badge variant="default" className="bg-green-500">
+                                <Badge variant="default" className="bg-success">
                                   <CheckCircle2 className="h-3 w-3 mr-1" />
                                   Completed
                                 </Badge>

@@ -34,11 +34,11 @@ interface AdminUser {
 }
 
 const roleColors: Record<string, string> = {
-  user: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
-  processor: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300",
-  staff: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-  admin: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
-  super_admin: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  user: "bg-secondary text-secondary-foreground",
+  processor: "bg-success/10 text-success",
+  staff: "bg-info/10 text-info",
+  admin: "bg-primary/10 text-primary",
+  super_admin: "bg-destructive/10 text-destructive",
 };
 
 const roleIcons: Record<string, typeof UserIcon> = {
@@ -770,7 +770,7 @@ function TeamTab() {
 export default function AdminUsers() {
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-semibold" data-testid="text-admin-users-title">User Management</h1>
+      <h1 className="text-3xl font-bold tracking-tight" data-testid="text-admin-users-title">User Management</h1>
 
       <Tabs defaultValue="team" className="w-full">
         <TabsList data-testid="tabs-user-management">

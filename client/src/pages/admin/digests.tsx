@@ -450,7 +450,7 @@ export default function AdminDigests() {
         );
       case 'approved':
         return (
-          <Badge className="bg-green-600">
+          <Badge className="bg-success">
             <Check className="h-3 w-3 mr-1" />
             Approved
           </Badge>
@@ -479,7 +479,7 @@ export default function AdminDigests() {
       <div className="flex items-center justify-between gap-2 md:gap-3 flex-wrap">
         <div className="flex items-center gap-2 md:gap-3 min-w-0">
           <CalendarDays className="h-5 w-5 md:h-6 md:w-6 text-muted-foreground shrink-0" />
-          <h1 className="text-xl md:text-2xl font-semibold truncate" data-testid="text-admin-digests-title">Daily Digests</h1>
+          <h1 className="text-xl md:text-2xl font-semibold tracking-tight truncate" data-testid="text-admin-digests-title">Daily Digests</h1>
         </div>
         <Button
           variant="outline"
@@ -538,7 +538,7 @@ export default function AdminDigests() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Approved</span>
-                <Badge className="bg-green-600">{stats.approved}</Badge>
+                <Badge className="bg-success">{stats.approved}</Badge>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Sent</span>
@@ -551,7 +551,7 @@ export default function AdminDigests() {
               {stats.noDraft > 0 && (
                 <div className="flex items-center justify-between pt-2 border-t">
                   <span className="text-sm text-muted-foreground">Need Drafts</span>
-                  <Badge variant="outline" className="text-orange-600">{stats.noDraft}</Badge>
+                  <Badge variant="outline" className="text-warning">{stats.noDraft}</Badge>
                 </div>
               )}
             </CardContent>

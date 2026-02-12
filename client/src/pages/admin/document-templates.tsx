@@ -294,8 +294,8 @@ export default function DocumentTemplatesPage() {
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Document Templates</h1>
-          <p className="text-slate-500 mt-1">
+          <h1 className="text-2xl font-bold">Document Templates</h1>
+          <p className="text-muted-foreground mt-1">
             Create reusable PDF templates with positioned fields for auto-population
           </p>
         </div>
@@ -314,7 +314,7 @@ export default function DocumentTemplatesPage() {
           <div className="flex items-center justify-between flex-wrap gap-4">
             <CardTitle className="text-lg">All Templates</CardTitle>
             <div className="relative w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search templates..."
                 value={searchQuery}
@@ -327,7 +327,7 @@ export default function DocumentTemplatesPage() {
         </CardHeader>
         <CardContent>
           {filteredTemplates.length === 0 ? (
-            <div className="text-center py-12 text-slate-500">
+            <div className="text-center py-12 text-muted-foreground">
               <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p className="text-lg font-medium">No templates found</p>
               <p className="text-sm mt-1">Create your first document template to get started</p>
@@ -350,12 +350,12 @@ export default function DocumentTemplatesPage() {
                   <TableRow key={template.id} data-testid={`row-template-${template.id}`}>
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-50 rounded-lg">
-                          <FileText className="h-5 w-5 text-blue-600" />
+                        <div className="p-2 bg-primary/10 rounded-lg">
+                          <FileText className="h-5 w-5 text-primary" />
                         </div>
                         <div>
-                          <p className="font-medium text-slate-800">{template.name}</p>
-                          <p className="text-sm text-slate-500 truncate max-w-xs">
+                          <p className="font-medium">{template.name}</p>
+                          <p className="text-sm text-muted-foreground truncate max-w-xs">
                             {template.description || template.pdfFileName}
                           </p>
                         </div>
@@ -367,7 +367,7 @@ export default function DocumentTemplatesPage() {
                           {template.category}
                         </Badge>
                       ) : (
-                        <span className="text-slate-400">—</span>
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
                     <TableCell>
@@ -376,11 +376,11 @@ export default function DocumentTemplatesPage() {
                           {template.loanType.replace(/_/g, " ").toUpperCase()}
                         </Badge>
                       ) : (
-                        <span className="text-slate-400">All</span>
+                        <span className="text-muted-foreground">All</span>
                       )}
                     </TableCell>
                     <TableCell>
-                      <span className="text-slate-600">{template.pageCount}</span>
+                      <span className="text-foreground">{template.pageCount}</span>
                     </TableCell>
                     <TableCell>
                       <Switch
@@ -392,7 +392,7 @@ export default function DocumentTemplatesPage() {
                       />
                     </TableCell>
                     <TableCell>
-                      <span className="text-sm text-slate-500">
+                      <span className="text-sm text-muted-foreground">
                         {format(new Date(template.createdAt), "MMM d, yyyy")}
                       </span>
                     </TableCell>
@@ -418,7 +418,7 @@ export default function DocumentTemplatesPage() {
                           variant="ghost"
                           size="icon"
                           onClick={() => setDeleteTemplateId(template.id)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
                           data-testid={`button-delete-${template.id}`}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -458,7 +458,7 @@ export default function DocumentTemplatesPage() {
                 />
                 {pdfPreview ? (
                   <div className="space-y-2">
-                    <div className="flex items-center justify-center gap-2 text-green-600">
+                    <div className="flex items-center justify-center gap-2 text-success">
                       <FileText className="h-5 w-5" />
                       <span className="font-medium">{pdfFile?.name}</span>
                     </div>

@@ -100,7 +100,7 @@ export function AddressAutocomplete({
   return (
     <div ref={wrapperRef} className="relative">
       <div className="relative">
-        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
           id={id}
           value={inputValue}
@@ -112,22 +112,22 @@ export function AddressAutocomplete({
           autoComplete="off"
         />
         {isLoading && (
-          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 animate-spin" />
+          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground animate-spin" />
         )}
       </div>
 
       {showDropdown && suggestions.length > 0 && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-60 overflow-auto">
+        <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-md shadow-lg max-h-60 overflow-auto">
           {suggestions.map((suggestion, index) => (
             <button
               key={index}
               type="button"
               onClick={() => handleSelectAddress(suggestion)}
-              className="w-full px-4 py-3 text-left hover:bg-slate-50 flex items-start gap-3 border-b border-slate-100 last:border-0"
+              className="w-full px-4 py-3 text-left hover:bg-muted flex items-start gap-3 border-b border-border last:border-0"
               data-testid={`address-suggestion-${index}`}
             >
               <MapPin className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-              <span className="text-sm text-slate-700">
+              <span className="text-sm text-foreground">
                 {suggestion.properties?.formatted || suggestion.formatted}
               </span>
             </button>

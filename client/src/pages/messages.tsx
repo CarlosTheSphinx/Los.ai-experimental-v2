@@ -361,14 +361,14 @@ export default function MessagesPage() {
                           <div
                             className={`max-w-[70%] rounded-lg p-3 ${
                               isNotification
-                                ? "bg-amber-50 border border-amber-200 dark:bg-amber-900/20 dark:border-amber-800"
+                                ? "bg-warning/10 border border-warning/20"
                                 : isOwnMessage
                                 ? "bg-primary text-primary-foreground"
                                 : "bg-muted"
                             }`}
                           >
                             <div className="flex items-center gap-2 mb-1">
-                              {isNotification && <Bell className="h-3 w-3 text-amber-600" />}
+                              {isNotification && <Bell className="h-3 w-3 text-warning" />}
                               <span className="text-xs opacity-70">
                                 {msg.senderName || (msg.senderRole === 'system' ? 'System' : msg.senderRole)}
                                 {" · "}

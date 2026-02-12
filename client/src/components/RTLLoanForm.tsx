@@ -60,9 +60,9 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
   // Auto-calculate experience level based on completed projects
   const calculatedExperienceLevel = (() => {
     const projects = completedProjects || 0;
-    if (projects >= 10) return { tier: "institutional", label: "Institutional", color: "text-purple-600" };
-    if (projects >= 3) return { tier: "experienced", label: "Experienced", color: "text-blue-600" };
-    return { tier: "no_experience", label: "No Experience", color: "text-orange-600" };
+    if (projects >= 10) return { tier: "institutional", label: "Institutional", color: "text-primary" };
+    if (projects >= 3) return { tier: "experienced", label: "Experienced", color: "text-primary" };
+    return { tier: "no_experience", label: "No Experience", color: "text-warning" };
   })();
 
   // Auto-set experience tier based on completed projects
@@ -104,20 +104,20 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
   }, [asIsValue, rehabBudget, loanType, form]);
 
   return (
-    <Card className="w-full bg-white/90 backdrop-blur-sm shadow-xl border-slate-200/60 overflow-hidden">
-      <CardHeader className="bg-orange-50/50 border-b border-orange-100 pb-6">
+    <Card className="w-full bg-background/90 backdrop-blur-sm shadow-xl border-border/60 overflow-hidden">
+      <CardHeader className="bg-warning/5 border-b border-warning/10 pb-6">
         <div className="flex items-center gap-3 mb-1">
-          <div className="p-2 bg-orange-100 rounded-lg">
-            <Calculator className="h-6 w-6 text-orange-600" />
+          <div className="p-2 bg-warning/10 rounded-lg">
+            <Calculator className="h-6 w-6 text-warning" />
           </div>
           <div>
-            <CardTitle className="text-2xl font-bold text-slate-800">Fix and Flip/Ground Up Construction</CardTitle>
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700 mt-1">
+            <CardTitle className="text-2xl font-bold text-foreground">Fix and Flip/Ground Up Construction</CardTitle>
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-warning/10 text-warning mt-1">
               RTL Pricing
             </span>
           </div>
         </div>
-        <CardDescription className="text-base text-slate-500 mt-2">
+        <CardDescription className="text-base text-muted-foreground mt-2">
           Enter the loan details below to receive a real-time rate quote.
         </CardDescription>
       </CardHeader>
@@ -127,8 +127,8 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
             {/* Loan Details Section */}
             <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                  <DollarSign className="w-5 h-5 text-slate-400" />
+                <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-muted-foreground" />
                   Loan Details
                 </h3>
 
@@ -137,10 +137,10 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                   name="loanType"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-slate-700">Loan Type</FormLabel>
+                      <FormLabel className="text-foreground">Loan Type</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                          <SelectTrigger className="h-11 bg-slate-50 border-slate-200" data-testid="select-rtl-loan-type">
+                          <SelectTrigger className="h-11 bg-muted border-border" data-testid="select-rtl-loan-type">
                             <SelectValue placeholder="Select loan type" />
                           </SelectTrigger>
                         </FormControl>
@@ -168,8 +168,8 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                         />
                       </FormControl>
                       <div className="space-y-1 leading-none">
-                        <FormLabel className="text-slate-700">Midstream Loan</FormLabel>
-                        <p className="text-sm text-slate-500">Check if this is a midstream/construction takeout</p>
+                        <FormLabel className="text-foreground">Midstream Loan</FormLabel>
+                        <p className="text-sm text-muted-foreground">Check if this is a midstream/construction takeout</p>
                       </div>
                     </FormItem>
                   )}
@@ -177,18 +177,18 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
 
                 {loanType === "guc" && (
                   <div className="border-t pt-6 space-y-6">
-                    <h4 className="font-medium text-slate-700">GUC-Specific Fields</h4>
+                    <h4 className="font-medium text-foreground">GUC-Specific Fields</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <FormField
                         control={form.control}
                         name="initialDrawToLandPct"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-slate-700">Initial Draw to Land (%)</FormLabel>
+                            <FormLabel className="text-foreground">Initial Draw to Land (%)</FormLabel>
                             <FormControl>
                               <Input
                                 type="number"
-                                className="h-11 bg-slate-50 border-slate-200"
+                                className="h-11 bg-muted border-border"
                                 placeholder="0-70"
                                 data-testid="input-initial-draw"
                                 {...field}
@@ -203,11 +203,11 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                         name="monthsSinceWorkPerformed"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-slate-700">Months Since Work Performed</FormLabel>
+                            <FormLabel className="text-foreground">Months Since Work Performed</FormLabel>
                             <FormControl>
                               <Input
                                 type="number"
-                                className="h-11 bg-slate-50 border-slate-200"
+                                className="h-11 bg-muted border-border"
                                 placeholder="Enter months"
                                 data-testid="input-months-since-work"
                                 {...field}
@@ -231,7 +231,7 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                             />
                           </FormControl>
                           <div className="space-y-1 leading-none">
-                            <FormLabel className="text-slate-700">Building Permits Issued</FormLabel>
+                            <FormLabel className="text-foreground">Building Permits Issued</FormLabel>
                           </div>
                         </FormItem>
                       )}
@@ -242,8 +242,8 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
 
             {/* Borrower Information Section */}
             <div className="border-t pt-6 space-y-4">
-              <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                <User className="w-5 h-5 text-slate-400" />
+              <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <User className="w-5 h-5 text-muted-foreground" />
                 Borrower Information
               </h3>
 
@@ -253,11 +253,11 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                     name="completedProjects"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-slate-700">Completed Projects (In last three years)</FormLabel>
+                        <FormLabel className="text-foreground">Completed Projects (In last three years)</FormLabel>
                         <FormControl>
                           <Input
                             type="number"
-                            className="h-11 bg-slate-50 border-slate-200"
+                            className="h-11 bg-muted border-border"
                             placeholder="Enter count"
                             data-testid="input-completed-projects"
                             {...field}
@@ -269,12 +269,12 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                   />
 
                   <div className="flex items-end">
-                    <div className="w-full p-3 bg-slate-100 rounded-lg border border-slate-200">
-                      <p className="text-sm text-slate-500 mb-1">Experience Level</p>
+                    <div className="w-full p-3 bg-muted rounded-lg border border-border">
+                      <p className="text-sm text-muted-foreground mb-1">Experience Level</p>
                       <p className={`text-lg font-semibold ${calculatedExperienceLevel.color}`} data-testid="text-experience-level">
                         {calculatedExperienceLevel.label}
                       </p>
-                      <p className="text-xs text-slate-500 mt-1">
+                      <p className="text-xs text-muted-foreground mt-1">
                         {completedProjects >= 10 ? "10+ projects" : completedProjects >= 3 ? "3-9 projects" : "0-2 projects"}
                       </p>
                     </div>
@@ -287,11 +287,11 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                     name="fico"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-slate-700">FICO Score</FormLabel>
+                        <FormLabel className="text-foreground">FICO Score</FormLabel>
                         <FormControl>
                           <Input
                             type="number"
-                            className="h-11 bg-slate-50 border-slate-200"
+                            className="h-11 bg-muted border-border"
                             placeholder="Enter FICO (660-850)"
                             data-testid="input-fico"
                             {...field}
@@ -307,10 +307,10 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                     name="borrowingEntityType"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-slate-700">Entity Type</FormLabel>
+                        <FormLabel className="text-foreground">Entity Type</FormLabel>
                         <Select onValueChange={field.onChange} value={field.value || ""}>
                           <FormControl>
-                            <SelectTrigger className="h-11 bg-slate-50 border-slate-200" data-testid="select-entity-type">
+                            <SelectTrigger className="h-11 bg-muted border-border" data-testid="select-entity-type">
                               <SelectValue placeholder="Select entity type" />
                             </SelectTrigger>
                           </FormControl>
@@ -343,8 +343,8 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                           />
                         </FormControl>
                         <div className="space-y-1 leading-none">
-                          <FormLabel className="text-slate-700">Full Guaranty</FormLabel>
-                          <p className="text-sm text-slate-500">Without full guaranty, minimum FICO is 700</p>
+                          <FormLabel className="text-foreground">Full Guaranty</FormLabel>
+                          <p className="text-sm text-muted-foreground">Without full guaranty, minimum FICO is 700</p>
                         </div>
                       </FormItem>
                     )}
@@ -363,8 +363,8 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                           />
                         </FormControl>
                         <div className="space-y-1 leading-none">
-                          <FormLabel className="text-slate-700">Foreign National</FormLabel>
-                          <p className="text-sm text-slate-500">Additional documentation will be required</p>
+                          <FormLabel className="text-foreground">Foreign National</FormLabel>
+                          <p className="text-sm text-muted-foreground">Additional documentation will be required</p>
                         </div>
                       </FormItem>
                     )}
@@ -374,8 +374,8 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
 
             {/* Property Details Section */}
             <div className="border-t pt-6 space-y-4">
-              <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                <Building className="w-5 h-5 text-slate-400" />
+              <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <Building className="w-5 h-5 text-muted-foreground" />
                 Property Details
               </h3>
 
@@ -385,10 +385,10 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                     name="propertyType"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-slate-700">Property Type</FormLabel>
+                        <FormLabel className="text-foreground">Property Type</FormLabel>
                         <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
-                            <SelectTrigger className="h-11 bg-slate-50 border-slate-200" data-testid="select-property-type">
+                            <SelectTrigger className="h-11 bg-muted border-border" data-testid="select-property-type">
                               <SelectValue placeholder="Select type" />
                             </SelectTrigger>
                           </FormControl>
@@ -411,11 +411,11 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                     name="propertyUnits"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-slate-700">Number of Units</FormLabel>
+                        <FormLabel className="text-foreground">Number of Units</FormLabel>
                         <FormControl>
                           <Input
                             type="number"
-                            className="h-11 bg-slate-50 border-slate-200"
+                            className="h-11 bg-muted border-border"
                             placeholder="1-20"
                             data-testid="input-units"
                             {...field}
@@ -432,13 +432,13 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                   name="propertyAddress"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-slate-700">Property Address</FormLabel>
+                      <FormLabel className="text-foreground">Property Address</FormLabel>
                       <FormControl>
                         <AddressAutocomplete
                           value={field.value}
                           onChange={field.onChange}
                           placeholder="Start typing an address..."
-                          className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all"
+                          className="h-11 bg-muted border-border focus:bg-background transition-all"
                           data-testid="input-property-address"
                         />
                       </FormControl>
@@ -453,10 +453,10 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                     name="asIsValue"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-slate-700">As-Is Value ($)</FormLabel>
+                        <FormLabel className="text-foreground">As-Is Value ($)</FormLabel>
                         <FormControl>
                           <CurrencyInput
-                            className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all"
+                            className="h-11 bg-muted border-border focus:bg-background transition-all"
                             placeholder="Enter as-is value"
                             data-testid="input-as-is-value"
                             value={field.value}
@@ -475,10 +475,10 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                     name="arv"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-slate-700">ARV - After Repair Value ($)</FormLabel>
+                        <FormLabel className="text-foreground">ARV - After Repair Value ($)</FormLabel>
                         <FormControl>
                           <CurrencyInput
-                            className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all"
+                            className="h-11 bg-muted border-border focus:bg-background transition-all"
                             placeholder="Enter after repair value"
                             data-testid="input-arv"
                             value={field.value}
@@ -495,10 +495,10 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                     name="rehabBudget"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-slate-700">Rehab Budget ($)</FormLabel>
+                        <FormLabel className="text-foreground">Rehab Budget ($)</FormLabel>
                         <FormControl>
                           <CurrencyInput
-                            className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all"
+                            className="h-11 bg-muted border-border focus:bg-background transition-all"
                             placeholder="Enter rehab budget (0 for no rehab)"
                             data-testid="input-rehab-budget"
                             value={field.value}
@@ -512,21 +512,21 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
 
                   {loanType !== "guc" && asIsValue > 0 && (
                     <div className="flex items-end">
-                      <div className="w-full p-3 bg-slate-100 rounded-lg border border-slate-200">
-                        <p className="text-sm text-slate-500 mb-1">Calculated Loan Type</p>
-                        <p className="text-lg font-semibold text-slate-800" data-testid="text-calculated-loan-type">
+                      <div className="w-full p-3 bg-muted rounded-lg border border-border">
+                        <p className="text-sm text-muted-foreground mb-1">Calculated Loan Type</p>
+                        <p className="text-lg font-semibold text-foreground" data-testid="text-calculated-loan-type">
                           {rehabBudget > 0 ? (
                             (rehabBudget / asIsValue * 100) >= 50 ? (
-                              <span className="text-orange-600">Heavy Rehab</span>
+                              <span className="text-warning">Heavy Rehab</span>
                             ) : (
-                              <span className="text-green-600">Light Rehab</span>
+                              <span className="text-success">Light Rehab</span>
                             )
                           ) : (
-                            <span className="text-blue-600">Bridge (No Rehab)</span>
+                            <span className="text-info">Bridge (No Rehab)</span>
                           )}
                         </p>
                         {rehabBudget > 0 && (
-                          <p className="text-xs text-slate-500 mt-1">
+                          <p className="text-xs text-muted-foreground mt-1">
                             Rehab is {((rehabBudget / asIsValue) * 100).toFixed(1)}% of as-is value
                           </p>
                         )}
@@ -536,7 +536,7 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                 </div>
 
                 <div className="border-t pt-6 space-y-4">
-                  <h4 className="font-medium text-slate-700">Market Conditions</h4>
+                  <h4 className="font-medium text-foreground">Market Conditions</h4>
 
                   <FormField
                     control={form.control}
@@ -551,7 +551,7 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                           />
                         </FormControl>
                         <div className="space-y-1 leading-none">
-                          <FormLabel className="text-slate-700">Listed in Last 12 Months</FormLabel>
+                          <FormLabel className="text-foreground">Listed in Last 12 Months</FormLabel>
                         </div>
                       </FormItem>
                     )}
@@ -563,11 +563,11 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                       name="daysOnMarket"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-slate-700">Days on Market</FormLabel>
+                          <FormLabel className="text-foreground">Days on Market</FormLabel>
                           <FormControl>
                             <Input
                               type="number"
-                              className="h-11 bg-slate-50 border-slate-200 max-w-xs"
+                              className="h-11 bg-muted border-border max-w-xs"
                               placeholder="Enter days"
                               data-testid="input-days-on-market"
                               {...field}
@@ -583,8 +583,8 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
 
             {/* Credit History Section */}
             <div className="border-t pt-6 space-y-4">
-              <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-slate-400" />
+              <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-muted-foreground" />
                 Credit History
               </h3>
 
@@ -594,17 +594,17 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                     name="mortgageLate30Last24"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-slate-700">30-Day Lates (Last 24 Mo)</FormLabel>
+                        <FormLabel className="text-foreground">30-Day Lates (Last 24 Mo)</FormLabel>
                         <FormControl>
                           <Input
                             type="number"
-                            className="h-11 bg-slate-50 border-slate-200"
+                            className="h-11 bg-muted border-border"
                             placeholder="0"
                             data-testid="input-late30"
                             {...field}
                           />
                         </FormControl>
-                        <p className="text-xs text-slate-500">Max allowed: 1</p>
+                        <p className="text-xs text-muted-foreground">Max allowed: 1</p>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -615,17 +615,17 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                     name="mortgageLate60Last24"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-slate-700">60-Day Lates (Last 24 Mo)</FormLabel>
+                        <FormLabel className="text-foreground">60-Day Lates (Last 24 Mo)</FormLabel>
                         <FormControl>
                           <Input
                             type="number"
-                            className="h-11 bg-slate-50 border-slate-200"
+                            className="h-11 bg-muted border-border"
                             placeholder="0"
                             data-testid="input-late60"
                             {...field}
                           />
                         </FormControl>
-                        <p className="text-xs text-slate-500">Max allowed: 0</p>
+                        <p className="text-xs text-muted-foreground">Max allowed: 0</p>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -633,7 +633,7 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                 </div>
 
                 <div className="border-t pt-6">
-                  <h4 className="font-medium text-slate-700 mb-4">Credit Events (In last 5 years)</h4>
+                  <h4 className="font-medium text-foreground mb-4">Credit Events (In last 5 years)</h4>
                   
                   <div className="space-y-4">
                     <FormField
@@ -651,7 +651,7 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                             />
                           </FormControl>
                           <div className="space-y-1 leading-none">
-                            <FormLabel className="text-slate-700">Bankruptcy in the last 5 years?</FormLabel>
+                            <FormLabel className="text-foreground">Bankruptcy in the last 5 years?</FormLabel>
                           </div>
                         </FormItem>
                       )}
@@ -672,7 +672,7 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                             />
                           </FormControl>
                           <div className="space-y-1 leading-none">
-                            <FormLabel className="text-slate-700">Foreclosure in the last 5 years?</FormLabel>
+                            <FormLabel className="text-foreground">Foreclosure in the last 5 years?</FormLabel>
                           </div>
                         </FormItem>
                       )}
@@ -693,7 +693,7 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
                             />
                           </FormControl>
                           <div className="space-y-1 leading-none">
-                            <FormLabel className="text-slate-700">Short Sale/DIL in the last 5 years?</FormLabel>
+                            <FormLabel className="text-foreground">Short Sale/DIL in the last 5 years?</FormLabel>
                           </div>
                         </FormItem>
                       )}
@@ -705,7 +705,7 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData }: RTLLoanFormPro
             <div className="pt-6 border-t">
               <Button
                 type="submit"
-                className="w-full h-12 text-lg font-semibold bg-orange-600 hover:bg-orange-700"
+                className="w-full h-12 text-lg font-semibold bg-warning hover:bg-warning/90"
                 disabled={isLoading}
                 data-testid="button-rtl-submit"
               >

@@ -102,7 +102,7 @@ function getStatusBadge(status: string, type: "document" | "task") {
   if (type === "document") {
     switch (status) {
       case "approved":
-        return <Badge variant="default" className="bg-green-600">Approved</Badge>;
+        return <Badge variant="default" className="bg-success">Approved</Badge>;
       case "uploaded":
       case "submitted":
         return <Badge variant="secondary">Under Review</Badge>;
@@ -117,7 +117,7 @@ function getStatusBadge(status: string, type: "document" | "task") {
   } else {
     switch (status) {
       case "completed":
-        return <Badge variant="default" className="bg-green-600">Done</Badge>;
+        return <Badge variant="default" className="bg-success">Done</Badge>;
       case "in_progress":
         return <Badge variant="secondary">In Progress</Badge>;
       case "blocked":
@@ -132,10 +132,10 @@ function getStatusIcon(status: string, type: "document" | "task") {
   if (type === "document") {
     switch (status) {
       case "approved":
-        return <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />;
+        return <CheckCircle2 className="h-5 w-5 text-success shrink-0" />;
       case "uploaded":
       case "submitted":
-        return <Clock className="h-5 w-5 text-blue-500 shrink-0" />;
+        return <Clock className="h-5 w-5 text-info shrink-0" />;
       case "rejected":
         return <AlertCircle className="h-5 w-5 text-destructive shrink-0" />;
       default:
@@ -144,9 +144,9 @@ function getStatusIcon(status: string, type: "document" | "task") {
   } else {
     switch (status) {
       case "completed":
-        return <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />;
+        return <CheckCircle2 className="h-5 w-5 text-success shrink-0" />;
       case "in_progress":
-        return <Clock className="h-5 w-5 text-blue-500 shrink-0" />;
+        return <Clock className="h-5 w-5 text-info shrink-0" />;
       case "blocked":
         return <AlertCircle className="h-5 w-5 text-destructive shrink-0" />;
       default:
@@ -409,7 +409,7 @@ function ChecklistItemRow({
           </div>
         )}
         {item.status === "approved" && item.reviewNotes && (
-          <div className="text-xs text-green-600 dark:text-green-400 mt-1">
+          <div className="text-xs text-success mt-1">
             Note: {item.reviewNotes}
           </div>
         )}
@@ -444,7 +444,7 @@ function ChecklistItemRow({
             <Button
               variant="outline"
               size="sm"
-              className="text-green-600"
+              className="text-success"
               onClick={() => onReviewDoc(item.itemId, "approved")}
               data-testid={`button-approve-${item.id}`}
             >

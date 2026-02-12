@@ -237,7 +237,7 @@ export default function BorrowerPortal() {
         data-testid="input-file-upload"
       />
 
-      <header className="bg-white dark:bg-slate-900 border-b">
+      <header className="bg-background border-b">
         <div className="max-w-4xl mx-auto px-4 md:px-6 py-3 md:py-4">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
@@ -290,8 +290,8 @@ export default function BorrowerPortal() {
                     <div key={stage.id} className="flex flex-col items-center relative flex-1" data-testid={`progress-stage-${stage.id}`}>
                       <div
                         className={`h-10 w-10 md:h-12 md:w-12 rounded-full flex items-center justify-center text-xs md:text-sm font-semibold border-[3px] flex-shrink-0 transition-all z-10 ${
-                          isCompleted ? 'bg-green-500 border-green-500 text-white' :
-                          isActive ? 'bg-blue-500 border-blue-500 text-white' :
+                          isCompleted ? 'bg-success border-success text-white' :
+                          isActive ? 'bg-primary border-primary text-white' :
                           'bg-muted border-border text-muted-foreground'
                         }`}
                         data-testid={`stage-indicator-${stage.id}`}
@@ -300,8 +300,8 @@ export default function BorrowerPortal() {
                       </div>
                       <div className="mt-2 md:mt-3 text-center max-w-[80px] md:max-w-[120px]">
                         <div className={`text-[10px] md:text-[13px] font-medium leading-tight ${
-                          isCompleted ? 'text-green-600 dark:text-green-400' :
-                          isActive ? 'text-blue-600 dark:text-blue-400 font-semibold' :
+                          isCompleted ? 'text-success' :
+                          isActive ? 'text-primary font-semibold' :
                           'text-muted-foreground'
                         }`}>
                           {stage.stageName}
@@ -315,7 +315,7 @@ export default function BorrowerPortal() {
                       {i < stages.length - 1 && (
                         <div
                           className={`absolute top-5 md:top-6 left-[calc(50%+20px)] md:left-[calc(50%+24px)] h-[2px] md:h-[3px] z-0 ${
-                            isCompleted ? 'bg-green-300 dark:bg-green-700' : 'bg-border'
+                            isCompleted ? 'bg-success/50' : 'bg-border'
                           }`}
                           style={{ width: 'calc(100% - 40px)' }}
                         />
@@ -342,8 +342,8 @@ export default function BorrowerPortal() {
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 md:gap-4">
           <Card className="p-3 md:p-4">
             <div className="flex items-center gap-2 md:gap-3">
-              <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center shrink-0">
-                <DollarSign className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
+              <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg bg-success/10 flex items-center justify-center shrink-0">
+                <DollarSign className="h-4 w-4 md:h-5 md:w-5 text-success" />
               </div>
               <div className="min-w-0">
                 <div className="text-[10px] md:text-xs text-muted-foreground">Loan Amount</div>
@@ -353,8 +353,8 @@ export default function BorrowerPortal() {
           </Card>
           <Card className="p-3 md:p-4">
             <div className="flex items-center gap-2 md:gap-3">
-              <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
-                <span className="text-blue-600 font-semibold text-xs md:text-sm">%</span>
+              <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg bg-info/10 flex items-center justify-center shrink-0">
+                <span className="text-info font-semibold text-xs md:text-sm">%</span>
               </div>
               <div className="min-w-0">
                 <div className="text-[10px] md:text-xs text-muted-foreground">Interest Rate</div>
@@ -364,8 +364,8 @@ export default function BorrowerPortal() {
           </Card>
           <Card className="p-3 md:p-4 col-span-2 sm:col-span-1">
             <div className="flex items-center gap-2 md:gap-3">
-              <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center shrink-0">
-                <Calendar className="h-4 w-4 md:h-5 md:w-5 text-purple-600" />
+              <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <Calendar className="h-4 w-4 md:h-5 md:w-5 text-primary" />
               </div>
               <div className="min-w-0">
                 <div className="text-[10px] md:text-xs text-muted-foreground">Target Close</div>
@@ -453,7 +453,7 @@ export default function BorrowerPortal() {
         )}
       </main>
 
-      <footer className="border-t bg-white dark:bg-slate-900 mt-12">
+      <footer className="border-t bg-background mt-12">
         <div className="max-w-4xl mx-auto px-6 py-4 text-center text-sm text-muted-foreground">
           Loan Progress Portal - Powered by Sphinx Capital
         </div>

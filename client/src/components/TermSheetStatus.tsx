@@ -99,9 +99,9 @@ const formatDate = (dateString: string | null) => {
 const getStatusColor = (status: string) => {
   switch (status.toLowerCase()) {
     case "completed":
-      return "text-green-600 dark:text-green-400";
+      return "text-success";
     case "declined":
-      return "text-red-600 dark:text-red-400";
+      return "text-destructive";
     default:
       return "text-muted-foreground";
   }
@@ -217,7 +217,7 @@ export function TermSheetStatus({ quoteId }: { quoteId: number }) {
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   {envelope.hasProject && (
-                    <Badge variant="outline" className="flex items-center gap-1.5 whitespace-nowrap text-green-600 dark:text-green-400 border-green-200 dark:border-green-800" data-testid={`badge-loan-created-${envelope.id}`}>
+                    <Badge variant="outline" className="flex items-center gap-1.5 whitespace-nowrap text-success border-success/30" data-testid={`badge-loan-created-${envelope.id}`}>
                       <Building2 className="w-3 h-3" />
                       <span>Loan Created</span>
                     </Badge>

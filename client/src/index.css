@@ -4,91 +4,156 @@
 @tailwind utilities;
 
 :root {
-  /* Sphinx Capital Logo Colors */
-  --font-sans: 'Inter', sans-serif;
-  --font-display: 'Lexend', sans-serif;
+  /* ================================================
+     LENDRY.AI DESIGN SYSTEM — Brand Palette
+     Navy (#1A3A52) + Blue (#2E7FD6) + Emerald (#10B981)
+     Fonts: Inter (body), Inter (headings), JetBrains Mono (code)
+     ================================================ */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
-  --background: 210 20% 98%;
-  --foreground: 226 100% 25%; /* Deep Blue from logo */
+  /* Background: Warm light gray (modern, not harsh white) */
+  --background: 220 14% 96%;        /* #F1F3F6 */
+  --foreground: 205 35% 21%;        /* #1A3A52 - Primary Navy */
 
-  --card: 0 0% 100%;
-  --card-foreground: 226 100% 25%;
+  /* Cards: Clean white with navy text */
+  --card: 0 0% 100%;                /* #FFFFFF */
+  --card-foreground: 205 35% 21%;   /* #1A3A52 */
+  --card-border: 216 20% 90%;       /* subtle gray border */
 
+  /* Popovers */
   --popover: 0 0% 100%;
-  --popover-foreground: 226 100% 25%;
+  --popover-foreground: 205 35% 21%;
+  --popover-border: 216 20% 90%;
 
-  /* Corporate Blue Primary from Logo (#002699 or similar) */
-  --primary: 226 100% 30%; 
-  --primary-foreground: 210 40% 98%;
+  /* Primary: Brand Blue (#2E7FD6) */
+  --primary: 212 67% 51%;           /* #2E7FD6 */
+  --primary-foreground: 0 0% 100%;  /* White */
+  --primary-border: 212 67% 45%;
 
-  /* Subtle Secondary */
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222 47% 11.2%;
+  /* Secondary: Soft blue-gray */
+  --secondary: 214 20% 94%;         /* #EDF1F5 */
+  --secondary-foreground: 205 35% 21%;
+  --secondary-border: 214 20% 88%;
 
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
+  /* Muted: Subtle backgrounds */
+  --muted: 214 20% 94%;
+  --muted-foreground: 215 14% 50%;  /* #6B7F8E - readable gray */
+  --muted-border: 214 20% 88%;
 
-  --accent: 210 40% 96.1%;
-  --accent-foreground: 222 47% 11.2%;
+  /* Accent: Emerald (#10B981) for success/growth */
+  --accent: 160 84% 39%;            /* #10B981 */
+  --accent-foreground: 0 0% 100%;
+  --accent-border: 160 84% 34%;
 
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
+  /* Destructive: Clear red */
+  --destructive: 0 84% 60%;         /* #EF4444 */
+  --destructive-foreground: 0 0% 100%;
+  --destructive-border: 0 84% 54%;
 
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 221.2 83.2% 53.3%;
+  /* Borders and inputs */
+  --border: 216 20% 90%;            /* #E2E6EB */
+  --input: 216 20% 90%;
+  --ring: 212 67% 51%;              /* Matches primary blue */
 
-  --radius: 0.75rem;
+  --radius: 0.625rem;               /* 10px - modern, slightly softer */
 
-  /* Sidebar - solid background */
-  --sidebar: 222 47% 11%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 214.3 31.8% 91.4%;
-  --sidebar-ring: 221.2 83.2% 53.3%;
-  --sidebar-accent: 210 40% 96.1%;
-  --sidebar-accent-foreground: 222 47% 11.2%;
-  --sidebar-primary: 226 100% 30%;
-  --sidebar-primary-foreground: 210 40% 98%;
+  /* Sidebar: Deep navy */
+  --sidebar: 205 50% 13%;           /* #0F2438 */
+  --sidebar-foreground: 210 25% 92%;
+  --sidebar-border: 205 40% 20%;
+  --sidebar-ring: 212 67% 51%;
+  --sidebar-accent: 205 40% 20%;
+  --sidebar-accent-foreground: 210 25% 92%;
+  --sidebar-primary: 212 67% 51%;
+  --sidebar-primary-foreground: 0 0% 100%;
+
+  /* Status colors (semantic) */
+  --success: 160 84% 39%;           /* Emerald #10B981 */
+  --success-foreground: 0 0% 100%;
+  --warning: 38 92% 50%;            /* Amber #F59E0B */
+  --warning-foreground: 0 0% 100%;
+  --info: 212 67% 51%;              /* Blue #2E7FD6 */
+  --info-foreground: 0 0% 100%;
+
+  /* Chart colors */
+  --chart-1: 212 67% 51%;           /* Brand Blue */
+  --chart-2: 160 84% 39%;           /* Emerald */
+  --chart-3: 205 35% 21%;           /* Navy */
+  --chart-4: 38 92% 50%;            /* Amber */
+  --chart-5: 280 60% 55%;           /* Purple accent */
 }
 
 .dark {
-  --background: 222.2 84% 4.9%;
-  --foreground: 210 40% 98%;
+  /* Background: Deep navy (not pure black) */
+  --background: 210 50% 7%;         /* #0A1428 */
+  --foreground: 210 25% 92%;        /* #E2E8EF */
 
-  --card: 222.2 84% 4.9%;
-  --card-foreground: 210 40% 98%;
+  /* Cards: Slightly lighter navy */
+  --card: 210 45% 10%;              /* #0F1D2F */
+  --card-foreground: 210 25% 92%;
+  --card-border: 210 35% 18%;
 
-  --popover: 222.2 84% 4.9%;
-  --popover-foreground: 210 40% 98%;
+  /* Popovers */
+  --popover: 210 45% 10%;
+  --popover-foreground: 210 25% 92%;
+  --popover-border: 210 35% 18%;
 
-  --primary: 217.2 91.2% 59.8%;
-  --primary-foreground: 222.2 47.4% 11.2%;
+  /* Primary: Bright blue (accessible on dark) */
+  --primary: 212 80% 60%;           /* #4A9EFF */
+  --primary-foreground: 210 50% 7%;
+  --primary-border: 212 80% 55%;
 
-  --secondary: 217.2 32.6% 17.5%;
-  --secondary-foreground: 210 40% 98%;
+  /* Secondary */
+  --secondary: 210 35% 18%;
+  --secondary-foreground: 210 25% 92%;
+  --secondary-border: 210 35% 22%;
 
-  --muted: 217.2 32.6% 17.5%;
-  --muted-foreground: 215 20.2% 65.1%;
+  /* Muted */
+  --muted: 210 35% 18%;
+  --muted-foreground: 215 15% 60%;  /* #8B9BB0 */
+  --muted-border: 210 35% 22%;
 
-  --accent: 217.2 32.6% 17.5%;
-  --accent-foreground: 210 40% 98%;
+  /* Accent: Emerald (slightly brighter for dark) */
+  --accent: 160 70% 45%;
+  --accent-foreground: 210 50% 7%;
+  --accent-border: 160 70% 40%;
 
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 40% 98%;
+  /* Destructive */
+  --destructive: 0 72% 50%;
+  --destructive-foreground: 210 25% 92%;
+  --destructive-border: 0 72% 44%;
 
-  --border: 217.2 32.6% 17.5%;
-  --input: 217.2 32.6% 17.5%;
-  --ring: 224.3 76.3% 48%;
+  /* Borders */
+  --border: 210 35% 18%;
+  --input: 210 35% 18%;
+  --ring: 212 80% 60%;
 
-  /* Sidebar - solid dark background */
-  --sidebar: 222 47% 11%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 217.2 32.6% 17.5%;
-  --sidebar-ring: 224.3 76.3% 48%;
-  --sidebar-accent: 217.2 32.6% 17.5%;
-  --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-primary: 217.2 91.2% 59.8%;
-  --sidebar-primary-foreground: 222.2 47.4% 11.2%;
+  /* Sidebar: Deepest navy */
+  --sidebar: 210 55% 6%;
+  --sidebar-foreground: 210 25% 92%;
+  --sidebar-border: 210 35% 15%;
+  --sidebar-ring: 212 80% 60%;
+  --sidebar-accent: 210 35% 15%;
+  --sidebar-accent-foreground: 210 25% 92%;
+  --sidebar-primary: 212 80% 60%;
+  --sidebar-primary-foreground: 210 50% 7%;
+
+  /* Status colors (dark mode) */
+  --success: 160 70% 45%;
+  --success-foreground: 210 50% 7%;
+  --warning: 38 90% 55%;
+  --warning-foreground: 210 50% 7%;
+  --info: 212 80% 60%;
+  --info-foreground: 210 50% 7%;
+
+  /* Chart colors (dark mode - brighter) */
+  --chart-1: 212 80% 60%;
+  --chart-2: 160 70% 45%;
+  --chart-3: 210 25% 70%;
+  --chart-4: 38 90% 55%;
+  --chart-5: 280 65% 65%;
 }
 
 @layer base {
@@ -97,22 +162,73 @@
   }
   body {
     @apply bg-background text-foreground antialiased font-sans;
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-display tracking-tight;
+    font-weight: 600;
   }
+  h1 { @apply text-3xl; }
+  h2 { @apply text-2xl; }
+  h3 { @apply text-xl; }
 }
 
-/* Custom Gradients & Effects */
+/* ================================================
+   UTILITY CLASSES
+   ================================================ */
+
+/* Glass panel effect */
 .glass-panel {
-  @apply bg-white/70 backdrop-blur-lg border border-white/20 shadow-xl;
+  @apply bg-white/80 backdrop-blur-xl border border-white/30 shadow-lg;
+}
+.dark .glass-panel {
+  @apply bg-card/80 backdrop-blur-xl border-white/5;
 }
 
+/* Subtle entrance animation */
 .animate-in {
-  animation: fadeIn 0.5s ease-out forwards;
+  animation: fadeIn 0.4s ease-out forwards;
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* KPI stat card gradient accents */
+.stat-card-blue {
+  border-left: 3px solid hsl(212 67% 51%);
+}
+.stat-card-emerald {
+  border-left: 3px solid hsl(160 84% 39%);
+}
+.stat-card-navy {
+  border-left: 3px solid hsl(205 35% 21%);
+}
+.stat-card-amber {
+  border-left: 3px solid hsl(38 92% 50%);
+}
+
+/* Smooth focus ring */
+*:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+
+/* Scrollbar styling for dark sidebar */
+.dark ::-webkit-scrollbar {
+  width: 6px;
+}
+.dark ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: hsl(210 35% 25%);
+  border-radius: 3px;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: hsl(210 35% 35%);
 }

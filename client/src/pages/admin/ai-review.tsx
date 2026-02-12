@@ -77,9 +77,9 @@ const RULE_TYPE_OPTIONS = [
 ];
 
 const SEVERITY_OPTIONS = [
-  { value: "fail", label: "Fail", color: "text-red-600", bg: "bg-red-50 dark:bg-red-950/30", description: "Must pass - blocks approval" },
-  { value: "warn", label: "Warning", color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-950/30", description: "Should review - flagged for attention" },
-  { value: "info", label: "Info", color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-950/30", description: "Informational - noted in report" },
+  { value: "fail", label: "Fail", color: "text-destructive", bg: "bg-destructive/10", description: "Must pass - blocks approval" },
+  { value: "warn", label: "Warning", color: "text-warning", bg: "bg-warning/10", description: "Should review - flagged for attention" },
+  { value: "info", label: "Info", color: "text-info", bg: "bg-info/10", description: "Informational - noted in report" },
 ];
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -310,13 +310,13 @@ function TemplateRulesEditor({
                       )}
                     >
                       {rule.severity === "fail" && (
-                        <AlertTriangle className="h-3 w-3 mr-1 text-red-600" />
+                        <AlertTriangle className="h-3 w-3 mr-1 text-destructive" />
                       )}
                       {rule.severity === "warn" && (
-                        <AlertTriangle className="h-3 w-3 mr-1 text-amber-600" />
+                        <AlertTriangle className="h-3 w-3 mr-1 text-warning" />
                       )}
                       {rule.severity === "info" && (
-                        <Info className="h-3 w-3 mr-1 text-blue-600" />
+                        <Info className="h-3 w-3 mr-1 text-info" />
                       )}
                       {SEVERITY_OPTIONS.find((s) => s.value === rule.severity)
                         ?.description}
@@ -632,15 +632,15 @@ export default function AIReviewPage() {
             </p>
             <div className="flex items-center justify-center gap-6 mt-6 text-xs text-muted-foreground">
               <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                <CheckCircle2 className="h-4 w-4 text-success" />
                 Presence checks
               </div>
               <div className="flex items-center gap-1.5">
-                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                <AlertTriangle className="h-4 w-4 text-warning" />
                 Red flag detection
               </div>
               <div className="flex items-center gap-1.5">
-                <ShieldCheck className="h-4 w-4 text-blue-600" />
+                <ShieldCheck className="h-4 w-4 text-primary" />
                 Consistency validation
               </div>
             </div>

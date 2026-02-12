@@ -187,11 +187,11 @@ export default function AgreementDetailPage() {
         return <Badge variant="secondary">Draft</Badge>;
       case 'pending':
       case 'sent':
-        return <Badge className="bg-amber-100 text-amber-700 border-amber-200">Sent</Badge>;
+        return <Badge className="bg-warning/10 text-warning border-border">Sent</Badge>;
       case 'in_progress':
-        return <Badge className="bg-blue-100 text-blue-700 border-blue-200">In Progress</Badge>;
+        return <Badge className="bg-info/10 text-info border-border">In Progress</Badge>;
       case 'completed':
-        return <Badge className="bg-green-100 text-green-700 border-green-200">Completed</Badge>;
+        return <Badge className="bg-success/10 text-success border-border">Completed</Badge>;
       case 'voided':
       case 'voided_edited':
         return <Badge variant="destructive">Voided</Badge>;
@@ -203,13 +203,13 @@ export default function AgreementDetailPage() {
   const getSignerStatusIcon = (status: string) => {
     switch (status) {
       case 'signed':
-        return <CheckCircle className="w-4 h-4 text-green-500" />;
+        return <CheckCircle className="w-4 h-4 text-success" />;
       case 'viewed':
-        return <Eye className="w-4 h-4 text-blue-500" />;
+        return <Eye className="w-4 h-4 text-info" />;
       case 'sent':
-        return <Send className="w-4 h-4 text-amber-500" />;
+        return <Send className="w-4 h-4 text-warning" />;
       default:
-        return <Clock className="w-4 h-4 text-slate-400" />;
+        return <Clock className="w-4 h-4 text-muted-foreground" />;
     }
   };
 
@@ -252,9 +252,9 @@ export default function AgreementDetailPage() {
       <div className="p-6">
         <Card className="text-center py-12">
           <CardContent>
-            <XCircle className="w-16 h-16 mx-auto text-red-300 mb-4" />
-            <h3 className="text-xl font-semibold text-slate-600 mb-2">Term Sheet Not Found</h3>
-            <p className="text-slate-400 mb-4">The term sheet you're looking for doesn't exist.</p>
+            <XCircle className="w-16 h-16 mx-auto text-destructive/40 mb-4" />
+            <h3 className="text-xl font-semibold text-foreground mb-2">Term Sheet Not Found</h3>
+            <p className="text-muted-foreground mb-4">The term sheet you're looking for doesn't exist.</p>
             <Link href="/agreements">
               <Button variant="outline">
                 <ArrowLeft className="w-4 h-4 mr-2" />
@@ -268,7 +268,7 @@ export default function AgreementDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-background">
       <header className="bg-white border-b sticky top-0 z-40">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
@@ -280,12 +280,12 @@ export default function AgreementDetailPage() {
               </Link>
               <div>
                 <div className="flex items-center gap-3">
-                  <h1 className="text-xl font-bold text-slate-800" data-testid="text-agreement-title">
+                  <h1 className="text-xl font-bold text-foreground tracking-tight" data-testid="text-agreement-title">
                     {agreement.title}
                   </h1>
                   {getStatusBadge(agreement.status)}
                 </div>
-                <p className="text-sm text-slate-500">{agreement.fileName}</p>
+                <p className="text-sm text-muted-foreground">{agreement.fileName}</p>
               </div>
             </div>
 
@@ -352,7 +352,7 @@ export default function AgreementDetailPage() {
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         onClick={() => setVoidDialogOpen(true)}
-                        className="text-red-600"
+                        className="text-destructive"
                         data-testid="action-void"
                       >
                         <Ban className="w-4 h-4 mr-2" />
@@ -382,7 +382,7 @@ export default function AgreementDetailPage() {
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </Button>
-                  <span className="text-sm text-slate-600">
+                  <span className="text-sm text-foreground">
                     Page {currentPage} of {agreement.pageCount}
                   </span>
                   <Button
@@ -405,7 +405,7 @@ export default function AgreementDetailPage() {
                   >
                     <ZoomOut className="w-4 h-4" />
                   </Button>
-                  <span className="text-sm text-slate-600 w-16 text-center">
+                  <span className="text-sm text-foreground w-16 text-center">
                     {Math.round(scale * 100)}%
                   </span>
                   <Button
@@ -420,13 +420,13 @@ export default function AgreementDetailPage() {
                 </div>
               </div>
 
-              <div className="relative bg-slate-200 rounded overflow-auto max-h-[600px] flex justify-center">
+              <div className="relative bg-muted rounded overflow-auto max-h-[600px] flex justify-center">
                 <div className="relative">
                   {pdfError && (
                     <div className="flex flex-col items-center justify-center p-20 text-center">
-                      <XCircle className="w-12 h-12 text-red-400 mb-4" />
-                      <p className="text-slate-600 mb-2">Unable to load PDF preview</p>
-                      <p className="text-sm text-slate-400">{pdfError}</p>
+                      <XCircle className="w-12 h-12 text-destructive mb-4" />
+                      <p className="text-foreground mb-2">Unable to load PDF preview</p>
+                      <p className="text-sm text-muted-foreground">{pdfError}</p>
                     </div>
                   )}
                   {pdfDataUrl && !pdfError && (
@@ -474,7 +474,7 @@ export default function AgreementDetailPage() {
                           </span>
                         )
                       ) : (
-                        <span className="text-slate-400">{field.fieldType}</span>
+                        <span className="text-muted-foreground">{field.fieldType}</span>
                       )}
                     </div>
                   ))}
@@ -486,44 +486,44 @@ export default function AgreementDetailPage() {
 
         <div className="w-80 border-l bg-white p-6 space-y-6">
           <div>
-            <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
+            <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
               <FileText className="w-4 h-4" />
               Document Details
             </h3>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-slate-500">Created</span>
-                <span className="text-slate-700">{formatDate(agreement.createdAt)}</span>
+                <span className="text-muted-foreground">Created</span>
+                <span className="text-foreground">{formatDate(agreement.createdAt)}</span>
               </div>
               {agreement.sentAt && (
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Sent</span>
-                  <span className="text-slate-700">{formatDate(agreement.sentAt)}</span>
+                  <span className="text-muted-foreground">Sent</span>
+                  <span className="text-foreground">{formatDate(agreement.sentAt)}</span>
                 </div>
               )}
               {agreement.completedAt && (
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Completed</span>
-                  <span className="text-green-600">{formatDate(agreement.completedAt)}</span>
+                  <span className="text-muted-foreground">Completed</span>
+                  <span className="text-success">{formatDate(agreement.completedAt)}</span>
                 </div>
               )}
               {agreement.voidedAt && (
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Voided</span>
-                  <span className="text-red-600">{formatDate(agreement.voidedAt)}</span>
+                  <span className="text-muted-foreground">Voided</span>
+                  <span className="text-destructive">{formatDate(agreement.voidedAt)}</span>
                 </div>
               )}
               {agreement.voidedReason && (
                 <div className="pt-2 border-t">
-                  <span className="text-slate-500 block mb-1">Void Reason</span>
-                  <span className="text-slate-700">{agreement.voidedReason}</span>
+                  <span className="text-muted-foreground block mb-1">Void Reason</span>
+                  <span className="text-foreground">{agreement.voidedReason}</span>
                 </div>
               )}
             </div>
           </div>
 
           <div>
-            <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
+            <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
               <User className="w-4 h-4" />
               Signers ({agreement.signers.length})
             </h3>
@@ -540,8 +540,8 @@ export default function AgreementDetailPage() {
                           {signer.name.charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <p className="font-medium text-slate-800 truncate text-sm">{signer.name}</p>
-                          <p className="text-xs text-slate-500 truncate">{signer.email}</p>
+                          <p className="font-medium text-foreground truncate text-sm">{signer.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{signer.email}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
@@ -565,13 +565,13 @@ export default function AgreementDetailPage() {
                       </div>
                     </div>
                     {signer.signedAt && (
-                      <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+                      <p className="text-xs text-success mt-2 flex items-center gap-1">
                         <CheckCircle className="w-3 h-3" />
                         Signed {formatDate(signer.signedAt)}
                       </p>
                     )}
                     {signer.tokenExpiresAt && signer.status !== 'signed' && (
-                      <p className="text-xs text-slate-400 mt-2 flex items-center gap-1">
+                      <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
                         <Clock className="w-3 h-3" />
                         Expires {formatDate(signer.tokenExpiresAt)}
                       </p>
@@ -593,7 +593,7 @@ export default function AgreementDetailPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <label className="text-sm font-medium text-slate-700">Reason (optional)</label>
+            <label className="text-sm font-medium text-foreground">Reason (optional)</label>
             <Textarea
               value={voidReason}
               onChange={(e) => setVoidReason(e.target.value)}

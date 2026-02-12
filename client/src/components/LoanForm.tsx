@@ -93,20 +93,20 @@ export function LoanForm({ onSubmit, isLoading, defaultData }: LoanFormProps) {
   }, [grossMonthlyRent, annualTaxes, annualInsurance, loanAmount, form]);
 
   return (
-    <Card className="w-full bg-white/90 backdrop-blur-sm shadow-xl border-slate-200/60 overflow-hidden">
-      <CardHeader className="bg-blue-50/50 border-b border-blue-100 pb-6">
+    <Card className="w-full bg-background/90 backdrop-blur-sm shadow-xl border-border/60 overflow-hidden">
+      <CardHeader className="bg-primary/5 border-b border-primary/10 pb-6">
         <div className="flex items-center gap-3 mb-1">
-          <div className="p-2 bg-blue-100 rounded-lg">
-            <Calculator className="h-6 w-6 text-blue-600" />
+          <div className="p-2 bg-primary/10 rounded-lg">
+            <Calculator className="h-6 w-6 text-primary" />
           </div>
           <div>
-            <CardTitle className="text-2xl font-bold text-slate-800">DSCR Loan Parameters</CardTitle>
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 mt-1">
+            <CardTitle className="text-2xl font-bold text-foreground">DSCR Loan Parameters</CardTitle>
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary mt-1">
               Debt Service Coverage Ratio
             </span>
           </div>
         </div>
-        <CardDescription className="text-base text-slate-500 mt-2">
+        <CardDescription className="text-base text-muted-foreground mt-2">
           Enter the DSCR loan details below to receive a real-time interest rate quote.
         </CardDescription>
       </CardHeader>
@@ -117,8 +117,8 @@ export function LoanForm({ onSubmit, isLoading, defaultData }: LoanFormProps) {
             
             {/* Financial Details Section */}
             <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                <DollarSign className="w-5 h-5 text-slate-400" />
+              <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-muted-foreground" />
                 Financials
               </h3>
               
@@ -128,10 +128,10 @@ export function LoanForm({ onSubmit, isLoading, defaultData }: LoanFormProps) {
                   name="loanAmount"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-slate-700">Loan Amount ($)</FormLabel>
+                      <FormLabel className="text-foreground">Loan Amount ($)</FormLabel>
                       <FormControl>
-                        <CurrencyInput 
-                          className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all" 
+                        <CurrencyInput
+                          className="h-11 bg-muted border-border focus:bg-background transition-all" 
                           placeholder="Enter amount" 
                           value={field.value}
                           onChange={field.onChange}
@@ -148,10 +148,10 @@ export function LoanForm({ onSubmit, isLoading, defaultData }: LoanFormProps) {
                   name="propertyValue"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-slate-700">Property Value ($)</FormLabel>
+                      <FormLabel className="text-foreground">Property Value ($)</FormLabel>
                       <FormControl>
-                        <CurrencyInput 
-                          className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all" 
+                        <CurrencyInput
+                          className="h-11 bg-muted border-border focus:bg-background transition-all" 
                           placeholder="Enter value" 
                           value={field.value}
                           onChange={field.onChange}
@@ -170,11 +170,11 @@ export function LoanForm({ onSubmit, isLoading, defaultData }: LoanFormProps) {
                   name="ltv"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-slate-700">LTV (%)</FormLabel>
+                      <FormLabel className="text-foreground">LTV (%)</FormLabel>
                       <FormControl>
                         <div className="relative">
-                          <Percent className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                          <Input readOnly className="pl-9 h-11 bg-slate-100/50 text-slate-500 font-medium" {...field} />
+                          <Percent className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                          <Input readOnly className="pl-9 h-11 bg-muted text-muted-foreground font-medium" {...field} />
                         </div>
                       </FormControl>
                       <FormMessage />
@@ -187,10 +187,10 @@ export function LoanForm({ onSubmit, isLoading, defaultData }: LoanFormProps) {
                   name="ficoScore"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-slate-700">FICO Score</FormLabel>
+                      <FormLabel className="text-foreground">FICO Score</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger className="h-11 bg-slate-50 border-slate-200">
+                          <SelectTrigger className="h-11 bg-muted border-border">
                             <SelectValue placeholder="Select FICO" />
                           </SelectTrigger>
                         </FormControl>
@@ -212,10 +212,10 @@ export function LoanForm({ onSubmit, isLoading, defaultData }: LoanFormProps) {
                   name="grossMonthlyRent"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-slate-700">Gross Monthly Rent ($)</FormLabel>
+                      <FormLabel className="text-foreground">Gross Monthly Rent ($)</FormLabel>
                       <FormControl>
-                        <CurrencyInput 
-                          className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all" 
+                        <CurrencyInput
+                          className="h-11 bg-muted border-border focus:bg-background transition-all" 
                           placeholder="Enter rent" 
                           value={field.value}
                           onChange={field.onChange}
@@ -232,10 +232,10 @@ export function LoanForm({ onSubmit, isLoading, defaultData }: LoanFormProps) {
                   name="annualTaxes"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-slate-700">Annual Taxes ($)</FormLabel>
+                      <FormLabel className="text-foreground">Annual Taxes ($)</FormLabel>
                       <FormControl>
-                        <CurrencyInput 
-                          className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all" 
+                        <CurrencyInput
+                          className="h-11 bg-muted border-border focus:bg-background transition-all" 
                           placeholder="Enter taxes" 
                           value={field.value}
                           onChange={field.onChange}
@@ -252,10 +252,10 @@ export function LoanForm({ onSubmit, isLoading, defaultData }: LoanFormProps) {
                   name="annualInsurance"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-slate-700">Annual Insurance ($)</FormLabel>
+                      <FormLabel className="text-foreground">Annual Insurance ($)</FormLabel>
                       <FormControl>
-                        <CurrencyInput 
-                          className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all" 
+                        <CurrencyInput
+                          className="h-11 bg-muted border-border focus:bg-white transition-all" 
                           placeholder="Enter insurance" 
                           value={field.value}
                           onChange={field.onChange}
@@ -274,9 +274,9 @@ export function LoanForm({ onSubmit, isLoading, defaultData }: LoanFormProps) {
                   name="calculatedDscr"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-slate-700">Exact DSCR</FormLabel>
+                      <FormLabel className="text-foreground">Exact DSCR</FormLabel>
                       <FormControl>
-                        <Input readOnly className="h-11 bg-slate-100/50 text-slate-500 font-medium" placeholder="Calculated" {...field} />
+                        <Input readOnly className="h-11 bg-muted text-muted-foreground font-medium" placeholder="Calculated" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -288,10 +288,10 @@ export function LoanForm({ onSubmit, isLoading, defaultData }: LoanFormProps) {
                   name="dscr"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-slate-700">Est. DSCR</FormLabel>
+                      <FormLabel className="text-foreground">Est. DSCR</FormLabel>
                       <Select disabled onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                          <SelectTrigger className="h-11 bg-slate-100/50 text-slate-500 font-medium">
+                          <SelectTrigger className="h-11 bg-muted text-muted-foreground font-medium">
                             <SelectValue placeholder="Calculated from financials" />
                           </SelectTrigger>
                         </FormControl>
@@ -307,12 +307,12 @@ export function LoanForm({ onSubmit, isLoading, defaultData }: LoanFormProps) {
               </div>
             </div>
 
-            <div className="h-px bg-slate-100" />
+            <div className="h-px bg-border" />
 
             {/* Loan Specifics Section */}
             <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                <Building className="w-5 h-5 text-slate-400" />
+              <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <Building className="w-5 h-5 text-muted-foreground" />
                 Loan Specifics
               </h3>
 
@@ -322,10 +322,10 @@ export function LoanForm({ onSubmit, isLoading, defaultData }: LoanFormProps) {
                   name="loanType"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-slate-700">Loan Type</FormLabel>
+                      <FormLabel className="text-foreground">Loan Type</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger className="h-11 bg-slate-50 border-slate-200">
+                          <SelectTrigger className="h-11 bg-muted border-border">
                             <SelectValue placeholder="Select type" />
                           </SelectTrigger>
                         </FormControl>
@@ -346,10 +346,10 @@ export function LoanForm({ onSubmit, isLoading, defaultData }: LoanFormProps) {
                   name="loanPurpose"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-slate-700">Loan Purpose</FormLabel>
+                      <FormLabel className="text-foreground">Loan Purpose</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger className="h-11 bg-slate-50 border-slate-200">
+                          <SelectTrigger className="h-11 bg-muted border-border">
                             <SelectValue placeholder="Select purpose" />
                           </SelectTrigger>
                         </FormControl>
@@ -369,10 +369,10 @@ export function LoanForm({ onSubmit, isLoading, defaultData }: LoanFormProps) {
                   name="propertyType"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-slate-700">Property Type</FormLabel>
+                      <FormLabel className="text-foreground">Property Type</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger className="h-11 bg-slate-50 border-slate-200">
+                          <SelectTrigger className="h-11 bg-muted border-border">
                             <SelectValue placeholder="Select property type" />
                           </SelectTrigger>
                         </FormControl>
@@ -394,10 +394,10 @@ export function LoanForm({ onSubmit, isLoading, defaultData }: LoanFormProps) {
                   name="interestOnly"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-slate-700">Interest Only</FormLabel>
+                      <FormLabel className="text-foreground">Interest Only</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger className="h-11 bg-slate-50 border-slate-200">
+                          <SelectTrigger className="h-11 bg-muted border-border">
                             <SelectValue placeholder="Select option" />
                           </SelectTrigger>
                         </FormControl>
@@ -418,10 +418,10 @@ export function LoanForm({ onSubmit, isLoading, defaultData }: LoanFormProps) {
                   name="prepaymentPenalty"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-slate-700">Prepayment Penalty</FormLabel>
+                      <FormLabel className="text-foreground">Prepayment Penalty</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger className="h-11 bg-slate-50 border-slate-200">
+                          <SelectTrigger className="h-11 bg-muted border-border">
                             <SelectValue placeholder="None" />
                           </SelectTrigger>
                         </FormControl>

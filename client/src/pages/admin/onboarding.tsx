@@ -179,7 +179,7 @@ export default function AdminOnboarding() {
     <div className="container max-w-6xl mx-auto py-6 px-4">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Onboarding Management</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Onboarding Management</h1>
           <p className="text-muted-foreground">
             Manage partnership agreements, training materials, and track user onboarding
           </p>
@@ -297,7 +297,7 @@ export default function AdminOnboarding() {
                           </TableCell>
                           <TableCell>
                             {doc.isActive ? (
-                              <Badge variant="default" className="bg-green-500">Active</Badge>
+                              <Badge variant="default" className="bg-success">Active</Badge>
                             ) : (
                               <Badge variant="secondary">Inactive</Badge>
                             )}
@@ -351,7 +351,7 @@ export default function AdminOnboarding() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Clock className="h-5 w-5 text-yellow-500" />
+                  <Clock className="h-5 w-5 text-warning" />
                   Pending Onboarding
                 </CardTitle>
                 <CardDescription>
@@ -365,7 +365,7 @@ export default function AdminOnboarding() {
                   </div>
                 ) : brokersPendingOnboarding.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-8">
-                    <CheckCircle2 className="h-12 w-12 text-green-500 mb-4" />
+                    <CheckCircle2 className="h-12 w-12 text-success mb-4" />
                     <p className="text-lg font-medium">All Caught Up!</p>
                     <p className="text-muted-foreground">All brokers have completed their onboarding.</p>
                   </div>
@@ -390,7 +390,7 @@ export default function AdminOnboarding() {
                           </TableCell>
                           <TableCell>
                             {user.partnershipAgreementSignedAt ? (
-                              <Badge variant="default" className="bg-green-500">
+                              <Badge variant="default" className="bg-success">
                                 <CheckCircle2 className="h-3 w-3 mr-1" />
                                 Signed
                               </Badge>
@@ -403,7 +403,7 @@ export default function AdminOnboarding() {
                           </TableCell>
                           <TableCell>
                             {user.trainingCompletedAt ? (
-                              <Badge variant="default" className="bg-green-500">
+                              <Badge variant="default" className="bg-success">
                                 <CheckCircle2 className="h-3 w-3 mr-1" />
                                 Completed
                               </Badge>
@@ -428,7 +428,7 @@ export default function AdminOnboarding() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                  <CheckCircle2 className="h-5 w-5 text-success" />
                   Completed Onboarding
                 </CardTitle>
                 <CardDescription>
@@ -615,7 +615,7 @@ function DocumentForm({
             </div>
           )}
           {uploadedFileName && !isUploading && (
-            <p className="text-sm text-green-600 flex items-center gap-1">
+            <p className="text-sm text-success flex items-center gap-1">
               <CheckCircle2 className="h-4 w-4" />
               Uploaded: {uploadedFileName}
             </p>

@@ -227,8 +227,8 @@ export default function Home() {
             <div className="flex items-center gap-2 md:gap-3 min-w-0">
               <Calculator className="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" />
               <div className="min-w-0">
-                <h1 className="text-lg md:text-xl font-bold text-primary truncate" data-testid="text-page-title">New Quote</h1>
-                <p className="text-xs md:text-sm text-slate-500 hidden sm:block">Generate loan pricing</p>
+                <h1 className="text-lg md:text-xl font-bold text-primary tracking-tight truncate" data-testid="text-page-title">New Quote</h1>
+                <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">Generate loan pricing</p>
               </div>
             </div>
             {programsWithRulesets.length > 0 && (
@@ -320,7 +320,7 @@ export default function Home() {
           >
             <Card className="border-primary/20 bg-primary/5">
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
+                <CardTitle className="text-lg tracking-tight flex items-center gap-2">
                   <Sparkles className="h-5 w-5 text-primary" />
                   Instant Pricing Engine
                 </CardTitle>
@@ -477,11 +477,11 @@ export default function Home() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                   >
-                    <Card className={instantResult.eligible ? "border-green-200 bg-green-50 dark:bg-green-950" : "border-red-200 bg-red-50 dark:bg-red-950"}>
+                    <Card className={instantResult.eligible ? "border-success/30 bg-success/10" : "border-destructive/30 bg-destructive/10"}>
                       <CardContent className="pt-4">
                         {instantResult.eligible ? (
                           <div className="space-y-3">
-                            <div className="flex items-center gap-2 text-green-700 dark:text-green-300">
+                            <div className="flex items-center gap-2 text-success">
                               <CheckCircle2 className="h-5 w-5" />
                               <span className="font-medium">Eligible for Financing</span>
                             </div>
@@ -524,12 +524,12 @@ export default function Home() {
                           </div>
                         ) : (
                           <div>
-                            <div className="flex items-center gap-2 text-red-700 dark:text-red-300 mb-2">
+                            <div className="flex items-center gap-2 text-destructive mb-2">
                               <XCircle className="h-5 w-5" />
                               <span className="font-medium">Not Eligible</span>
                             </div>
                             {instantResult.reasons && (
-                              <ul className="text-sm text-red-600 dark:text-red-400 list-disc list-inside">
+                              <ul className="text-sm text-destructive list-disc list-inside">
                                 {instantResult.reasons.map((reason, i) => (
                                   <li key={i}>{reason}</li>
                                 ))}
@@ -557,7 +557,7 @@ export default function Home() {
             >
               <div className="max-w-md mx-auto space-y-4">
                 <Progress value={progress} className="h-3 w-full" />
-                <p className="text-lg font-medium text-slate-700 animate-pulse">
+                <p className="text-lg font-medium text-foreground animate-pulse">
                   {progressMessage}
                 </p>
               </div>

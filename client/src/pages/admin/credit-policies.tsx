@@ -257,7 +257,7 @@ export default function AdminCreditPolicies() {
 
         <div className="space-y-3 border-t pt-4">
           <Label className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-amber-500" />
+            <Sparkles className="h-4 w-4 text-warning" />
             Upload Credit Policy Document
           </Label>
           <p className="text-xs text-muted-foreground">
@@ -290,7 +290,7 @@ export default function AdminCreditPolicies() {
             <div
               className={`border-2 border-dashed rounded-md p-6 text-center cursor-pointer transition-colors ${
                 isDragOver
-                  ? "border-emerald-500 bg-emerald-500/5"
+                  ? "border-success bg-success/5"
                   : "border-muted-foreground/25 hover:border-muted-foreground/50"
               }`}
               data-testid="dropzone-policy-upload"

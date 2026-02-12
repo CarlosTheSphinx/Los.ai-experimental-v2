@@ -30,11 +30,11 @@ interface AdminProject {
 }
 
 const statusColors: Record<string, string> = {
-  active: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
-  on_hold: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300",
-  completed: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
-  funded: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
-  cancelled: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+  active: "bg-primary/10 text-primary",
+  on_hold: "bg-warning/10 text-warning",
+  completed: "bg-success/10 text-success",
+  funded: "bg-success/10 text-success",
+  cancelled: "bg-destructive/10 text-destructive",
 };
 
 type ViewMode = "table" | "kanban" | "pipeline";
@@ -85,7 +85,7 @@ export default function AdminProjects() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <h1 className="text-2xl font-semibold" data-testid="text-admin-projects-title">All Projects</h1>
+        <h1 className="text-3xl font-bold tracking-tight" data-testid="text-admin-projects-title">All Projects</h1>
         <div className="flex items-center gap-1 rounded-md border p-0.5">
           {viewButtons.map(({ mode, label, icon: Icon }) => (
             <Button

@@ -98,11 +98,11 @@ const fieldTypeIcons: Record<string, any> = {
 };
 
 const fieldTypeColors: Record<string, string> = {
-  text: "bg-blue-100 border-blue-400 text-blue-800",
-  number: "bg-green-100 border-green-400 text-green-800",
-  date: "bg-purple-100 border-purple-400 text-purple-800",
-  checkbox: "bg-orange-100 border-orange-400 text-orange-800",
-  signature: "bg-red-100 border-red-400 text-red-800",
+  text: "bg-primary/10 border-primary text-primary",
+  number: "bg-success/10 border-success text-success",
+  date: "bg-primary/10 border-primary text-primary",
+  checkbox: "bg-warning/10 border-warning text-warning",
+  signature: "bg-destructive/10 border-destructive text-destructive",
 };
 
 const BINDING_KEYS = [
@@ -419,7 +419,7 @@ export default function TemplateEditorPage() {
   if (!data?.template) {
     return (
       <div className="p-6">
-        <p className="text-slate-500">Template not found.</p>
+        <p className="text-muted-foreground">Template not found.</p>
       </div>
     );
   }
@@ -434,8 +434,8 @@ export default function TemplateEditorPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-xl font-bold text-slate-800">{data.template.name}</h1>
-            <p className="text-sm text-slate-500">{data.template.pdfFileName}</p>
+            <h1 className="text-xl font-bold text-foreground">{data.template.name}</h1>
+            <p className="text-sm text-muted-foreground">{data.template.pdfFileName}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -446,7 +446,7 @@ export default function TemplateEditorPage() {
           <Button
             onClick={() => saveFieldsMutation.mutate(fields)}
             disabled={saveFieldsMutation.isPending}
-            className="bg-gradient-to-r from-green-600 to-emerald-600"
+            className="bg-gradient-to-r from-success to-success/80"
             data-testid="button-save-fields"
           >
             {saveFieldsMutation.isPending ? (
@@ -465,9 +465,9 @@ export default function TemplateEditorPage() {
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        <div className="w-72 border-r bg-slate-50 flex flex-col">
+        <div className="w-72 border-r bg-muted/30 flex flex-col">
           <div className="p-4 border-b bg-white">
-            <h3 className="font-semibold text-slate-700 mb-3">Add Field</h3>
+            <h3 className="font-semibold text-foreground mb-3">Add Field</h3>
             <div className="grid grid-cols-3 gap-2">
               {Object.entries(fieldTypeIcons).map(([type, Icon]) => (
                 <Button
@@ -487,7 +487,7 @@ export default function TemplateEditorPage() {
 
           <ScrollArea className="flex-1">
             <div className="p-4 space-y-2">
-              <h3 className="font-semibold text-slate-700 text-sm mb-3">
+              <h3 className="font-semibold text-foreground text-sm mb-3">
                 Fields on Page {currentPage} ({currentPageFields.length})
               </h3>
               {currentPageFields.map((field, index) => {
@@ -502,25 +502,25 @@ export default function TemplateEditorPage() {
                     }}
                     className={`p-3 rounded-lg border cursor-pointer hover-elevate ${
                       selectedField?.tabOrder === globalIndex
-                        ? "border-blue-500 bg-blue-50"
-                        : "border-slate-200 bg-white"
+                        ? "border-primary bg-primary/10"
+                        : "border-border bg-white"
                     }`}
                     data-testid={`field-item-${index}`}
                   >
                     <div className="flex items-center gap-2">
-                      <Icon className="h-4 w-4 text-slate-500" />
+                      <Icon className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm font-medium truncate flex-1">
                         {field.fieldName}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-400 mt-1 truncate">
+                    <p className="text-xs text-muted-foreground mt-1 truncate">
                       {field.fieldKey || "No binding set"}
                     </p>
                   </div>
                 );
               })}
               {currentPageFields.length === 0 && (
-                <p className="text-sm text-slate-400 text-center py-4">
+                <p className="text-sm text-muted-foreground text-center py-4">
                   No fields on this page
                 </p>
               )}
@@ -528,13 +528,13 @@ export default function TemplateEditorPage() {
           </ScrollArea>
         </div>
 
-        <div className="flex-1 bg-slate-100 p-6 overflow-auto">
+        <div className="flex-1 bg-muted/30 p-6 overflow-auto">
           {!data.template.pdfUrl || !data.template.pdfUrl.trim() ? (
             <Card className="max-w-md mx-auto mt-12">
               <CardContent className="py-12 text-center">
-                <Upload className="h-12 w-12 mx-auto mb-4 text-slate-400" />
+                <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                 <h3 className="text-lg font-semibold mb-2">Upload PDF Template</h3>
-                <p className="text-slate-500 mb-4">
+                <p className="text-muted-foreground mb-4">
                   Upload a PDF to start adding fields
                 </p>
                 <Button onClick={() => setShowUploadDialog(true)}>
@@ -554,7 +554,7 @@ export default function TemplateEditorPage() {
                 >
                   <ChevronLeft className="h-5 w-5" />
                 </Button>
-                <span className="text-sm text-slate-600">
+                <span className="text-sm text-foreground">
                   Page {currentPage} of {pdfPages.length || data.template.pageCount}
                 </span>
                 <Button
@@ -591,7 +591,7 @@ export default function TemplateEditorPage() {
                     <div
                       key={index}
                       className={`absolute border-2 cursor-move flex items-center justify-center ${colorClass} ${
-                        selectedField?.tabOrder === globalIndex ? "ring-2 ring-blue-500" : ""
+                        selectedField?.tabOrder === globalIndex ? "ring-2 ring-primary" : ""
                       }`}
                       style={{
                         left: screenX,
@@ -657,7 +657,7 @@ export default function TemplateEditorPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   This field will be auto-filled with the selected data
                 </p>
               </div>
@@ -774,10 +774,10 @@ export default function TemplateEditorPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="py-6">
-            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/30 transition-colors">
               <div className="flex flex-col items-center justify-center">
-                <Upload className="h-8 w-8 mb-2 text-slate-400" />
-                <p className="text-sm text-slate-600">
+                <Upload className="h-8 w-8 mb-2 text-muted-foreground" />
+                <p className="text-sm text-foreground">
                   {uploadPdfMutation.isPending ? "Uploading..." : "Click to upload PDF"}
                 </p>
               </div>

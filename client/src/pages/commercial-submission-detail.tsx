@@ -94,15 +94,15 @@ interface CommercialSubmission {
 
 function getStatusBadgeClass(status: string): string {
   const colors: Record<string, string> = {
-    DRAFT: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
-    NEW: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-    UNDER_REVIEW: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-    NEEDS_INFO: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
-    APPROVED: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-    DECLINED: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-    EXPIRED: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
+    DRAFT: "bg-secondary text-secondary-foreground",
+    NEW: "bg-info/20 text-info",
+    UNDER_REVIEW: "bg-warning/20 text-warning",
+    NEEDS_INFO: "bg-warning/20 text-warning",
+    APPROVED: "bg-success/10 text-success",
+    DECLINED: "bg-destructive/10 text-destructive",
+    EXPIRED: "bg-muted text-muted-foreground",
   };
-  return colors[status] || "bg-gray-100 text-gray-800";
+  return colors[status] || "bg-muted text-muted-foreground";
 }
 
 function formatCurrency(amount: number | null | undefined): string {

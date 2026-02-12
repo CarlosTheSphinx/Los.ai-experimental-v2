@@ -417,7 +417,7 @@ export default function AdminPartners() {
                   </div>
                 )}
 
-                <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 rounded-md text-sm text-amber-800 dark:text-amber-200">
+                <div className="bg-warning/10 border border-warning p-3 rounded-md text-sm text-warning">
                   <strong>Note:</strong> This will send to all {partners.length} active partners. Messages will be sent in the background.
                 </div>
               </div>
@@ -801,7 +801,7 @@ export default function AdminPartners() {
                           </span>
                           {broadcast.sendEmail && (
                             <span className="flex items-center gap-1">
-                              <CheckCircle2 className="h-4 w-4 text-green-500" />
+                              <CheckCircle2 className="h-4 w-4 text-success" />
                               {broadcast.emailsSent} emails sent
                               {broadcast.emailsFailed > 0 && (
                                 <span className="text-destructive">

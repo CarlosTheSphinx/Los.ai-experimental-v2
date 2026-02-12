@@ -110,15 +110,15 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
   const additionalPointsAmount = (maxLoanByLTC * additionalPoints) / 100;
   if (!result.eligible) {
     return (
-      <Card className="w-full bg-white/90 backdrop-blur-sm shadow-xl border-red-200/60 overflow-hidden">
-        <CardHeader className="bg-red-50/50 border-b border-red-100 pb-6">
+      <Card className="w-full bg-background/90 backdrop-blur-sm shadow-xl border-destructive/60 overflow-hidden">
+        <CardHeader className="bg-destructive/5 border-b border-destructive/10 pb-6">
           <div className="flex items-center gap-3 mb-1">
-            <div className="p-2 bg-red-100 rounded-lg">
-              <XCircle className="h-6 w-6 text-red-600" />
+            <div className="p-2 bg-destructive/10 rounded-lg">
+              <XCircle className="h-6 w-6 text-destructive" />
             </div>
             <div>
-              <CardTitle className="text-2xl font-bold text-red-800">Not Eligible</CardTitle>
-              <CardDescription className="text-red-600">
+              <CardTitle className="text-2xl font-bold text-destructive">Not Eligible</CardTitle>
+              <CardDescription className="text-destructive">
                 This loan does not meet program requirements
               </CardDescription>
             </div>
@@ -126,13 +126,13 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
         </CardHeader>
         <CardContent className="pt-6 pb-8">
           <div className="space-y-4 mb-6">
-            <h3 className="font-semibold text-slate-700">Disqualification Reasons:</h3>
+            <h3 className="font-semibold text-foreground">Disqualification Reasons:</h3>
             {result.disqualifiers?.map((dq, idx) => (
-              <div key={idx} className="flex items-start gap-3 p-3 bg-red-50 rounded-lg border border-red-100">
-                <XCircle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
+              <div key={idx} className="flex items-start gap-3 p-3 bg-destructive/10 rounded-lg border border-destructive/20">
+                <XCircle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
                 <div>
-                  <Badge variant="outline" className="text-xs mb-1 border-red-200 text-red-600">{dq.id}</Badge>
-                  <p className="text-sm text-slate-700">{dq.message}</p>
+                  <Badge variant="outline" className="text-xs mb-1 border-destructive/20 text-destructive">{dq.id}</Badge>
+                  <p className="text-sm text-foreground">{dq.message}</p>
                 </div>
               </div>
             ))}
@@ -140,11 +140,11 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
 
           {result.flags && result.flags.length > 0 && (
             <div className="space-y-3 mb-6">
-              <h3 className="font-semibold text-slate-700">Additional Flags:</h3>
+              <h3 className="font-semibold text-foreground">Additional Flags:</h3>
               {result.flags.map((flag, idx) => (
-                <div key={idx} className="flex items-start gap-3 p-3 bg-amber-50 rounded-lg border border-amber-100">
-                  <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0" />
-                  <p className="text-sm text-slate-700">{flag.message}</p>
+                <div key={idx} className="flex items-start gap-3 p-3 bg-warning/10 rounded-lg border border-warning/20">
+                  <AlertTriangle className="h-5 w-5 text-warning mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-foreground">{flag.message}</p>
                 </div>
               ))}
             </div>
@@ -160,15 +160,15 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
   }
 
   return (
-    <Card className="w-full bg-white/90 backdrop-blur-sm shadow-xl border-green-200/60 overflow-hidden">
-      <CardHeader className="bg-green-50/50 border-b border-green-100 pb-6">
+    <Card className="w-full bg-background/90 backdrop-blur-sm shadow-xl border-success/60 overflow-hidden">
+      <CardHeader className="bg-success/5 border-b border-success/10 pb-6">
         <div className="flex items-center gap-3 mb-1">
-          <div className="p-2 bg-green-100 rounded-lg">
-            <CheckCircle2 className="h-6 w-6 text-green-600" />
+          <div className="p-2 bg-success/10 rounded-lg">
+            <CheckCircle2 className="h-6 w-6 text-success" />
           </div>
           <div>
-            <CardTitle className="text-2xl font-bold text-green-800">Eligible</CardTitle>
-            <CardDescription className="text-green-600">
+            <CardTitle className="text-2xl font-bold text-success">Eligible</CardTitle>
+            <CardDescription className="text-success">
               Loan meets program requirements
             </CardDescription>
           </div>
@@ -176,29 +176,29 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
       </CardHeader>
       <CardContent className="pt-6 pb-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <div className="p-4 bg-slate-50 rounded-lg border">
-            <div className="flex items-center gap-2 text-slate-500 mb-2">
+          <div className="p-4 bg-muted rounded-lg border border-border">
+            <div className="flex items-center gap-2 text-muted-foreground mb-2">
               <Percent className="h-4 w-4" />
               <span className="text-sm font-medium">Interest Rate</span>
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-slate-800" data-testid="text-rtl-rate">
+              <span className="text-3xl font-bold text-foreground" data-testid="text-rtl-rate">
                 {result.finalRate?.toFixed(3)}%
               </span>
               {result.baseRate && result.finalRate && result.baseRate !== result.finalRate && (
-                <span className="text-sm text-slate-500">
+                <span className="text-sm text-muted-foreground">
                   (base: {result.baseRate}%)
                 </span>
               )}
             </div>
           </div>
 
-          <div className="p-4 bg-slate-50 rounded-lg border">
-            <div className="flex items-center gap-2 text-slate-500 mb-2">
+          <div className="p-4 bg-muted rounded-lg border border-border">
+            <div className="flex items-center gap-2 text-muted-foreground mb-2">
               <TrendingUp className="h-4 w-4" />
               <span className="text-sm font-medium">Points</span>
             </div>
-            <span className="text-3xl font-bold text-slate-800" data-testid="text-rtl-points">
+            <span className="text-3xl font-bold text-foreground" data-testid="text-rtl-points">
               {result.points?.toFixed(2)}
             </span>
           </div>
@@ -206,26 +206,26 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
 
         {result.caps && (
           <div className="mb-6">
-            <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+            <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
               <Building className="h-4 w-4" />
               Maximum Leverage Caps
             </h3>
             <div className="grid grid-cols-3 gap-4">
-              <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 text-center">
-                <span className="text-xs text-blue-600 font-medium">Max LTC</span>
-                <div className="text-xl font-bold text-blue-800" data-testid="text-max-ltc">
+              <div className="p-3 bg-primary/10 rounded-lg border border-primary/20 text-center">
+                <span className="text-xs text-primary font-medium">Max LTC</span>
+                <div className="text-xl font-bold text-primary" data-testid="text-max-ltc">
                   {result.caps.maxLTC}%
                 </div>
               </div>
-              <div className="p-3 bg-purple-50 rounded-lg border border-purple-100 text-center">
-                <span className="text-xs text-purple-600 font-medium">Max LTAIV</span>
-                <div className="text-xl font-bold text-purple-800" data-testid="text-max-ltaiv">
+              <div className="p-3 bg-primary/10 rounded-lg border border-primary/20 text-center">
+                <span className="text-xs text-primary font-medium">Max LTAIV</span>
+                <div className="text-xl font-bold text-primary" data-testid="text-max-ltaiv">
                   {result.caps.maxLTAIV}%
                 </div>
               </div>
-              <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-100 text-center">
-                <span className="text-xs text-indigo-600 font-medium">Max LTARV</span>
-                <div className="text-xl font-bold text-indigo-800" data-testid="text-max-ltarv">
+              <div className="p-3 bg-primary/10 rounded-lg border border-primary/20 text-center">
+                <span className="text-xs text-primary font-medium">Max LTARV</span>
+                <div className="text-xl font-bold text-primary" data-testid="text-max-ltarv">
                   {isLTARVApplicable ? `${result.caps.maxLTARV}%` : "N/A"}
                 </div>
               </div>
@@ -235,15 +235,15 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
 
 
         {formData && result.caps && maxLoanAmount > 0 && (
-          <div className="mb-6 bg-slate-50 rounded-lg p-5 border border-slate-200">
-            <h3 className="font-semibold text-slate-700 mb-4 flex items-center gap-2">
+          <div className="mb-6 bg-muted rounded-lg p-5 border border-border">
+            <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
               <DollarSign className="h-4 w-4" />
               Commission Calculator
             </h3>
             
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <Label className="flex items-center gap-1">
+                <Label className="flex items-center gap-1 text-foreground">
                   <Percent className="w-3 h-3" />
                   Additional Points (on top of {MIN_POINTS} minimum)
                 </Label>
@@ -260,14 +260,14 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
                         setAdditionalPoints(val);
                       }
                     }}
-                    className="w-20 text-center text-lg font-bold"
+                    className="w-20 text-center text-lg font-bold border-border"
                     data-testid="input-additional-points"
                   />
-                  <span className="text-sm text-slate-500">points</span>
+                  <span className="text-sm text-muted-foreground">points</span>
                 </div>
               </div>
               
-              <div className="bg-white rounded-lg p-4 border border-slate-200">
+              <div className="bg-background rounded-lg p-4 border border-border">
                 <Slider
                   value={[additionalPoints]}
                   onValueChange={([val]) => setAdditionalPoints(val)}
@@ -276,33 +276,33 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
                   className="w-full"
                   data-testid="slider-additional-points"
                 />
-                <div className="flex justify-between text-xs text-slate-500 mt-2">
+                <div className="flex justify-between text-xs text-muted-foreground mt-2">
                   <span>+0</span>
                   <span>+1</span>
                   <span>+2</span>
                   <span>+3</span>
                 </div>
               </div>
-              
-              <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
+
+              <div className="bg-background rounded-lg p-4 border border-border space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">Minimum Points Required</span>
+                  <span className="text-muted-foreground">Minimum Points Required</span>
                   <span className="font-medium">{MIN_POINTS.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">Additional Points</span>
+                  <span className="text-muted-foreground">Additional Points</span>
                   <span className="font-medium">+{additionalPoints.toFixed(2)}</span>
                 </div>
                 <div className="border-t pt-2 flex justify-between text-sm font-semibold">
-                  <span className="text-slate-700">Total Points</span>
+                  <span className="text-foreground">Total Points</span>
                   <span className="text-primary">{totalPoints.toFixed(2)}</span>
                 </div>
               </div>
               
-              <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+              <div className="bg-success/10 rounded-lg p-4 border border-success/20">
                 <div className="flex justify-between items-center">
-                  <span className="font-semibold text-green-700">Your Commission</span>
-                  <span className="text-2xl font-bold text-green-600" data-testid="text-rtl-commission">
+                  <span className="font-semibold text-success">Your Commission</span>
+                  <span className="text-2xl font-bold text-success" data-testid="text-rtl-commission">
                     ${additionalPointsAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
@@ -313,12 +313,12 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
 
         {result.appliedAdjusters && result.appliedAdjusters.length > 0 && (
           <div className="mb-6">
-            <h3 className="font-semibold text-slate-700 mb-3">Rate Adjustments Applied:</h3>
+            <h3 className="font-semibold text-foreground mb-3">Rate Adjustments Applied:</h3>
             <div className="space-y-2">
               {result.appliedAdjusters.map((adj, idx) => (
-                <div key={idx} className="flex items-center justify-between p-2 bg-amber-50 rounded border border-amber-100">
-                  <span className="text-sm text-slate-700">{adj.label}</span>
-                  <Badge variant="secondary" className="bg-amber-100 text-amber-700">
+                <div key={idx} className="flex items-center justify-between p-2 bg-warning/10 rounded border border-warning/20">
+                  <span className="text-sm text-foreground">{adj.label}</span>
+                  <Badge variant="secondary" className="bg-warning/20 text-warning">
                     +{adj.rateAdd.toFixed(2)}%
                   </Badge>
                 </div>
@@ -329,12 +329,12 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
 
         {result.flags && result.flags.length > 0 && (
           <div className="mb-6">
-            <h3 className="font-semibold text-slate-700 mb-3">Flags & Notes:</h3>
+            <h3 className="font-semibold text-foreground mb-3">Flags & Notes:</h3>
             <div className="space-y-2">
               {result.flags.map((flag, idx) => (
-                <div key={idx} className="flex items-start gap-3 p-3 bg-amber-50 rounded-lg border border-amber-100">
-                  <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0" />
-                  <p className="text-sm text-slate-700">{flag.message}</p>
+                <div key={idx} className="flex items-start gap-3 p-3 bg-warning/10 rounded-lg border border-warning/20">
+                  <AlertTriangle className="h-5 w-5 text-warning mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-foreground">{flag.message}</p>
                 </div>
               ))}
             </div>
@@ -342,54 +342,54 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
         )}
 
         {formData && result.caps && maxLoanAmount > 0 && (
-          <div className="mb-6 bg-white rounded-lg p-5 border border-slate-200">
-            <h3 className="font-semibold text-slate-700 mb-4 flex items-center gap-2">
+          <div className="mb-6 bg-background rounded-lg p-5 border border-border">
+            <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
               <Calculator className="h-4 w-4" />
               Loan Summary
             </h3>
             <div className="space-y-3">
-              <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                <span className="text-slate-600 font-medium">Maximum Loan Amount</span>
-                <span className="text-xl font-bold text-green-600" data-testid="text-max-loan-amount">
+              <div className="flex justify-between items-center py-2 border-b border-border">
+                <span className="text-foreground font-medium">Maximum Loan Amount</span>
+                <span className="text-xl font-bold text-success" data-testid="text-max-loan-amount">
                   ${maxLoanByLTC.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </span>
               </div>
-              <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                <span className="text-slate-600 font-medium">Initial Loan Amount</span>
-                <span className="text-xl font-bold text-blue-600" data-testid="text-initial-loan-amount">
+              <div className="flex justify-between items-center py-2 border-b border-border">
+                <span className="text-foreground font-medium">Initial Loan Amount</span>
+                <span className="text-xl font-bold text-primary" data-testid="text-initial-loan-amount">
                   ${maxLoanByLTAIV.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </span>
               </div>
-              <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                <span className="text-slate-600">
-                  Budget <span className="text-slate-400">(100% held back)</span>
+              <div className="flex justify-between items-center py-2 border-b border-border">
+                <span className="text-foreground">
+                  Budget <span className="text-muted-foreground">(100% held back)</span>
                 </span>
-                <span className="text-lg font-semibold text-slate-700" data-testid="text-budget-held-back">
+                <span className="text-lg font-semibold text-foreground" data-testid="text-budget-held-back">
                   ${rehabBudget.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </span>
               </div>
-              <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                <span className="text-slate-600">Down Payment</span>
-                <span className="text-lg font-semibold text-slate-700" data-testid="text-down-payment">
+              <div className="flex justify-between items-center py-2 border-b border-border">
+                <span className="text-foreground">Down Payment</span>
+                <span className="text-lg font-semibold text-foreground" data-testid="text-down-payment">
                   ${Math.max(0, asIsValue - maxLoanByLTAIV).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </span>
               </div>
-              <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                <span className="text-slate-600">Total Points ({totalPoints.toFixed(2)}%)</span>
-                <span className="text-lg font-semibold text-slate-700" data-testid="text-total-points-dollars">
+              <div className="flex justify-between items-center py-2 border-b border-border">
+                <span className="text-foreground">Total Points ({totalPoints.toFixed(2)}%)</span>
+                <span className="text-lg font-semibold text-foreground" data-testid="text-total-points-dollars">
                   ${((maxLoanByLTC * totalPoints) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </span>
               </div>
-              <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                <span className="text-slate-600">
-                  Misc. Closing Costs <span className="text-slate-400">(title, insurance, etc.)</span>
+              <div className="flex justify-between items-center py-2 border-b border-border">
+                <span className="text-foreground">
+                  Misc. Closing Costs <span className="text-muted-foreground">(title, insurance, etc.)</span>
                 </span>
-                <span className="text-lg font-semibold text-slate-700" data-testid="text-misc-closing-costs">
+                <span className="text-lg font-semibold text-foreground" data-testid="text-misc-closing-costs">
                   ${((maxLoanByLTC * 1.5) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </span>
               </div>
               <div className="flex justify-between items-center py-3 bg-primary/5 rounded-lg px-3 -mx-3">
-                <span className="text-slate-700 font-semibold">Estimated Total Cash to Close</span>
+                <span className="text-foreground font-semibold">Estimated Total Cash to Close</span>
                 <span className="text-2xl font-bold text-primary" data-testid="text-cash-to-close">
                   ${(Math.max(0, asIsValue - maxLoanByLTAIV) + ((maxLoanByLTC * totalPoints) / 100) + ((maxLoanByLTC * 1.5) / 100)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </span>
@@ -402,7 +402,7 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
           <>
             <Button 
               onClick={() => setShowQuoteForm(true)}
-              className="w-full mb-3 h-12 text-lg font-semibold bg-gradient-to-r from-green-600 to-emerald-600 shadow-lg shadow-green-500/20"
+              className="w-full mb-3 h-12 text-lg font-semibold bg-gradient-to-r from-success to-success/80 shadow-lg shadow-success/20"
               data-testid="button-save-rtl-quote"
             >
               <Save className="mr-2 h-5 w-5" />
@@ -419,8 +419,8 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
             </Button>
           </>
         ) : (
-          <div className="bg-blue-50 rounded-xl p-5 border border-blue-100 space-y-5 mb-3">
-            <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+          <div className="bg-info/5 rounded-xl p-5 border border-info/20 space-y-5 mb-3">
+            <h3 className="font-semibold text-foreground flex items-center gap-2">
               <User className="w-4 h-4 text-primary" />
               Customer Details
             </h3>
@@ -464,63 +464,63 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
                 <MapPin className="w-3 h-3" />
                 Property Address
               </Label>
-              <div className="p-3 bg-white rounded border border-slate-200 text-sm text-slate-700">
+              <div className="p-3 bg-background rounded border border-border text-sm text-foreground">
                 {formData?.propertyAddress || "Not provided"}
               </div>
             </div>
 
-            <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
-              <h4 className="font-semibold text-slate-700 text-sm">Loan Details Summary</h4>
+            <div className="bg-background rounded-lg p-4 border border-border space-y-3">
+              <h4 className="font-semibold text-foreground text-sm">Loan Details Summary</h4>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Loan Type:</span>
+                  <span className="text-muted-foreground">Loan Type:</span>
                   <span className="font-medium">{formData?.loanType?.replace(/_/g, ' ').toUpperCase()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Interest Rate:</span>
+                  <span className="text-muted-foreground">Interest Rate:</span>
                   <span className="font-medium">{result.finalRate?.toFixed(3)}%</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">As-Is Value:</span>
+                  <span className="text-muted-foreground">As-Is Value:</span>
                   <span className="font-medium">${asIsValue.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">ARV:</span>
+                  <span className="text-muted-foreground">ARV:</span>
                   <span className="font-medium">${arv.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Rehab Budget:</span>
+                  <span className="text-muted-foreground">Rehab Budget:</span>
                   <span className="font-medium">${rehabBudget.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Total Cost:</span>
+                  <span className="text-muted-foreground">Total Cost:</span>
                   <span className="font-medium">${totalCost.toLocaleString()}</span>
                 </div>
               </div>
               <div className="border-t pt-3 mt-3 grid grid-cols-2 gap-3 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Maximum Loan Amount:</span>
-                  <span className="font-bold text-green-600">${maxLoanByLTC.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  <span className="text-muted-foreground">Maximum Loan Amount:</span>
+                  <span className="font-bold text-success">${maxLoanByLTC.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Initial Loan Amount:</span>
-                  <span className="font-bold text-blue-600">${maxLoanByLTAIV.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  <span className="text-muted-foreground">Initial Loan Amount:</span>
+                  <span className="font-bold text-primary">${maxLoanByLTAIV.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                 </div>
               </div>
               <div className="border-t pt-3 mt-3 grid grid-cols-2 gap-3 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Down Payment:</span>
-                  <span className="font-bold text-slate-700">${Math.max(0, asIsValue - maxLoanByLTAIV).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  <span className="text-muted-foreground">Down Payment:</span>
+                  <span className="font-bold text-foreground">${Math.max(0, asIsValue - maxLoanByLTAIV).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Total Points ({totalPoints.toFixed(2)}%):</span>
-                  <span className="font-bold text-slate-700">${((maxLoanByLTC * totalPoints) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  <span className="text-muted-foreground">Total Points ({totalPoints.toFixed(2)}%):</span>
+                  <span className="font-bold text-foreground">${((maxLoanByLTC * totalPoints) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                 </div>
               </div>
               <div className="border-t pt-3 mt-3">
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">Your Commission:</span>
-                  <span className="font-bold text-green-600">${additionalPointsAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span className="text-muted-foreground">Your Commission:</span>
+                  <span className="font-bold text-success">${additionalPointsAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               </div>
             </div>
@@ -537,7 +537,7 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
               <Button
                 onClick={handleSaveQuote}
                 disabled={saveQuoteMutation.isPending}
-                className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600"
+                className="flex-1 bg-gradient-to-r from-success to-success/80"
                 data-testid="button-confirm-rtl-save"
               >
                 {saveQuoteMutation.isPending ? "Saving..." : "Save Quote"}

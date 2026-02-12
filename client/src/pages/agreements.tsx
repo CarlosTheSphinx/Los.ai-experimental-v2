@@ -219,7 +219,7 @@ export default function Agreements() {
     
     if (isPandadoc) {
       badges.push(
-        <Badge key="vendor" className="bg-purple-100 text-purple-700 border-purple-200" data-testid={`badge-vendor-${agreement.id}`}>
+        <Badge key="vendor" className="bg-primary/10 text-primary border-border" data-testid={`badge-vendor-${agreement.id}`}>
           PandaDoc
         </Badge>
       );
@@ -231,13 +231,13 @@ export default function Agreements() {
         break;
       case 'pending':
       case 'sent':
-        badges.push(<Badge key="status" className="bg-amber-100 text-amber-700 border-amber-200" data-testid={`badge-status-${agreement.id}`}>Sent</Badge>);
+        badges.push(<Badge key="status" className="bg-warning/10 text-warning border-border" data-testid={`badge-status-${agreement.id}`}>Sent</Badge>);
         break;
       case 'in_progress':
-        badges.push(<Badge key="status" className="bg-blue-100 text-blue-700 border-blue-200" data-testid={`badge-status-${agreement.id}`}>In Progress</Badge>);
+        badges.push(<Badge key="status" className="bg-info/10 text-info border-border" data-testid={`badge-status-${agreement.id}`}>In Progress</Badge>);
         break;
       case 'completed':
-        badges.push(<Badge key="status" className="bg-green-100 text-green-700 border-green-200" data-testid={`badge-status-${agreement.id}`}>Completed</Badge>);
+        badges.push(<Badge key="status" className="bg-success/10 text-success border-border" data-testid={`badge-status-${agreement.id}`}>Completed</Badge>);
         break;
       case 'voided':
       case 'voided_edited':
@@ -253,7 +253,7 @@ export default function Agreements() {
   const getSignerProgress = (agreement: Agreement) => {
     if (agreement.totalSigners === 0) return null;
     return (
-      <div className="flex items-center gap-2 text-sm text-slate-500">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Users className="w-4 h-4" />
         <span>{agreement.signedCount}/{agreement.totalSigners} signed</span>
       </div>
@@ -340,7 +340,7 @@ export default function Agreements() {
             <ClipboardList className="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" />
             <div className="min-w-0">
               <h1 className="text-lg md:text-xl font-bold text-primary truncate">Term Sheets</h1>
-              <p className="text-xs md:text-sm text-slate-500 hidden sm:block">Manage and track all your e-signature documents</p>
+              <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">Manage and track all your e-signature documents</p>
             </div>
           </div>
         </div>
@@ -349,7 +349,7 @@ export default function Agreements() {
       <div className="p-4 md:p-6 space-y-3 md:space-y-4">
         <div className="flex flex-col gap-3 md:gap-4">
           <div className="relative w-full sm:hidden">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="Search term sheets..."
               value={searchQuery}
@@ -376,7 +376,7 @@ export default function Agreements() {
             </div>
             
             <div className="relative w-64 hidden sm:block">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Search term sheets..."
                 value={searchQuery}
@@ -395,9 +395,9 @@ export default function Agreements() {
         ) : filteredAgreements.length === 0 ? (
           <Card className="text-center py-12">
             <CardContent>
-              <FileText className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-              <h3 className="text-xl font-semibold text-slate-600 mb-2">No Term Sheets Found</h3>
-              <p className="text-slate-400">
+              <FileText className="w-16 h-16 mx-auto text-muted-foreground/30 mb-4" />
+              <h3 className="text-xl font-semibold text-foreground mb-2">No Term Sheets Found</h3>
+              <p className="text-muted-foreground">
                 {activeFilter === 'all' 
                   ? "Create a quote and send it for signature to get started." 
                   : `No term sheets with status "${activeFilter}".`}
@@ -425,26 +425,26 @@ export default function Agreements() {
                         }}
                       >
                         <div className="flex items-center gap-4">
-                          <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-full bg-purple-100">
-                            <ExternalLink className="w-5 h-5 text-purple-600" />
+                          <div className="hidden sm:flex items-center justify-center w-10 h-10 rounded-full bg-primary/10">
+                            <ExternalLink className="w-5 h-5 text-primary" />
                           </div>
                           
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <h3 className="font-semibold text-slate-800 truncate" data-testid={`text-agreement-title-${agreement.id}`}>
+                              <h3 className="font-semibold text-foreground truncate" data-testid={`text-agreement-title-${agreement.id}`}>
                                 {agreement.title}
                               </h3>
                               {getStatusBadge(agreement)}
                             </div>
                             
-                            <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500">
+                            <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                               <span className="flex items-center gap-1.5">
                                 <Calendar className="w-3.5 h-3.5" />
                                 {agreement.sentAt ? `Sent ${formatDate(agreement.sentAt)}` : `Created ${formatDate(agreement.createdAt)}`}
                               </span>
                               {getSignerProgress(agreement)}
                               {agreement.completedAt && (
-                                <span className="flex items-center gap-1.5 text-green-600">
+                                <span className="flex items-center gap-1.5 text-success">
                                   <CheckCircle className="w-3.5 h-3.5" />
                                   Completed {formatDate(agreement.completedAt)}
                                 </span>
@@ -452,7 +452,7 @@ export default function Agreements() {
                             </div>
                           </div>
                           
-                          <ExternalLink className="w-5 h-5 text-slate-400 hidden sm:block" />
+                          <ExternalLink className="w-5 h-5 text-muted-foreground hidden sm:block" />
                         </div>
                       </div>
                     ) : (
@@ -464,20 +464,20 @@ export default function Agreements() {
                           
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <h3 className="font-semibold text-slate-800 truncate" data-testid={`text-agreement-title-${agreement.id}`}>
+                              <h3 className="font-semibold text-foreground truncate" data-testid={`text-agreement-title-${agreement.id}`}>
                                 {agreement.title}
                               </h3>
                               {getStatusBadge(agreement)}
                             </div>
                             
-                            <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500">
+                            <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                               <span className="flex items-center gap-1.5">
                                 <Calendar className="w-3.5 h-3.5" />
                                 {agreement.sentAt ? `Sent ${formatDate(agreement.sentAt)}` : `Created ${formatDate(agreement.createdAt)}`}
                               </span>
                               {getSignerProgress(agreement)}
                               {agreement.completedAt && (
-                                <span className="flex items-center gap-1.5 text-green-600">
+                                <span className="flex items-center gap-1.5 text-success">
                                   <CheckCircle className="w-3.5 h-3.5" />
                                   Completed {formatDate(agreement.completedAt)}
                                 </span>
@@ -485,7 +485,7 @@ export default function Agreements() {
                             </div>
                           </div>
                           
-                          <ChevronRight className="w-5 h-5 text-slate-400 hidden sm:block" />
+                          <ChevronRight className="w-5 h-5 text-muted-foreground hidden sm:block" />
                         </div>
                       </Link>
                     )}
@@ -594,7 +594,7 @@ export default function Agreements() {
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem 
                                   onClick={() => handleVoid(agreement)}
-                                  className="text-red-600"
+                                  className="text-destructive"
                                   data-testid={`action-void-${agreement.id}`}
                                 >
                                   <Ban className="w-4 h-4 mr-2" />
@@ -608,7 +608,7 @@ export default function Agreements() {
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem 
                                   onClick={() => handleDelete(agreement)}
-                                  className="text-red-600"
+                                  className="text-destructive"
                                   data-testid={`action-delete-${agreement.id}`}
                                 >
                                   <Trash2 className="w-4 h-4 mr-2" />
@@ -639,7 +639,7 @@ export default function Agreements() {
             <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => selectedAgreement && deleteMutation.mutate(selectedAgreement.id)}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-destructive hover:bg-destructive/90"
               data-testid="button-confirm-delete"
             >
               Delete
@@ -657,7 +657,7 @@ export default function Agreements() {
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <label className="text-sm font-medium text-slate-700">Reason (optional)</label>
+            <label className="text-sm font-medium text-foreground">Reason (optional)</label>
             <Textarea
               value={voidReason}
               onChange={(e) => setVoidReason(e.target.value)}

@@ -156,15 +156,15 @@ const ROLE_OPTIONS = [
 function getPriorityColor(priority: string): string {
   switch (priority) {
     case "low":
-      return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+      return "bg-muted text-muted-foreground";
     case "medium":
-      return "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300";
+      return "bg-primary/10 text-primary";
     case "high":
-      return "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300";
+      return "bg-warning/10 text-warning";
     case "critical":
-      return "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300";
+      return "bg-destructive/10 text-destructive";
     default:
-      return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+      return "bg-muted text-muted-foreground";
   }
 }
 
@@ -715,7 +715,7 @@ function DocumentsTab({ programId }: { programId: number }) {
         <div
           className={`min-w-[180px] w-[180px] shrink-0 rounded-md border-2 border-dashed p-3 transition-colors ${
             dragOverStepId === "unassigned"
-              ? "border-blue-500 bg-blue-50 dark:bg-blue-950"
+              ? "border-primary bg-primary/5"
               : "border-border"
           }`}
           onDragOver={(e) => {
@@ -752,7 +752,7 @@ function DocumentsTab({ programId }: { programId: number }) {
                 key={ws.id}
                 className={`min-w-[180px] w-[180px] shrink-0 rounded-md border-2 border-dashed p-3 transition-colors ${
                   dragOverStepId === ws.id
-                    ? "border-blue-500 bg-blue-50 dark:bg-blue-950"
+                    ? "border-primary bg-primary/5"
                     : "border-border"
                 }`}
                 onDragOver={(e) => {
@@ -923,9 +923,9 @@ const RULE_TYPE_OPTIONS = [
 ];
 
 const SEVERITY_OPTIONS = [
-  { value: "fail", label: "Fail", color: "text-red-600" },
-  { value: "warn", label: "Warning", color: "text-amber-600" },
-  { value: "info", label: "Info", color: "text-blue-600" },
+  { value: "fail", label: "Fail", color: "text-destructive" },
+  { value: "warn", label: "Warning", color: "text-warning" },
+  { value: "info", label: "Info", color: "text-primary" },
 ];
 
 function DocumentRulesDialog({
@@ -1333,7 +1333,7 @@ function TasksTab({ programId }: { programId: number }) {
         <div
           className={`min-w-[180px] w-[180px] shrink-0 rounded-md border-2 border-dashed p-3 transition-colors ${
             dragOverStepId === "unassigned"
-              ? "border-blue-500 bg-blue-50 dark:bg-blue-950"
+              ? "border-primary bg-primary/5"
               : "border-border"
           }`}
           onDragOver={(e) => {
@@ -1372,7 +1372,7 @@ function TasksTab({ programId }: { programId: number }) {
                 key={ws.id}
                 className={`min-w-[180px] w-[180px] shrink-0 rounded-md border-2 border-dashed p-3 transition-colors ${
                   dragOverStepId === ws.id
-                    ? "border-blue-500 bg-blue-50 dark:bg-blue-950"
+                    ? "border-primary bg-primary/5"
                     : "border-border"
                 }`}
                 onDragOver={(e) => {

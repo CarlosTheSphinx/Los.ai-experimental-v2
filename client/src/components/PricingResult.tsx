@@ -87,23 +87,23 @@ export function PricingResult({ result, formData, onReset, programId }: PricingR
 
   if (result.error || !result.success) {
     return (
-      <Card className="w-full border-red-100 bg-red-50/50 shadow-lg">
-        <CardHeader className="text-red-700">
+      <Card className="w-full border-destructive/20 bg-destructive/5 shadow-lg">
+        <CardHeader className="text-destructive">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-6 h-6" />
             <CardTitle>Pricing Error</CardTitle>
           </div>
         </CardHeader>
         <CardContent>
-          <p className="text-red-600 mb-4">{result.message || result.error || "An unknown error occurred."}</p>
+          <p className="text-destructive mb-4">{result.message || result.error || "An unknown error occurred."}</p>
           {result.debug && (
-             <pre className="bg-red-100 p-2 rounded text-xs overflow-auto max-h-40">
+             <pre className="bg-destructive/10 p-2 rounded text-xs overflow-auto max-h-40">
                {JSON.stringify(result.debug, null, 2)}
              </pre>
           )}
         </CardContent>
         <CardFooter>
-          <Button onClick={onReset} variant="outline" className="w-full border-red-200 text-red-700 hover:bg-red-100 hover:text-red-800">
+          <Button onClick={onReset} variant="outline" className="w-full border-destructive/20 text-destructive hover:bg-destructive/10 hover:text-destructive">
             Edit Loan
           </Button>
         </CardFooter>
@@ -117,65 +117,65 @@ export function PricingResult({ result, formData, onReset, programId }: PricingR
   return (
     <Card className="w-full bg-white shadow-xl border-primary/10 overflow-hidden animate-in">
       <div className="bg-primary/5 border-b border-primary/10 p-6 flex flex-col items-center justify-center text-center space-y-2">
-        <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center mb-2 shadow-sm">
-          <CheckCircle2 className="w-6 h-6 text-green-600" />
+        <div className="h-12 w-12 rounded-full bg-success/10 flex items-center justify-center mb-2 shadow-sm">
+          <CheckCircle2 className="w-6 h-6 text-success" />
         </div>
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">Your Qualified Rate</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Your Qualified Rate</h2>
         <div className="text-5xl font-extrabold text-primary tracking-tight">
           {formattedRate}
         </div>
-        <p className="text-sm text-slate-500 mt-2">Based on today's market conditions</p>
+        <p className="text-sm text-muted-foreground mt-2">Based on today's market conditions</p>
       </div>
 
       <CardContent className="p-6">
         <div className="grid gap-6">
-          <div className="bg-slate-50 rounded-xl p-5 border border-slate-100">
-            <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+          <div className="bg-muted/30 rounded-xl p-5 border border-border">
+            <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
               <FileText className="w-4 h-4 text-primary" />
               Loan Summary
             </h3>
-            
+
             <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
               <div>
-                <dt className="text-slate-500">Loan Amount</dt>
-                <dd className="font-medium text-slate-900">${formData?.loanAmount?.toLocaleString()}</dd>
+                <dt className="text-muted-foreground">Loan Amount</dt>
+                <dd className="font-medium text-foreground">${formData?.loanAmount?.toLocaleString()}</dd>
               </div>
               <div>
-                <dt className="text-slate-500">Property Value</dt>
-                <dd className="font-medium text-slate-900">${formData?.propertyValue?.toLocaleString()}</dd>
+                <dt className="text-muted-foreground">Property Value</dt>
+                <dd className="font-medium text-foreground">${formData?.propertyValue?.toLocaleString()}</dd>
               </div>
               <div>
-                <dt className="text-slate-500">LTV</dt>
-                <dd className="font-medium text-slate-900">{formData?.ltv}</dd>
+                <dt className="text-muted-foreground">LTV</dt>
+                <dd className="font-medium text-foreground">{formData?.ltv}</dd>
               </div>
               <div>
-                <dt className="text-slate-500">FICO Score</dt>
-                <dd className="font-medium text-slate-900">{formData?.ficoScore}</dd>
+                <dt className="text-muted-foreground">FICO Score</dt>
+                <dd className="font-medium text-foreground">{formData?.ficoScore}</dd>
               </div>
               <div>
-                <dt className="text-slate-500">Program</dt>
-                <dd className="font-medium text-slate-900">{formData?.loanType}</dd>
+                <dt className="text-muted-foreground">Program</dt>
+                <dd className="font-medium text-foreground">{formData?.loanType}</dd>
               </div>
               <div>
-                <dt className="text-slate-500">Property Type</dt>
-                <dd className="font-medium text-slate-900">{formData?.propertyType}</dd>
+                <dt className="text-muted-foreground">Property Type</dt>
+                <dd className="font-medium text-foreground">{formData?.propertyType}</dd>
               </div>
 {/* TPO Premium is auto-included but hidden from user */}
             </dl>
           </div>
 
           {!showQuoteForm ? (
-            <Button 
+            <Button
               onClick={() => setShowQuoteForm(true)}
-              className="w-full h-12 text-lg font-semibold bg-gradient-to-r from-green-600 to-emerald-600 shadow-lg shadow-green-500/20"
+              className="w-full h-12 text-lg font-semibold bg-gradient-to-r from-success to-success shadow-lg shadow-success/20"
               data-testid="button-save-quote"
             >
               <Save className="mr-2 h-5 w-5" />
               Save as Quote
             </Button>
           ) : (
-            <div className="bg-blue-50 rounded-xl p-5 border border-blue-100 space-y-5">
-              <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+            <div className="bg-info/10 rounded-xl p-5 border border-info/20 space-y-5">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
                 <User className="w-4 h-4 text-primary" />
                 Customer Details
               </h3>
@@ -247,11 +247,11 @@ export function PricingResult({ result, formData, onReset, programId }: PricingR
                       className="w-20 text-center text-lg font-bold"
                       data-testid="input-points"
                     />
-                    <span className="text-sm text-slate-500">points</span>
+                    <span className="text-sm text-muted-foreground">points</span>
                   </div>
                 </div>
-                <p className="text-xs text-slate-500">1 point minimum required. Your commission is the additional points above 1.</p>
-                <div className="bg-white rounded-lg p-4 border-2 border-slate-300 shadow-sm">
+                <p className="text-xs text-muted-foreground">1 point minimum required. Your commission is the additional points above 1.</p>
+                <div className="bg-background rounded-lg p-4 border-2 border-border shadow-sm">
                   <Slider
                     value={[pointsCharged]}
                     onValueChange={([val]) => setPointsCharged(val)}
@@ -261,7 +261,7 @@ export function PricingResult({ result, formData, onReset, programId }: PricingR
                     className="w-full"
                     data-testid="slider-points"
                   />
-                  <div className="flex justify-between text-xs text-slate-500 mt-2">
+                  <div className="flex justify-between text-xs text-muted-foreground mt-2">
                     <span>1 point (min)</span>
                     <span>2 points</span>
                     <span>3 points (max)</span>
@@ -269,25 +269,25 @@ export function PricingResult({ result, formData, onReset, programId }: PricingR
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
-                <h4 className="font-semibold text-slate-700 flex items-center gap-2">
-                  <DollarSign className="w-4 h-4 text-green-600" />
+              <div className="bg-background rounded-lg p-4 border border-border space-y-3">
+                <h4 className="font-semibold text-foreground flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-success" />
                   Revenue Breakdown
                 </h4>
-                
+
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Points Amount ({pointsCharged.toFixed(2)}% of ${loanAmount.toLocaleString()})</span>
+                    <span className="text-muted-foreground">Points Amount ({pointsCharged.toFixed(2)}% of ${loanAmount.toLocaleString()})</span>
                     <span className="font-medium">${pointsAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 </div>
 
-                <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+                <div className="bg-success/10 rounded-lg p-3 border border-success/20">
                   <div className="flex justify-between items-center">
-                    <span className="font-semibold text-green-700">
+                    <span className="font-semibold text-success">
                       Your Commission ({additionalPoints.toFixed(2)} pts above 1 min)
                     </span>
-                    <span className="text-2xl font-bold text-green-600" data-testid="text-commission">
+                    <span className="text-2xl font-bold text-success" data-testid="text-commission">
                       ${commission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
@@ -306,7 +306,7 @@ export function PricingResult({ result, formData, onReset, programId }: PricingR
                 <Button
                   onClick={handleSaveQuote}
                   disabled={saveQuoteMutation.isPending}
-                  className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600"
+                  className="flex-1 bg-gradient-to-r from-success to-success"
                   data-testid="button-confirm-save"
                 >
                   {saveQuoteMutation.isPending ? "Saving..." : "Save Quote"}
@@ -314,26 +314,27 @@ export function PricingResult({ result, formData, onReset, programId }: PricingR
               </div>
             </div>
           )}
-          
-          <div className="text-xs text-slate-400 text-center px-4">
+
+
+          <div className="text-xs text-muted-foreground text-center px-4">
             Disclaimer: This rate is an estimate based on the information provided. Final approval is subject to full underwriting and verification of all documents. Rates are subject to change without notice.
           </div>
         </div>
       </CardContent>
 
-      <CardFooter className="bg-slate-50 p-6 border-t border-slate-100">
+      <CardFooter className="bg-muted/30 p-6 border-t border-border">
         <div className="flex flex-col sm:flex-row gap-4 w-full">
-          <Button 
-            onClick={onReset} 
-            variant="outline" 
+          <Button
+            onClick={onReset}
+            variant="outline"
             className="flex-1 h-12 text-lg font-semibold"
           >
             <ArrowLeft className="mr-2 h-5 w-5" />
             Edit Loan
           </Button>
-          <Button 
-            onClick={() => window.print()} 
-            className="flex-1 h-12 text-lg font-semibold shadow-lg shadow-primary/20 bg-gradient-to-r from-primary to-blue-600"
+          <Button
+            onClick={() => window.print()}
+            className="flex-1 h-12 text-lg font-semibold shadow-lg shadow-primary/20 bg-gradient-to-r from-primary to-primary"
           >
             <Download className="mr-2 h-5 w-5" />
             Download PDF

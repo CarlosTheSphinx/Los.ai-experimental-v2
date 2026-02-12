@@ -310,25 +310,25 @@ function parseAddress(address: string) {
 function getDocumentStatusIcon(status: string) {
   switch (status) {
     case "approved":
-      return <Check className="h-4 w-4 text-green-600" />;
+      return <Check className="h-4 w-4 text-success" />;
     case "uploaded":
-      return <FileCheck className="h-4 w-4 text-blue-600" />;
+      return <FileCheck className="h-4 w-4 text-info" />;
     case "rejected":
-      return <XCircle className="h-4 w-4 text-red-600" />;
+      return <XCircle className="h-4 w-4 text-destructive" />;
     case "not_applicable":
-      return <AlertCircle className="h-4 w-4 text-gray-400" />;
+      return <AlertCircle className="h-4 w-4 text-muted-foreground" />;
     default:
-      return <Clock className="h-4 w-4 text-yellow-600" />;
+      return <Clock className="h-4 w-4 text-warning" />;
   }
 }
 
 function getDocumentStatusBadge(status: string) {
   const styles: Record<string, string> = {
-    pending: "bg-yellow-100 text-yellow-800",
-    uploaded: "bg-blue-100 text-blue-800",
-    approved: "bg-green-100 text-green-800",
-    rejected: "bg-red-100 text-red-800",
-    not_applicable: "bg-gray-100 text-gray-500",
+    pending: "bg-warning/10 text-warning",
+    uploaded: "bg-info/10 text-info",
+    approved: "bg-success/10 text-success",
+    rejected: "bg-destructive/10 text-destructive",
+    not_applicable: "bg-muted text-muted-foreground",
   };
   const labels: Record<string, string> = {
     pending: "Pending",
@@ -338,7 +338,7 @@ function getDocumentStatusBadge(status: string) {
     not_applicable: "N/A",
   };
   return (
-    <Badge className={cn("text-xs", styles[status] || "bg-gray-100 text-gray-800")}>
+    <Badge className={cn("text-xs", styles[status] || "bg-muted text-muted-foreground")}>
       {labels[status] || status}
     </Badge>
   );
@@ -917,8 +917,8 @@ export default function AdminDealDetail() {
 
   const getStageIcon = (status: string) => {
     switch (status) {
-      case 'completed': return <CheckCircle2 className="h-5 w-5 text-green-500" />;
-      case 'in_progress': return <Clock className="h-5 w-5 text-blue-500" />;
+      case 'completed': return <CheckCircle2 className="h-5 w-5 text-success" />;
+      case 'in_progress': return <Clock className="h-5 w-5 text-info" />;
       default: return <Circle className="h-5 w-5 text-muted-foreground" />;
     }
   };
@@ -926,7 +926,7 @@ export default function AdminDealDetail() {
   const getPriorityBadge = (priority: string) => {
     switch (priority) {
       case 'critical': return <Badge variant="destructive" className="text-xs">Critical</Badge>;
-      case 'high': return <Badge variant="secondary" className="bg-orange-100 text-orange-700 text-xs">High</Badge>;
+      case 'high': return <Badge variant="secondary" className="bg-warning/10 text-warning text-xs">High</Badge>;
       case 'medium': return <Badge variant="secondary" className="text-xs">Medium</Badge>;
       default: return null;
     }
@@ -1305,8 +1305,8 @@ export default function AdminDealDetail() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card className="p-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-green-100 dark:bg-green-900 flex items-center justify-center">
-                  <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
+                <div className="h-10 w-10 rounded-lg bg-success/10 flex items-center justify-center">
+                  <DollarSign className="h-5 w-5 text-success" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Loan Amount</div>
@@ -1316,8 +1316,8 @@ export default function AdminDealDetail() {
             </Card>
             <Card className="p-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                  <span className="text-blue-600 dark:text-blue-400 font-semibold text-sm">%</span>
+                <div className="h-10 w-10 rounded-lg bg-info/10 flex items-center justify-center">
+                  <span className="text-info font-semibold text-sm">%</span>
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Interest Rate</div>
@@ -1327,8 +1327,8 @@ export default function AdminDealDetail() {
             </Card>
             <Card className="p-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-purple-100 dark:bg-purple-900 flex items-center justify-center">
-                  <Calendar className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Calendar className="h-5 w-5 text-primary" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Term</div>
@@ -1338,8 +1338,8 @@ export default function AdminDealDetail() {
             </Card>
             <Card className="p-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-orange-100 dark:bg-orange-900 flex items-center justify-center">
-                  <Building2 className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                <div className="h-10 w-10 rounded-lg bg-warning/10 flex items-center justify-center">
+                  <Building2 className="h-5 w-5 text-warning" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Property</div>
@@ -1456,8 +1456,8 @@ export default function AdminDealDetail() {
             <div>
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Borrower</div>
               <div className="flex items-center gap-2">
-                <div className="h-7 w-7 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center flex-shrink-0">
-                  <User className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                <div className="h-7 w-7 rounded-full bg-info/10 flex items-center justify-center flex-shrink-0">
+                  <User className="h-3.5 w-3.5 text-info" />
                 </div>
                 <div className="min-w-0">
                   <div className="font-medium truncate">{borrowerName}</div>
@@ -1483,8 +1483,8 @@ export default function AdminDealDetail() {
                 <div className="space-y-1.5">
                   {dealProcessorsData.map((proc: any) => (
                     <div key={proc.id} className="flex items-center gap-2" data-testid={`processor-${proc.id}`}>
-                      <div className="h-7 w-7 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center flex-shrink-0">
-                        <User className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <div className="h-7 w-7 rounded-full bg-success/10 flex items-center justify-center flex-shrink-0">
+                        <User className="h-3.5 w-3.5 text-success" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="font-medium truncate">{proc.user?.fullName || 'Unknown'}</div>
@@ -1501,8 +1501,8 @@ export default function AdminDealDetail() {
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Broker</div>
               {deal.userName ? (
                 <div className="flex items-center gap-2">
-                  <div className="h-7 w-7 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center flex-shrink-0">
-                    <User className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                  <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <User className="h-3.5 w-3.5 text-primary" />
                   </div>
                   <div className="min-w-0">
                     <div className="font-medium truncate">{deal.userName}</div>
@@ -1532,8 +1532,8 @@ export default function AdminDealDetail() {
                   {dealProcessorsData.map((proc: any) => (
                     <div key={proc.id} className="flex items-center justify-between p-2 rounded-md border" data-testid={`processor-manage-${proc.id}`}>
                       <div className="flex items-center gap-2">
-                        <div className="h-7 w-7 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center">
-                          <User className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                        <div className="h-7 w-7 rounded-full bg-success/10 flex items-center justify-center">
+                          <User className="h-3.5 w-3.5 text-success" />
                         </div>
                         <div>
                           <div className="text-sm font-medium">{proc.user?.fullName || 'Unknown'}</div>
@@ -1633,8 +1633,8 @@ export default function AdminDealDetail() {
                   key={stage.id}
                   className={cn(
                     "transition-all",
-                    isActive && "border-blue-500 dark:border-blue-400 ring-2 ring-blue-500/10",
-                    isCompleted && "border-emerald-500 dark:border-emerald-400 opacity-90"
+                    isActive && "border-info ring-2 ring-info/10",
+                    isCompleted && "border-success opacity-90"
                   )}
                   data-testid={`stage-card-${stage.id}`}
                 >
@@ -1646,8 +1646,8 @@ export default function AdminDealDetail() {
                     <div className="flex items-center gap-4">
                       <div className={cn(
                         "h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0",
-                        isCompleted && "bg-emerald-100 dark:bg-emerald-900 text-emerald-600 dark:text-emerald-400",
-                        isActive && "bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400",
+                        isCompleted && "bg-success/10 text-success",
+                        isActive && "bg-info/10 text-info",
                         !isCompleted && !isActive && "bg-muted text-muted-foreground"
                       )}>
                         {isCompleted ? <CheckCircle2 className="h-5 w-5" /> : isActive ? <Clock className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
@@ -1704,7 +1704,7 @@ export default function AdminDealDetail() {
                                 key={task.id}
                                 className={cn(
                                   "flex items-center gap-3 p-3 rounded-lg border",
-                                  task.status === 'completed' && "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 opacity-80"
+                                  task.status === 'completed' && "bg-success/10 border-success/30 opacity-80"
                                 )}
                                 data-testid={`task-row-${task.id}`}
                               >
@@ -1733,7 +1733,7 @@ export default function AdminDealDetail() {
                                   </div>
                                   {task.completedAt && (
                                     <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                                      <Check className="h-3 w-3 text-emerald-500" />
+                                      <Check className="h-3 w-3 text-success" />
                                       {formatDateTime(task.completedAt)}
                                       {task.completedBy && ` by ${task.completedBy}`}
                                     </div>
@@ -1792,8 +1792,8 @@ export default function AdminDealDetail() {
                               <div
                                 className={cn(
                                   "flex items-center justify-between gap-3 p-3 rounded-lg border",
-                                  (doc.status === 'approved' || doc.status === 'uploaded') && "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 opacity-80",
-                                  doc.status === 'rejected' && "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800",
+                                  (doc.status === 'approved' || doc.status === 'uploaded') && "bg-success/10 border-success/30 opacity-80",
+                                  doc.status === 'rejected' && "bg-destructive/10 border-destructive/30",
                                   expandedReviewDocId === doc.id && "rounded-b-none"
                                 )}
                                 data-testid={`doc-row-${doc.id}`}
@@ -1815,12 +1815,12 @@ export default function AdminDealDetail() {
                                         {doc.documentName}
                                       </span>
                                       {doc.isRequired && (
-                                        <Badge variant="secondary" className="text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">Required</Badge>
+                                        <Badge variant="secondary" className="text-[10px] bg-warning/10 text-warning">Required</Badge>
                                       )}
                                       {docReview && (
                                         <Badge
                                           variant={docReview.overallStatus === 'pass' ? 'default' : docReview.overallStatus === 'fail' ? 'destructive' : 'secondary'}
-                                          className={cn("text-[10px] cursor-pointer", docReview.overallStatus === 'pass' && "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200")}
+                                          className={cn("text-[10px] cursor-pointer", docReview.overallStatus === 'pass' && "bg-success/10 text-success")}
                                           onClick={(e) => { e.stopPropagation(); setExpandedReviewDocId(expandedReviewDocId === doc.id ? null : doc.id); }}
                                           data-testid={`badge-ai-review-${doc.id}`}
                                         >
@@ -1842,7 +1842,7 @@ export default function AdminDealDetail() {
                                       </div>
                                     )}
                                     {doc.status === 'rejected' && doc.reviewNotes && (
-                                      <div className="text-xs text-red-600 dark:text-red-400 mt-0.5 flex items-start gap-1">
+                                      <div className="text-xs text-destructive mt-0.5 flex items-start gap-1">
                                         <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
                                         <span>{doc.reviewNotes}</span>
                                       </div>
@@ -1861,7 +1861,7 @@ export default function AdminDealDetail() {
                                     <>
                                       {doc.googleDriveFileUrl ? (
                                         <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); window.open(doc.googleDriveFileUrl!, '_blank'); }} data-testid={`button-drive-open-${doc.id}`} title="Open in Google Drive">
-                                          <ExternalLink className="h-3.5 w-3.5 text-blue-500" />
+                                          <ExternalLink className="h-3.5 w-3.5 text-info" />
                                         </Button>
                                       ) : (
                                         <Button
@@ -1938,7 +1938,7 @@ export default function AdminDealDetail() {
                                 <div className="border border-t-0 rounded-b-lg p-3 bg-muted/30 space-y-2" data-testid={`review-panel-${doc.id}`}>
                                   <div className="flex items-center justify-between gap-2">
                                     <div className="flex items-center gap-2">
-                                      {docReview.overallStatus === 'pass' ? <ShieldCheck className="h-4 w-4 text-emerald-600" /> : docReview.overallStatus === 'fail' ? <ShieldAlert className="h-4 w-4 text-red-600" /> : <ShieldQuestion className="h-4 w-4 text-amber-600" />}
+                                      {docReview.overallStatus === 'pass' ? <ShieldCheck className="h-4 w-4 text-success" /> : docReview.overallStatus === 'fail' ? <ShieldAlert className="h-4 w-4 text-destructive" /> : <ShieldQuestion className="h-4 w-4 text-warning" />}
                                       <span className="text-sm font-medium">
                                         AI Review: {docReview.overallStatus === 'pass' ? 'Passed' : docReview.overallStatus === 'fail' ? 'Failed' : 'Needs Review'}
                                       </span>
@@ -1966,23 +1966,23 @@ export default function AdminDealDetail() {
                                         return (
                                         <div key={idx} data-testid={`finding-row-${doc.id}-${idx}`} className={cn(
                                           "p-2 rounded-md text-xs border",
-                                          !isOverridden && finding.status === 'pass' && "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800",
-                                          !isOverridden && finding.status === 'fail' && "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800",
-                                          !isOverridden && finding.status === 'warning' && "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800",
-                                          !isOverridden && finding.status === 'info' && "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800",
-                                          isOverridden && finding.overrideAction === 'override_accept' && "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800",
-                                          isOverridden && finding.overrideAction === 'manual_review' && "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800",
-                                          isOverridden && finding.overrideAction === 'reject' && "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800"
+                                          !isOverridden && finding.status === 'pass' && "bg-success/10 border-success/30",
+                                          !isOverridden && finding.status === 'fail' && "bg-destructive/10 border-destructive/30",
+                                          !isOverridden && finding.status === 'warning' && "bg-warning/10 border-warning/30",
+                                          !isOverridden && finding.status === 'info' && "bg-info/10 border-info/30",
+                                          isOverridden && finding.overrideAction === 'override_accept' && "bg-success/10 border-success/30",
+                                          isOverridden && finding.overrideAction === 'manual_review' && "bg-warning/10 border-warning/30",
+                                          isOverridden && finding.overrideAction === 'reject' && "bg-destructive/10 border-destructive/30"
                                         )}>
                                           <div className="flex items-start gap-2">
                                             <div className="flex-shrink-0 mt-0.5">
-                                              {isOverridden && finding.overrideAction === 'override_accept' ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> :
-                                               isOverridden && finding.overrideAction === 'manual_review' ? <AlertCircle className="h-3.5 w-3.5 text-amber-600" /> :
-                                               isOverridden && finding.overrideAction === 'reject' ? <XCircle className="h-3.5 w-3.5 text-red-600" /> :
-                                               finding.status === 'pass' ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> :
-                                               finding.status === 'fail' ? <XCircle className="h-3.5 w-3.5 text-red-600" /> :
-                                               finding.status === 'warning' ? <AlertCircle className="h-3.5 w-3.5 text-amber-600" /> :
-                                               <Circle className="h-3.5 w-3.5 text-blue-600" />}
+                                              {isOverridden && finding.overrideAction === 'override_accept' ? <CheckCircle2 className="h-3.5 w-3.5 text-success" /> :
+                                               isOverridden && finding.overrideAction === 'manual_review' ? <AlertCircle className="h-3.5 w-3.5 text-warning" /> :
+                                               isOverridden && finding.overrideAction === 'reject' ? <XCircle className="h-3.5 w-3.5 text-destructive" /> :
+                                               finding.status === 'pass' ? <CheckCircle2 className="h-3.5 w-3.5 text-success" /> :
+                                               finding.status === 'fail' ? <XCircle className="h-3.5 w-3.5 text-destructive" /> :
+                                               finding.status === 'warning' ? <AlertCircle className="h-3.5 w-3.5 text-warning" /> :
+                                               <Circle className="h-3.5 w-3.5 text-info" />}
                                             </div>
                                             <div className="flex-1 min-w-0">
                                               <div className="flex items-center gap-1.5 flex-wrap">
@@ -2031,7 +2031,7 @@ export default function AdminDealDetail() {
                                                 onClick={() => overrideFindingMutation.mutate({ reviewId: docReview.id, findingIndex: idx, action: 'override_accept' })}
                                                 data-testid={`button-override-accept-${doc.id}-${idx}`}
                                               >
-                                                <CheckCircle2 className="h-3 w-3 mr-1 text-emerald-600" />
+                                                <CheckCircle2 className="h-3 w-3 mr-1 text-success" />
                                                 Override & Accept
                                               </Button>
                                               <Button
@@ -2042,7 +2042,7 @@ export default function AdminDealDetail() {
                                                 onClick={() => overrideFindingMutation.mutate({ reviewId: docReview.id, findingIndex: idx, action: 'manual_review' })}
                                                 data-testid={`button-manual-review-${doc.id}-${idx}`}
                                               >
-                                                <AlertCircle className="h-3 w-3 mr-1 text-amber-600" />
+                                                <AlertCircle className="h-3 w-3 mr-1 text-warning" />
                                                 Review Manually
                                               </Button>
                                               <Button
@@ -2053,7 +2053,7 @@ export default function AdminDealDetail() {
                                                 onClick={() => { setRejectingFindingKey(findingKey); setFindingRejectionReason(''); }}
                                                 data-testid={`button-reject-finding-${doc.id}-${idx}`}
                                               >
-                                                <XCircle className="h-3 w-3 mr-1 text-red-600" />
+                                                <XCircle className="h-3 w-3 mr-1 text-destructive" />
                                                 Reject
                                               </Button>
                                             </div>
@@ -2256,8 +2256,8 @@ export default function AdminDealDetail() {
                       key={doc.id}
                       className={cn(
                         "flex items-center justify-between gap-3 p-3 rounded-lg border",
-                        (doc.status === 'approved' || doc.status === 'uploaded') && "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 opacity-80",
-                        doc.status === 'rejected' && "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"
+                        (doc.status === 'approved' || doc.status === 'uploaded') && "bg-success/10 border-success/30 opacity-80",
+                        doc.status === 'rejected' && "bg-destructive/10 border-destructive/30"
                       )}
                       data-testid={`doc-row-${doc.id}`}
                     >

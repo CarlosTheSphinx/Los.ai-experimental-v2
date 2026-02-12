@@ -66,9 +66,9 @@ export function BorrowerDashboard() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'active':
-        return <Badge variant="default" className="bg-blue-500">In Progress</Badge>;
+        return <Badge variant="default" className="bg-primary">In Progress</Badge>;
       case 'completed':
-        return <Badge variant="default" className="bg-green-500">Completed</Badge>;
+        return <Badge variant="default" className="bg-success">Completed</Badge>;
       case 'on_hold':
         return <Badge variant="secondary">On Hold</Badge>;
       default:
@@ -98,7 +98,7 @@ export function BorrowerDashboard() {
   return (
     <div className="container max-w-4xl mx-auto py-6 px-4">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold mb-2">
+        <h1 className="text-2xl font-bold tracking-tight mb-2">
           Welcome{user?.firstName ? `, ${user.firstName}` : ''}!
         </h1>
         <p className="text-muted-foreground">
@@ -145,7 +145,7 @@ export function BorrowerDashboard() {
         </Card>
       ) : (
         <div className="space-y-6">
-          <h2 className="text-lg font-semibold">Your Loans</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Your Loans</h2>
           
           {projects.map((project) => {
             const progress = calculateProgress(project.stages);
@@ -193,7 +193,7 @@ export function BorrowerDashboard() {
                           <Badge
                             key={stage.id}
                             variant={stage.status === 'completed' ? 'default' : 'outline'}
-                            className={stage.status === 'completed' ? 'bg-green-500' : stage.status === 'in_progress' ? 'border-blue-500 text-blue-500' : ''}
+                            className={stage.status === 'completed' ? 'bg-success' : stage.status === 'in_progress' ? 'border-primary text-primary' : ''}
                           >
                             {stage.status === 'completed' && <CheckCircle2 className="h-3 w-3 mr-1" />}
                             {stage.status === 'in_progress' && <Clock className="h-3 w-3 mr-1" />}

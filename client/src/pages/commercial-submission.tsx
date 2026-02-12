@@ -3376,7 +3376,7 @@ export default function CommercialSubmissionPage() {
             ) : (
               uploadedDocs.map((doc) => (
                 <div key={doc.docType} className="flex items-center gap-2 text-sm" data-testid={`review-doc-${doc.docType}`}>
-                  <Check className="w-4 h-4 text-green-600" />
+                  <Check className="w-4 h-4 text-success" />
                   <span>{DOC_TYPE_LABELS[doc.docType]}</span>
                   <span className="text-muted-foreground">- {doc.file.name}</span>
                 </div>

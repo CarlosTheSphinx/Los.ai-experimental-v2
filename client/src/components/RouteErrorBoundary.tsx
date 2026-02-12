@@ -30,8 +30,8 @@ export class RouteErrorBoundary extends Component<Props, State> {
       return (
         <div className="flex items-center justify-center p-12">
           <div className="text-center space-y-3">
-            <AlertTriangle className="h-8 w-8 text-amber-500 mx-auto" />
-            <p className="text-gray-600 text-sm">Failed to load {this.props.routeName || 'this page'}</p>
+            <AlertTriangle className="h-8 w-8 text-warning mx-auto" />
+            <p className="text-muted-foreground text-sm">Failed to load {this.props.routeName || 'this page'}</p>
             <button
               onClick={() => this.setState({ hasError: false, error: null })}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded text-xs font-medium hover:bg-primary/90"

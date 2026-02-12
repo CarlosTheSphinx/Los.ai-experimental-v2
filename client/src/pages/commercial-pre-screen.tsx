@@ -178,7 +178,7 @@ export default function CommercialPreScreenPage() {
     <div className="min-h-full p-4 md:p-8">
       <div className="max-w-2xl mx-auto space-y-6">
         <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground" data-testid="text-page-title">
             Quick Deal Check
           </h1>
           <p className="text-muted-foreground" data-testid="text-page-subtitle">
@@ -345,17 +345,17 @@ export default function CommercialPreScreenPage() {
           >
             {result.decision === "proceed" && (
               <Card
-                className="border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20"
+                className="border-success/20 bg-success/10"
                 data-testid="result-card-proceed"
               >
                 <CardContent className="pt-6 space-y-4">
                   <div className="flex items-start gap-3">
-                    <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+                    <CheckCircle2 className="h-6 w-6 text-success shrink-0 mt-0.5" />
                     <div className="space-y-2">
-                      <h3 className="font-semibold text-green-800 dark:text-green-200" data-testid="text-result-title">
+                      <h3 className="font-semibold text-success" data-testid="text-result-title">
                         Great fit! Proceed with full submission
                       </h3>
-                      <p className="text-sm text-green-700 dark:text-green-300" data-testid="text-result-reason">
+                      <p className="text-sm text-success/80" data-testid="text-result-reason">
                         {result.reason}
                       </p>
                     </div>
@@ -374,17 +374,17 @@ export default function CommercialPreScreenPage() {
 
             {result.decision === "decline" && (
               <Card
-                className="border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20"
+                className="border-destructive/20 bg-destructive/10"
                 data-testid="result-card-decline"
               >
                 <CardContent className="pt-6 space-y-4">
                   <div className="flex items-start gap-3">
-                    <XCircle className="h-6 w-6 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                    <XCircle className="h-6 w-6 text-destructive shrink-0 mt-0.5" />
                     <div className="space-y-2">
-                      <h3 className="font-semibold text-red-800 dark:text-red-200" data-testid="text-result-title">
+                      <h3 className="font-semibold text-destructive" data-testid="text-result-title">
                         This deal doesn't fit our current criteria
                       </h3>
-                      <p className="text-sm text-red-700 dark:text-red-300" data-testid="text-result-reason">
+                      <p className="text-sm text-destructive/80" data-testid="text-result-reason">
                         {result.reason}
                       </p>
                     </div>
@@ -403,17 +403,17 @@ export default function CommercialPreScreenPage() {
 
             {result.decision === "borderline" && (
               <Card
-                className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20"
+                className="border-warning/20 bg-warning/10"
                 data-testid="result-card-borderline"
               >
                 <CardContent className="pt-6 space-y-4">
                   <div className="flex items-start gap-3">
-                    <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <AlertTriangle className="h-6 w-6 text-warning shrink-0 mt-0.5" />
                     <div className="space-y-2">
-                      <h3 className="font-semibold text-amber-800 dark:text-amber-200" data-testid="text-result-title">
+                      <h3 className="font-semibold text-warning" data-testid="text-result-title">
                         Borderline - Worth submitting
                       </h3>
-                      <p className="text-sm text-amber-700 dark:text-amber-300" data-testid="text-result-reason">
+                      <p className="text-sm text-warning/80" data-testid="text-result-reason">
                         {result.reason}
                       </p>
                     </div>

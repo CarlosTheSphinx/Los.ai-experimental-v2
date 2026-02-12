@@ -118,7 +118,7 @@ function AppLayoutContent({ children }: AppLayoutProps) {
   };
 
   return (
-    <div className="flex h-screen w-full bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
+    <div className="flex h-screen w-full bg-background">
       <Sidebar collapsible="icon">
         <SidebarHeader className="p-4 border-b border-sidebar-border">
           <div className="flex items-center gap-2">
@@ -234,10 +234,10 @@ function AppLayoutContent({ children }: AppLayoutProps) {
       </Sidebar>
 
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
-        <header className="flex items-center gap-2 p-2 md:p-3 border-b border-slate-200 bg-white/80 backdrop-blur-md shrink-0">
+        <header className="flex items-center gap-2 p-2 md:p-3 border-b border-border bg-card/80 backdrop-blur-md shrink-0">
           <SidebarTrigger data-testid="button-toggle-sidebar" className="shrink-0" />
-          <span className="text-sm font-medium text-slate-600 truncate md:hidden">
-            {user?.firstName ? `Hi, ${user.firstName}` : 'Sphinx Capital'}
+          <span className="text-sm font-medium text-muted-foreground truncate md:hidden">
+            {user?.firstName ? `Hi, ${user.firstName}` : 'Lendry.AI'}
           </span>
         </header>
         <main className="flex-1 overflow-auto">

@@ -202,9 +202,9 @@ function TaskBoard() {
 
   const priorityColor = (p: string | null) => {
     switch (p) {
-      case "critical": return "text-red-600 dark:text-red-400";
-      case "high": return "text-orange-600 dark:text-orange-400";
-      case "medium": return "text-yellow-600 dark:text-yellow-400";
+      case "critical": return "text-destructive";
+      case "high": return "text-warning";
+      case "medium": return "text-warning";
       case "low": return "text-muted-foreground";
       default: return "text-muted-foreground";
     }
@@ -325,7 +325,7 @@ function TaskBoard() {
             <div className="space-y-4">
               {!showAllTasks && overdueTasks.length > 0 && (
                 <div className="space-y-2" data-testid="section-overdue">
-                  <div className="flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400 uppercase tracking-wide">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-destructive uppercase tracking-wide">
                     <AlertCircle className="h-3.5 w-3.5" />
                     Overdue
                   </div>
@@ -511,7 +511,7 @@ function TaskRow({ task, onComplete, onEdit, priorityColor, isCompleting }: {
         data-testid={`button-complete-task-${task.id}`}
       >
         {isCompleting ? (
-          <CheckCircle2 className="h-5 w-5 text-green-500" />
+          <CheckCircle2 className="h-5 w-5 text-success" />
         ) : (
           <Circle className="h-5 w-5 text-muted-foreground/50 hover:text-primary transition-colors" />
         )}
@@ -583,51 +583,62 @@ export default function AdminDashboard() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold" data-testid="text-admin-dashboard-title">Admin Dashboard</h1>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight" data-testid="text-admin-dashboard-title">Admin Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-1">Overview of your lending operations</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card data-testid="card-stat-users">
+        <Card data-testid="card-stat-users" className="stat-card-blue">
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Active Users</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <div className="rounded-full bg-info/10 p-2">
+              <Users className="h-4 w-4 text-info" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.totalActiveUsers || 0}</div>
-            <p className="text-xs text-muted-foreground">{stats?.regularUsers || 0} regular users</p>
+            <div className="text-3xl font-bold tracking-tight">{stats?.totalActiveUsers || 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">{stats?.regularUsers || 0} regular users</p>
           </CardContent>
         </Card>
 
-        <Card data-testid="card-stat-deals">
+        <Card data-testid="card-stat-deals" className="stat-card-navy">
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Active Deals</CardTitle>
-            <FolderKanban className="h-4 w-4 text-muted-foreground" />
+            <div className="rounded-full bg-foreground/10 p-2">
+              <FolderKanban className="h-4 w-4 text-foreground/70" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.activeProjects || 0}</div>
-            <p className="text-xs text-muted-foreground">{stats?.completedProjects || 0} completed</p>
+            <div className="text-3xl font-bold tracking-tight">{stats?.activeProjects || 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">{stats?.completedProjects || 0} completed</p>
           </CardContent>
         </Card>
 
-        <Card data-testid="card-stat-pipeline">
+        <Card data-testid="card-stat-pipeline" className="stat-card-emerald">
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Pipeline Value</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <div className="rounded-full bg-accent/10 p-2">
+              <DollarSign className="h-4 w-4 text-accent" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats?.activePipelineValue || 0)}</div>
-            <p className="text-xs text-muted-foreground">Active loans</p>
+            <div className="text-3xl font-bold tracking-tight">{formatCurrency(stats?.activePipelineValue || 0)}</div>
+            <p className="text-xs text-muted-foreground mt-1">Active loans</p>
           </CardContent>
         </Card>
 
-        <Card data-testid="card-stat-funded">
+        <Card data-testid="card-stat-funded" className="stat-card-amber">
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Funded Volume</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <div className="rounded-full bg-warning/10 p-2">
+              <TrendingUp className="h-4 w-4 text-warning" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats?.fundedVolume || 0)}</div>
-            <p className="text-xs text-muted-foreground">Total funded</p>
+            <div className="text-3xl font-bold tracking-tight">{formatCurrency(stats?.fundedVolume || 0)}</div>
+            <p className="text-xs text-muted-foreground mt-1">Total funded</p>
           </CardContent>
         </Card>
       </div>
@@ -638,7 +649,9 @@ export default function AdminDashboard() {
         <Card data-testid="card-agreements">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <FileCheck className="h-5 w-5" />
+              <div className="rounded-full bg-success/10 p-1.5">
+                <FileCheck className="h-5 w-5 text-success" />
+              </div>
               Completed Agreements
             </CardTitle>
             <CardDescription>Signed documents across all users</CardDescription>
@@ -646,8 +659,8 @@ export default function AdminDashboard() {
           <CardContent>
             <div className="flex items-center justify-center py-8">
               <div className="text-center">
-                <div className="text-4xl font-bold text-green-600">{stats?.completedAgreements || 0}</div>
-                <p className="text-muted-foreground mt-1">agreements signed</p>
+                <div className="text-5xl font-bold text-success tracking-tight">{stats?.completedAgreements || 0}</div>
+                <p className="text-sm text-muted-foreground mt-2">agreements signed</p>
               </div>
             </div>
           </CardContent>

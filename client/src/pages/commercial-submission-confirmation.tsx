@@ -27,10 +27,10 @@ interface Submission {
 }
 
 const statusColorMap: Record<string, string> = {
-  NEW: "bg-blue-500",
-  PENDING: "bg-yellow-500",
-  APPROVED: "bg-green-500",
-  REJECTED: "bg-red-500",
+  NEW: "bg-info",
+  PENDING: "bg-warning",
+  APPROVED: "bg-success",
+  REJECTED: "bg-destructive",
 };
 
 function formatCurrency(value: number): string {
@@ -83,16 +83,16 @@ export default function CommercialSubmissionConfirmation() {
     );
   }
 
-  const statusColor = statusColorMap[submission.status] || "bg-gray-500";
+  const statusColor = statusColorMap[submission.status] || "bg-secondary";
 
   return (
     <div className="min-h-screen p-4 md:p-6">
       <div className="max-w-2xl mx-auto">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <CheckCircle className="w-16 h-16 text-green-500" data-testid="icon-success-check" />
+            <CheckCircle className="w-16 h-16 text-success" data-testid="icon-success-check" />
           </div>
-          <h1 className="text-3xl font-bold text-foreground mb-2" data-testid="text-submission-received">
+          <h1 className="text-3xl font-bold text-foreground mb-2 tracking-tight" data-testid="text-submission-received">
             Submission Received
           </h1>
           <p className="text-muted-foreground" data-testid="text-confirmation-message">

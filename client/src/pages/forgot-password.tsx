@@ -51,9 +51,9 @@ export default function ForgotPasswordPage() {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <div className="flex justify-center mb-4">
-              <CheckCircle className="h-12 w-12 text-green-500" />
+              <CheckCircle className="h-12 w-12 text-success" />
             </div>
-            <CardTitle className="text-2xl">Check Your Email</CardTitle>
+            <CardTitle className="text-2xl tracking-tight">Check Your Email</CardTitle>
             <CardDescription>
               If an account exists with that email, we've sent you a password reset link.
             </CardDescription>
@@ -75,7 +75,7 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Forgot Password</CardTitle>
+          <CardTitle className="text-2xl tracking-tight">Forgot Password</CardTitle>
           <CardDescription>
             Enter your email and we'll send you a reset link
           </CardDescription>
