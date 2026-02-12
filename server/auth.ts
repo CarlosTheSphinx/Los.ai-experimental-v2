@@ -5,6 +5,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { db } from './db';
 import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
+export { encryptToken, decryptToken } from './utils/encryption';
 
 const SALT_ROUNDS = 10;
 const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET;

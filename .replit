@@ -1,9 +1,9 @@
-modules = ["nodejs-20", "web", "postgresql-16"]
+modules = ["nodejs-20", "web"]
 run = "npm run dev"
 hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
 [nix]
-channel = "stable-24_05"
+channel = "stable-25_05"
 packages = ["pkg-config", "cairo", "pango", "libjpeg", "giflib", "librsvg", "pixman"]
 
 [[ports]]
@@ -14,7 +14,7 @@ externalPort = 80
 PORT = "5000"
 
 [deployment]
-deploymentTarget = "gce"
+deploymentTarget = "autoscale"
 run = ["node", "./dist/index.cjs"]
 build = ["npm", "run", "build"]
 

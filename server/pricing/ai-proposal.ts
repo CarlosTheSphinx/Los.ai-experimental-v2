@@ -2,10 +2,17 @@ import OpenAI from "openai";
 import { z } from "zod";
 import { pricingRulesSchema } from "@shared/schema";
 
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+let openai: OpenAI | null = null;
+
+function getOpenAI(): OpenAI {
+  if (!openai) {
+    openai = new OpenAI({
+      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || 'placeholder',
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    });
+  }
+  return openai;
+}
 
 export interface GuidelineAnalysisRequest {
   guidelineText: string;
@@ -125,7 +132,7 @@ Format your response as:
   "explanation": "Brief explanation of extracted rules and assumptions"
 }`;
 
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: "gpt-5.2",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
@@ -189,7 +196,7 @@ Format your response as:
   "explanation": "What changes were made based on the feedback"
 }`;
 
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: "gpt-5.2",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },

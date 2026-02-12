@@ -50,7 +50,12 @@ app.use('/api/auth/forgot-password', authLimiter);
 // Stricter limits on pricing (expensive compute)
 app.use('/api/pricing/', pricingLimiter);
 // Upload rate limiting
-app.use('/api/*/upload*', uploadLimiter);
+app.use((req: Request, _res: Response, next: Function) => {
+  if (req.path.startsWith('/api/') && req.path.includes('/upload')) {
+    return uploadLimiter(req, _res, next);
+  }
+  next();
+});
 
 // Health check endpoint (no auth required)
 app.get('/health', (_req: Request, res: Response) => {

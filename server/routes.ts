@@ -77,9 +77,6 @@ export async function registerRoutes(
 
   // ==================== ROUTE MODULES ====================
 
-  // Register auth routes (address autocomplete, registration, login, OAuth, password reset)
-  registerAuthRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
-
   // Admin authentication middleware - requires admin, staff, or super_admin role
   const requireAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
@@ -191,6 +188,9 @@ export async function registerRoutes(
       res.status(500).json({ error: 'Authorization check failed' });
     }
   };
+
+  // Register auth routes (address autocomplete, registration, login, OAuth, password reset)
+  registerAuthRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
 
   // Forgot password
   app.post('/api/auth/forgot-password', async (req: Request, res: Response) => {

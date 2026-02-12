@@ -291,7 +291,7 @@ export function registerMessagingRoutes(app: Express, deps: RouteDeps) {
   // ==================== NOTIFICATION HELPER ====================
 
   // Internal helper to post a notification to a user's thread (creates thread if needed)
-  export async function postDealNotification(userId: number, dealId: number, message: string, meta?: any) {
+  async function postDealNotification(userId: number, dealId: number, message: string, meta?: any) {
     try {
       // Find or create thread for this user + deal
       let thread = await db.select().from(messageThreads)
