@@ -6548,6 +6548,7 @@ export async function registerRoutes(
             userId: req.user!.id,
             activityType: `document_${status}`,
             activityDescription: `Document "${updated.documentName}" ${actionText}${reviewNotes ? ` — ${reviewNotes}` : ''}`,
+            visibleToBorrower: true,
           });
         } catch (activityError) {
           console.error('Failed to log document review activity:', activityError);
@@ -6587,6 +6588,51 @@ export async function registerRoutes(
             }
           } catch (driveErr: any) {
             console.error('Drive sync check error on approval:', driveErr.message);
+          }
+        }
+
+        if (status === 'rejected') {
+          try {
+            const [project] = await db.select().from(projects).where(eq(projects.id, dealId)).limit(1);
+            if (project) {
+              const borrowerEmail = project.borrowerEmail;
+              const borrowerUser = project.userId ? await db.select({ email: users.email, fullName: users.fullName }).from(users).where(eq(users.id, project.userId)).then(r => r[0]) : null;
+              const emailTo = borrowerEmail || borrowerUser?.email;
+              const borrowerName = project.borrowerName || borrowerUser?.fullName || 'Borrower';
+              if (emailTo) {
+                const { getResendClient } = await import('./email');
+                const { client } = await getResendClient();
+                await client.emails.send({
+                  from: 'Sphinx Capital <onboarding@resend.dev>',
+                  to: emailTo,
+                  subject: `Action Required: Document Rejected - ${updated.documentName}`,
+                  html: `
+                    <!DOCTYPE html><html><head><style>
+                      body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                      .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                      .header { background-color: #dc2626; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+                      .content { background-color: #f8fafc; padding: 30px; border-radius: 0 0 8px 8px; }
+                      .reason { background: white; padding: 15px; border-radius: 6px; border-left: 4px solid #dc2626; margin: 15px 0; }
+                      .footer { text-align: center; color: #64748b; font-size: 12px; margin-top: 20px; }
+                    </style></head><body>
+                      <div class="container">
+                        <div class="header"><h1>Document Rejected</h1></div>
+                        <div class="content">
+                          <p>Hello ${borrowerName},</p>
+                          <p>The following document for your loan (DEAL-${dealId}) has been reviewed and needs to be resubmitted:</p>
+                          <p><strong>${updated.documentName}</strong></p>
+                          ${reviewNotes ? `<div class="reason"><strong>Reason:</strong> ${reviewNotes}</div>` : ''}
+                          <p>Please upload a corrected version through your borrower portal at your earliest convenience.</p>
+                        </div>
+                        <div class="footer"><p>Powered by Sphinx Capital</p></div>
+                      </div>
+                    </body></html>
+                  `
+                });
+              }
+            }
+          } catch (emailErr) {
+            console.error('Failed to send rejection email:', emailErr);
           }
         }
       }
@@ -6913,17 +6959,77 @@ export async function registerRoutes(
         const [doc] = await db.select().from(dealDocuments).where(eq(dealDocuments.id, review.documentId));
         if (doc) {
           await db.update(dealDocuments)
-            .set({ status: 'rejected', reviewNotes: reason })
+            .set({ status: 'rejected', reviewNotes: reason, reviewedAt: new Date(), reviewedBy: req.user!.id })
             .where(eq(dealDocuments.id, review.documentId));
 
           if (review.projectId) {
-            await storage.addProjectActivity({
-              projectId: review.projectId,
-              activityType: 'document_rejected',
-              activityDescription: `Document "${doc.documentName}" rejected — ${reason}`,
-              performedBy: req.user!.id,
-              metadata: JSON.stringify({ documentId: doc.id, rejectionReason: reason, fromAiReview: true }),
-            });
+            try {
+              await storage.createProjectActivity({
+                projectId: review.projectId,
+                userId: req.user!.id,
+                activityType: 'document_rejected',
+                activityDescription: `Document "${doc.documentName}" rejected — ${reason}`,
+                visibleToBorrower: true,
+                metadata: { documentId: doc.id, rejectionReason: reason, fromAiReview: true },
+              });
+            } catch (actErr) {
+              console.error('Failed to log rejection activity:', actErr);
+            }
+
+            try {
+              await db.insert(loanUpdates).values({
+                projectId: review.projectId,
+                updateType: 'doc_rejected',
+                summary: `Document "${doc.documentName}" has been rejected`,
+                meta: { documentId: doc.id, documentName: doc.documentName, reviewNotes: reason },
+                performedBy: req.user!.id,
+              });
+            } catch (digestErr) {
+              console.error('Failed to log rejection for digest:', digestErr);
+            }
+
+            try {
+              const [project] = await db.select().from(projects).where(eq(projects.id, review.projectId)).limit(1);
+              if (project) {
+                const borrowerEmail = project.borrowerEmail;
+                const borrowerUser = project.userId ? await db.select({ email: users.email, fullName: users.fullName }).from(users).where(eq(users.id, project.userId)).then(r => r[0]) : null;
+                const emailTo = borrowerEmail || borrowerUser?.email;
+                const borrowerName = project.borrowerName || borrowerUser?.fullName || 'Borrower';
+                if (emailTo) {
+                  const { getResendClient } = await import('./email');
+                  const { client } = await getResendClient();
+                  await client.emails.send({
+                    from: 'Sphinx Capital <onboarding@resend.dev>',
+                    to: emailTo,
+                    subject: `Action Required: Document Rejected - ${doc.documentName}`,
+                    html: `
+                      <!DOCTYPE html><html><head><style>
+                        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                        .header { background-color: #dc2626; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+                        .content { background-color: #f8fafc; padding: 30px; border-radius: 0 0 8px 8px; }
+                        .reason { background: white; padding: 15px; border-radius: 6px; border-left: 4px solid #dc2626; margin: 15px 0; }
+                        .footer { text-align: center; color: #64748b; font-size: 12px; margin-top: 20px; }
+                      </style></head><body>
+                        <div class="container">
+                          <div class="header"><h1>Document Rejected</h1></div>
+                          <div class="content">
+                            <p>Hello ${borrowerName},</p>
+                            <p>The following document for your loan (DEAL-${review.projectId}) has been reviewed and needs to be resubmitted:</p>
+                            <p><strong>${doc.documentName}</strong></p>
+                            <div class="reason"><strong>Reason:</strong> ${reason}</div>
+                            <p>Please upload a corrected version through your borrower portal at your earliest convenience.</p>
+                          </div>
+                          <div class="footer"><p>Powered by Sphinx Capital</p></div>
+                        </div>
+                      </body></html>
+                    `
+                  });
+                }
+              }
+            } catch (emailErr) {
+              console.error('Failed to send rejection email:', emailErr);
+            }
           }
         }
       }

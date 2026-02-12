@@ -784,12 +784,17 @@ export default function AdminDealDetail() {
       const res = await apiRequest('PATCH', `/api/admin/reviews/${reviewId}/findings/${findingIndex}/override`, { action, reason });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${linkedProjectId}/ai-reviews`] });
       queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
       setRejectingFindingKey(null);
       setFindingRejectionReason('');
-      toast({ title: "Rule action saved" });
+      if (variables.action === 'reject') {
+        setExpandedReviewDocId(null);
+        toast({ title: "Document rejected", description: "The borrower has been notified and will need to resubmit." });
+      } else {
+        toast({ title: "Rule action saved" });
+      }
     },
     onError: (error: any) => {
       toast({ title: "Failed to save action", description: error.message, variant: "destructive" });
