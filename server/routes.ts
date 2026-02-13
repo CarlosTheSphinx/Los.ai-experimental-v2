@@ -13596,6 +13596,15 @@ Return JSON only:
     }
   });
 
+  // ===================== ALIAS ROUTES: /deals -> /projects (nomenclature consistency) =====================
+  // Add a middleware that rewrites /api/deals to /api/projects for backward compatibility
+  app.use((req: AuthRequest, res: Response, next: Function) => {
+    if (req.path.startsWith('/api/deals')) {
+      req.url = req.url.replace('/api/deals', '/api/projects');
+    }
+    next();
+  });
+
   // Run expired submission check every hour
   setInterval(() => {
     checkExpiredSubmissions().catch(err => {

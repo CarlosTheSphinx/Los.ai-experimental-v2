@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 
-interface Project {
+interface Deal {
   id: number;
   name: string;
   propertyAddress: string;
@@ -56,7 +56,7 @@ export function BorrowerDashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
 
-  const { data: projectsData, isLoading } = useQuery<{ projects: Project[] }>({
+  const { data: projectsData, isLoading } = useQuery<{ projects: Deal[] }>({
     queryKey: ['/api/deals'],
   });
 
