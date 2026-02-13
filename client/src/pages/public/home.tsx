@@ -142,8 +142,9 @@ export default function PublicHomePage() {
             {/* Hero Headline */}
             <motion.div variants={itemVariants}>
               <h1 className="text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight text-white leading-tight">
-                The World's First Loan
+                The World's First
                 <br />
+                Loan{" "}
                 <span className="line-through decoration-blue-500 decoration-4">
                   Origination
                 </span>
