@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/hooks/use-auth';
+import { useBranding } from '@/hooks/use-branding';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +27,7 @@ export default function LoginPage() {
   const [, setLocation] = useLocation();
   const searchString = useSearch();
   const { login } = useAuth();
+  const { branding } = useBranding();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -184,7 +186,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-xs opacity-50 relative z-10">
-          &copy; {new Date().getFullYear()} Sphinx Capital. All rights reserved.
+          &copy; {branding.copyrightYear} {branding.companyName}. All rights reserved.
         </p>
       </div>
 

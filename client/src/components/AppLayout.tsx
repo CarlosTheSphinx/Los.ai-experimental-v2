@@ -154,6 +154,7 @@ function AppLayoutContent({ children }: AppLayoutProps) {
               src={sphinxLogo}
               alt="Sphinx Capital"
               className="h-[52px] w-auto object-contain group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:w-10"
+              title="Logo"
             />
             <span className="text-[10px] text-muted-foreground font-medium group-data-[collapsible=icon]:hidden">
               Intelligent Lending

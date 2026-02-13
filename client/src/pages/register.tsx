@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '@/hooks/use-auth';
+import { useBranding } from '@/hooks/use-branding';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +34,7 @@ type RegisterFormData = z.infer<typeof registerSchema>;
 export default function RegisterPage() {
   const [, setLocation] = useLocation();
   const { register } = useAuth();
+  const { branding } = useBranding();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -120,7 +122,7 @@ export default function RegisterPage() {
 
         {/* Copyright Footer */}
         <div className="text-sm text-background/60">
-          &copy; 2024 Sphinx Capital. All rights reserved.
+          &copy; {branding.copyrightYear} {branding.companyName}. All rights reserved.
         </div>
       </div>
 
@@ -133,7 +135,7 @@ export default function RegisterPage() {
           </div>
 
           <h2 className="text-3xl font-bold tracking-tight mb-2">Create your account</h2>
-          <p className="text-muted-foreground mb-8">Sign up for Sphinx Capital</p>
+          <p className="text-muted-foreground mb-8">Sign up for {branding.companyName}</p>
 
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
