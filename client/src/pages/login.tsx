@@ -125,7 +125,6 @@ export default function LoginPage() {
         <p className="text-xs opacity-50 relative z-10">
           &copy; {new Date().getFullYear()} Sphinx Capital. All rights reserved.
         </p>
-        </div>
       </div>
 
       {/* Right Panel — Login Form */}
