@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import {
   Dialog,
   DialogContent,
@@ -179,21 +180,39 @@ function StatsCard({
   icon: React.ComponentType<{ className?: string }>;
   className?: string;
 }) {
+  // Determine stat card class and colors based on title
+  const getColorClasses = (title: string) => {
+    switch (title) {
+      case "Total Deals":
+        return { statCard: "stat-card-blue", bg: "bg-primary/10", icon: "text-primary" };
+      case "Total Loan Volume":
+        return { statCard: "stat-card-emerald", bg: "bg-accent/10", icon: "text-accent" };
+      case "Total Revenue":
+        return { statCard: "stat-card-navy", bg: "bg-info/10", icon: "text-info" };
+      case "Total Commission":
+        return { statCard: "stat-card-amber", bg: "bg-warning/10", icon: "text-warning" };
+      default:
+        return { statCard: "stat-card-blue", bg: "bg-primary/10", icon: "text-primary" };
+    }
+  };
+
+  const colors = getColorClasses(title);
+
   return (
-    <Card className={className}>
+    <Card className={`${colors.statCard} hover:shadow-lg transition-all duration-200 ${className}`}>
       <CardContent className="pt-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-2xl font-bold">{value}</span>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex-1">
+            <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-3xl font-bold">{value}</span>
             </div>
             {subtitle && (
-              <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+              <p className="text-xs text-muted-foreground mt-2">{subtitle}</p>
             )}
           </div>
-          <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-            <Icon className="h-6 w-6 text-primary" />
+          <div className={`h-14 w-14 rounded-full ${colors.bg} flex items-center justify-center flex-shrink-0`}>
+            <Icon className={`h-7 w-7 ${colors.icon}`} />
           </div>
         </div>
       </CardContent>
@@ -202,33 +221,78 @@ function StatsCard({
 }
 
 function PipelineByStage({ stageStats }: { stageStats: StageInfo[] }) {
+  // Define stage colors using design system colors
+  const stageColorMap: Record<string, string> = {
+    'application': 'hsl(212 67% 51%)',      // Primary Blue
+    'underwriting': 'hsl(212 67% 60%)',     // Lighter Blue
+    'approval': 'hsl(160 84% 39%)',         // Accent/Success
+    'conditions': 'hsl(38 92% 50%)',        // Warning/Amber
+    'title': 'hsl(205 35% 21%)',            // Navy
+    'appraisal': 'hsl(160 70% 45%)',        // Lighter Success
+    'final-review': 'hsl(212 67% 45%)',     // Darker Blue
+    'closing': 'hsl(160 84% 39%)',          // Emerald
+    'funded': 'hsl(160 84% 39%)',           // Success
+  };
+
+  const chartData = stageStats.map(stage => ({
+    name: stage.label,
+    count: stage.count,
+    color: stage.color || stageColorMap[stage.stage] || 'hsl(212 67% 51%)',
+  }));
+
+  const maxCount = Math.max(...stageStats.map(s => s.count), 1);
+
+  const totalDeals = stageStats.reduce((sum, s) => sum + s.count, 0);
+
   return (
     <Card>
-      <CardHeader className="pb-2">
+      <CardHeader className="pb-3">
         <CardTitle className="text-lg">Pipeline by Stage</CardTitle>
+        <CardDescription>Deal count and percentage at each stage</CardDescription>
       </CardHeader>
-      <CardContent>
-        <div className="flex items-center justify-between gap-1 overflow-x-auto pb-2">
-          {stageStats.map((stageInfo, index) => (
-            <div key={stageInfo.stage} className="flex flex-col items-center flex-1 min-w-[80px]">
-              <span className="text-2xl font-bold">{stageInfo.count}</span>
-              <span className="text-xs text-muted-foreground text-center whitespace-nowrap">
-                {stageInfo.label}
-              </span>
-              <div className="flex items-center w-full mt-2 gap-1">
-                <div
-                  className="h-2 flex-1 rounded-full"
-                  style={{
-                    backgroundColor: stageInfo.color || '#6b7280',
-                    opacity: stageInfo.count > 0 ? 1 : 0.3,
-                  }}
-                />
-                {index < stageStats.length - 1 && (
-                  <span className="text-muted-foreground text-xs">&rarr;</span>
-                )}
+      <CardContent className="space-y-4">
+        {/* Horizontal bar chart visualization */}
+        <div className="space-y-3">
+          {chartData.map((stage, index) => {
+            const percentage = totalDeals > 0 ? Math.round((stage.count / totalDeals) * 100) : 0;
+            return (
+              <div key={index} className="space-y-1.5">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium text-foreground">{stage.name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground font-semibold">{stage.count} deals</span>
+                    <span className="text-xs font-bold px-2 py-1 rounded-full bg-muted text-muted-foreground">
+                      {percentage}%
+                    </span>
+                  </div>
+                </div>
+                <div className="w-full h-7 rounded-md overflow-hidden bg-muted">
+                  <div
+                    className="h-full rounded-md transition-all duration-500 flex items-center justify-end pr-2"
+                    style={{
+                      width: `${Math.max((stage.count / maxCount) * 100, 5)}%`,
+                      backgroundColor: stage.color,
+                    }}
+                  >
+                    {stage.count > 0 && (stage.count / maxCount) * 100 > 20 && (
+                      <span className="text-xs font-semibold text-white drop-shadow-sm">{stage.count}</span>
+                    )}
+                  </div>
+                </div>
               </div>
+            );
+          })}
+        </div>
+
+        {/* Total deals summary */}
+        <div className="pt-3 border-t">
+          <div className="flex items-center justify-between">
+            <span className="font-medium text-muted-foreground">Total in Pipeline</span>
+            <div className="flex items-center gap-3">
+              <span className="text-2xl font-bold text-primary">{totalDeals}</span>
+              <span className="text-sm text-muted-foreground">deals</span>
             </div>
-          ))}
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -941,10 +1005,11 @@ export default function AdminDeals() {
             ))}
           </div>
         ) : (
-          <Card>
-            <Table>
-              <TableHeader>
-                <TableRow>
+          <Card className="overflow-hidden">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="sticky top-0 bg-card z-10 border-b-2 border-border">
+                  <TableRow className="hover:bg-transparent">
                   <TableHead>Deal</TableHead>
                   <TableHead>Borrower</TableHead>
                   <TableHead>Property</TableHead>
@@ -1013,7 +1078,8 @@ export default function AdminDeals() {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+              </Table>
+            </div>
           </Card>
         )}
       </div>

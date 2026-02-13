@@ -12,13 +12,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { 
-  Users, FolderKanban, FileCheck, ClipboardList, DollarSign, TrendingUp, 
+import {
+  Users, FolderKanban, FileCheck, ClipboardList, DollarSign, TrendingUp,
   ChevronLeft, ChevronRight, CalendarDays, Pencil, Circle, CheckCircle2,
-  MapPin, Loader2, AlertCircle
+  MapPin, Loader2, AlertCircle, ArrowUpRight, ArrowDownRight, Plus, Calculator, FolderUp
 } from "lucide-react";
 import { format, addDays, subDays, isToday, isBefore, startOfDay, parseISO, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 interface DashboardStats {
   totalActiveUsers: number;
@@ -65,6 +66,32 @@ interface TaskBoardResponse {
   tasks: TaskBoardItem[];
   dateCounts: Record<string, number>;
   pendingCount: number;
+}
+
+// Sparkline mini-chart component
+function SparklineChart({ data, color }: { data: number[]; color: string }) {
+  const chartData = data.map((value, index) => ({ index, value }));
+  return (
+    <ResponsiveContainer width="100%" height={30}>
+      <AreaChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+        <defs>
+          <linearGradient id={`sparklineGrad-${color}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.3} />
+            <stop offset="100%" stopColor={color} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <Area
+          type="monotone"
+          dataKey="value"
+          stroke={color}
+          fill={`url(#sparklineGrad-${color})`}
+          strokeWidth={2}
+          dot={false}
+          isAnimationActive={false}
+        />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
 }
 
 function TaskBoard() {
@@ -590,55 +617,122 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card data-testid="card-stat-users" className="stat-card-blue">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+        {/* Active Users Card */}
+        <Card data-testid="card-stat-users" className="stat-card-blue hover:shadow-lg transition-all duration-200">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground">Active Users</CardTitle>
             <div className="rounded-full bg-info/10 p-2">
               <Users className="h-4 w-4 text-info" />
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold tracking-tight">{stats?.totalActiveUsers || 0}</div>
-            <p className="text-xs text-muted-foreground mt-1">{stats?.regularUsers || 0} regular users</p>
+          <CardContent className="space-y-3">
+            <div>
+              <div className="text-3xl font-bold tracking-tight">{stats?.totalActiveUsers || 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">{stats?.regularUsers || 0} regular users</p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <ArrowUpRight className="h-3.5 w-3.5 text-success" />
+              <span className="text-xs font-medium text-success">+8% vs last month</span>
+            </div>
+            {/* TODO: Replace with real trend data from API */}
+            <SparklineChart data={[12, 15, 14, 18, 20, 19, 22]} color="hsl(160 84% 39%)" />
           </CardContent>
         </Card>
 
-        <Card data-testid="card-stat-deals" className="stat-card-navy">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+        {/* Active Deals Card */}
+        <Card data-testid="card-stat-deals" className="stat-card-navy hover:shadow-lg transition-all duration-200">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground">Active Deals</CardTitle>
             <div className="rounded-full bg-foreground/10 p-2">
               <FolderKanban className="h-4 w-4 text-foreground/70" />
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold tracking-tight">{stats?.activeProjects || 0}</div>
-            <p className="text-xs text-muted-foreground mt-1">{stats?.completedProjects || 0} completed</p>
+          <CardContent className="space-y-3">
+            <div>
+              <div className="text-3xl font-bold tracking-tight">{stats?.activeProjects || 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">{stats?.completedProjects || 0} completed</p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <ArrowUpRight className="h-3.5 w-3.5 text-success" />
+              <span className="text-xs font-medium text-success">+5% vs last month</span>
+            </div>
+            {/* TODO: Replace with real trend data from API */}
+            <SparklineChart data={[8, 10, 9, 12, 11, 13, 14]} color="hsl(212 67% 51%)" />
           </CardContent>
         </Card>
 
-        <Card data-testid="card-stat-pipeline" className="stat-card-emerald">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+        {/* Pipeline Value Card — HERO CARD (spans 2 columns for visual hierarchy) */}
+        <Card data-testid="card-stat-pipeline" className="stat-card-emerald hover:shadow-lg transition-all duration-200 lg:col-span-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground">Pipeline Value</CardTitle>
             <div className="rounded-full bg-accent/10 p-2">
               <DollarSign className="h-4 w-4 text-accent" />
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold tracking-tight">{formatCurrency(stats?.activePipelineValue || 0)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Active loans</p>
+          <CardContent className="space-y-3">
+            <div>
+              <div className="text-5xl font-bold tracking-tight">{formatCurrency(stats?.activePipelineValue || 0)}</div>
+              <p className="text-xs text-muted-foreground mt-2">Active loans in pipeline</p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <ArrowUpRight className="h-3.5 w-3.5 text-success" />
+              <span className="text-xs font-medium text-success">+12% vs last month</span>
+            </div>
+            {/* TODO: Replace with real trend data from API */}
+            <SparklineChart data={[45, 52, 48, 61, 58, 65, 72]} color="hsl(160 84% 39%)" />
           </CardContent>
         </Card>
 
-        <Card data-testid="card-stat-funded" className="stat-card-amber">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+        {/* Funded Volume Card */}
+        <Card data-testid="card-stat-funded" className="stat-card-amber hover:shadow-lg transition-all duration-200">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground">Funded Volume</CardTitle>
             <div className="rounded-full bg-warning/10 p-2">
               <TrendingUp className="h-4 w-4 text-warning" />
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold tracking-tight">{formatCurrency(stats?.fundedVolume || 0)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Total funded</p>
+          <CardContent className="space-y-3">
+            <div>
+              <div className="text-3xl font-bold tracking-tight">{formatCurrency(stats?.fundedVolume || 0)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Total funded</p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <ArrowDownRight className="h-3.5 w-3.5 text-destructive" />
+              <span className="text-xs font-medium text-destructive">-3% vs last month</span>
+            </div>
+            {/* TODO: Replace with real trend data from API */}
+            <SparklineChart data={[88, 85, 92, 88, 95, 92, 89]} color="hsl(38 92% 50%)" />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Quick Actions Row */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="border-2 border-dashed border-border hover:border-primary/30 hover:bg-primary/5 transition-all duration-200 cursor-pointer">
+          <CardContent className="flex flex-col items-center justify-center p-6 gap-3">
+            <div className="rounded-lg bg-primary/10 p-3">
+              <Plus className="h-5 w-5 text-primary" />
+            </div>
+            <p className="font-semibold text-sm text-foreground">New Deal</p>
+            <p className="text-xs text-muted-foreground text-center">Create a new lending opportunity</p>
+          </CardContent>
+        </Card>
+        <Card className="border-2 border-dashed border-border hover:border-primary/30 hover:bg-primary/5 transition-all duration-200 cursor-pointer">
+          <CardContent className="flex flex-col items-center justify-center p-6 gap-3">
+            <div className="rounded-lg bg-info/10 p-3">
+              <FolderUp className="h-5 w-5 text-info" />
+            </div>
+            <p className="font-semibold text-sm text-foreground">Upload Document</p>
+            <p className="text-xs text-muted-foreground text-center">Add borrower documentation</p>
+          </CardContent>
+        </Card>
+        <Card className="border-2 border-dashed border-border hover:border-primary/30 hover:bg-primary/5 transition-all duration-200 cursor-pointer">
+          <CardContent className="flex flex-col items-center justify-center p-6 gap-3">
+            <div className="rounded-lg bg-accent/10 p-3">
+              <Calculator className="h-5 w-5 text-accent" />
+            </div>
+            <p className="font-semibold text-sm text-foreground">Run Pricing</p>
+            <p className="text-xs text-muted-foreground text-center">Generate loan quote</p>
           </CardContent>
         </Card>
       </div>
@@ -676,20 +770,38 @@ export default function AdminDashboard() {
           {activity.length === 0 ? (
             <p className="text-muted-foreground text-center py-4">No recent activity</p>
           ) : (
-            <div className="space-y-3">
-              {activity.map((item) => (
-                <div key={item.id} className="flex items-start gap-3 py-2 border-b last:border-0">
-                  <Badge variant="outline" className="text-xs shrink-0">
-                    {item.actionType.replace(/_/g, " ")}
-                  </Badge>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm truncate">{item.actionDescription}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
-                    </p>
+            <div className="space-y-0">
+              {activity.map((item, index) => {
+                const actionTypeColor = item.actionType.includes('approved') ? 'success' :
+                  item.actionType.includes('rejected') ? 'destructive' :
+                  item.actionType.includes('created') ? 'primary' :
+                  'info';
+                const borderColorClass = actionTypeColor === 'success' ? 'border-l-success' :
+                  actionTypeColor === 'destructive' ? 'border-l-destructive' :
+                  actionTypeColor === 'primary' ? 'border-l-primary' : 'border-l-info';
+
+                return (
+                  <div
+                    key={item.id}
+                    className={`flex items-start gap-3 py-3 px-3 border-l-3 ${borderColorClass} ${
+                      index !== activity.length - 1 ? 'border-b border-border' : ''
+                    } hover:bg-muted/50 transition-colors`}
+                  >
+                    <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-white text-xs font-semibold shrink-0">
+                      {item.userId ? 'A' : 'S'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{item.actionDescription}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="text-xs shrink-0 ml-auto">
+                      {item.actionType.replace(/_/g, " ")}
+                    </Badge>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>

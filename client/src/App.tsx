@@ -51,6 +51,10 @@ import CommercialSubmissionDetail from "@/pages/commercial-submission-detail";
 import AdminAIReview from "@/pages/admin/ai-review";
 import AdminCommercialConfig from "@/pages/admin/commercial-config";
 import { AppLayout } from "@/components/AppLayout";
+import PublicHomePage from "@/pages/public/home";
+import PublicPricingPage from "@/pages/public/pricing";
+import PublicUseCasesPage from "@/pages/public/use-cases";
+import PublicContactPage from "@/pages/public/contact";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -195,8 +199,13 @@ function AppContent() {
   const [isResetPasswordPage] = useRoute("/reset-password/:token");
   const [isOnboardingPage] = useRoute("/onboarding");
   const [isSelectRolePage] = useRoute("/select-role");
+  const [isPublicHomePage] = useRoute("/");
+  const [isPublicPricingPage] = useRoute("/pricing");
+  const [isPublicUseCasesPage] = useRoute("/use-cases");
+  const [isPublicContactPage] = useRoute("/contact");
 
   const isPublicAuthPage = isLoginPage || isRegisterPage || isForgotPasswordPage || isResetPasswordPage;
+  const isPublicMarketingPage = isPublicHomePage || isPublicPricingPage || isPublicUseCasesPage || isPublicContactPage;
 
   if (isSignPage) {
     return (
@@ -237,6 +246,17 @@ function AppContent() {
     return (
       <Switch>
         <Route path="/onboarding" component={() => <ProtectedRoute component={OnboardingPage} />} />
+      </Switch>
+    );
+  }
+
+  if (isPublicMarketingPage) {
+    return (
+      <Switch>
+        <Route path="/" component={PublicHomePage} />
+        <Route path="/pricing" component={PublicPricingPage} />
+        <Route path="/use-cases" component={PublicUseCasesPage} />
+        <Route path="/contact" component={PublicContactPage} />
       </Switch>
     );
   }

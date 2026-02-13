@@ -1,7 +1,8 @@
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { 
-  Calculator, 
-  FileText, 
+import {
+  Calculator,
+  FileText,
   ClipboardList,
   FolderKanban,
   LogOut,
@@ -19,6 +20,7 @@ import {
   DollarSign,
   Sparkles,
   ClipboardEdit,
+  Search,
 } from "lucide-react";
 import { 
   Sidebar, 
@@ -40,6 +42,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
 import { InboxBadge } from "@/components/InboxBadge";
+import { CommandPalette } from "@/components/CommandPalette";
 import sphinxLogo from "@assets/Sphinx_Capital_Logo_-_Blue_-_No_Background_(1)_1769811166428.jpeg";
 import type { PermissionKey } from "@shared/schema";
 
@@ -53,17 +56,18 @@ interface NavItem {
   icon: any;
   showBadge?: boolean;
   requiredPermission?: PermissionKey;
+  shortcut?: string;
 }
 
 const brokerNavItems: NavItem[] = [
-  { href: "/", label: "New Quote", icon: Calculator },
-  { href: "/quotes", label: "Saved Quotes", icon: FileText },
-  { href: "/agreements", label: "Term Sheets", icon: ClipboardList },
-  { href: "/deals", label: "Loans", icon: FolderKanban },
-  { href: "/commissions", label: "My Commissions", icon: DollarSign },
-  { href: "/commercial/dashboard", label: "Commercial", icon: Building2 },
-  { href: "/messages", label: "Messages", icon: MessageSquare, showBadge: true },
-  { href: "/resources", label: "Resources", icon: BookOpen },
+  { href: "/", label: "New Quote", icon: Calculator, shortcut: undefined },
+  { href: "/quotes", label: "Saved Quotes", icon: FileText, shortcut: undefined },
+  { href: "/agreements", label: "Term Sheets", icon: ClipboardList, shortcut: undefined },
+  { href: "/deals", label: "Loans", icon: FolderKanban, shortcut: undefined },
+  { href: "/commissions", label: "My Commissions", icon: DollarSign, shortcut: undefined },
+  { href: "/commercial/dashboard", label: "Commercial", icon: Building2, shortcut: undefined },
+  { href: "/messages", label: "Messages", icon: MessageSquare, showBadge: true, shortcut: undefined },
+  { href: "/resources", label: "Resources", icon: BookOpen, shortcut: undefined },
 ];
 
 const borrowerNavItems: NavItem[] = [
@@ -75,8 +79,8 @@ const borrowerNavItems: NavItem[] = [
 ];
 
 const adminNavItems: NavItem[] = [
-  { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/admin/deals", label: "Pipeline", icon: FileText, requiredPermission: "pipeline.view" },
+  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, shortcut: "⌘1" },
+  { href: "/admin/deals", label: "Pipeline", icon: FileText, requiredPermission: "pipeline.view", shortcut: "⌘2" },
   { href: "/admin/commercial-submissions", label: "Commercial Deals", icon: Building2, requiredPermission: "commercial.view" },
   { href: "/admin/commercial/config", label: "Commercial Config", icon: ClipboardEdit, requiredPermission: "commercial.manage" },
   { href: "/admin/partners", label: "Partners", icon: Handshake, requiredPermission: "partners.view" },
@@ -85,7 +89,7 @@ const adminNavItems: NavItem[] = [
   { href: "/admin/ai-review", label: "AI Review", icon: Sparkles, requiredPermission: "programs.view" },
   { href: "/admin/onboarding", label: "Onboarding", icon: BookOpen, requiredPermission: "onboarding.view" },
   { href: "/admin/digests", label: "Digests", icon: CalendarDays, requiredPermission: "digests.view" },
-  { href: "/admin/users", label: "Users", icon: Users, requiredPermission: "users.view" },
+  { href: "/admin/users", label: "Users", icon: Users, requiredPermission: "users.view", shortcut: "⌘3" },
   { href: "/messages", label: "Messages", icon: MessageSquare, showBadge: true, requiredPermission: "messages.view" },
   { href: "/admin/settings", label: "Settings", icon: Settings, requiredPermission: "settings.view" },
 ];
@@ -95,10 +99,11 @@ function AppLayoutContent({ children }: AppLayoutProps) {
   const { user, logout } = useAuth();
   const { setOpenMobile, isMobile } = useSidebar();
   const { hasPermission, isSuperAdmin } = usePermissions();
-  
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+
   const isAdmin = user?.role && ['admin', 'staff', 'super_admin', 'processor'].includes(user.role);
   const isBorrower = user?.userType === 'borrower';
-  
+
   const navItems = isBorrower ? borrowerNavItems : brokerNavItems;
 
   const filteredAdminItems = adminNavItems.filter(item => {
@@ -117,10 +122,24 @@ function AppLayoutContent({ children }: AppLayoutProps) {
     }
   };
 
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // CMD+K or CTRL+K opens command palette
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
     <div className="flex h-screen w-full bg-background">
       <Sidebar collapsible="icon">
-        <SidebarHeader className="p-4 border-b border-sidebar-border">
+        <SidebarHeader className="p-4 border-b border-sidebar-border space-y-3">
           <div className="flex flex-col items-start gap-1">
             <img
               src={sphinxLogo}
@@ -131,18 +150,30 @@ function AppLayoutContent({ children }: AppLayoutProps) {
               Intelligent Lending
             </span>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-start text-muted-foreground text-xs group-data-[collapsible=icon]:hidden"
+            onClick={() => setCommandPaletteOpen(true)}
+          >
+            <Search className="h-3.5 w-3.5 mr-2" />
+            Search... ⌘K
+          </Button>
         </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
+            <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/60 px-0 pb-2">
+              {isBorrower ? 'Lending' : 'Deals'}
+            </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {navItems.map((item) => {
-                  const isActive = location === item.href || 
+                  const isActive = location === item.href ||
                     (item.href !== "/" && location.startsWith(item.href) && !location.startsWith("/admin"));
                   const Icon = item.icon;
-                  
+
                   return (
-                    <SidebarMenuItem key={item.href}>
+                    <SidebarMenuItem key={item.href} className="group relative">
                       <SidebarMenuButton
                         asChild
                         isActive={isActive}
@@ -155,10 +186,15 @@ function AppLayoutContent({ children }: AppLayoutProps) {
                           onClick={handleNavClick}
                         >
                           <Icon className="h-5 w-5" />
-                          <span className="flex items-center gap-1">
+                          <span className="flex items-center gap-1 flex-1">
                             {item.label}
                             {'showBadge' in item && item.showBadge && <InboxBadge />}
                           </span>
+                          {item.shortcut && (
+                            <span className="text-[10px] text-muted-foreground/50 group-hover:text-muted-foreground/70 transition-colors ml-2 hidden group-hover:inline">
+                              {item.shortcut}
+                            </span>
+                          )}
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -170,19 +206,18 @@ function AppLayoutContent({ children }: AppLayoutProps) {
           
           {isAdmin && (
             <SidebarGroup className="mt-4 pt-4 border-t border-sidebar-border">
-              <SidebarGroupLabel className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider">
-                <Shield className="h-3 w-3" />
-                Admin
+              <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/60 px-0 pb-2">
+                Administration
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   {filteredAdminItems.map((item) => {
-                    const isActive = location === item.href || 
+                    const isActive = location === item.href ||
                       (item.href !== "/admin" && location.startsWith(item.href));
                     const Icon = item.icon;
-                    
+
                     return (
-                      <SidebarMenuItem key={item.href}>
+                      <SidebarMenuItem key={item.href} className="group relative">
                         <SidebarMenuButton
                           asChild
                           isActive={isActive}
@@ -195,10 +230,15 @@ function AppLayoutContent({ children }: AppLayoutProps) {
                             onClick={handleNavClick}
                           >
                             <Icon className="h-5 w-5" />
-                            <span className="flex items-center gap-1">
+                            <span className="flex items-center gap-1 flex-1">
                               {item.label}
                               {'showBadge' in item && item.showBadge && <InboxBadge />}
                             </span>
+                            {item.shortcut && (
+                              <span className="text-[10px] text-muted-foreground/50 group-hover:text-muted-foreground/70 transition-colors ml-2 hidden group-hover:inline">
+                                {item.shortcut}
+                              </span>
+                            )}
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
@@ -254,6 +294,8 @@ function AppLayoutContent({ children }: AppLayoutProps) {
           {children}
         </main>
       </div>
+
+      <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} />
     </div>
   );
 }

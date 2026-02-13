@@ -3,6 +3,7 @@ import { useLocation, Link, useSearch } from 'wouter';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { motion } from 'framer-motion';
 import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -72,8 +73,12 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex bg-background">
       {/* Left Panel — Brand + Trust Signals (hidden on mobile) */}
-      <div className="hidden lg:flex lg:w-1/2 bg-foreground text-background flex-col justify-between p-12">
-        <div>
+      <div className="hidden lg:flex lg:w-1/2 bg-foreground text-background flex-col justify-between p-12 relative overflow-hidden">
+        {/* Animated gradient background */}
+        <div className="absolute inset-0 opacity-20">
+          <div className="absolute inset-0 bg-gradient-to-br from-foreground via-foreground to-background animate-pulse" />
+        </div>
+        <div className="relative z-10">
           <img
             src={sphinxLogo}
             alt="Sphinx Capital"
@@ -117,14 +122,20 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <p className="text-xs opacity-50">
+        <p className="text-xs opacity-50 relative z-10">
           &copy; {new Date().getFullYear()} Sphinx Capital. All rights reserved.
         </p>
+        </div>
       </div>
 
       {/* Right Panel — Login Form */}
       <div className="flex-1 flex items-center justify-center p-4 sm:p-8">
-        <div className="w-full max-w-md space-y-8">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="w-full max-w-md space-y-8"
+        >
           {/* Mobile logo */}
           <div className="lg:hidden text-center">
             <img
@@ -151,7 +162,7 @@ export default function LoginPage() {
                       <Input
                         type="email"
                         placeholder="you@company.com"
-                        className="h-11"
+                        className="h-12 focus:ring-2 focus:ring-primary/20 transition-all duration-200"
                         data-testid="input-email"
                         {...field}
                       />
@@ -175,7 +186,7 @@ export default function LoginPage() {
                       <Input
                         type="password"
                         placeholder="Enter your password"
-                        className="h-11"
+                        className="h-12 focus:ring-2 focus:ring-primary/20 transition-all duration-200"
                         data-testid="input-password"
                         {...field}
                       />
@@ -226,6 +237,23 @@ export default function LoginPage() {
             </Link>
           </p>
 
+          {/* Social Proof */}
+          <div className="pt-4 border-t border-border">
+            <p className="text-center text-xs text-muted-foreground mb-3">
+              Trusted by 50+ leading lenders
+            </p>
+            <div className="flex items-center justify-center gap-2">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center text-[10px] font-semibold text-muted-foreground border border-border"
+                >
+                  L{i}
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Trust signals for mobile */}
           <div className="lg:hidden pt-4 border-t border-border">
             <div className="flex items-center justify-center gap-6 text-xs text-muted-foreground">
@@ -239,7 +267,7 @@ export default function LoginPage() {
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
       </div>
     </div>
   );

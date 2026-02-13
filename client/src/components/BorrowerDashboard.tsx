@@ -156,10 +156,13 @@ export function BorrowerDashboard() {
             
             return (
               <Card key={project.id} className="overflow-hidden">
+                {/* Gradient header bar */}
+                <div className="h-1 bg-gradient-to-r from-primary/30 via-accent/30 to-primary/10" />
+
                 <CardHeader className="pb-4">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-3 mb-2">
                         <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                         <CardTitle className="text-lg truncate">{project.propertyAddress}</CardTitle>
                       </div>
@@ -171,12 +174,17 @@ export function BorrowerDashboard() {
                         {currentStage && (
                           <div className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            Currently: {stageLabels[currentStage.name] || currentStage.name}
+                            Currently: <span className="font-semibold text-primary">{stageLabels[currentStage.name] || currentStage.name}</span>
                           </div>
                         )}
                       </div>
                     </div>
-                    {getStatusBadge(project.status)}
+                    <div className="flex items-center gap-2">
+                      <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-white text-xs font-semibold shrink-0">
+                        LO
+                      </div>
+                      {getStatusBadge(project.status)}
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -189,52 +197,73 @@ export function BorrowerDashboard() {
                   </div>
 
                   {project.stages && project.stages.length > 0 && (
-                    <div className="mb-4">
-                      <p className="text-sm font-medium mb-3">Loan Progress</p>
-                      <div className="relative">
-                        {/* Connection line */}
-                        <div className="absolute top-3 left-3 right-3 h-0.5 bg-border" />
-                        <div
-                          className="absolute top-3 left-3 h-0.5 bg-success transition-all duration-500"
-                          style={{
-                            width: `${Math.max(0, (project.stages.filter(s => s.status === 'completed').length / Math.max(project.stages.length - 1, 1)) * 100)}%`,
-                            maxWidth: 'calc(100% - 1.5rem)'
-                          }}
-                        />
-                        {/* Stage dots and labels */}
-                        <div className="relative flex justify-between">
-                          {project.stages.slice().sort((a, b) => a.sortOrder - b.sortOrder).map((stage) => (
-                            <div key={stage.id} className="flex flex-col items-center" style={{ width: `${100 / project.stages!.length}%` }}>
-                              <div className={`
-                                h-6 w-6 rounded-full flex items-center justify-center text-xs font-medium z-10
-                                ${stage.status === 'completed'
-                                  ? 'bg-success text-success-foreground'
-                                  : stage.status === 'in_progress'
-                                    ? 'bg-primary text-primary-foreground ring-4 ring-primary/20'
-                                    : 'bg-muted text-muted-foreground border-2 border-border'
-                                }
-                              `}>
-                                {stage.status === 'completed' ? (
-                                  <CheckCircle2 className="h-3.5 w-3.5" />
-                                ) : stage.status === 'in_progress' ? (
-                                  <ArrowRight className="h-3 w-3" />
-                                ) : (
-                                  <span className="h-2 w-2 rounded-full bg-current opacity-40" />
-                                )}
+                    <div className="mb-4 space-y-3">
+                      <div>
+                        <p className="text-sm font-medium mb-3">Loan Progress</p>
+                        <div className="relative">
+                          {/* Connection line */}
+                          <div className="absolute top-3 left-3 right-3 h-0.5 bg-border" />
+                          <div
+                            className="absolute top-3 left-3 h-0.5 bg-success transition-all duration-500"
+                            style={{
+                              width: `${Math.max(0, (project.stages.filter(s => s.status === 'completed').length / Math.max(project.stages.length - 1, 1)) * 100)}%`,
+                              maxWidth: 'calc(100% - 1.5rem)'
+                            }}
+                          />
+                          {/* Stage dots and labels */}
+                          <div className="relative flex justify-between">
+                            {project.stages.slice().sort((a, b) => a.sortOrder - b.sortOrder).map((stage) => (
+                              <div key={stage.id} className="flex flex-col items-center" style={{ width: `${100 / project.stages!.length}%` }}>
+                                <div className={`
+                                  h-6 w-6 rounded-full flex items-center justify-center text-xs font-medium z-10 transition-all duration-300
+                                  ${stage.status === 'completed'
+                                    ? 'bg-success text-success-foreground'
+                                    : stage.status === 'in_progress'
+                                      ? 'bg-primary text-primary-foreground ring-4 ring-primary/30 animate-pulse'
+                                      : 'bg-muted text-muted-foreground border-2 border-border'
+                                  }
+                                `}>
+                                  {stage.status === 'completed' ? (
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                  ) : stage.status === 'in_progress' ? (
+                                    <ArrowRight className="h-3 w-3" />
+                                  ) : (
+                                    <span className="h-2 w-2 rounded-full bg-current opacity-40" />
+                                  )}
+                                </div>
+                                <span className={`text-[10px] mt-1.5 text-center leading-tight ${
+                                  stage.status === 'in_progress' ? 'font-semibold text-primary' :
+                                  stage.status === 'completed' ? 'text-success font-medium' :
+                                  'text-muted-foreground'
+                                }`}>
+                                  {stageLabels[stage.name] || stage.name}
+                                </span>
                               </div>
-                              <span className={`text-[10px] mt-1.5 text-center leading-tight ${
-                                stage.status === 'in_progress' ? 'font-semibold text-primary' :
-                                stage.status === 'completed' ? 'text-success font-medium' :
-                                'text-muted-foreground'
-                              }`}>
-                                {stageLabels[stage.name] || stage.name}
-                              </span>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Document checklist preview */}
+                      <div className="rounded-lg bg-muted/50 p-3 border border-border/50">
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Documentation</p>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">3 of 8 documents uploaded</span>
+                          <Progress value={37.5} className="h-1.5 flex-1 ml-3" />
                         </div>
                       </div>
                     </div>
                   )}
+
+                  {/* Next Step Callout */}
+                  <div className="rounded-lg bg-primary/10 border border-primary/20 p-3 mb-4">
+                    <p className="text-xs font-semibold text-primary mb-2">Next Step</p>
+                    <p className="text-sm text-foreground font-medium mb-2">Upload your W-2 forms</p>
+                    <Button size="sm" className="w-full" variant="outline">
+                      <FileText className="h-4 w-4 mr-1" />
+                      Upload Documents
+                    </Button>
+                  </div>
 
                   <div className="flex gap-2">
                     <Button
