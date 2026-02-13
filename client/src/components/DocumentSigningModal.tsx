@@ -897,7 +897,7 @@ export function DocumentSigningModal({ open, onClose, quote, existingDocumentId 
       if (!documentId) throw new Error('No document to send');
       const res = await apiRequest('POST', `/api/documents/${documentId}/pandadoc/send`, {
         subject: `Please sign: ${quote.quoteName || 'Document'}`,
-        message: `Please review and sign this document from ${senderName || 'Sphinx Capital'}.`,
+        message: `Please review and sign this document from ${senderName || branding.companyName}.`,
       });
       const data = await res.json();
       if (!data.success) {

@@ -11,11 +11,11 @@ export interface BrandingConfig {
 }
 
 const DEFAULT_BRANDING: BrandingConfig = {
-  companyName: 'Sphinx Capital',
-  companyShortName: 'Sphinx',
+  companyName: 'Lendry.AI',
+  companyShortName: 'Lendry',
   copyrightYear: new Date().getFullYear(),
-  emailSignature: 'Sphinx Capital',
-  smsSignature: 'Sphinx Capital',
+  emailSignature: 'Lendry.AI',
+  smsSignature: 'Lendry.AI',
   logoUrl: undefined,
   logoDarkUrl: undefined,
 };
