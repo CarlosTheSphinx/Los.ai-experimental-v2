@@ -145,8 +145,11 @@ export default function PublicHomePage() {
                 The World's First
                 <br />
                 Loan{" "}
-                <span className="line-through decoration-blue-500 decoration-4">
+                <span className="relative inline-block">
                   Origination
+                  <span className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ transform: 'rotate(-8deg)' }}>
+                    <span className="block w-full" style={{ height: '6px', background: 'rgba(59, 130, 246, 0.85)', borderRadius: '3px' }}></span>
+                  </span>
                 </span>
                 {" "}Automation System
               </h1>
