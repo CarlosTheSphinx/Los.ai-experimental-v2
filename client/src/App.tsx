@@ -199,13 +199,16 @@ function AppContent() {
   const [isResetPasswordPage] = useRoute("/reset-password/:token");
   const [isOnboardingPage] = useRoute("/onboarding");
   const [isSelectRolePage] = useRoute("/select-role");
-  const [isPublicHomePage] = useRoute("/");
   const [isPublicPricingPage] = useRoute("/pricing");
   const [isPublicUseCasesPage] = useRoute("/use-cases");
   const [isPublicContactPage] = useRoute("/contact");
 
+  const { isAuthenticated, isLoading } = useAuth();
+
   const isPublicAuthPage = isLoginPage || isRegisterPage || isForgotPasswordPage || isResetPasswordPage;
-  const isPublicMarketingPage = isPublicHomePage || isPublicPricingPage || isPublicUseCasesPage || isPublicContactPage;
+  // Only show public marketing pages for NON-authenticated users
+  // The "/" route must fall through to MainRoutes for authenticated users (their dashboard)
+  const isPublicMarketingPage = !isLoading && !isAuthenticated && (isPublicPricingPage || isPublicUseCasesPage || isPublicContactPage);
 
   if (isSignPage) {
     return (
@@ -253,7 +256,6 @@ function AppContent() {
   if (isPublicMarketingPage) {
     return (
       <Switch>
-        <Route path="/" component={PublicHomePage} />
         <Route path="/pricing" component={PublicPricingPage} />
         <Route path="/use-cases" component={PublicUseCasesPage} />
         <Route path="/contact" component={PublicContactPage} />
