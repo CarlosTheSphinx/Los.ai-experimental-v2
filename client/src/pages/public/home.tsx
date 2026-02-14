@@ -146,7 +146,7 @@ export default function PublicHomePage() {
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-600/5 rounded-full blur-3xl animate-pulse opacity-20" style={{ animationDelay: '1s' }} />
 
         {/* Content */}
-        <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center w-full">
+        <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center w-full">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
