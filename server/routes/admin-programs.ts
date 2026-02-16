@@ -155,41 +155,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
           createdBy: req.user!.id,
         }).returning();
 
-        // Create inline document templates if provided
-        if (documents && Array.isArray(documents) && documents.length > 0) {
-          // Filter out documents with empty names
-          const validDocs = documents.filter((doc: any) => doc.documentName?.trim());
-          if (validDocs.length > 0) {
-            const documentEntries = validDocs.map((doc: any, index: number) => ({
-              programId: program.id,
-              documentName: doc.documentName.trim(),
-              documentCategory: doc.documentCategory || 'other',
-              documentDescription: doc.documentDescription || null,
-              isRequired: doc.isRequired !== false,
-              sortOrder: index,
-            }));
-            await tx.insert(programDocumentTemplates).values(documentEntries);
-          }
-        }
-
-        // Create inline task templates if provided
-        if (tasks && Array.isArray(tasks) && tasks.length > 0) {
-          // Filter out tasks with empty names
-          const validTasks = tasks.filter((task: any) => task.taskName?.trim());
-          if (validTasks.length > 0) {
-            const taskEntries = validTasks.map((task: any, index: number) => ({
-              programId: program.id,
-              taskName: task.taskName.trim(),
-              taskDescription: task.taskDescription || null,
-              taskCategory: task.taskCategory || 'other',
-              priority: task.priority || 'medium',
-              sortOrder: index,
-            }));
-            await tx.insert(programTaskTemplates).values(taskEntries);
-          }
-        }
-
-        // Create inline workflow steps if provided
+        // Create inline workflow steps if provided (must be created before docs/tasks to resolve stepIndex)
+        const createdStepIds: number[] = [];
         if (steps && Array.isArray(steps) && steps.length > 0) {
           for (let i = 0; i < steps.length; i++) {
             const step = steps[i];
@@ -215,14 +182,51 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
             }
 
             if (stepDefId) {
-              await tx.insert(programWorkflowSteps).values({
+              const [createdStep] = await tx.insert(programWorkflowSteps).values({
                 programId: program.id,
                 stepDefinitionId: stepDefId,
                 stepOrder: i + 1,
                 isRequired: step.isRequired !== false,
                 estimatedDays: step.estimatedDays ? parseInt(step.estimatedDays) : null,
-              });
+              }).returning();
+              createdStepIds.push(createdStep.id);
+            } else {
+              createdStepIds.push(-1);
             }
+          }
+        }
+
+        // Create inline document templates if provided (after steps so stepIndex can be resolved)
+        if (documents && Array.isArray(documents) && documents.length > 0) {
+          const validDocs = documents.filter((doc: any) => doc.documentName?.trim());
+          if (validDocs.length > 0) {
+            const documentEntries = validDocs.map((doc: any, index: number) => ({
+              programId: program.id,
+              documentName: doc.documentName.trim(),
+              documentCategory: doc.documentCategory || 'other',
+              documentDescription: doc.documentDescription || null,
+              isRequired: doc.isRequired !== false,
+              sortOrder: index,
+              stepId: doc.stepIndex !== null && doc.stepIndex !== undefined && doc.stepIndex >= 0 && doc.stepIndex < createdStepIds.length && createdStepIds[doc.stepIndex] > 0 ? createdStepIds[doc.stepIndex] : null,
+            }));
+            await tx.insert(programDocumentTemplates).values(documentEntries);
+          }
+        }
+
+        // Create inline task templates if provided (after steps so stepIndex can be resolved)
+        if (tasks && Array.isArray(tasks) && tasks.length > 0) {
+          const validTasks = tasks.filter((task: any) => task.taskName?.trim());
+          if (validTasks.length > 0) {
+            const taskEntries = validTasks.map((task: any, index: number) => ({
+              programId: program.id,
+              taskName: task.taskName.trim(),
+              taskDescription: task.taskDescription || null,
+              taskCategory: task.taskCategory || 'other',
+              priority: task.priority || 'medium',
+              sortOrder: index,
+              stepId: task.stepIndex !== null && task.stepIndex !== undefined && task.stepIndex >= 0 && task.stepIndex < createdStepIds.length && createdStepIds[task.stepIndex] > 0 ? createdStepIds[task.stepIndex] : null,
+            }));
+            await tx.insert(programTaskTemplates).values(taskEntries);
           }
         }
 

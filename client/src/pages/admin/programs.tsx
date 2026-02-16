@@ -74,6 +74,7 @@ interface LoanProgram {
 interface ProgramDocument {
   id: number;
   programId: number;
+  stepId: number | null;
   documentName: string;
   documentCategory: string;
   documentDescription: string | null;
@@ -84,6 +85,7 @@ interface ProgramDocument {
 interface ProgramTask {
   id: number;
   programId: number;
+  stepId: number | null;
   taskName: string;
   taskDescription: string | null;
   taskCategory: string | null;
@@ -165,6 +167,7 @@ export default function AdminPrograms() {
     documentCategory: string;
     documentDescription: string;
     isRequired: boolean;
+    stepIndex: number | null;
   }
 
   interface InlineTask {
@@ -173,6 +176,7 @@ export default function AdminPrograms() {
     taskDescription: string;
     taskCategory: string;
     priority: string;
+    stepIndex: number | null;
   }
 
   interface InlineStep {
@@ -211,6 +215,7 @@ export default function AdminPrograms() {
     documentCategory: "borrower_docs",
     documentDescription: "",
     isRequired: true,
+    stepId: null as number | null,
   });
 
   const [taskForm, setTaskForm] = useState({
@@ -218,6 +223,7 @@ export default function AdminPrograms() {
     taskDescription: "",
     taskCategory: "other",
     priority: "medium",
+    stepId: null as number | null,
   });
 
 
@@ -239,6 +245,7 @@ export default function AdminPrograms() {
     program: LoanProgram;
     documents: ProgramDocument[];
     tasks: ProgramTask[];
+    workflowSteps: { id: number; programId: number; stepDefinitionId: number; stepOrder: number; isRequired: boolean; estimatedDays: number | null; createdAt: string; definition: { id: number; name: string; key: string; description: string | null; color: string | null; icon: string | null } }[];
   }>({
     queryKey: ["/api/admin/programs", selectedProgram?.id],
     enabled: !!selectedProgram?.id,
@@ -412,6 +419,7 @@ export default function AdminPrograms() {
         documentCategory: "borrower_docs",
         documentDescription: "",
         isRequired: true,
+        stepIndex: null,
       },
     ]);
   };
@@ -437,6 +445,7 @@ export default function AdminPrograms() {
         taskDescription: "",
         taskCategory: "other",
         priority: "medium",
+        stepIndex: null,
       },
     ]);
   };
@@ -484,6 +493,7 @@ export default function AdminPrograms() {
       documentCategory: "borrower_docs",
       documentDescription: "",
       isRequired: true,
+      stepId: null,
     });
   };
 
@@ -493,6 +503,7 @@ export default function AdminPrograms() {
       taskDescription: "",
       taskCategory: "other",
       priority: "medium",
+      stepId: null,
     });
   };
 
@@ -937,6 +948,32 @@ export default function AdminPrograms() {
                                   />
                                   <Label className="text-sm">Required</Label>
                                 </div>
+                                {inlineSteps.length > 0 && (
+                                  <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">Assign to Step</Label>
+                                    <Select
+                                      value={doc.stepIndex !== null ? String(doc.stepIndex) : "none"}
+                                      onValueChange={(v) =>
+                                        updateInlineDocument(doc.id, "stepIndex", v === "none" ? null : parseInt(v))
+                                      }
+                                    >
+                                      <SelectTrigger data-testid={`select-doc-step-${index}`}>
+                                        <SelectValue placeholder="No step assigned" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="none">No step assigned</SelectItem>
+                                        {inlineSteps.map((step, si) => {
+                                          const name = step.stepName || (availableSteps?.find(s => s.id === step.stepDefinitionId)?.name) || `Step ${si + 1}`;
+                                          return name.trim() ? (
+                                            <SelectItem key={step.id} value={String(si)}>
+                                              {name}
+                                            </SelectItem>
+                                          ) : null;
+                                        })}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                )}
                               </div>
                               <Button
                                 type="button"
@@ -1034,6 +1071,32 @@ export default function AdminPrograms() {
                                     </SelectContent>
                                   </Select>
                                 </div>
+                                {inlineSteps.length > 0 && (
+                                  <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">Assign to Step</Label>
+                                    <Select
+                                      value={task.stepIndex !== null ? String(task.stepIndex) : "none"}
+                                      onValueChange={(v) =>
+                                        updateInlineTask(task.id, "stepIndex", v === "none" ? null : parseInt(v))
+                                      }
+                                    >
+                                      <SelectTrigger data-testid={`select-task-step-${index}`}>
+                                        <SelectValue placeholder="No step assigned" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="none">No step assigned</SelectItem>
+                                        {inlineSteps.map((step, si) => {
+                                          const name = step.stepName || (availableSteps?.find(s => s.id === step.stepDefinitionId)?.name) || `Step ${si + 1}`;
+                                          return name.trim() ? (
+                                            <SelectItem key={step.id} value={String(si)}>
+                                              {name}
+                                            </SelectItem>
+                                          ) : null;
+                                        })}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                )}
                               </div>
                               <Button
                                 type="button"
@@ -1779,6 +1842,29 @@ export default function AdminPrograms() {
               />
               <Label>Required Document</Label>
             </div>
+            {programDetails?.workflowSteps && programDetails.workflowSteps.length > 0 && (
+              <div className="space-y-2">
+                <Label>Assign to Workflow Step</Label>
+                <Select
+                  value={documentForm.stepId ? String(documentForm.stepId) : "none"}
+                  onValueChange={(v) =>
+                    setDocumentForm({ ...documentForm, stepId: v === "none" ? null : parseInt(v) })
+                  }
+                >
+                  <SelectTrigger data-testid="select-doc-step">
+                    <SelectValue placeholder="No step assigned" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No step assigned</SelectItem>
+                    {programDetails.workflowSteps.map((step) => (
+                      <SelectItem key={step.id} value={String(step.id)}>
+                        {step.definition.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button
@@ -1872,6 +1958,29 @@ export default function AdminPrograms() {
                 data-testid="input-task-description"
               />
             </div>
+            {programDetails?.workflowSteps && programDetails.workflowSteps.length > 0 && (
+              <div className="space-y-2">
+                <Label>Assign to Workflow Step</Label>
+                <Select
+                  value={taskForm.stepId ? String(taskForm.stepId) : "none"}
+                  onValueChange={(v) =>
+                    setTaskForm({ ...taskForm, stepId: v === "none" ? null : parseInt(v) })
+                  }
+                >
+                  <SelectTrigger data-testid="select-task-step">
+                    <SelectValue placeholder="No step assigned" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No step assigned</SelectItem>
+                    {programDetails.workflowSteps.map((step) => (
+                      <SelectItem key={step.id} value={String(step.id)}>
+                        {step.definition.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button
@@ -2110,6 +2219,7 @@ function DocumentList({
     program: LoanProgram;
     documents: ProgramDocument[];
     tasks: ProgramTask[];
+    workflowSteps: { id: number; programId: number; stepDefinitionId: number; stepOrder: number; isRequired: boolean; estimatedDays: number | null; createdAt: string; definition: { id: number; name: string; key: string; description: string | null; color: string | null; icon: string | null } }[];
   }>({
     queryKey: ["/api/admin/programs", programId],
   });
@@ -2145,6 +2255,14 @@ function DocumentList({
                       Required
                     </Badge>
                   )}
+                  {doc.stepId && data?.workflowSteps && (() => {
+                    const step = data.workflowSteps.find(s => s.id === doc.stepId);
+                    return step ? (
+                      <Badge variant="outline" className="ml-1 text-xs">
+                        {step.definition.name}
+                      </Badge>
+                    ) : null;
+                  })()}
                 </div>
               </div>
             </div>
@@ -2196,6 +2314,7 @@ function TaskList({
     program: LoanProgram;
     documents: ProgramDocument[];
     tasks: ProgramTask[];
+    workflowSteps: { id: number; programId: number; stepDefinitionId: number; stepOrder: number; isRequired: boolean; estimatedDays: number | null; createdAt: string; definition: { id: number; name: string; key: string; description: string | null; color: string | null; icon: string | null } }[];
   }>({
     queryKey: ["/api/admin/programs", programId],
   });
@@ -2236,12 +2355,20 @@ function TaskList({
             <ListChecks className="h-4 w-4 text-muted-foreground" />
             <div>
               <div className="font-medium text-sm">{task.taskName}</div>
-              <div className="text-xs text-muted-foreground flex items-center gap-2">
+              <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
                 {taskCategories.find((c) => c.value === task.taskCategory)?.label ||
                   task.taskCategory}
                 <Badge variant={getPriorityVariant(task.priority) as any}>
                   {task.priority}
                 </Badge>
+                {task.stepId && data?.workflowSteps && (() => {
+                  const step = data.workflowSteps.find(s => s.id === task.stepId);
+                  return step ? (
+                    <Badge variant="outline" className="text-xs">
+                      {step.definition.name}
+                    </Badge>
+                  ) : null;
+                })()}
               </div>
             </div>
           </div>
