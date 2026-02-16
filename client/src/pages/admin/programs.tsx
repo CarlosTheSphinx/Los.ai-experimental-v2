@@ -183,7 +183,6 @@ export default function AdminPrograms() {
     id: string;
     stepName: string;
     stepDefinitionId: number | null;
-    estimatedDays: string;
     isRequired: boolean;
   }
 
@@ -469,7 +468,6 @@ export default function AdminPrograms() {
         id: crypto.randomUUID(),
         stepName: "",
         stepDefinitionId: null,
-        estimatedDays: "",
         isRequired: true,
       },
     ]);
@@ -1143,18 +1141,13 @@ export default function AdminPrograms() {
                             <div className="flex items-start gap-2">
                               <div className="flex-1 space-y-2">
                                 <Select
-                                  value={String(step.stepDefinitionId || "custom")}
+                                  value={step.stepDefinitionId ? String(step.stepDefinitionId) : ""}
                                   onValueChange={(v) => {
-                                    if (v === "custom") {
-                                      updateInlineStep(step.id, "stepDefinitionId", null);
-                                      updateInlineStep(step.id, "stepName", "");
-                                    } else {
-                                      const defId = parseInt(v);
-                                      const def = availableSteps?.find((s) => s.id === defId);
-                                      updateInlineStep(step.id, "stepDefinitionId", defId);
-                                      if (def) {
-                                        updateInlineStep(step.id, "stepName", def.name);
-                                      }
+                                    const defId = parseInt(v);
+                                    const def = availableSteps?.find((s) => s.id === defId);
+                                    updateInlineStep(step.id, "stepDefinitionId", defId);
+                                    if (def) {
+                                      updateInlineStep(step.id, "stepName", def.name);
                                     }
                                   }}
                                 >
@@ -1167,40 +1160,17 @@ export default function AdminPrograms() {
                                         {s.name}
                                       </SelectItem>
                                     ))}
-                                    <SelectItem value="custom">Custom...</SelectItem>
                                   </SelectContent>
                                 </Select>
-                                {(!step.stepDefinitionId) && (
-                                  <Input
-                                    placeholder="Custom step name"
-                                    value={step.stepName}
-                                    onChange={(e) =>
-                                      updateInlineStep(step.id, "stepName", e.target.value)
+                                <div className="flex items-center gap-2">
+                                  <Switch
+                                    checked={step.isRequired}
+                                    onCheckedChange={(v) =>
+                                      updateInlineStep(step.id, "isRequired", v)
                                     }
-                                    data-testid={`input-step-name-${index}`}
+                                    data-testid={`switch-step-required-${index}`}
                                   />
-                                )}
-                                <div className="flex items-center gap-3">
-                                  <Input
-                                    type="number"
-                                    placeholder="Est. days"
-                                    value={step.estimatedDays}
-                                    onChange={(e) =>
-                                      updateInlineStep(step.id, "estimatedDays", e.target.value)
-                                    }
-                                    className="w-28"
-                                    data-testid={`input-step-days-${index}`}
-                                  />
-                                  <div className="flex items-center gap-2">
-                                    <Switch
-                                      checked={step.isRequired}
-                                      onCheckedChange={(v) =>
-                                        updateInlineStep(step.id, "isRequired", v)
-                                      }
-                                      data-testid={`switch-step-required-${index}`}
-                                    />
-                                    <Label className="text-sm">Required</Label>
-                                  </div>
+                                  <Label className="text-sm">Required</Label>
                                 </div>
                               </div>
                               <Button
