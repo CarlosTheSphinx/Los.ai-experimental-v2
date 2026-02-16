@@ -186,6 +186,8 @@ export default function AdminPrograms() {
     maxLtv: "80",
     minInterestRate: "9",
     maxInterestRate: "12",
+    minUnits: "",
+    maxUnits: "",
     termOptions: "12, 24",
     eligiblePropertyTypes: [] as string[],
     reviewGuidelines: "",
@@ -371,6 +373,8 @@ export default function AdminPrograms() {
       maxLtv: "80",
       minInterestRate: "9",
       maxInterestRate: "12",
+      minUnits: "",
+      maxUnits: "",
       termOptions: "12, 24",
       eligiblePropertyTypes: [],
       reviewGuidelines: "",
@@ -459,6 +463,8 @@ export default function AdminPrograms() {
       maxLtv: String(program.maxLtv || 80),
       minInterestRate: String(program.minInterestRate || 9),
       maxInterestRate: String(program.maxInterestRate || 12),
+      minUnits: program.minUnits != null ? String(program.minUnits) : "",
+      maxUnits: program.maxUnits != null ? String(program.maxUnits) : "",
       termOptions: program.termOptions || "",
       eligiblePropertyTypes: program.eligiblePropertyTypes || [],
       reviewGuidelines: program.reviewGuidelines || "",
@@ -704,6 +710,32 @@ export default function AdminPrograms() {
                           setProgramForm({ ...programForm, maxInterestRate: e.target.value })
                         }
                         data-testid="input-max-rate"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Min Units (optional)</Label>
+                      <Input
+                        type="number"
+                        placeholder="e.g. 1"
+                        value={programForm.minUnits}
+                        onChange={(e) =>
+                          setProgramForm({ ...programForm, minUnits: e.target.value })
+                        }
+                        data-testid="input-min-units"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Max Units (optional)</Label>
+                      <Input
+                        type="number"
+                        placeholder="e.g. 100"
+                        value={programForm.maxUnits}
+                        onChange={(e) =>
+                          setProgramForm({ ...programForm, maxUnits: e.target.value })
+                        }
+                        data-testid="input-max-units"
                       />
                     </div>
                   </div>
@@ -1397,6 +1429,32 @@ export default function AdminPrograms() {
                   onChange={(e) =>
                     setProgramForm({ ...programForm, maxInterestRate: e.target.value })
                   }
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Min Units (optional)</Label>
+                <Input
+                  type="number"
+                  placeholder="e.g. 1"
+                  value={programForm.minUnits}
+                  onChange={(e) =>
+                    setProgramForm({ ...programForm, minUnits: e.target.value })
+                  }
+                  data-testid="input-edit-min-units"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Max Units (optional)</Label>
+                <Input
+                  type="number"
+                  placeholder="e.g. 100"
+                  value={programForm.maxUnits}
+                  onChange={(e) =>
+                    setProgramForm({ ...programForm, maxUnits: e.target.value })
+                  }
+                  data-testid="input-edit-max-units"
                 />
               </div>
             </div>

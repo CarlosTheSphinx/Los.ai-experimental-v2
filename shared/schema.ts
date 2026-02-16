@@ -727,6 +727,9 @@ export const loanPrograms = pgTable("loan_programs", {
   minInterestRate: real("min_interest_rate").default(8),
   maxInterestRate: real("max_interest_rate").default(15),
   
+  minUnits: integer("min_units"),
+  maxUnits: integer("max_units"),
+  
   termOptions: text("term_options"), // comma-separated: "6, 12, 18, 24"
   eligiblePropertyTypes: text("eligible_property_types").array(), // ['single-family', 'multi-family', 'commercial']
   

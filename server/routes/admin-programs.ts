@@ -121,6 +121,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         minLoanAmount, maxLoanAmount,
         minLtv, maxLtv,
         minInterestRate, maxInterestRate,
+        minUnits, maxUnits,
         termOptions, eligiblePropertyTypes,
         isActive,
         documents,
@@ -144,6 +145,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
           maxLtv: maxLtv ? parseFloat(maxLtv) : 80,
           minInterestRate: minInterestRate ? parseFloat(minInterestRate) : 8,
           maxInterestRate: maxInterestRate ? parseFloat(maxInterestRate) : 15,
+          minUnits: minUnits ? parseInt(minUnits) : null,
+          maxUnits: maxUnits ? parseInt(maxUnits) : null,
           termOptions,
           eligiblePropertyTypes: eligiblePropertyTypes || [],
           isActive: isActive !== false,
@@ -212,6 +215,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         minLoanAmount, maxLoanAmount,
         minLtv, maxLtv,
         minInterestRate, maxInterestRate,
+        minUnits, maxUnits,
         termOptions, eligiblePropertyTypes,
         isActive, reviewGuidelines, creditPolicyId
       } = req.body;
@@ -226,6 +230,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
       if (maxLtv !== undefined) updateData.maxLtv = parseFloat(maxLtv);
       if (minInterestRate !== undefined) updateData.minInterestRate = parseFloat(minInterestRate);
       if (maxInterestRate !== undefined) updateData.maxInterestRate = parseFloat(maxInterestRate);
+      if (minUnits !== undefined) updateData.minUnits = minUnits ? parseInt(minUnits) : null;
+      if (maxUnits !== undefined) updateData.maxUnits = maxUnits ? parseInt(maxUnits) : null;
       if (termOptions !== undefined) updateData.termOptions = termOptions;
       if (eligiblePropertyTypes !== undefined) updateData.eligiblePropertyTypes = eligiblePropertyTypes;
       if (isActive !== undefined) updateData.isActive = isActive;
