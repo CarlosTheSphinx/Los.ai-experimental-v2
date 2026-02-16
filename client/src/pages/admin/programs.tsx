@@ -217,6 +217,7 @@ export default function AdminPrograms() {
   const [inlineDocuments, setInlineDocuments] = useState<InlineDocument[]>([]);
   const [inlineTasks, setInlineTasks] = useState<InlineTask[]>([]);
   const [inlineSteps, setInlineSteps] = useState<InlineStep[]>([]);
+  const [editDataInitialized, setEditDataInitialized] = useState(false);
 
   const [documentForm, setDocumentForm] = useState({
     documentName: "",
@@ -296,13 +297,30 @@ export default function AdminPrograms() {
 
   const updateProgram = useMutation({
     mutationFn: async (data: typeof programForm & { id: number }) => {
-      return apiRequest("PUT", `/api/admin/programs/${data.id}`, data);
+      const payload: any = { ...data };
+
+      if (editDataInitialized) {
+        payload.documents = inlineDocuments
+          .filter(doc => doc.documentName.trim())
+          .map(({ id, ...doc }) => doc);
+        payload.tasks = inlineTasks
+          .filter(task => task.taskName.trim())
+          .map(({ id, ...task }) => task);
+        payload.steps = inlineSteps
+          .filter(step => step.stepName.trim() || step.stepDefinitionId)
+          .map(({ id, ...step }) => step);
+      }
+
+      return apiRequest("PUT", `/api/admin/programs/${data.id}`, payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/programs"] });
       setShowEditProgram(false);
       setSelectedProgram(null);
       resetProgramForm();
+      setInlineSteps([]);
+      setInlineDocuments([]);
+      setInlineTasks([]);
       toast({ title: "Program updated successfully" });
     },
     onError: () => {
@@ -535,8 +553,55 @@ export default function AdminPrograms() {
     setSelectedProgram(program);
     setCustomLoanType("");
     setCustomPropertyType("");
+    setInlineSteps([]);
+    setInlineDocuments([]);
+    setInlineTasks([]);
+    setEditDataInitialized(false);
     setShowEditProgram(true);
   };
+
+  useEffect(() => {
+    if (showEditProgram && programDetails) {
+      const steps = (programDetails.workflowSteps || [])
+        .sort((a, b) => a.stepOrder - b.stepOrder)
+        .map((ws) => ({
+          id: crypto.randomUUID(),
+          stepName: ws.definition?.name || "",
+          stepDefinitionId: ws.stepDefinitionId,
+          isRequired: ws.isRequired,
+        }));
+      setInlineSteps(steps);
+
+      const stepIdToIndex = new Map<number, number>();
+      (programDetails.workflowSteps || [])
+        .sort((a, b) => a.stepOrder - b.stepOrder)
+        .forEach((ws, idx) => {
+          stepIdToIndex.set(ws.id, idx);
+        });
+
+      setInlineDocuments(
+        (programDetails.documents || []).map((doc) => ({
+          id: crypto.randomUUID(),
+          documentName: doc.documentName,
+          documentCategory: doc.documentCategory || "borrower_docs",
+          documentDescription: doc.documentDescription || "",
+          isRequired: doc.isRequired,
+          stepIndex: doc.stepId != null ? (stepIdToIndex.get(doc.stepId) ?? null) : null,
+        }))
+      );
+      setInlineTasks(
+        (programDetails.tasks || []).map((task) => ({
+          id: crypto.randomUUID(),
+          taskName: task.taskName,
+          taskDescription: task.taskDescription || "",
+          taskCategory: task.taskCategory || "other",
+          priority: task.priority || "medium",
+          stepIndex: task.stepId != null ? (stepIdToIndex.get(task.stepId) ?? null) : null,
+        }))
+      );
+      setEditDataInitialized(true);
+    }
+  }, [showEditProgram, programDetails]);
 
   const [customLoanType, setCustomLoanType] = useState("");
   const [customPropertyType, setCustomPropertyType] = useState("");
@@ -1469,7 +1534,7 @@ export default function AdminPrograms() {
               <Button
                 size="sm"
                 onClick={() => updateProgram.mutate({ ...programForm, id: selectedProgram!.id })}
-                disabled={updateProgram.isPending || !programForm.name}
+                disabled={updateProgram.isPending || !programForm.name || (loadingDetails && !editDataInitialized)}
                 data-testid="button-save-edit-program-top"
               >
                 {updateProgram.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
@@ -1728,19 +1793,266 @@ export default function AdminPrograms() {
           </div>
             </div>
             <div className="w-1/2 overflow-y-auto p-6 md:p-8">
-              <div className="space-y-4">
-                <Label className="text-base font-semibold flex items-center gap-2">
-                  <Workflow className="h-4 w-4" />
-                  Stages & Workflow
-                </Label>
-                <div className="text-center py-12">
-                  <Workflow className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="font-medium mb-2" data-testid="text-workflow-message">Workflow Configuration</h3>
-                  <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-                    Manage stages, documents, and tasks for this program using the Configure Workflow button on the program card.
-                  </p>
+              {loadingDetails ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <Label className="text-base font-semibold flex items-center gap-2">
+                      <Workflow className="h-4 w-4" />
+                      Stages ({inlineSteps.length})
+                    </Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addInlineStep}
+                      data-testid="button-edit-add-inline-step"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Stage
+                    </Button>
+                  </div>
+                  {inlineSteps.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Workflow className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+                      <p className="text-sm text-muted-foreground">
+                        No stages added yet. Click "Add Stage" to add one.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <div className="absolute left-4 top-6 bottom-6 w-0.5 bg-border" />
+                      {inlineSteps.map((step, index) => {
+                        const stageDocs = inlineDocuments.filter(d => d.stepIndex === index);
+                        const stageTasks = inlineTasks.filter(t => t.stepIndex === index);
+                        return (
+                          <div key={step.id} className="relative pl-10 pb-4">
+                            <div className="absolute left-2.5 top-4 w-3 h-3 rounded-full bg-primary border-2 border-background z-[1]" />
+                            <Card className="p-3">
+                              <div className="flex items-start gap-2">
+                                <div className="flex-1 space-y-2">
+                                  <Input
+                                    placeholder="Stage name (e.g., Underwriting)"
+                                    value={step.stepName}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      const match = availableSteps?.find(
+                                        (s) => s.name.toLowerCase() === val.trim().toLowerCase()
+                                      );
+                                      setInlineSteps((prev) =>
+                                        prev.map((s) =>
+                                          s.id === step.id
+                                            ? { ...s, stepName: val, stepDefinitionId: match ? match.id : null }
+                                            : s
+                                        )
+                                      );
+                                    }}
+                                    list={`edit-step-suggestions-${index}`}
+                                    data-testid={`input-edit-step-name-${index}`}
+                                  />
+                                  {availableSteps && availableSteps.length > 0 && (
+                                    <datalist id={`edit-step-suggestions-${index}`}>
+                                      {availableSteps.map((s) => (
+                                        <option key={s.id} value={s.name} />
+                                      ))}
+                                    </datalist>
+                                  )}
+                                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                                    <div className="flex items-center gap-2">
+                                      <Switch
+                                        checked={step.isRequired}
+                                        onCheckedChange={(v) =>
+                                          updateInlineStep(step.id, "isRequired", v)
+                                        }
+                                        data-testid={`switch-edit-step-required-${index}`}
+                                      />
+                                      <Label className="text-sm">Required</Label>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                          setInlineDocuments(prev => [...prev, {
+                                            id: crypto.randomUUID(),
+                                            documentName: "",
+                                            documentCategory: "borrower_docs",
+                                            documentDescription: "",
+                                            isRequired: true,
+                                            stepIndex: index,
+                                          }]);
+                                        }}
+                                        data-testid={`button-edit-add-stage-doc-${index}`}
+                                      >
+                                        <FileText className="h-3 w-3 mr-1" />
+                                        Doc
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                          setInlineTasks(prev => [...prev, {
+                                            id: crypto.randomUUID(),
+                                            taskName: "",
+                                            taskDescription: "",
+                                            taskCategory: "other",
+                                            priority: "medium",
+                                            stepIndex: index,
+                                          }]);
+                                        }}
+                                        data-testid={`button-edit-add-stage-task-${index}`}
+                                      >
+                                        <ListChecks className="h-3 w-3 mr-1" />
+                                        Task
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  {stageDocs.map((doc) => (
+                                    <div key={doc.id} className="flex items-center gap-2 text-sm border rounded-md px-2 py-1.5 bg-muted/30">
+                                      <FileText className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                                      <Input
+                                        className="text-sm border-0 bg-transparent focus-visible:ring-0"
+                                        placeholder="Document name"
+                                        value={doc.documentName}
+                                        onChange={(e) => updateInlineDocument(doc.id, "documentName", e.target.value)}
+                                        data-testid={`input-edit-stage-doc-name-${index}-${doc.id}`}
+                                      />
+                                      {doc.isRequired && <Badge variant="secondary" className="text-xs flex-shrink-0">Req</Badge>}
+                                      <Button type="button" variant="ghost" size="sm" className="flex-shrink-0" onClick={() => removeInlineDocument(doc.id)} data-testid={`button-edit-remove-stage-doc-${doc.id}`}>
+                                        <X className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  ))}
+                                  {stageTasks.map((task) => (
+                                    <div key={task.id} className="flex items-center gap-2 text-sm border rounded-md px-2 py-1.5 bg-muted/30">
+                                      <ListChecks className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                                      <Input
+                                        className="text-sm border-0 bg-transparent focus-visible:ring-0"
+                                        placeholder="Task name"
+                                        value={task.taskName}
+                                        onChange={(e) => updateInlineTask(task.id, "taskName", e.target.value)}
+                                        data-testid={`input-edit-stage-task-name-${index}-${task.id}`}
+                                      />
+                                      <Button type="button" variant="ghost" size="sm" className="flex-shrink-0" onClick={() => removeInlineTask(task.id)} data-testid={`button-edit-remove-stage-task-${task.id}`}>
+                                        <X className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => removeInlineStep(step.id)}
+                                  data-testid={`button-edit-remove-step-${index}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </Card>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {(() => {
+                    const unassignedDocs = inlineDocuments.filter(d => d.stepIndex === null);
+                    const unassignedTasks = inlineTasks.filter(t => t.stepIndex === null);
+                    return (unassignedDocs.length > 0 || unassignedTasks.length > 0 || inlineSteps.length > 0) ? (
+                      <div className="space-y-3 border-t pt-4">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <Label className="text-sm font-medium text-muted-foreground">Unassigned Items</Label>
+                          <div className="flex items-center gap-1">
+                            <Button type="button" variant="ghost" size="sm" onClick={addInlineDocument} data-testid="button-edit-add-unassigned-document">
+                              <FileText className="h-3 w-3 mr-1" />
+                              Doc
+                            </Button>
+                            <Button type="button" variant="ghost" size="sm" onClick={addInlineTask} data-testid="button-edit-add-unassigned-task">
+                              <ListChecks className="h-3 w-3 mr-1" />
+                              Task
+                            </Button>
+                          </div>
+                        </div>
+                        {unassignedDocs.length === 0 && unassignedTasks.length === 0 ? (
+                          <p className="text-xs text-muted-foreground text-center py-2" data-testid="text-edit-no-unassigned">No unassigned documents or tasks</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {unassignedDocs.map((doc) => (
+                              <div key={doc.id} className="flex items-center gap-2 text-sm border rounded-md px-2 py-1.5">
+                                <FileText className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                                <Input
+                                  className="text-sm border-0 bg-transparent focus-visible:ring-0"
+                                  placeholder="Document name"
+                                  value={doc.documentName}
+                                  onChange={(e) => updateInlineDocument(doc.id, "documentName", e.target.value)}
+                                  data-testid={`input-edit-unassigned-doc-${doc.id}`}
+                                />
+                                {inlineSteps.length > 0 && (
+                                  <Select
+                                    value="none"
+                                    onValueChange={(v) => updateInlineDocument(doc.id, "stepIndex", v === "none" ? null : parseInt(v))}
+                                  >
+                                    <SelectTrigger className="w-[120px] text-xs" data-testid={`select-edit-assign-doc-${doc.id}`}>
+                                      <SelectValue placeholder="Assign..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="none">No stage</SelectItem>
+                                      {inlineSteps.map((s, si) => {
+                                        const name = s.stepName || (availableSteps?.find(av => av.id === s.stepDefinitionId)?.name) || `Stage ${si + 1}`;
+                                        return name.trim() ? <SelectItem key={s.id} value={String(si)}>{name}</SelectItem> : null;
+                                      })}
+                                    </SelectContent>
+                                  </Select>
+                                )}
+                                <Button type="button" variant="ghost" size="sm" className="flex-shrink-0" onClick={() => removeInlineDocument(doc.id)} data-testid={`button-edit-remove-unassigned-doc-${doc.id}`}>
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            ))}
+                            {unassignedTasks.map((task) => (
+                              <div key={task.id} className="flex items-center gap-2 text-sm border rounded-md px-2 py-1.5">
+                                <ListChecks className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                                <Input
+                                  className="text-sm border-0 bg-transparent focus-visible:ring-0"
+                                  placeholder="Task name"
+                                  value={task.taskName}
+                                  onChange={(e) => updateInlineTask(task.id, "taskName", e.target.value)}
+                                  data-testid={`input-edit-unassigned-task-${task.id}`}
+                                />
+                                {inlineSteps.length > 0 && (
+                                  <Select
+                                    value="none"
+                                    onValueChange={(v) => updateInlineTask(task.id, "stepIndex", v === "none" ? null : parseInt(v))}
+                                  >
+                                    <SelectTrigger className="w-[120px] text-xs" data-testid={`select-edit-assign-task-${task.id}`}>
+                                      <SelectValue placeholder="Assign..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="none">No stage</SelectItem>
+                                      {inlineSteps.map((s, si) => {
+                                        const name = s.stepName || (availableSteps?.find(av => av.id === s.stepDefinitionId)?.name) || `Stage ${si + 1}`;
+                                        return name.trim() ? <SelectItem key={s.id} value={String(si)}>{name}</SelectItem> : null;
+                                      })}
+                                    </SelectContent>
+                                  </Select>
+                                )}
+                                <Button type="button" variant="ghost" size="sm" className="flex-shrink-0" onClick={() => removeInlineTask(task.id)} data-testid={`button-edit-remove-unassigned-task-${task.id}`}>
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+              )}
             </div>
           </div>
         </DialogContent>

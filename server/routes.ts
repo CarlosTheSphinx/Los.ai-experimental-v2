@@ -7473,6 +7473,7 @@ export async function registerRoutes(
         isActive,
         documents,
         tasks,
+        steps,
         creditPolicyId
       } = req.body;
       
@@ -7480,7 +7481,6 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Name and loan type are required' });
       }
       
-      // Use a transaction to ensure atomicity of program + templates creation
       const result = await db.transaction(async (tx) => {
         const [program] = await tx.insert(loanPrograms).values({
           name,
@@ -7498,10 +7498,26 @@ export async function registerRoutes(
           creditPolicyId: creditPolicyId ? parseInt(creditPolicyId) : null,
           createdBy: req.user!.id,
         }).returning();
+
+        const stepIndexToId = new Map<number, number>();
+        if (steps && Array.isArray(steps) && steps.length > 0) {
+          const validSteps = steps.filter((s: any) => s.stepName?.trim() || s.stepDefinitionId);
+          if (validSteps.length > 0) {
+            const stepEntries = validSteps.map((step: any, index: number) => ({
+              programId: program.id,
+              stepDefinitionId: step.stepDefinitionId,
+              stepOrder: index + 1,
+              isRequired: step.isRequired !== false,
+              estimatedDays: step.estimatedDays || null,
+            }));
+            const insertedSteps = await tx.insert(programWorkflowSteps).values(stepEntries).returning();
+            insertedSteps.forEach((row, idx) => {
+              stepIndexToId.set(idx, row.id);
+            });
+          }
+        }
         
-        // Create inline document templates if provided
         if (documents && Array.isArray(documents) && documents.length > 0) {
-          // Filter out documents with empty names
           const validDocs = documents.filter((doc: any) => doc.documentName?.trim());
           if (validDocs.length > 0) {
             const documentEntries = validDocs.map((doc: any, index: number) => ({
@@ -7511,14 +7527,13 @@ export async function registerRoutes(
               documentDescription: doc.documentDescription || null,
               isRequired: doc.isRequired !== false,
               sortOrder: index,
+              stepId: doc.stepIndex != null ? (stepIndexToId.get(doc.stepIndex) ?? null) : null,
             }));
             await tx.insert(programDocumentTemplates).values(documentEntries);
           }
         }
         
-        // Create inline task templates if provided
         if (tasks && Array.isArray(tasks) && tasks.length > 0) {
-          // Filter out tasks with empty names
           const validTasks = tasks.filter((task: any) => task.taskName?.trim());
           if (validTasks.length > 0) {
             const taskEntries = validTasks.map((task: any, index: number) => ({
@@ -7528,6 +7543,7 @@ export async function registerRoutes(
               taskCategory: task.taskCategory || 'other',
               priority: task.priority || 'medium',
               sortOrder: index,
+              stepId: task.stepIndex != null ? (stepIndexToId.get(task.stepIndex) ?? null) : null,
             }));
             await tx.insert(programTaskTemplates).values(taskEntries);
           }
@@ -7547,8 +7563,9 @@ export async function registerRoutes(
   app.put('/api/admin/programs/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
+      const pid = parseInt(id);
       
-      const [existingProgram] = await db.select().from(loanPrograms).where(eq(loanPrograms.id, parseInt(id)));
+      const [existingProgram] = await db.select().from(loanPrograms).where(eq(loanPrograms.id, pid));
       if (!existingProgram) return res.status(404).json({ error: 'Program not found' });
       const user = await storage.getUserById(req.user!.id);
       if (user?.role !== 'super_admin' && existingProgram.createdBy !== req.user!.id) {
@@ -7561,7 +7578,8 @@ export async function registerRoutes(
         minLtv, maxLtv, 
         minInterestRate, maxInterestRate,
         termOptions, eligiblePropertyTypes,
-        isActive, reviewGuidelines, creditPolicyId
+        isActive, reviewGuidelines, creditPolicyId,
+        documents, tasks, steps
       } = req.body;
       
       const updateData: any = { updatedAt: new Date() };
@@ -7580,10 +7598,72 @@ export async function registerRoutes(
       if (reviewGuidelines !== undefined) updateData.reviewGuidelines = reviewGuidelines;
       if (creditPolicyId !== undefined) updateData.creditPolicyId = creditPolicyId ? parseInt(creditPolicyId) : null;
       
-      const [program] = await db.update(loanPrograms)
-        .set(updateData)
-        .where(eq(loanPrograms.id, parseInt(id)))
-        .returning();
+      await db.transaction(async (tx) => {
+        await tx.update(loanPrograms)
+          .set(updateData)
+          .where(eq(loanPrograms.id, pid));
+
+        if (steps !== undefined && Array.isArray(steps)) {
+          await tx.delete(programWorkflowSteps).where(eq(programWorkflowSteps.programId, pid));
+          if (steps.length > 0) {
+            const stepEntries = steps.map((step: any, index: number) => ({
+              programId: pid,
+              stepDefinitionId: step.stepDefinitionId,
+              stepOrder: index + 1,
+              isRequired: step.isRequired !== false,
+              estimatedDays: step.estimatedDays || null,
+            }));
+            await tx.insert(programWorkflowSteps).values(stepEntries);
+          }
+        }
+
+        const newStepRows = await tx.select({
+          id: programWorkflowSteps.id,
+          stepDefinitionId: programWorkflowSteps.stepDefinitionId,
+          stepOrder: programWorkflowSteps.stepOrder,
+        }).from(programWorkflowSteps).where(eq(programWorkflowSteps.programId, pid)).orderBy(asc(programWorkflowSteps.stepOrder));
+
+        const stepIndexToId = new Map<number, number>();
+        newStepRows.forEach((row, idx) => {
+          stepIndexToId.set(idx, row.id);
+        });
+
+        if (documents !== undefined && Array.isArray(documents)) {
+          await tx.delete(programDocumentTemplates).where(eq(programDocumentTemplates.programId, pid));
+          const validDocs = documents.filter((doc: any) => doc.documentName?.trim());
+          if (validDocs.length > 0) {
+            const docEntries = validDocs.map((doc: any, index: number) => ({
+              programId: pid,
+              documentName: doc.documentName.trim(),
+              documentCategory: doc.documentCategory || 'other',
+              documentDescription: doc.documentDescription || null,
+              isRequired: doc.isRequired !== false,
+              sortOrder: index,
+              stepId: doc.stepIndex != null ? (stepIndexToId.get(doc.stepIndex) ?? null) : null,
+            }));
+            await tx.insert(programDocumentTemplates).values(docEntries);
+          }
+        }
+
+        if (tasks !== undefined && Array.isArray(tasks)) {
+          await tx.delete(programTaskTemplates).where(eq(programTaskTemplates.programId, pid));
+          const validTasks = tasks.filter((task: any) => task.taskName?.trim());
+          if (validTasks.length > 0) {
+            const taskEntries = validTasks.map((task: any, index: number) => ({
+              programId: pid,
+              taskName: task.taskName.trim(),
+              taskDescription: task.taskDescription || null,
+              taskCategory: task.taskCategory || 'other',
+              priority: task.priority || 'medium',
+              sortOrder: index,
+              stepId: task.stepIndex != null ? (stepIndexToId.get(task.stepIndex) ?? null) : null,
+            }));
+            await tx.insert(programTaskTemplates).values(taskEntries);
+          }
+        }
+      });
+
+      const [program] = await db.select().from(loanPrograms).where(eq(loanPrograms.id, pid));
       
       res.json({ program });
     } catch (error) {
