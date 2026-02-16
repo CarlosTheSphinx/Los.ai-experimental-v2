@@ -8399,6 +8399,62 @@ export async function registerRoutes(
     }
   });
 
+  // Generate review rule from voice/text using AI
+  app.post('/api/admin/document-templates/:templateId/generate-rule-from-voice', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { audio, documentName } = req.body;
+      if (!audio) {
+        return res.status(400).json({ error: 'audio (base64) is required' });
+      }
+
+      const { ensureCompatibleFormat, speechToText } = await import('./replit_integrations/audio/client.js');
+      const audioBuffer = Buffer.from(audio, 'base64');
+      const { buffer: compatibleBuffer, format } = await ensureCompatibleFormat(audioBuffer);
+      const transcript = await speechToText(compatibleBuffer, format);
+
+      if (!transcript || transcript.trim().length === 0) {
+        return res.status(400).json({ error: 'Could not transcribe audio. Please try again.' });
+      }
+
+      const OpenAI = (await import('openai')).default;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || 'placeholder',
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4.1',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an expert at creating document review rules for loan underwriting. A lender is describing what they want an AI reviewer to check when reviewing "${documentName || 'a document'}". Convert their natural language description into a structured review rule. Respond with valid JSON only, no markdown:\n{"ruleTitle": "short title", "ruleDescription": "detailed instructions for the AI reviewer", "ruleType": "general|completeness|accuracy|compliance|formatting", "severity": "fail|warn|info"}`
+          },
+          {
+            role: 'user',
+            content: `The lender said: "${transcript}"`
+          }
+        ],
+        response_format: { type: 'json_object' },
+      });
+
+      const content = completion.choices[0]?.message?.content || '{}';
+      const rule = JSON.parse(content);
+
+      res.json({
+        transcript,
+        rule: {
+          ruleTitle: rule.ruleTitle || 'Untitled Rule',
+          ruleDescription: rule.ruleDescription || transcript,
+          ruleType: rule.ruleType || 'general',
+          severity: rule.severity || 'fail',
+        }
+      });
+    } catch (error: any) {
+      console.error('Generate rule from voice error:', error);
+      res.status(500).json({ error: 'Failed to generate rule from voice' });
+    }
+  });
+
   app.post('/api/admin/programs/:programId/extract-rules', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const programId = parseInt(req.params.programId);

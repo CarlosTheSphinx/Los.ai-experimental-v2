@@ -49,8 +49,11 @@ import {
   UserCheck,
   Copy,
   BookTemplate,
+  Mic,
+  MicOff,
+  Check,
 } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import ProgramWorkflowEditor from "@/components/ProgramWorkflowEditor";
@@ -2650,6 +2653,88 @@ function DocumentRulesEditor({ templateId, programId, documentName }: { template
   const { toast } = useToast();
   const [rules, setRules] = useState<ReviewRule[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isProcessingVoice, setIsProcessingVoice] = useState(false);
+  const [pendingAiRule, setPendingAiRule] = useState<{ rule: ReviewRule; transcript: string } | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(track => track.stop());
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        await processVoiceRecording(audioBlob);
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      toast({ title: "Microphone access denied. Please allow microphone access and try again.", variant: "destructive" });
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const processVoiceRecording = async (audioBlob: Blob) => {
+    setIsProcessingVoice(true);
+    try {
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = '';
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64 = btoa(binary);
+
+      const res = await apiRequest('POST', `/api/admin/document-templates/${templateId}/generate-rule-from-voice`, {
+        audio: base64,
+        documentName,
+      });
+      const data = await res.json();
+
+      setPendingAiRule({
+        transcript: data.transcript,
+        rule: {
+          ruleTitle: data.rule.ruleTitle,
+          ruleDescription: data.rule.ruleDescription,
+          ruleType: data.rule.ruleType,
+          severity: data.rule.severity,
+          isActive: true,
+        },
+      });
+    } catch (err) {
+      toast({ title: "Failed to generate rule from voice. Please try again.", variant: "destructive" });
+    } finally {
+      setIsProcessingVoice(false);
+    }
+  };
+
+  const acceptAiRule = () => {
+    if (pendingAiRule) {
+      setRules([...rules, pendingAiRule.rule]);
+      setHasChanges(true);
+      setPendingAiRule(null);
+    }
+  };
+
+  const discardAiRule = () => {
+    setPendingAiRule(null);
+  };
 
   const { data: rulesData, isLoading } = useQuery<{ rules: any[] }>({
     queryKey: [`/api/admin/document-templates/${templateId}/review-rules`],
@@ -2790,11 +2875,100 @@ function DocumentRulesEditor({ templateId, programId, documentName }: { template
           ))}
         </div>
       )}
-      <div className="flex items-center justify-between gap-2">
-        <Button size="sm" variant="outline" onClick={addRule} data-testid={`button-add-rule-${templateId}`}>
-          <Plus className="h-3 w-3 mr-1" />
-          Add Rule
-        </Button>
+      {pendingAiRule && (
+        <div className="border-2 border-primary/30 rounded-md p-4 space-y-3 bg-primary/5">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Sparkles className="h-4 w-4 text-primary" />
+            AI-Generated Rule
+          </div>
+          <p className="text-xs text-muted-foreground italic">
+            You said: &ldquo;{pendingAiRule.transcript}&rdquo;
+          </p>
+          <div className="space-y-2">
+            <Input
+              value={pendingAiRule.rule.ruleTitle}
+              onChange={(e) => setPendingAiRule({ ...pendingAiRule, rule: { ...pendingAiRule.rule, ruleTitle: e.target.value } })}
+              className="text-sm"
+              data-testid={`input-ai-rule-title-${templateId}`}
+            />
+            <Textarea
+              value={pendingAiRule.rule.ruleDescription}
+              onChange={(e) => setPendingAiRule({ ...pendingAiRule, rule: { ...pendingAiRule.rule, ruleDescription: e.target.value } })}
+              className="text-sm min-h-[60px]"
+              data-testid={`input-ai-rule-description-${templateId}`}
+            />
+            <div className="flex items-center gap-2 flex-wrap">
+              <Select value={pendingAiRule.rule.ruleType} onValueChange={(v) => setPendingAiRule({ ...pendingAiRule, rule: { ...pendingAiRule.rule, ruleType: v } })}>
+                <SelectTrigger className="w-[180px] text-xs h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ruleTypeOptions.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={pendingAiRule.rule.severity} onValueChange={(v) => setPendingAiRule({ ...pendingAiRule, rule: { ...pendingAiRule.rule, severity: v } })}>
+                <SelectTrigger className="w-[120px] text-xs h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {severityOptions.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={acceptAiRule} data-testid={`button-accept-ai-rule-${templateId}`}>
+              <Check className="h-3 w-3 mr-1" />
+              Accept Rule
+            </Button>
+            <Button size="sm" variant="outline" onClick={discardAiRule} data-testid={`button-discard-ai-rule-${templateId}`}>
+              <X className="h-3 w-3 mr-1" />
+              Discard
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {isProcessingVoice && (
+        <div className="flex items-center gap-2 p-3 rounded-md border bg-muted/30">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          <span className="text-sm text-muted-foreground">Transcribing and generating rule...</span>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={addRule} data-testid={`button-add-rule-${templateId}`}>
+            <Plus className="h-3 w-3 mr-1" />
+            Add Rule
+          </Button>
+          <Button
+            size="sm"
+            variant={isRecording ? "destructive" : "outline"}
+            onClick={isRecording ? stopRecording : startRecording}
+            disabled={isProcessingVoice}
+            data-testid={`button-voice-rule-${templateId}`}
+          >
+            {isRecording ? (
+              <>
+                <MicOff className="h-3 w-3 mr-1" />
+                Stop Recording
+              </>
+            ) : (
+              <>
+                <Mic className="h-3 w-3 mr-1" />
+                Speak to AI
+              </>
+            )}
+          </Button>
+          {isRecording && (
+            <span className="text-xs text-destructive animate-pulse">Recording... Describe your rule, then click Stop</span>
+          )}
+        </div>
         {hasChanges && (
           <Button size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} data-testid={`button-save-rules-${templateId}`}>
             {saveMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <ShieldCheck className="h-3 w-3 mr-1" />}
