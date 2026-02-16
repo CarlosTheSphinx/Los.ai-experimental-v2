@@ -25,7 +25,6 @@ import AdminUsers from "@/pages/admin/users";
 import AdminSettings from "@/pages/admin/settings";
 import AdminDeals from "@/pages/admin/deals";
 
-const AdminDashboardPipeline = () => <AdminDashboard defaultTab="pipeline" />;
 import AdminDealDetail from "@/pages/admin/deal-detail";
 import AdminPartners from "@/pages/admin/partners";
 import AdminPrograms from "@/pages/admin/programs";
@@ -175,7 +174,7 @@ function MainRoutes() {
           {/* Admin Routes */}
           <Route path="/admin" component={() => <AdminProtectedRoute component={AdminDashboard} />} />
           <Route path="/admin/dashboard" component={() => <AdminProtectedRoute component={AdminDashboard} />} />
-          <Route path="/admin/deals" component={() => <AdminProtectedRoute component={AdminDashboardPipeline} />} />
+          <Route path="/admin/deals" component={() => <AdminProtectedRoute component={AdminDashboard} />} />
           <Route path="/admin/deals/:id" component={() => <AdminProtectedRoute component={AdminDealDetail} />} />
           <Route path="/admin/partners" component={() => <AdminProtectedRoute component={AdminPartners} />} />
           <Route path="/admin/programs" component={() => <AdminProtectedRoute component={AdminPrograms} />} />
