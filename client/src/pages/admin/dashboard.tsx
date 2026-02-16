@@ -582,7 +582,7 @@ export default function AdminDashboard({ defaultTab = "overview" }: { defaultTab
     <div className="p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-admin-dashboard-title">Command Center</h1>
+          <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-admin-dashboard-title">Pipeline</h1>
           <p className="text-sm text-muted-foreground mt-1">Overview of your lending operations</p>
         </div>
       </div>

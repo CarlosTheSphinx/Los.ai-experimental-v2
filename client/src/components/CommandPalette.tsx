@@ -40,7 +40,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const commands: CommandItem[] = [
     {
       id: 'dashboard',
-      label: 'Command Center',
+      label: 'Pipeline',
       description: 'View dashboard and pipeline',
       icon: LayoutDashboard,
       href: '/admin',

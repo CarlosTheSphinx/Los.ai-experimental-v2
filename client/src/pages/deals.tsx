@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
 import { 
   FolderKanban, 
   Plus, 
@@ -185,6 +186,8 @@ function formatStage(stage: string | null) {
 }
 
 export default function Projects() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -247,12 +250,14 @@ export default function Projects() {
           <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Loans Dashboard</h1>
           <p className="text-muted-foreground">Overview of all your loans</p>
         </div>
-        <Link href="/deals/new">
-          <Button data-testid="button-new-deal">
-            <Plus className="h-4 w-4 mr-2" />
-            New Loan
-          </Button>
-        </Link>
+        {isAdmin && (
+          <Link href="/deals/new">
+            <Button data-testid="button-new-deal">
+              <Plus className="h-4 w-4 mr-2" />
+              New Loan
+            </Button>
+          </Link>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -355,12 +360,21 @@ export default function Projects() {
                     {searchQuery ? 'Try a different search term' : 'Loans are auto-created when term sheets are signed'}
                   </p>
                 </div>
-                <Link href="/deals/new">
-                  <Button variant="outline" data-testid="button-create-first">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Loan Manually
-                  </Button>
-                </Link>
+                {isAdmin ? (
+                  <Link href="/deals/new">
+                    <Button variant="outline" data-testid="button-create-first">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Loan Manually
+                    </Button>
+                  </Link>
+                ) : (
+                  <Link href="/quotes">
+                    <Button variant="outline" data-testid="button-get-quote">
+                      <FileText className="h-4 w-4 mr-2" />
+                      Get a Quote
+                    </Button>
+                  </Link>
+                )}
               </div>
             </CardContent>
           </Card>

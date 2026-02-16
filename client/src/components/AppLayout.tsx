@@ -77,7 +77,7 @@ interface NavItem {
 
 const brokerNavItems: NavItem[] = [
   { href: "/quotes", label: "Quotes", icon: FileText, shortcut: undefined },
-  { href: "/deals", label: "Deals", icon: FolderKanban, shortcut: undefined },
+  { href: "/deals", label: "My Loans", icon: FolderKanban, shortcut: undefined },
   { href: "/commissions", label: "My Commissions", icon: DollarSign, shortcut: undefined },
   { href: "/commercial/dashboard", label: "Commercial", icon: Building2, shortcut: undefined },
   { href: "/broker/contacts", label: "Contacts", icon: Users, shortcut: undefined },
@@ -87,14 +87,14 @@ const brokerNavItems: NavItem[] = [
 ];
 
 const borrowerNavItems: NavItem[] = [
-  { href: "/", label: "My Deals", icon: FolderKanban },
+  { href: "/", label: "My Loans", icon: FolderKanban },
   { href: "/quotes", label: "Quotes", icon: FileText },
   { href: "/messages", label: "Messages", icon: MessageSquare, showBadge: true },
   { href: "/resources", label: "Resources", icon: BookOpen },
 ];
 
 const adminNavItems: NavItem[] = [
-  { href: "/admin", label: "Command Center", icon: LayoutDashboard, shortcut: "⌘1" },
+  { href: "/admin", label: "Pipeline", icon: LayoutDashboard, shortcut: "⌘1" },
   { href: "/admin/processor", label: "One-Click Processing", icon: Zap, requiredPermission: "processor.view" },
   { href: "/quotes", label: "Quotes", icon: FileText },
   { href: "/admin/commercial-submissions", label: "Commercial Deals", icon: Building2, requiredPermission: "commercial.view" },
@@ -235,7 +235,7 @@ function AppLayoutContent({ children }: AppLayoutProps) {
         <SidebarContent>
           <SidebarGroup>
             <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/60 px-0 pb-2">
-              {(effectiveViewAsBorrower || isBorrower) ? 'Lending' : 'Deals'}
+              {(effectiveViewAsBorrower || isBorrower) ? 'My Loans' : 'Pipeline'}
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>

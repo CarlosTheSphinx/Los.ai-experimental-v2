@@ -55,6 +55,7 @@ import {
   Upload,
   Download,
   FileUp,
+  Paperclip,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -409,6 +410,8 @@ export default function AdminPrograms() {
     assignedTo: string | null;
     visibility: string | null;
     isRequired: boolean;
+    templateUrl: string | null;
+    templateFileName: string | null;
     rules: any[];
   };
   const { data: documentLibrary } = useQuery<{ documents: LibraryDocument[] }>({
@@ -1508,6 +1511,15 @@ export default function AdminPrograms() {
                                               data-testid={`input-stage-doc-name-${index}-${doc.id}`}
                                             />
                                             {doc.isRequired && <Badge variant="secondary" className="text-xs flex-shrink-0">Req</Badge>}
+                                            {(() => {
+                                              const libDoc = documentLibrary?.documents?.find(d => d.documentName === doc.documentName);
+                                              return libDoc?.templateUrl ? (
+                                                <Badge variant="outline" className="text-xs flex-shrink-0 text-green-600 border-green-200 gap-1">
+                                                  <Paperclip className="h-2.5 w-2.5" />
+                                                  Template
+                                                </Badge>
+                                              ) : null;
+                                            })()}
                                             <Button type="button" variant="ghost" size="sm" className="flex-shrink-0" onClick={() => removeInlineDocument(doc.id)} data-testid={`button-remove-stage-doc-${index}-${doc.id}`}>
                                               <X className="h-3 w-3" />
                                             </Button>
@@ -1666,6 +1678,15 @@ export default function AdminPrograms() {
                                         onChange={(e) => handleDocumentNameChange(doc.id, e.target.value)}
                                         data-testid={`input-unassigned-doc-${doc.id}`}
                                       />
+                                      {(() => {
+                                        const libDoc = documentLibrary?.documents?.find(d => d.documentName === doc.documentName);
+                                        return libDoc?.templateUrl ? (
+                                          <Badge variant="outline" className="text-xs flex-shrink-0 text-green-600 border-green-200 gap-1">
+                                            <Paperclip className="h-2.5 w-2.5" />
+                                            Template
+                                          </Badge>
+                                        ) : null;
+                                      })()}
                                       <Button type="button" variant="ghost" size="sm" className="flex-shrink-0" onClick={() => removeInlineDocument(doc.id)} data-testid={`button-remove-unassigned-doc-${doc.id}`}>
                                         <X className="h-3 w-3" />
                                       </Button>
@@ -2610,6 +2631,15 @@ export default function AdminPrograms() {
                                         data-testid={`input-edit-stage-doc-name-${index}-${doc.id}`}
                                       />
                                       {doc.isRequired && <Badge variant="secondary" className="text-xs flex-shrink-0">Req</Badge>}
+                                      {(() => {
+                                        const libDoc = documentLibrary?.documents?.find(d => d.documentName === doc.documentName);
+                                        return libDoc?.templateUrl ? (
+                                          <Badge variant="outline" className="text-xs flex-shrink-0 text-green-600 border-green-200 gap-1">
+                                            <Paperclip className="h-2.5 w-2.5" />
+                                            Template
+                                          </Badge>
+                                        ) : null;
+                                      })()}
                                       <Button type="button" variant="ghost" size="sm" className="flex-shrink-0" onClick={() => removeInlineDocument(doc.id)} data-testid={`button-edit-remove-stage-doc-${doc.id}`}>
                                         <X className="h-3 w-3" />
                                       </Button>
@@ -2680,6 +2710,15 @@ export default function AdminPrograms() {
                                   onChange={(e) => handleDocumentNameChange(doc.id, e.target.value)}
                                   data-testid={`input-edit-unassigned-doc-${doc.id}`}
                                 />
+                                {(() => {
+                                  const libDoc = documentLibrary?.documents?.find(d => d.documentName === doc.documentName);
+                                  return libDoc?.templateUrl ? (
+                                    <Badge variant="outline" className="text-xs flex-shrink-0 text-green-600 border-green-200 gap-1">
+                                      <Paperclip className="h-2.5 w-2.5" />
+                                      Template
+                                    </Badge>
+                                  ) : null;
+                                })()}
                                 {inlineSteps.length > 0 && (
                                   <Select
                                     value="none"

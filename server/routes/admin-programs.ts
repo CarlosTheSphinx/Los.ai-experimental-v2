@@ -407,6 +407,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         assignedTo: programDocumentTemplates.assignedTo,
         visibility: programDocumentTemplates.visibility,
         isRequired: programDocumentTemplates.isRequired,
+        templateUrl: programDocumentTemplates.templateUrl,
+        templateFileName: programDocumentTemplates.templateFileName,
       })
         .from(programDocumentTemplates)
         .where(inArray(programDocumentTemplates.programId, programIds));
@@ -417,6 +419,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         assignedTo: string | null;
         visibility: string | null;
         isRequired: boolean;
+        templateUrl: string | null;
+        templateFileName: string | null;
       }>();
 
       for (const doc of allDocs) {
@@ -427,7 +431,13 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
             assignedTo: doc.assignedTo,
             visibility: doc.visibility,
             isRequired: doc.isRequired,
+            templateUrl: doc.templateUrl,
+            templateFileName: doc.templateFileName,
           });
+        } else if (doc.templateUrl && !uniqueDocsMap.get(doc.documentName)!.templateUrl) {
+          const existing = uniqueDocsMap.get(doc.documentName)!;
+          existing.templateUrl = doc.templateUrl;
+          existing.templateFileName = doc.templateFileName;
         }
       }
 
