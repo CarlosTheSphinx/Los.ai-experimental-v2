@@ -16,6 +16,7 @@ import Deals from "@/pages/deals";
 import DealDetail from "@/pages/deal-detail";
 import NewDeal from "@/pages/new-deal";
 import BorrowerPortal from "@/pages/borrower-portal";
+import BrokerPortal from "@/pages/broker-portal";
 import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
 import ForgotPasswordPage from "@/pages/forgot-password";
@@ -23,6 +24,7 @@ import ResetPasswordPage from "@/pages/reset-password";
 import AdminDashboard from "@/pages/admin/dashboard";
 import AdminUsers from "@/pages/admin/users";
 import AdminSettings from "@/pages/admin/settings";
+import AdminTeamPermissions from "@/pages/admin/team-permissions";
 import AdminDeals from "@/pages/admin/deals";
 
 import AdminDealDetail from "@/pages/admin/deal-detail";
@@ -51,6 +53,7 @@ import AdminCommercialConfig from "@/pages/admin/commercial-config";
 
 import ProcessorDashboard from "@/pages/admin/processor-dashboard";
 import AIAgentsPage from "@/pages/admin/ai-agents";
+import SuperAdminDashboard from "@/pages/admin/super-admin-dashboard";
 
 import BrokerContactsPage from "@/pages/broker-contacts";
 import BrokerOutreachPage from "@/pages/broker-outreach";
@@ -119,6 +122,36 @@ function AdminProtectedRoute({ component: Component }: { component: React.Compon
   );
 }
 
+function SuperAdminProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+  const { isAuthenticated, isLoading, user } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect to="/login" />;
+  }
+
+  if (!user?.userType) {
+    return <Redirect to="/select-role" />;
+  }
+
+  if (user?.role !== 'super_admin') {
+    return <Redirect to="/" />;
+  }
+
+  return (
+    <RouteErrorBoundary routeName={Component.displayName || Component.name || 'Super Admin Route'}>
+      <Component />
+    </RouteErrorBoundary>
+  );
+}
+
 function AuthRoute({ component: Component }: { component: React.ComponentType }) {
   const { isAuthenticated, isLoading } = useAuth();
 
@@ -172,6 +205,7 @@ function MainRoutes() {
           <Route path="/broker/outreach" component={() => <ProtectedRoute component={BrokerOutreachPage} />} />
 
           {/* Admin Routes */}
+          <Route path="/admin/platform" component={() => <SuperAdminProtectedRoute component={SuperAdminDashboard} />} />
           <Route path="/admin" component={() => <AdminProtectedRoute component={AdminDashboard} />} />
           <Route path="/admin/dashboard" component={() => <AdminProtectedRoute component={AdminDashboard} />} />
           <Route path="/admin/deals" component={() => <AdminProtectedRoute component={AdminDashboard} />} />
@@ -179,6 +213,7 @@ function MainRoutes() {
           <Route path="/admin/partners" component={() => <AdminProtectedRoute component={AdminPartners} />} />
           <Route path="/admin/programs" component={() => <AdminProtectedRoute component={AdminPrograms} />} />
           <Route path="/admin/users" component={() => <AdminProtectedRoute component={AdminUsers} />} />
+          <Route path="/admin/team-permissions" component={() => <AdminProtectedRoute component={AdminTeamPermissions} />} />
           <Route path="/admin/projects" component={() => <Redirect to="/admin/deals" />} />
           <Route path="/admin/projects/:id">{(params) => <Redirect to={`/admin/deals/${params.id}`} />}</Route>
           <Route path="/admin/settings" component={() => <AdminProtectedRoute component={AdminSettings} />} />
@@ -203,6 +238,7 @@ function MainRoutes() {
 function AppContent() {
   const [isSignPage] = useRoute("/sign/:token");
   const [isPortalPage] = useRoute("/portal/:token");
+  const [isBrokerPortalPage] = useRoute("/broker-portal/:token");
   const [isLoginPage] = useRoute("/login");
   const [isRegisterPage] = useRoute("/register");
   const [isForgotPasswordPage] = useRoute("/forgot-password");
@@ -233,6 +269,14 @@ function AppContent() {
     return (
       <Switch>
         <Route path="/portal/:token" component={BorrowerPortal} />
+      </Switch>
+    );
+  }
+
+  if (isBrokerPortalPage) {
+    return (
+      <Switch>
+        <Route path="/broker-portal/:token" component={BrokerPortal} />
       </Switch>
     );
   }

@@ -410,6 +410,12 @@ export class DatabaseStorage implements IStorage {
     return project;
   }
 
+  async getProjectByBrokerToken(token: string): Promise<Project | undefined> {
+    const [project] = await db.select().from(projects)
+      .where(eq(projects.brokerPortalToken, token));
+    return project;
+  }
+
   async updateProject(id: number, userId: number, updates: Partial<Project>): Promise<Project | undefined> {
     const [updated] = await db.update(projects)
       .set({ ...updates, lastUpdated: new Date() })
