@@ -151,6 +151,13 @@ interface StageInfo {
   color?: string;
 }
 
+interface ProgramPipeline {
+  programId: number;
+  programName: string;
+  totalDeals: number;
+  stages: StageInfo[];
+}
+
 interface DealsStats {
   totalDeals: number;
   totalLoanAmount: number;
@@ -158,6 +165,7 @@ interface DealsStats {
   totalCommission: number;
   loanTypeStats: Record<string, { count: number; amount: number }>;
   stageStats: StageInfo[];
+  pipelineByProgram: ProgramPipeline[];
   monthlyStats: { month: string; count: number; amount: number }[];
 }
 
@@ -219,71 +227,68 @@ function StatsCard({
   );
 }
 
-function PipelineByStage({ stageStats }: { stageStats: StageInfo[] }) {
-  // Define stage colors using design system colors
-  const stageColorMap: Record<string, string> = {
-    'application': 'hsl(212 67% 51%)',      // Primary Blue
-    'underwriting': 'hsl(212 67% 60%)',     // Lighter Blue
-    'approval': 'hsl(160 84% 39%)',         // Accent/Success
-    'conditions': 'hsl(38 92% 50%)',        // Warning/Amber
-    'title': 'hsl(205 35% 21%)',            // Navy
-    'appraisal': 'hsl(160 70% 45%)',        // Lighter Success
-    'final-review': 'hsl(212 67% 45%)',     // Darker Blue
-    'closing': 'hsl(160 84% 39%)',          // Emerald
-    'funded': 'hsl(160 84% 39%)',           // Success
-  };
-
-  const chartData = stageStats.map(stage => ({
-    name: stage.label,
-    count: stage.count,
-    color: stage.color || stageColorMap[stage.stage] || 'hsl(212 67% 51%)',
-  }));
-
-  const maxCount = Math.max(...stageStats.map(s => s.count), 1);
-
-  const totalDeals = stageStats.reduce((sum, s) => sum + s.count, 0);
+function PipelineByProgram({ programs }: { programs: ProgramPipeline[] }) {
+  const totalDeals = programs.reduce((sum, p) => sum + p.totalDeals, 0);
 
   return (
-    <Card>
+    <Card data-testid="card-pipeline-by-program">
       <CardHeader className="pb-3">
-        <CardTitle className="text-lg">Pipeline by Stage</CardTitle>
-        <CardDescription>Deal count and percentage at each stage</CardDescription>
+        <CardTitle className="text-lg">Pipeline by Program</CardTitle>
+        <CardDescription>Deal distribution across programs and stages</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Horizontal bar chart visualization */}
-        <div className="space-y-3">
-          {chartData.map((stage, index) => {
-            const percentage = totalDeals > 0 ? Math.round((stage.count / totalDeals) * 100) : 0;
+      <CardContent className="space-y-6">
+        {programs.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4">No deals in pipeline</p>
+        ) : (
+          programs.map((program) => {
+            const maxCount = Math.max(...(program.stages.length > 0 ? program.stages.map(s => s.count) : [0]), 1);
             return (
-              <div key={index} className="space-y-1.5">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-foreground">{stage.name}</span>
+              <div key={program.programId} className="space-y-3" data-testid={`pipeline-program-${program.programId}`}>
+                <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground font-semibold">{stage.count} deals</span>
-                    <span className="text-xs font-bold px-2 py-1 rounded-full bg-muted text-muted-foreground">
-                      {percentage}%
-                    </span>
+                    <span className="font-semibold text-foreground">{program.programName}</span>
+                    <Badge variant="secondary" className="text-xs">{program.totalDeals} {program.totalDeals === 1 ? 'deal' : 'deals'}</Badge>
                   </div>
                 </div>
-                <div className="w-full h-7 rounded-md overflow-hidden bg-muted">
-                  <div
-                    className="h-full rounded-md transition-all duration-500 flex items-center justify-end pr-2"
-                    style={{
-                      width: `${Math.max((stage.count / maxCount) * 100, 5)}%`,
-                      backgroundColor: stage.color,
-                    }}
-                  >
-                    {stage.count > 0 && (stage.count / maxCount) * 100 > 20 && (
-                      <span className="text-xs font-semibold text-white drop-shadow-sm">{stage.count}</span>
-                    )}
+                {program.stages.length > 0 ? (
+                  <div className="space-y-2 pl-1">
+                    {program.stages.map((stage, idx) => {
+                      const pct = program.totalDeals > 0 ? Math.round((stage.count / program.totalDeals) * 100) : 0;
+                      return (
+                        <div key={idx} className="space-y-1">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">{stage.label}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground font-medium">{stage.count}</span>
+                              <span className="text-xs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
+                                {pct}%
+                              </span>
+                            </div>
+                          </div>
+                          <div className="w-full h-5 rounded-md overflow-hidden bg-muted">
+                            <div
+                              className="h-full rounded-md transition-all duration-500"
+                              style={{
+                                width: `${Math.max((stage.count / maxCount) * 100, 4)}%`,
+                                backgroundColor: stage.color || 'hsl(212 67% 51%)',
+                              }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground pl-1">No workflow stages configured</p>
+                )}
+                {program !== programs[programs.length - 1] && (
+                  <div className="border-b" />
+                )}
               </div>
             );
-          })}
-        </div>
+          })
+        )}
 
-        {/* Total deals summary */}
         <div className="pt-3 border-t">
           <div className="flex items-center justify-between">
             <span className="font-medium text-muted-foreground">Total in Pipeline</span>
@@ -1014,8 +1019,8 @@ export default function AdminDeals({ embedded = false }: { embedded?: boolean })
         </div>
       )}
 
-      {stats?.stageStats && stats.stageStats.length > 0 && (
-        <PipelineByStage stageStats={stats.stageStats} />
+      {stats?.pipelineByProgram && stats.pipelineByProgram.length > 0 && (
+        <PipelineByProgram programs={stats.pipelineByProgram} />
       )}
 
       <div className="flex flex-wrap gap-2">

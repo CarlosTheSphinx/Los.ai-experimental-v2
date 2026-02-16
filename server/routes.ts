@@ -5034,6 +5034,7 @@ export async function registerRoutes(
         createdAt: projects.createdAt,
         targetCloseDate: projects.targetCloseDate,
         quoteId: projects.quoteId,
+        programId: projects.programId,
         googleDriveFolderId: projects.googleDriveFolderId,
         googleDriveFolderUrl: projects.googleDriveFolderUrl,
         driveSyncStatus: projects.driveSyncStatus,
@@ -5146,19 +5147,7 @@ export async function registerRoutes(
         loanTypeStats[loanType].amount += p.loanAmount || 0;
       });
       
-      // Calculate pipeline by program workflow steps
-      const allStepDefs = await db.select({
-        id: workflowStepDefinitions.id,
-        name: workflowStepDefinitions.name,
-        key: workflowStepDefinitions.key,
-        color: workflowStepDefinitions.color,
-        sortOrder: workflowStepDefinitions.sortOrder,
-      })
-        .from(workflowStepDefinitions)
-        .where(eq(workflowStepDefinitions.isActive, true))
-        .orderBy(asc(workflowStepDefinitions.sortOrder));
-
-      // Get all project stages to find each project's current (in_progress) step
+      // Calculate pipeline grouped by program
       const allProjectStages = await db.select({
         projectId: projectStages.projectId,
         stageKey: projectStages.stageKey,
@@ -5166,16 +5155,19 @@ export async function registerRoutes(
         programStepId: projectStages.programStepId,
       }).from(projectStages);
 
-      // Pre-load all program workflow step -> step definition key mappings
       const allProgramStepMappings = await db.select({
         programStepId: programWorkflowSteps.id,
+        programId: programWorkflowSteps.programId,
         stepKey: workflowStepDefinitions.key,
+        stepName: workflowStepDefinitions.name,
+        stepColor: workflowStepDefinitions.color,
+        stepOrder: programWorkflowSteps.stepOrder,
       })
         .from(programWorkflowSteps)
-        .innerJoin(workflowStepDefinitions, eq(programWorkflowSteps.stepDefinitionId, workflowStepDefinitions.id));
+        .innerJoin(workflowStepDefinitions, eq(programWorkflowSteps.stepDefinitionId, workflowStepDefinitions.id))
+        .orderBy(asc(programWorkflowSteps.stepOrder));
       const stepIdToKey = new Map(allProgramStepMappings.map(m => [m.programStepId, m.stepKey]));
 
-      // Map each project to its current workflow step key
       const projectCurrentStepKey = new Map<number, string>();
       const projectIds = [...new Set(allProjectStages.map(s => s.projectId))];
       for (const pid of projectIds) {
@@ -5190,14 +5182,66 @@ export async function registerRoutes(
         }
       }
 
+      // Get unique program IDs from deals
+      const dealProgramIds = [...new Set(allProjects.map(p => p.programId).filter(Boolean))] as number[];
+      const programNames = new Map<number, string>();
+      if (dealProgramIds.length > 0) {
+        const programs = await db.select({ id: loanPrograms.id, name: loanPrograms.name })
+          .from(loanPrograms)
+          .where(inArray(loanPrograms.id, dealProgramIds));
+        programs.forEach(p => programNames.set(p.id, p.name));
+      }
+
+      // Build pipeline by program
+      const pipelineByProgram = dealProgramIds.map(progId => {
+        const programDeals = allProjects.filter(p => p.programId === progId);
+        const programSteps = allProgramStepMappings
+          .filter(m => m.programId === progId)
+          .sort((a, b) => a.stepOrder - b.stepOrder);
+
+        const stages = programSteps.map(step => ({
+          stage: step.stepKey,
+          label: step.stepName,
+          color: step.stepColor || '#6366f1',
+          count: programDeals.filter(d => projectCurrentStepKey.get(d.id) === step.stepKey).length,
+        }));
+
+        return {
+          programId: progId,
+          programName: programNames.get(progId) || `Program ${progId}`,
+          totalDeals: programDeals.length,
+          stages,
+        };
+      }).sort((a, b) => b.totalDeals - a.totalDeals);
+
+      // Deals without a program
+      const unassignedDeals = allProjects.filter(p => !p.programId);
+      if (unassignedDeals.length > 0) {
+        pipelineByProgram.push({
+          programId: 0,
+          programName: 'Unassigned',
+          totalDeals: unassignedDeals.length,
+          stages: [],
+        });
+      }
+
+      // Keep flat stageStats for backward compatibility (badge labels etc.)
+      const allStepDefs = await db.select({
+        id: workflowStepDefinitions.id,
+        name: workflowStepDefinitions.name,
+        key: workflowStepDefinitions.key,
+        color: workflowStepDefinitions.color,
+        sortOrder: workflowStepDefinitions.sortOrder,
+      })
+        .from(workflowStepDefinitions)
+        .where(eq(workflowStepDefinitions.isActive, true))
+        .orderBy(asc(workflowStepDefinitions.sortOrder));
+
       const stageStats = allStepDefs.map(step => ({
         stage: step.key,
         label: step.name,
         color: step.color || '#6366f1',
-        count: allProjects.filter(p => {
-          const stepKey = projectCurrentStepKey.get(p.id);
-          return stepKey === step.key;
-        }).length,
+        count: allProjects.filter(p => projectCurrentStepKey.get(p.id) === step.key).length,
       }));
       
       // Calculate deals by month (last 6 months)
@@ -5229,6 +5273,7 @@ export async function registerRoutes(
           totalCommission: 0,
           loanTypeStats,
           stageStats,
+          pipelineByProgram,
           monthlyStats
         }
       });
