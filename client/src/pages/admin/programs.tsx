@@ -52,6 +52,9 @@ import {
   Mic,
   MicOff,
   Check,
+  Upload,
+  Download,
+  FileUp,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -92,6 +95,8 @@ interface ProgramDocument {
   assignedTo: string | null;
   visibility: string | null;
   sortOrder: number;
+  templateUrl: string | null;
+  templateFileName: string | null;
 }
 
 interface ProgramTask {
@@ -150,6 +155,61 @@ const priorityOptions = [
   { value: "critical", label: "Critical" },
 ];
 
+const standardDocuments = [
+  {
+    category: "borrower_docs",
+    categoryLabel: "Borrower Docs",
+    documents: [
+      { id: "gov_id", name: "Government-Issued Photo ID" },
+      { id: "ssn_card", name: "Social Security Card" },
+      { id: "auth_release", name: "Authorization to Release Information" },
+    ],
+  },
+  {
+    category: "financial_docs",
+    categoryLabel: "Financial Docs",
+    documents: [
+      { id: "personal_bank_stmt", name: "2 Months Personal Bank Statements" },
+      { id: "business_bank_stmt", name: "2 Months Business Bank Statements" },
+      { id: "pfs", name: "Personal Financial Statement (PFS)" },
+      { id: "tax_returns", name: "Most Recent Tax Returns (2 Years)" },
+      { id: "w2_1099", name: "W-2s / 1099s (2 Years)" },
+      { id: "pl_statement", name: "Profit & Loss Statement (YTD)" },
+    ],
+  },
+  {
+    category: "entity_docs",
+    categoryLabel: "Entity Docs",
+    documents: [
+      { id: "articles_org", name: "Articles of Organization / Incorporation" },
+      { id: "operating_agreement", name: "Operating Agreement" },
+      { id: "good_standing", name: "Certificate of Good Standing" },
+      { id: "ein_letter", name: "EIN Letter (IRS)" },
+    ],
+  },
+  {
+    category: "property_docs",
+    categoryLabel: "Property Docs",
+    documents: [
+      { id: "purchase_contract", name: "Purchase Contract / LOI" },
+      { id: "property_photos", name: "Property Photos" },
+      { id: "sreo", name: "Schedule of Real Estate Owned (SREO)" },
+      { id: "rent_roll", name: "Rent Roll (if applicable)" },
+      { id: "insurance_binder", name: "Insurance Binder / Dec Page" },
+      { id: "appraisal", name: "Appraisal (if applicable)" },
+      { id: "title_commitment", name: "Title Commitment / Preliminary Title Report" },
+    ],
+  },
+  {
+    category: "closing_docs",
+    categoryLabel: "Closing Docs",
+    documents: [
+      { id: "hud1_cd", name: "HUD-1 / Closing Disclosure (if refinance)" },
+      { id: "payoff_stmt", name: "Payoff Statement (if refinance)" },
+    ],
+  },
+];
+
 function formatCurrency(value: number | null): string {
   if (value === null) return "N/A";
   return new Intl.NumberFormat("en-US", {
@@ -178,6 +238,9 @@ export default function AdminPrograms() {
   const [showAddProgram, setShowAddProgram] = useState(false);
   const [showEditProgram, setShowEditProgram] = useState(false);
   const [showAddDocument, setShowAddDocument] = useState(false);
+  const [editingDocument, setEditingDocument] = useState<ProgramDocument | null>(null);
+  const [showQuickAddSection, setShowQuickAddSection] = useState(true);
+  const [selectedStandardDocs, setSelectedStandardDocs] = useState<Set<string>>(new Set());
   const [showAddTask, setShowAddTask] = useState(false);
   const [collapsedDocPrograms, setCollapsedDocPrograms] = useState<Set<number>>(new Set());
   const [collapsedTaskPrograms, setCollapsedTaskPrograms] = useState<Set<number>>(new Set());
@@ -431,6 +494,53 @@ export default function AdminPrograms() {
     },
   });
 
+  const updateDocument = useMutation({
+    mutationFn: async (data: typeof documentForm) => {
+      if (!editingDocument) throw new Error("No document selected for editing");
+      return apiRequest("PUT", `/api/admin/programs/${selectedProgram?.id}/documents/${editingDocument.id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/programs", selectedProgram?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/programs"] });
+      setShowAddDocument(false);
+      setEditingDocument(null);
+      resetDocumentForm();
+      toast({ title: "Document template updated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update document", variant: "destructive" });
+    },
+  });
+
+  const bulkCreateDocuments = useMutation({
+    mutationFn: async (docNames: string[]) => {
+      const promises = docNames.map(docName => {
+        const categoryGroup = standardDocuments.find(cat =>
+          cat.documents.some(doc => doc.name === docName)
+        );
+        return apiRequest("POST", `/api/admin/programs/${selectedProgram?.id}/documents`, {
+          documentName: docName,
+          documentCategory: categoryGroup?.category || "other",
+          documentDescription: "",
+          isRequired: true,
+          stepId: null,
+          assignedTo: "borrower",
+          visibility: "all",
+        });
+      });
+      return Promise.all(promises);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/programs", selectedProgram?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/programs"] });
+      setSelectedStandardDocs(new Set());
+      toast({ title: "Documents added successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to add some documents", variant: "destructive" });
+    },
+  });
+
   const deleteDocument = useMutation({
     mutationFn: async (docId: number) => {
       return apiRequest("DELETE", `/api/admin/programs/${selectedProgram?.id}/documents/${docId}`);
@@ -588,6 +698,20 @@ export default function AdminPrograms() {
       assignedTo: "borrower",
       visibility: "all",
     });
+  };
+
+  const loadDocumentForEditing = (doc: ProgramDocument) => {
+    setEditingDocument(doc);
+    setDocumentForm({
+      documentName: doc.documentName,
+      documentCategory: doc.documentCategory,
+      documentDescription: doc.documentDescription || "",
+      isRequired: doc.isRequired,
+      stepId: doc.stepId,
+      assignedTo: doc.assignedTo || "borrower",
+      visibility: doc.visibility || "all",
+    });
+    setShowAddDocument(true);
   };
 
   const resetTaskForm = () => {
@@ -1678,8 +1802,84 @@ export default function AdminPrograms() {
                         </Button>
                       </div>
                       {!isCollapsed && (
-                        <div className="mt-4">
-                          <DocumentList programId={program.id} onDelete={deleteDocument.mutate} />
+                        <div className="mt-4 space-y-4">
+                          {/* Quick Add Standard Documents Section */}
+                          <div className="border rounded-md bg-muted/30 p-4">
+                            <div
+                              className="flex items-center gap-2 cursor-pointer select-none"
+                              onClick={() => setShowQuickAddSection(!showQuickAddSection)}
+                            >
+                              {showQuickAddSection ? (
+                                <ChevronUp className="h-4 w-4" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4" />
+                              )}
+                              <BookTemplate className="h-4 w-4" />
+                              <span className="font-medium text-sm">Quick Add Standard Documents</span>
+                            </div>
+                            {showQuickAddSection && (
+                              <div className="mt-4 space-y-4">
+                                {standardDocuments.map((categoryGroup) => {
+                                  const existingDocs = programDetails?.documents || [];
+                                  const existingNames = new Set(existingDocs.map(d => d.documentName));
+                                  return (
+                                    <div key={categoryGroup.category}>
+                                      <h4 className="text-sm font-medium mb-2">{categoryGroup.categoryLabel}</h4>
+                                      <div className="space-y-2 pl-2">
+                                        {categoryGroup.documents.map((doc) => {
+                                          const isAdded = existingNames.has(doc.name);
+                                          const isSelected = selectedStandardDocs.has(doc.name);
+                                          return (
+                                            <div key={doc.id} className="flex items-center gap-2">
+                                              <input
+                                                type="checkbox"
+                                                id={`std-doc-${doc.id}`}
+                                                checked={isSelected}
+                                                disabled={isAdded}
+                                                onChange={(e) => {
+                                                  const newSelected = new Set(selectedStandardDocs);
+                                                  if (e.target.checked) {
+                                                    newSelected.add(doc.name);
+                                                  } else {
+                                                    newSelected.delete(doc.name);
+                                                  }
+                                                  setSelectedStandardDocs(newSelected);
+                                                }}
+                                                className="h-4 w-4 rounded"
+                                              />
+                                              <label
+                                                htmlFor={`std-doc-${doc.id}`}
+                                                className={`text-sm cursor-pointer flex items-center gap-2 ${isAdded ? 'text-muted-foreground line-through' : ''}`}
+                                              >
+                                                {doc.name}
+                                                {isAdded && <Check className="h-3 w-3 text-green-600" />}
+                                              </label>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                <Button
+                                  size="sm"
+                                  className="w-full mt-2"
+                                  onClick={() => {
+                                    if (selectedStandardDocs.size > 0) {
+                                      bulkCreateDocuments.mutate(Array.from(selectedStandardDocs));
+                                    }
+                                  }}
+                                  disabled={bulkCreateDocuments.isPending || selectedStandardDocs.size === 0}
+                                >
+                                  {bulkCreateDocuments.isPending && <Loader2 className="h-3 w-3 mr-2 animate-spin" />}
+                                  Add Selected ({selectedStandardDocs.size})
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Document List */}
+                          <DocumentList programId={program.id} onDelete={deleteDocument.mutate} onEdit={loadDocumentForEditing} />
                         </div>
                       )}
                     </CardContent>
@@ -2321,12 +2521,18 @@ export default function AdminPrograms() {
       </Dialog>
 
       {/* Add Document Dialog */}
-      <Dialog open={showAddDocument} onOpenChange={setShowAddDocument}>
+      <Dialog open={showAddDocument} onOpenChange={(open) => {
+        setShowAddDocument(open);
+        if (!open) {
+          resetDocumentForm();
+          setEditingDocument(null);
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Document Template</DialogTitle>
+            <DialogTitle>{editingDocument ? "Edit Document Template" : "Add Document Template"}</DialogTitle>
             <DialogDescription>
-              Add a required document for {selectedProgram?.name}
+              {editingDocument ? "Update the document template" : "Add a required document"} for {selectedProgram?.name}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -2445,19 +2651,26 @@ export default function AdminPrograms() {
               onClick={() => {
                 setShowAddDocument(false);
                 resetDocumentForm();
+                setEditingDocument(null);
               }}
             >
               Cancel
             </Button>
             <Button
-              onClick={() => createDocument.mutate(documentForm)}
-              disabled={createDocument.isPending || !documentForm.documentName}
+              onClick={() => {
+                if (editingDocument) {
+                  updateDocument.mutate(documentForm);
+                } else {
+                  createDocument.mutate(documentForm);
+                }
+              }}
+              disabled={(editingDocument ? updateDocument.isPending : createDocument.isPending) || !documentForm.documentName}
               data-testid="button-save-document"
             >
-              {createDocument.isPending && (
+              {(editingDocument ? updateDocument.isPending : createDocument.isPending) && (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
-              Add Document
+              {editingDocument ? "Save Changes" : "Add Document"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2983,9 +3196,11 @@ function DocumentRulesEditor({ templateId, programId, documentName }: { template
 function DocumentList({
   programId,
   onDelete,
+  onEdit,
 }: {
   programId: number;
   onDelete: (id: number) => void;
+  onEdit: (doc: ProgramDocument) => void;
 }) {
   const [expandedDocId, setExpandedDocId] = useState<number | null>(null);
 
@@ -3049,6 +3264,89 @@ function DocumentList({
               >
                 <Sparkles className="h-3 w-3 mr-1" />
                 AI Rules
+              </Button>
+              {doc.templateUrl ? (
+                <div className="flex items-center gap-0.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-7 gap-1 text-green-600 border-green-200"
+                    onClick={() => window.open(doc.templateUrl!, '_blank')}
+                    title={`Download: ${doc.templateFileName}`}
+                  >
+                    <Download className="h-3 w-3" />
+                    Template
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground"
+                    onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = '.pdf,.doc,.docx';
+                      input.onchange = async (e) => {
+                        const file = (e.target as HTMLInputElement).files?.[0];
+                        if (!file) return;
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        try {
+                          await fetch(`/api/admin/programs/${programId}/documents/${doc.id}/template`, {
+                            method: 'POST',
+                            body: formData,
+                          });
+                          queryClient.invalidateQueries({ queryKey: ["/api/admin/programs", programId] });
+                        } catch (err) {
+                          console.error('Template upload failed:', err);
+                        }
+                      };
+                      input.click();
+                    }}
+                    title="Replace template"
+                  >
+                    <FileUp className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-7 gap-1"
+                  onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = '.pdf,.doc,.docx';
+                    input.onchange = async (e) => {
+                      const file = (e.target as HTMLInputElement).files?.[0];
+                      if (!file) return;
+                      const formData = new FormData();
+                      formData.append('file', file);
+                      try {
+                        await fetch(`/api/admin/programs/${programId}/documents/${doc.id}/template`, {
+                          method: 'POST',
+                          body: formData,
+                        });
+                        queryClient.invalidateQueries({ queryKey: ["/api/admin/programs", programId] });
+                      } catch (err) {
+                        console.error('Template upload failed:', err);
+                      }
+                    };
+                    input.click();
+                  }}
+                  title="Upload a template file for borrowers to download"
+                >
+                  <Upload className="h-3 w-3" />
+                  Template
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-foreground"
+                onClick={() => onEdit(doc)}
+                data-testid={`button-edit-doc-${doc.id}`}
+              >
+                <Pencil className="h-4 w-4" />
               </Button>
               <Button
                 variant="ghost"

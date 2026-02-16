@@ -763,7 +763,10 @@ export const programDocumentTemplates = pgTable("program_document_templates", {
   assignedTo: varchar("assigned_to", { length: 50 }).default("borrower"), // borrower, broker, admin
   visibility: varchar("visibility", { length: 50 }).default("all"), // borrower, broker, admin, all
   sortOrder: integer("sort_order").default(0),
-  
+
+  templateUrl: varchar("template_url", { length: 500 }), // stores the URL/path to the uploaded template file
+  templateFileName: varchar("template_file_name", { length: 255 }), // stores the original filename
+
   createdAt: timestamp("created_at").defaultNow(),
 });
 
