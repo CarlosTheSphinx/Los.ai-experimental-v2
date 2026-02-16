@@ -2414,29 +2414,27 @@ export default function AdminPrograms() {
                 </SelectContent>
               </Select>
             </div>
-            {programDetails?.workflowSteps && programDetails.workflowSteps.length > 0 && (
-              <div className="space-y-2">
-                <Label>Assign to Stage</Label>
-                <Select
-                  value={documentForm.stepId ? String(documentForm.stepId) : "none"}
-                  onValueChange={(v) =>
-                    setDocumentForm({ ...documentForm, stepId: v === "none" ? null : parseInt(v) })
-                  }
-                >
-                  <SelectTrigger data-testid="select-doc-step">
-                    <SelectValue placeholder="No stage assigned" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No stage assigned</SelectItem>
-                    {programDetails.workflowSteps.map((step) => (
-                      <SelectItem key={step.id} value={String(step.id)}>
-                        {step.definition.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label>Assign to Stage</Label>
+              <Select
+                value={documentForm.stepId ? String(documentForm.stepId) : "none"}
+                onValueChange={(v) =>
+                  setDocumentForm({ ...documentForm, stepId: v === "none" ? null : parseInt(v) })
+                }
+              >
+                <SelectTrigger data-testid="select-doc-step">
+                  <SelectValue placeholder="No stage assigned" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No stage assigned</SelectItem>
+                  {programDetails?.workflowSteps?.map((step) => (
+                    <SelectItem key={step.id} value={String(step.id)}>
+                      {step.definition.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -2562,29 +2560,27 @@ export default function AdminPrograms() {
                 </SelectContent>
               </Select>
             </div>
-            {programDetails?.workflowSteps && programDetails.workflowSteps.length > 0 && (
-              <div className="space-y-2">
-                <Label>Assign to Stage</Label>
-                <Select
-                  value={taskForm.stepId ? String(taskForm.stepId) : "none"}
-                  onValueChange={(v) =>
-                    setTaskForm({ ...taskForm, stepId: v === "none" ? null : parseInt(v) })
-                  }
-                >
-                  <SelectTrigger data-testid="select-task-step">
-                    <SelectValue placeholder="No stage assigned" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No stage assigned</SelectItem>
-                    {programDetails.workflowSteps.map((step) => (
-                      <SelectItem key={step.id} value={String(step.id)}>
-                        {step.definition.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label>Assign to Stage</Label>
+              <Select
+                value={taskForm.stepId ? String(taskForm.stepId) : "none"}
+                onValueChange={(v) =>
+                  setTaskForm({ ...taskForm, stepId: v === "none" ? null : parseInt(v) })
+                }
+              >
+                <SelectTrigger data-testid="select-task-step">
+                  <SelectValue placeholder="No stage assigned" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No stage assigned</SelectItem>
+                  {programDetails?.workflowSteps?.map((step) => (
+                    <SelectItem key={step.id} value={String(step.id)}>
+                      {step.definition.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter>
             <Button
