@@ -49,6 +49,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import ProgramWorkflowEditor from "@/components/ProgramWorkflowEditor";
+import CreditPoliciesTab from "@/components/CreditPoliciesTab";
 
 interface LoanProgram {
   id: number;
@@ -591,6 +592,10 @@ export default function AdminPrograms() {
           <TabsTrigger value="tasks" className="gap-2" data-testid="tab-tasks">
             <ListChecks className="h-4 w-4" />
             Tasks
+          </TabsTrigger>
+          <TabsTrigger value="credit-policies" className="gap-2" data-testid="tab-credit-policies">
+            <ShieldCheck className="h-4 w-4" />
+            Credit Policies
           </TabsTrigger>
         </TabsList>
 
@@ -1469,6 +1474,11 @@ export default function AdminPrograms() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        {/* Credit Policies Tab */}
+        <TabsContent value="credit-policies" className="space-y-4">
+          <CreditPoliciesTab />
         </TabsContent>
       </Tabs>
 
