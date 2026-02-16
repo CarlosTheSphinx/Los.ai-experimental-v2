@@ -1144,11 +1144,17 @@ export default function AdminPrograms() {
                                   placeholder="Step name (e.g., Underwriting)"
                                   value={step.stepName}
                                   onChange={(e) => {
-                                    updateInlineStep(step.id, "stepName", e.target.value);
+                                    const val = e.target.value;
                                     const match = availableSteps?.find(
-                                      (s) => s.name.toLowerCase() === e.target.value.trim().toLowerCase()
+                                      (s) => s.name.toLowerCase() === val.trim().toLowerCase()
                                     );
-                                    updateInlineStep(step.id, "stepDefinitionId", match ? match.id : null);
+                                    setInlineSteps((prev) =>
+                                      prev.map((s) =>
+                                        s.id === step.id
+                                          ? { ...s, stepName: val, stepDefinitionId: match ? match.id : null }
+                                          : s
+                                      )
+                                    );
                                   }}
                                   list={`step-suggestions-${index}`}
                                   data-testid={`input-step-name-${index}`}
