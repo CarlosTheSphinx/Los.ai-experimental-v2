@@ -18,13 +18,30 @@ import {
 export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
   const { storage, db, authenticateUser, requireAdmin, requirePermission } = deps;
 
+  async function verifyProgramOwnership(req: AuthRequest, res: Response, programId: number): Promise<boolean> {
+    const [program] = await db.select().from(loanPrograms).where(eq(loanPrograms.id, programId));
+    if (!program) {
+      res.status(404).json({ error: 'Program not found' });
+      return false;
+    }
+    const user = await storage.getUserById(req.user!.id);
+    if (user?.role !== 'super_admin' && program.createdBy !== req.user!.id) {
+      res.status(403).json({ error: 'Not authorized to access this program' });
+      return false;
+    }
+    return true;
+  }
+
   // ==================== LOAN PROGRAMS ROUTES ====================
 
   app.get('/api/admin/programs', authenticateUser, requireAdmin, requirePermission('programs.view'), async (req: AuthRequest, res: Response) => {
     try {
-      const programs = await db.select().from(loanPrograms).orderBy(loanPrograms.sortOrder);
+      const user = await storage.getUserById(req.user!.id);
+      const isSuperAdmin = user?.role === 'super_admin';
+      const programs = await db.select().from(loanPrograms)
+        .where(isSuperAdmin ? undefined : eq(loanPrograms.createdBy, req.user!.id))
+        .orderBy(loanPrograms.sortOrder);
 
-      // Get document and task counts for each program
       const programsWithCounts = await Promise.all(programs.map(async (program) => {
         const docs = await db.select().from(programDocumentTemplates).where(eq(programDocumentTemplates.programId, program.id));
         const tasks = await db.select().from(programTaskTemplates).where(eq(programTaskTemplates.programId, program.id));
@@ -52,6 +69,11 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
 
       if (!program) {
         return res.status(404).json({ error: 'Program not found' });
+      }
+
+      const user = await storage.getUserById(req.user!.id);
+      if (user?.role !== 'super_admin' && program.createdBy !== req.user!.id) {
+        return res.status(403).json({ error: 'Not authorized to view this program' });
       }
 
       const documents = await db.select().from(programDocumentTemplates)
@@ -99,10 +121,12 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         minLoanAmount, maxLoanAmount,
         minLtv, maxLtv,
         minInterestRate, maxInterestRate,
+        minUnits, maxUnits,
         termOptions, eligiblePropertyTypes,
         isActive,
         documents,
         tasks,
+        steps,
         creditPolicyId
       } = req.body;
 
@@ -122,15 +146,58 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
           maxLtv: maxLtv ? parseFloat(maxLtv) : 80,
           minInterestRate: minInterestRate ? parseFloat(minInterestRate) : 8,
           maxInterestRate: maxInterestRate ? parseFloat(maxInterestRate) : 15,
+          minUnits: minUnits ? parseInt(minUnits) : null,
+          maxUnits: maxUnits ? parseInt(maxUnits) : null,
           termOptions,
           eligiblePropertyTypes: eligiblePropertyTypes || [],
           isActive: isActive !== false,
           creditPolicyId: creditPolicyId ? parseInt(creditPolicyId) : null,
+          createdBy: req.user!.id,
         }).returning();
 
-        // Create inline document templates if provided
+        // Create inline workflow steps if provided (must be created before docs/tasks to resolve stepIndex)
+        const createdStepIds: number[] = [];
+        if (steps && Array.isArray(steps) && steps.length > 0) {
+          for (let i = 0; i < steps.length; i++) {
+            const step = steps[i];
+            let stepDefId = step.stepDefinitionId;
+
+            // If no existing step definition, create a new one
+            if (!stepDefId && step.stepName?.trim()) {
+              const key = step.stepName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+              const existing = await tx.select().from(workflowStepDefinitions).where(eq(workflowStepDefinitions.key, key));
+              if (existing.length > 0) {
+                stepDefId = existing[0].id;
+              } else {
+                const maxOrder = await tx.select({ max: sql<number>`COALESCE(MAX(sort_order), 0)` }).from(workflowStepDefinitions);
+                const [newStep] = await tx.insert(workflowStepDefinitions).values({
+                  name: step.stepName.trim(),
+                  key,
+                  sortOrder: (maxOrder[0]?.max || 0) + 1,
+                  isActive: true,
+                  isDefault: false,
+                }).returning();
+                stepDefId = newStep.id;
+              }
+            }
+
+            if (stepDefId) {
+              const [createdStep] = await tx.insert(programWorkflowSteps).values({
+                programId: program.id,
+                stepDefinitionId: stepDefId,
+                stepOrder: i + 1,
+                isRequired: step.isRequired !== false,
+                estimatedDays: step.estimatedDays ? parseInt(step.estimatedDays) : null,
+              }).returning();
+              createdStepIds.push(createdStep.id);
+            } else {
+              createdStepIds.push(-1);
+            }
+          }
+        }
+
+        // Create inline document templates if provided (after steps so stepIndex can be resolved)
         if (documents && Array.isArray(documents) && documents.length > 0) {
-          // Filter out documents with empty names
           const validDocs = documents.filter((doc: any) => doc.documentName?.trim());
           if (validDocs.length > 0) {
             const documentEntries = validDocs.map((doc: any, index: number) => ({
@@ -140,14 +207,14 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
               documentDescription: doc.documentDescription || null,
               isRequired: doc.isRequired !== false,
               sortOrder: index,
+              stepId: doc.stepIndex !== null && doc.stepIndex !== undefined && doc.stepIndex >= 0 && doc.stepIndex < createdStepIds.length && createdStepIds[doc.stepIndex] > 0 ? createdStepIds[doc.stepIndex] : null,
             }));
             await tx.insert(programDocumentTemplates).values(documentEntries);
           }
         }
 
-        // Create inline task templates if provided
+        // Create inline task templates if provided (after steps so stepIndex can be resolved)
         if (tasks && Array.isArray(tasks) && tasks.length > 0) {
-          // Filter out tasks with empty names
           const validTasks = tasks.filter((task: any) => task.taskName?.trim());
           if (validTasks.length > 0) {
             const taskEntries = validTasks.map((task: any, index: number) => ({
@@ -157,6 +224,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
               taskCategory: task.taskCategory || 'other',
               priority: task.priority || 'medium',
               sortOrder: index,
+              stepId: task.stepIndex !== null && task.stepIndex !== undefined && task.stepIndex >= 0 && task.stepIndex < createdStepIds.length && createdStepIds[task.stepIndex] > 0 ? createdStepIds[task.stepIndex] : null,
             }));
             await tx.insert(programTaskTemplates).values(taskEntries);
           }
@@ -176,11 +244,20 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
   app.put('/api/admin/programs/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
+
+      const [existingProgram] = await db.select().from(loanPrograms).where(eq(loanPrograms.id, parseInt(id)));
+      if (!existingProgram) return res.status(404).json({ error: 'Program not found' });
+      const user = await storage.getUserById(req.user!.id);
+      if (user?.role !== 'super_admin' && existingProgram.createdBy !== req.user!.id) {
+        return res.status(403).json({ error: 'Not authorized to modify this program' });
+      }
+
       const {
         name, description, loanType,
         minLoanAmount, maxLoanAmount,
         minLtv, maxLtv,
         minInterestRate, maxInterestRate,
+        minUnits, maxUnits,
         termOptions, eligiblePropertyTypes,
         isActive, reviewGuidelines, creditPolicyId
       } = req.body;
@@ -195,6 +272,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
       if (maxLtv !== undefined) updateData.maxLtv = parseFloat(maxLtv);
       if (minInterestRate !== undefined) updateData.minInterestRate = parseFloat(minInterestRate);
       if (maxInterestRate !== undefined) updateData.maxInterestRate = parseFloat(maxInterestRate);
+      if (minUnits !== undefined) updateData.minUnits = minUnits ? parseInt(minUnits) : null;
+      if (maxUnits !== undefined) updateData.maxUnits = maxUnits ? parseInt(maxUnits) : null;
       if (termOptions !== undefined) updateData.termOptions = termOptions;
       if (eligiblePropertyTypes !== undefined) updateData.eligiblePropertyTypes = eligiblePropertyTypes;
       if (isActive !== undefined) updateData.isActive = isActive;
@@ -223,6 +302,11 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         return res.status(404).json({ error: 'Program not found' });
       }
 
+      const user = await storage.getUserById(req.user!.id);
+      if (user?.role !== 'super_admin' && program.createdBy !== req.user!.id) {
+        return res.status(403).json({ error: 'Not authorized to modify this program' });
+      }
+
       const [updated] = await db.update(loanPrograms)
         .set({ isActive: !program.isActive, updatedAt: new Date() })
         .where(eq(loanPrograms.id, parseInt(id)))
@@ -240,6 +324,13 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
     try {
       const { id } = req.params;
 
+      const [existingProgram] = await db.select().from(loanPrograms).where(eq(loanPrograms.id, parseInt(id)));
+      if (!existingProgram) return res.status(404).json({ error: 'Program not found' });
+      const user = await storage.getUserById(req.user!.id);
+      if (user?.role !== 'super_admin' && existingProgram.createdBy !== req.user!.id) {
+        return res.status(403).json({ error: 'Not authorized to delete this program' });
+      }
+
       await db.delete(loanPrograms).where(eq(loanPrograms.id, parseInt(id)));
 
       res.json({ success: true });
@@ -255,6 +346,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
   app.post('/api/admin/programs/:programId/documents', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const { programId } = req.params;
+      if (!await verifyProgramOwnership(req, res, parseInt(programId))) return;
       const { documentName, documentCategory, documentDescription, isRequired, sortOrder, stepId } = req.body;
 
       if (!documentName || !documentCategory) {
@@ -283,6 +375,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
   // Batch update document step assignments (MUST be before :docId route)
   app.put('/api/admin/programs/:programId/documents/batch-step', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
+      const { programId } = req.params;
+      if (!await verifyProgramOwnership(req, res, parseInt(programId))) return;
       const { assignments } = req.body;
       if (!Array.isArray(assignments)) {
         return res.status(400).json({ error: 'Assignments must be an array' });
@@ -295,7 +389,6 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         }
       });
       res.json({ success: true });
-      const { programId } = req.params;
       const { syncProgramToProjects } = await import('../services/projectPipeline');
       syncProgramToProjects(parseInt(programId)).catch(err => console.error('Sync error:', err));
     } catch (error) {
@@ -307,7 +400,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
   // Update document template
   app.put('/api/admin/programs/:programId/documents/:docId', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
-      const { docId } = req.params;
+      const { programId, docId } = req.params;
+      if (!await verifyProgramOwnership(req, res, parseInt(programId))) return;
       const { documentName, documentCategory, documentDescription, isRequired, sortOrder, stepId } = req.body;
 
       const updateData: any = {};
@@ -336,6 +430,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
   app.delete('/api/admin/programs/:programId/documents/:docId', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const { programId, docId } = req.params;
+      if (!await verifyProgramOwnership(req, res, parseInt(programId))) return;
 
       await db.delete(programDocumentTemplates).where(eq(programDocumentTemplates.id, parseInt(docId)));
 
@@ -354,6 +449,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
   app.post('/api/admin/programs/:programId/tasks', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const { programId } = req.params;
+      if (!await verifyProgramOwnership(req, res, parseInt(programId))) return;
       const { taskName, taskDescription, taskCategory, priority, sortOrder, stepId, assignToRole } = req.body;
 
       if (!taskName) {
@@ -383,6 +479,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
   // Batch update task step assignments (MUST be before :taskId route)
   app.put('/api/admin/programs/:programId/tasks/batch-step', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
+      const { programId } = req.params;
+      if (!await verifyProgramOwnership(req, res, parseInt(programId))) return;
       const { assignments } = req.body;
       if (!Array.isArray(assignments)) {
         return res.status(400).json({ error: 'Assignments must be an array' });
@@ -397,7 +495,6 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         }
       });
       res.json({ success: true });
-      const { programId } = req.params;
       const { syncProgramToProjects } = await import('../services/projectPipeline');
       syncProgramToProjects(parseInt(programId)).catch(err => console.error('Sync error:', err));
     } catch (error) {
@@ -409,7 +506,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
   // Update task template
   app.put('/api/admin/programs/:programId/tasks/:taskId', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
-      const { taskId } = req.params;
+      const { programId, taskId } = req.params;
+      if (!await verifyProgramOwnership(req, res, parseInt(programId))) return;
       const { taskName, taskDescription, taskCategory, priority, sortOrder, stepId, assignToRole } = req.body;
 
       const updateData: any = {};
@@ -439,6 +537,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
   app.delete('/api/admin/programs/:programId/tasks/:taskId', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const { programId, taskId } = req.params;
+      if (!await verifyProgramOwnership(req, res, parseInt(programId))) return;
 
       await db.delete(programTaskTemplates).where(eq(programTaskTemplates.id, parseInt(taskId)));
 
@@ -537,6 +636,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
   app.get('/api/admin/programs/:programId/workflow-steps', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const { programId } = req.params;
+      if (!await verifyProgramOwnership(req, res, parseInt(programId))) return;
       const steps = await db.select({
         id: programWorkflowSteps.id,
         programId: programWorkflowSteps.programId,
@@ -569,6 +669,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
   app.put('/api/admin/programs/:programId/workflow-steps', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const { programId } = req.params;
+      if (!await verifyProgramOwnership(req, res, parseInt(programId))) return;
       const { steps } = req.body;
       if (!Array.isArray(steps)) {
         return res.status(400).json({ error: 'Steps must be an array' });
@@ -694,6 +795,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
   app.get('/api/admin/programs/:programId/review-rules', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const programId = parseInt(req.params.programId);
+      if (!await verifyProgramOwnership(req, res, programId)) return;
       const rules = await storage.getReviewRulesByProgramId(programId);
       res.json({ rules });
     } catch (error: any) {
@@ -705,6 +807,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
   app.post('/api/admin/programs/:programId/review-rules', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const programId = parseInt(req.params.programId);
+      if (!await verifyProgramOwnership(req, res, programId)) return;
       const { rules } = req.body;
       if (!Array.isArray(rules)) {
         return res.status(400).json({ error: 'rules must be an array' });

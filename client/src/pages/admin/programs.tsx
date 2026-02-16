@@ -49,6 +49,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import ProgramWorkflowEditor from "@/components/ProgramWorkflowEditor";
+import CreditPoliciesTab from "@/components/CreditPoliciesTab";
 
 interface LoanProgram {
   id: number;
@@ -74,6 +75,7 @@ interface LoanProgram {
 interface ProgramDocument {
   id: number;
   programId: number;
+  stepId: number | null;
   documentName: string;
   documentCategory: string;
   documentDescription: string | null;
@@ -84,6 +86,7 @@ interface ProgramDocument {
 interface ProgramTask {
   id: number;
   programId: number;
+  stepId: number | null;
   taskName: string;
   taskDescription: string | null;
   taskCategory: string | null;
@@ -165,6 +168,7 @@ export default function AdminPrograms() {
     documentCategory: string;
     documentDescription: string;
     isRequired: boolean;
+    stepIndex: number | null;
   }
 
   interface InlineTask {
@@ -173,6 +177,14 @@ export default function AdminPrograms() {
     taskDescription: string;
     taskCategory: string;
     priority: string;
+    stepIndex: number | null;
+  }
+
+  interface InlineStep {
+    id: string;
+    stepName: string;
+    stepDefinitionId: number | null;
+    isRequired: boolean;
   }
 
   // Form states
@@ -186,6 +198,8 @@ export default function AdminPrograms() {
     maxLtv: "80",
     minInterestRate: "9",
     maxInterestRate: "12",
+    minUnits: "",
+    maxUnits: "",
     termOptions: "12, 24",
     eligiblePropertyTypes: [] as string[],
     reviewGuidelines: "",
@@ -194,12 +208,14 @@ export default function AdminPrograms() {
 
   const [inlineDocuments, setInlineDocuments] = useState<InlineDocument[]>([]);
   const [inlineTasks, setInlineTasks] = useState<InlineTask[]>([]);
+  const [inlineSteps, setInlineSteps] = useState<InlineStep[]>([]);
 
   const [documentForm, setDocumentForm] = useState({
     documentName: "",
     documentCategory: "borrower_docs",
     documentDescription: "",
     isRequired: true,
+    stepId: null as number | null,
   });
 
   const [taskForm, setTaskForm] = useState({
@@ -207,6 +223,7 @@ export default function AdminPrograms() {
     taskDescription: "",
     taskCategory: "other",
     priority: "medium",
+    stepId: null as number | null,
   });
 
 
@@ -220,10 +237,15 @@ export default function AdminPrograms() {
     queryKey: ["/api/admin/credit-policies"],
   });
 
+  const { data: availableSteps } = useQuery<{ id: number; name: string; key: string; description: string | null; color: string | null; icon: string | null }[]>({
+    queryKey: ["/api/admin/workflow-steps"],
+  });
+
   const { data: programDetails, isLoading: loadingDetails } = useQuery<{
     program: LoanProgram;
     documents: ProgramDocument[];
     tasks: ProgramTask[];
+    workflowSteps: { id: number; programId: number; stepDefinitionId: number; stepOrder: number; isRequired: boolean; estimatedDays: number | null; createdAt: string; definition: { id: number; name: string; key: string; description: string | null; color: string | null; icon: string | null } }[];
   }>({
     queryKey: ["/api/admin/programs", selectedProgram?.id],
     enabled: !!selectedProgram?.id,
@@ -239,14 +261,15 @@ export default function AdminPrograms() {
       const validTasks = inlineTasks
         .filter(task => task.taskName.trim())
         .map(({ id, ...task }) => task);
+      const validSteps = inlineSteps
+        .filter(step => step.stepName.trim() || step.stepDefinitionId)
+        .map(({ id, ...step }) => step);
       
-      return apiRequest("/api/admin/programs", {
-        method: "POST",
-        body: JSON.stringify({
-          ...data,
-          documents: validDocuments,
-          tasks: validTasks,
-        }),
+      return apiRequest("POST", "/api/admin/programs", {
+        ...data,
+        documents: validDocuments,
+        tasks: validTasks,
+        steps: validSteps,
       });
     },
     onSuccess: () => {
@@ -255,6 +278,7 @@ export default function AdminPrograms() {
       resetProgramForm();
       setInlineDocuments([]);
       setInlineTasks([]);
+      setInlineSteps([]);
       toast({ title: "Program created successfully" });
     },
     onError: () => {
@@ -374,6 +398,8 @@ export default function AdminPrograms() {
       maxLtv: "80",
       minInterestRate: "9",
       maxInterestRate: "12",
+      minUnits: "",
+      maxUnits: "",
       termOptions: "12, 24",
       eligiblePropertyTypes: [],
       reviewGuidelines: "",
@@ -381,6 +407,7 @@ export default function AdminPrograms() {
     });
     setInlineDocuments([]);
     setInlineTasks([]);
+    setInlineSteps([]);
   };
 
   const addInlineDocument = () => {
@@ -392,6 +419,7 @@ export default function AdminPrograms() {
         documentCategory: "borrower_docs",
         documentDescription: "",
         isRequired: true,
+        stepIndex: null,
       },
     ]);
   };
@@ -417,6 +445,7 @@ export default function AdminPrograms() {
         taskDescription: "",
         taskCategory: "other",
         priority: "medium",
+        stepIndex: null,
       },
     ]);
   };
@@ -433,12 +462,37 @@ export default function AdminPrograms() {
     setInlineTasks(inlineTasks.filter((task) => task.id !== id));
   };
 
+  const addInlineStep = () => {
+    setInlineSteps([
+      ...inlineSteps,
+      {
+        id: crypto.randomUUID(),
+        stepName: "",
+        stepDefinitionId: null,
+        isRequired: true,
+      },
+    ]);
+  };
+
+  const updateInlineStep = (id: string, field: keyof InlineStep, value: any) => {
+    setInlineSteps(
+      inlineSteps.map((step) =>
+        step.id === id ? { ...step, [field]: value } : step
+      )
+    );
+  };
+
+  const removeInlineStep = (id: string) => {
+    setInlineSteps(inlineSteps.filter((step) => step.id !== id));
+  };
+
   const resetDocumentForm = () => {
     setDocumentForm({
       documentName: "",
       documentCategory: "borrower_docs",
       documentDescription: "",
       isRequired: true,
+      stepId: null,
     });
   };
 
@@ -448,6 +502,7 @@ export default function AdminPrograms() {
       taskDescription: "",
       taskCategory: "other",
       priority: "medium",
+      stepId: null,
     });
   };
 
@@ -462,14 +517,33 @@ export default function AdminPrograms() {
       maxLtv: String(program.maxLtv || 80),
       minInterestRate: String(program.minInterestRate || 9),
       maxInterestRate: String(program.maxInterestRate || 12),
+      minUnits: program.minUnits != null ? String(program.minUnits) : "",
+      maxUnits: program.maxUnits != null ? String(program.maxUnits) : "",
       termOptions: program.termOptions || "",
       eligiblePropertyTypes: program.eligiblePropertyTypes || [],
       reviewGuidelines: program.reviewGuidelines || "",
       creditPolicyId: (program as any).creditPolicyId || null,
     });
     setSelectedProgram(program);
+    setCustomLoanType("");
+    setCustomPropertyType("");
     setShowEditProgram(true);
   };
+
+  const [customLoanType, setCustomLoanType] = useState("");
+  const [customPropertyType, setCustomPropertyType] = useState("");
+
+  const loanTypeOptions = [
+    { value: "dscr", label: "DSCR (Rental)" },
+    { value: "rtl", label: "RTL (Fix & Flip)" },
+  ];
+
+  const allPropertyTypeOptions = [
+    ...propertyTypeOptions,
+    ...programForm.eligiblePropertyTypes
+      .filter((t) => !propertyTypeOptions.some((p) => p.value === t))
+      .map((t) => ({ value: t, label: t })),
+  ];
 
   const handlePropertyTypeToggle = (type: string) => {
     setProgramForm((prev) => ({
@@ -479,6 +553,20 @@ export default function AdminPrograms() {
         : [...prev.eligiblePropertyTypes, type],
     }));
   };
+
+  const handleAddCustomPropertyType = () => {
+    const trimmed = customPropertyType.trim();
+    if (!trimmed) return;
+    if (!programForm.eligiblePropertyTypes.includes(trimmed)) {
+      setProgramForm((prev) => ({
+        ...prev,
+        eligiblePropertyTypes: [...prev.eligiblePropertyTypes, trimmed],
+      }));
+    }
+    setCustomPropertyType("");
+  };
+
+  const isCustomLoanType = programForm.loanType && !loanTypeOptions.some((o) => o.value === programForm.loanType);
 
   return (
     <div className="p-6 space-y-6">
@@ -504,6 +592,10 @@ export default function AdminPrograms() {
           <TabsTrigger value="tasks" className="gap-2" data-testid="tab-tasks">
             <ListChecks className="h-4 w-4" />
             Tasks
+          </TabsTrigger>
+          <TabsTrigger value="credit-policies" className="gap-2" data-testid="tab-credit-policies">
+            <ShieldCheck className="h-4 w-4" />
+            Credit Policies
           </TabsTrigger>
         </TabsList>
 
@@ -555,20 +647,55 @@ export default function AdminPrograms() {
                   </div>
                   <div className="space-y-2">
                     <Label>Loan Type</Label>
-                    <Select
-                      value={programForm.loanType}
-                      onValueChange={(v) =>
-                        setProgramForm({ ...programForm, loanType: v })
-                      }
-                    >
-                      <SelectTrigger data-testid="select-loan-type">
-                        <SelectValue placeholder="Select loan type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="rtl">RTL (Fix & Flip)</SelectItem>
-                        <SelectItem value="dscr">DSCR (Rental)</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {loanTypeOptions.map((opt) => (
+                        <Badge
+                          key={opt.value}
+                          variant={programForm.loanType === opt.value ? "default" : "outline"}
+                          className="cursor-pointer"
+                          onClick={() => {
+                            setProgramForm({ ...programForm, loanType: opt.value });
+                            setCustomLoanType("");
+                          }}
+                          data-testid={`badge-loan-type-${opt.value}`}
+                        >
+                          {opt.label}
+                        </Badge>
+                      ))}
+                      {isCustomLoanType && (
+                        <Badge variant="default" data-testid="badge-loan-type-custom">
+                          {programForm.loanType}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Or type a custom loan type..."
+                        value={customLoanType}
+                        onChange={(e) => setCustomLoanType(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && customLoanType.trim()) {
+                            e.preventDefault();
+                            setProgramForm({ ...programForm, loanType: customLoanType.trim() });
+                            setCustomLoanType("");
+                          }
+                        }}
+                        data-testid="input-custom-loan-type"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!customLoanType.trim()}
+                        onClick={() => {
+                          setProgramForm({ ...programForm, loanType: customLoanType.trim() });
+                          setCustomLoanType("");
+                        }}
+                        data-testid="button-add-custom-loan-type"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -644,6 +771,32 @@ export default function AdminPrograms() {
                       />
                     </div>
                   </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Min Units (optional)</Label>
+                      <Input
+                        type="number"
+                        placeholder="e.g. 1"
+                        value={programForm.minUnits}
+                        onChange={(e) =>
+                          setProgramForm({ ...programForm, minUnits: e.target.value })
+                        }
+                        data-testid="input-min-units"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Max Units (optional)</Label>
+                      <Input
+                        type="number"
+                        placeholder="e.g. 100"
+                        value={programForm.maxUnits}
+                        onChange={(e) =>
+                          setProgramForm({ ...programForm, maxUnits: e.target.value })
+                        }
+                        data-testid="input-max-units"
+                      />
+                    </div>
+                  </div>
                   <div className="space-y-2">
                     <Label>Term Options (months)</Label>
                     <Input
@@ -658,7 +811,7 @@ export default function AdminPrograms() {
                   <div className="space-y-2">
                     <Label>Eligible Property Types</Label>
                     <div className="flex flex-wrap gap-2">
-                      {propertyTypeOptions.map((type) => (
+                      {allPropertyTypeOptions.map((type) => (
                         <Badge
                           key={type.value}
                           variant={
@@ -673,6 +826,30 @@ export default function AdminPrograms() {
                           {type.label}
                         </Badge>
                       ))}
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                      <Input
+                        placeholder="Add custom property type..."
+                        value={customPropertyType}
+                        onChange={(e) => setCustomPropertyType(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddCustomPropertyType();
+                          }
+                        }}
+                        data-testid="input-custom-property-type"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!customPropertyType.trim()}
+                        onClick={handleAddCustomPropertyType}
+                        data-testid="button-add-custom-property-type"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
 
@@ -774,6 +951,32 @@ export default function AdminPrograms() {
                                   />
                                   <Label className="text-sm">Required</Label>
                                 </div>
+                                {inlineSteps.length > 0 && (
+                                  <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">Assign to Step</Label>
+                                    <Select
+                                      value={doc.stepIndex !== null ? String(doc.stepIndex) : "none"}
+                                      onValueChange={(v) =>
+                                        updateInlineDocument(doc.id, "stepIndex", v === "none" ? null : parseInt(v))
+                                      }
+                                    >
+                                      <SelectTrigger data-testid={`select-doc-step-${index}`}>
+                                        <SelectValue placeholder="No step assigned" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="none">No step assigned</SelectItem>
+                                        {inlineSteps.map((step, si) => {
+                                          const name = step.stepName || (availableSteps?.find(s => s.id === step.stepDefinitionId)?.name) || `Step ${si + 1}`;
+                                          return name.trim() ? (
+                                            <SelectItem key={step.id} value={String(si)}>
+                                              {name}
+                                            </SelectItem>
+                                          ) : null;
+                                        })}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                )}
                               </div>
                               <Button
                                 type="button"
@@ -871,6 +1074,32 @@ export default function AdminPrograms() {
                                     </SelectContent>
                                   </Select>
                                 </div>
+                                {inlineSteps.length > 0 && (
+                                  <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">Assign to Step</Label>
+                                    <Select
+                                      value={task.stepIndex !== null ? String(task.stepIndex) : "none"}
+                                      onValueChange={(v) =>
+                                        updateInlineTask(task.id, "stepIndex", v === "none" ? null : parseInt(v))
+                                      }
+                                    >
+                                      <SelectTrigger data-testid={`select-task-step-${index}`}>
+                                        <SelectValue placeholder="No step assigned" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="none">No step assigned</SelectItem>
+                                        {inlineSteps.map((step, si) => {
+                                          const name = step.stepName || (availableSteps?.find(s => s.id === step.stepDefinitionId)?.name) || `Step ${si + 1}`;
+                                          return name.trim() ? (
+                                            <SelectItem key={step.id} value={String(si)}>
+                                              {name}
+                                            </SelectItem>
+                                          ) : null;
+                                        })}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                )}
                               </div>
                               <Button
                                 type="button"
@@ -878,6 +1107,87 @@ export default function AdminPrograms() {
                                 size="icon"
                                 onClick={() => removeInlineTask(task.id)}
                                 data-testid={`button-remove-task-${index}`}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Inline Workflow Steps Section */}
+                  <div className="space-y-3 border-t pt-4">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-base font-semibold flex items-center gap-2">
+                        <Workflow className="h-4 w-4" />
+                        Workflow Steps ({inlineSteps.length})
+                      </Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addInlineStep}
+                        data-testid="button-add-inline-step"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Step
+                      </Button>
+                    </div>
+                    {inlineSteps.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No workflow steps added yet. Click "Add Step" to add one.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        {inlineSteps.map((step, index) => (
+                          <Card key={step.id} className="p-3">
+                            <div className="flex items-start gap-2">
+                              <div className="flex-1 space-y-2">
+                                <Input
+                                  placeholder="Step name (e.g., Underwriting)"
+                                  value={step.stepName}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const match = availableSteps?.find(
+                                      (s) => s.name.toLowerCase() === val.trim().toLowerCase()
+                                    );
+                                    setInlineSteps((prev) =>
+                                      prev.map((s) =>
+                                        s.id === step.id
+                                          ? { ...s, stepName: val, stepDefinitionId: match ? match.id : null }
+                                          : s
+                                      )
+                                    );
+                                  }}
+                                  list={`step-suggestions-${index}`}
+                                  data-testid={`input-step-name-${index}`}
+                                />
+                                {availableSteps && availableSteps.length > 0 && (
+                                  <datalist id={`step-suggestions-${index}`}>
+                                    {availableSteps.map((s) => (
+                                      <option key={s.id} value={s.name} />
+                                    ))}
+                                  </datalist>
+                                )}
+                                <div className="flex items-center gap-2">
+                                  <Switch
+                                    checked={step.isRequired}
+                                    onCheckedChange={(v) =>
+                                      updateInlineStep(step.id, "isRequired", v)
+                                    }
+                                    data-testid={`switch-step-required-${index}`}
+                                  />
+                                  <Label className="text-sm">Required</Label>
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeInlineStep(step.id)}
+                                data-testid={`button-remove-step-${index}`}
                               >
                                 <X className="h-4 w-4" />
                               </Button>
@@ -1165,6 +1475,11 @@ export default function AdminPrograms() {
             </div>
           )}
         </TabsContent>
+
+        {/* Credit Policies Tab */}
+        <TabsContent value="credit-policies" className="space-y-4">
+          <CreditPoliciesTab />
+        </TabsContent>
       </Tabs>
 
       {/* Edit Program Dialog */}
@@ -1195,18 +1510,55 @@ export default function AdminPrograms() {
             </div>
             <div className="space-y-2">
               <Label>Loan Type</Label>
-              <Select
-                value={programForm.loanType}
-                onValueChange={(v) => setProgramForm({ ...programForm, loanType: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="rtl">RTL (Fix & Flip)</SelectItem>
-                  <SelectItem value="dscr">DSCR (Rental)</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {loanTypeOptions.map((opt) => (
+                  <Badge
+                    key={opt.value}
+                    variant={programForm.loanType === opt.value ? "default" : "outline"}
+                    className="cursor-pointer"
+                    onClick={() => {
+                      setProgramForm({ ...programForm, loanType: opt.value });
+                      setCustomLoanType("");
+                    }}
+                    data-testid={`badge-edit-loan-type-${opt.value}`}
+                  >
+                    {opt.label}
+                  </Badge>
+                ))}
+                {isCustomLoanType && (
+                  <Badge variant="default" data-testid="badge-edit-loan-type-custom">
+                    {programForm.loanType}
+                  </Badge>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Or type a custom loan type..."
+                  value={customLoanType}
+                  onChange={(e) => setCustomLoanType(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && customLoanType.trim()) {
+                      e.preventDefault();
+                      setProgramForm({ ...programForm, loanType: customLoanType.trim() });
+                      setCustomLoanType("");
+                    }
+                  }}
+                  data-testid="input-edit-custom-loan-type"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!customLoanType.trim()}
+                  onClick={() => {
+                    setProgramForm({ ...programForm, loanType: customLoanType.trim() });
+                    setCustomLoanType("");
+                  }}
+                  data-testid="button-edit-add-custom-loan-type"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -1276,6 +1628,32 @@ export default function AdminPrograms() {
                 />
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Min Units (optional)</Label>
+                <Input
+                  type="number"
+                  placeholder="e.g. 1"
+                  value={programForm.minUnits}
+                  onChange={(e) =>
+                    setProgramForm({ ...programForm, minUnits: e.target.value })
+                  }
+                  data-testid="input-edit-min-units"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Max Units (optional)</Label>
+                <Input
+                  type="number"
+                  placeholder="e.g. 100"
+                  value={programForm.maxUnits}
+                  onChange={(e) =>
+                    setProgramForm({ ...programForm, maxUnits: e.target.value })
+                  }
+                  data-testid="input-edit-max-units"
+                />
+              </div>
+            </div>
             <div className="space-y-2">
               <Label>Term Options (months)</Label>
               <Input
@@ -1288,7 +1666,7 @@ export default function AdminPrograms() {
             <div className="space-y-2">
               <Label>Eligible Property Types</Label>
               <div className="flex flex-wrap gap-2">
-                {propertyTypeOptions.map((type) => (
+                {allPropertyTypeOptions.map((type) => (
                   <Badge
                     key={type.value}
                     variant={
@@ -1298,10 +1676,35 @@ export default function AdminPrograms() {
                     }
                     className="cursor-pointer"
                     onClick={() => handlePropertyTypeToggle(type.value)}
+                    data-testid={`badge-edit-property-${type.value}`}
                   >
                     {type.label}
                   </Badge>
                 ))}
+              </div>
+              <div className="flex gap-2 mt-2">
+                <Input
+                  placeholder="Add custom property type..."
+                  value={customPropertyType}
+                  onChange={(e) => setCustomPropertyType(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddCustomPropertyType();
+                    }
+                  }}
+                  data-testid="input-edit-custom-property-type"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!customPropertyType.trim()}
+                  onClick={handleAddCustomPropertyType}
+                  data-testid="button-edit-add-custom-property-type"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
               </div>
             </div>
             <div className="space-y-2">
@@ -1423,6 +1826,29 @@ export default function AdminPrograms() {
               />
               <Label>Required Document</Label>
             </div>
+            {programDetails?.workflowSteps && programDetails.workflowSteps.length > 0 && (
+              <div className="space-y-2">
+                <Label>Assign to Workflow Step</Label>
+                <Select
+                  value={documentForm.stepId ? String(documentForm.stepId) : "none"}
+                  onValueChange={(v) =>
+                    setDocumentForm({ ...documentForm, stepId: v === "none" ? null : parseInt(v) })
+                  }
+                >
+                  <SelectTrigger data-testid="select-doc-step">
+                    <SelectValue placeholder="No step assigned" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No step assigned</SelectItem>
+                    {programDetails.workflowSteps.map((step) => (
+                      <SelectItem key={step.id} value={String(step.id)}>
+                        {step.definition.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button
@@ -1516,6 +1942,29 @@ export default function AdminPrograms() {
                 data-testid="input-task-description"
               />
             </div>
+            {programDetails?.workflowSteps && programDetails.workflowSteps.length > 0 && (
+              <div className="space-y-2">
+                <Label>Assign to Workflow Step</Label>
+                <Select
+                  value={taskForm.stepId ? String(taskForm.stepId) : "none"}
+                  onValueChange={(v) =>
+                    setTaskForm({ ...taskForm, stepId: v === "none" ? null : parseInt(v) })
+                  }
+                >
+                  <SelectTrigger data-testid="select-task-step">
+                    <SelectValue placeholder="No step assigned" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No step assigned</SelectItem>
+                    {programDetails.workflowSteps.map((step) => (
+                      <SelectItem key={step.id} value={String(step.id)}>
+                        {step.definition.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button
@@ -1754,6 +2203,7 @@ function DocumentList({
     program: LoanProgram;
     documents: ProgramDocument[];
     tasks: ProgramTask[];
+    workflowSteps: { id: number; programId: number; stepDefinitionId: number; stepOrder: number; isRequired: boolean; estimatedDays: number | null; createdAt: string; definition: { id: number; name: string; key: string; description: string | null; color: string | null; icon: string | null } }[];
   }>({
     queryKey: ["/api/admin/programs", programId],
   });
@@ -1789,6 +2239,14 @@ function DocumentList({
                       Required
                     </Badge>
                   )}
+                  {doc.stepId && data?.workflowSteps && (() => {
+                    const step = data.workflowSteps.find(s => s.id === doc.stepId);
+                    return step ? (
+                      <Badge variant="outline" className="ml-1 text-xs">
+                        {step.definition.name}
+                      </Badge>
+                    ) : null;
+                  })()}
                 </div>
               </div>
             </div>
@@ -1840,6 +2298,7 @@ function TaskList({
     program: LoanProgram;
     documents: ProgramDocument[];
     tasks: ProgramTask[];
+    workflowSteps: { id: number; programId: number; stepDefinitionId: number; stepOrder: number; isRequired: boolean; estimatedDays: number | null; createdAt: string; definition: { id: number; name: string; key: string; description: string | null; color: string | null; icon: string | null } }[];
   }>({
     queryKey: ["/api/admin/programs", programId],
   });
@@ -1880,12 +2339,20 @@ function TaskList({
             <ListChecks className="h-4 w-4 text-muted-foreground" />
             <div>
               <div className="font-medium text-sm">{task.taskName}</div>
-              <div className="text-xs text-muted-foreground flex items-center gap-2">
+              <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
                 {taskCategories.find((c) => c.value === task.taskCategory)?.label ||
                   task.taskCategory}
                 <Badge variant={getPriorityVariant(task.priority) as any}>
                   {task.priority}
                 </Badge>
+                {task.stepId && data?.workflowSteps && (() => {
+                  const step = data.workflowSteps.find(s => s.id === task.stepId);
+                  return step ? (
+                    <Badge variant="outline" className="text-xs">
+                      {step.definition.name}
+                    </Badge>
+                  ) : null;
+                })()}
               </div>
             </div>
           </div>
