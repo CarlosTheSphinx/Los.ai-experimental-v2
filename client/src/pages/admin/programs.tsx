@@ -1140,28 +1140,26 @@ export default function AdminPrograms() {
                           <Card key={step.id} className="p-3">
                             <div className="flex items-start gap-2">
                               <div className="flex-1 space-y-2">
-                                <Select
-                                  value={step.stepDefinitionId ? String(step.stepDefinitionId) : ""}
-                                  onValueChange={(v) => {
-                                    const defId = parseInt(v);
-                                    const def = availableSteps?.find((s) => s.id === defId);
-                                    updateInlineStep(step.id, "stepDefinitionId", defId);
-                                    if (def) {
-                                      updateInlineStep(step.id, "stepName", def.name);
-                                    }
+                                <Input
+                                  placeholder="Step name (e.g., Underwriting)"
+                                  value={step.stepName}
+                                  onChange={(e) => {
+                                    updateInlineStep(step.id, "stepName", e.target.value);
+                                    const match = availableSteps?.find(
+                                      (s) => s.name.toLowerCase() === e.target.value.trim().toLowerCase()
+                                    );
+                                    updateInlineStep(step.id, "stepDefinitionId", match ? match.id : null);
                                   }}
-                                >
-                                  <SelectTrigger data-testid={`select-step-def-${index}`}>
-                                    <SelectValue placeholder="Select a step..." />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {availableSteps?.map((s) => (
-                                      <SelectItem key={s.id} value={String(s.id)}>
-                                        {s.name}
-                                      </SelectItem>
+                                  list={`step-suggestions-${index}`}
+                                  data-testid={`input-step-name-${index}`}
+                                />
+                                {availableSteps && availableSteps.length > 0 && (
+                                  <datalist id={`step-suggestions-${index}`}>
+                                    {availableSteps.map((s) => (
+                                      <option key={s.id} value={s.name} />
                                     ))}
-                                  </SelectContent>
-                                </Select>
+                                  </datalist>
+                                )}
                                 <div className="flex items-center gap-2">
                                   <Switch
                                     checked={step.isRequired}
