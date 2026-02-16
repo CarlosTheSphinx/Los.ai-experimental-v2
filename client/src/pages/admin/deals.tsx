@@ -234,113 +234,56 @@ function PipelineByProgram({ programs }: { programs: ProgramPipeline[] }) {
     <Card data-testid="card-pipeline-by-program">
       <CardHeader className="pb-3">
         <CardTitle className="text-lg">Pipeline by Program</CardTitle>
-        <CardDescription>Deal distribution across programs and stages</CardDescription>
+        <CardDescription>Programs and their stages from left to right</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {programs.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">No deals in pipeline</p>
         ) : (
-          programs.map((program) => {
-            const maxCount = Math.max(...(program.stages.length > 0 ? program.stages.map(s => s.count) : [0]), 1);
-            return (
-              <div key={program.programId} className="space-y-3" data-testid={`pipeline-program-${program.programId}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-foreground">{program.programName}</span>
-                    <Badge variant="secondary" className="text-xs">{program.totalDeals} {program.totalDeals === 1 ? 'deal' : 'deals'}</Badge>
-                  </div>
-                </div>
-                {program.stages.length > 0 ? (
-                  <div className="space-y-2 pl-1">
-                    {program.stages.map((stage, idx) => {
-                      const pct = program.totalDeals > 0 ? Math.round((stage.count / program.totalDeals) * 100) : 0;
-                      return (
-                        <div key={idx} className="space-y-1">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">{stage.label}</span>
-                            <div className="flex items-center gap-2">
-                              <span className="text-muted-foreground font-medium">{stage.count}</span>
-                              <span className="text-xs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
-                                {pct}%
-                              </span>
-                            </div>
-                          </div>
-                          <div className="w-full h-5 rounded-md overflow-hidden bg-muted">
-                            <div
-                              className="h-full rounded-md transition-all duration-500"
-                              style={{
-                                width: `${Math.max((stage.count / maxCount) * 100, 4)}%`,
-                                backgroundColor: stage.color || 'hsl(212 67% 51%)',
-                              }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground pl-1">No workflow stages configured</p>
-                )}
-                {program !== programs[programs.length - 1] && (
-                  <div className="border-b" />
-                )}
+          programs.map((program) => (
+            <div key={program.programId} className="space-y-3" data-testid={`pipeline-program-${program.programId}`}>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-foreground">{program.programName}</span>
+                <Badge variant="secondary" className="text-xs">
+                  {program.totalDeals} {program.totalDeals === 1 ? 'deal' : 'deals'}
+                </Badge>
               </div>
-            );
-          })
-        )}
-
-        <div className="pt-3 border-t">
-          <div className="flex items-center justify-between">
-            <span className="font-medium text-muted-foreground">Total in Pipeline</span>
-            <div className="flex items-center gap-3">
-              <span className="text-2xl font-bold text-primary">{totalDeals}</span>
-              <span className="text-sm text-muted-foreground">deals</span>
+              {program.stages.length > 0 ? (
+                <div className="flex items-stretch gap-0 overflow-x-auto">
+                  {program.stages.map((stage, idx) => (
+                    <div
+                      key={idx}
+                      className="flex-1 min-w-0 flex flex-col items-center text-center relative"
+                      data-testid={`pipeline-stage-${program.programId}-${idx}`}
+                    >
+                      <div
+                        className="w-full py-3 px-2 flex flex-col items-center justify-center gap-1"
+                        style={{
+                          backgroundColor: stage.color || 'hsl(212 67% 51%)',
+                          opacity: stage.count > 0 ? 1 : 0.4,
+                          borderTopLeftRadius: idx === 0 ? '0.375rem' : 0,
+                          borderBottomLeftRadius: idx === 0 ? '0.375rem' : 0,
+                          borderTopRightRadius: idx === program.stages.length - 1 ? '0.375rem' : 0,
+                          borderBottomRightRadius: idx === program.stages.length - 1 ? '0.375rem' : 0,
+                        }}
+                      >
+                        <span className="text-lg font-bold text-white drop-shadow-sm">{stage.count}</span>
+                      </div>
+                      <span className="text-[11px] text-muted-foreground mt-1.5 leading-tight px-0.5 truncate w-full">
+                        {stage.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No workflow stages configured</p>
+              )}
+              {program !== programs[programs.length - 1] && (
+                <div className="border-b" />
+              )}
             </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function PipelineByStage({ stageStats }: { stageStats: StageInfo[] }) {
-  const totalDeals = stageStats.reduce((sum, s) => sum + s.count, 0);
-  const maxCount = Math.max(...stageStats.map(s => s.count), 1);
-
-  return (
-    <Card data-testid="card-pipeline-by-stage">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-lg">Pipeline by Program</CardTitle>
-        <CardDescription>Deal count and percentage at each stage</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-3">
-          {stageStats.map((stage, index) => {
-            const pct = totalDeals > 0 ? Math.round((stage.count / totalDeals) * 100) : 0;
-            return (
-              <div key={index} className="space-y-1.5">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-foreground">{stage.label}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground font-semibold">{stage.count} deals</span>
-                    <span className="text-xs font-bold px-2 py-1 rounded-full bg-muted text-muted-foreground">
-                      {pct}%
-                    </span>
-                  </div>
-                </div>
-                <div className="w-full h-5 rounded-md overflow-hidden bg-muted">
-                  <div
-                    className="h-full rounded-md transition-all duration-500"
-                    style={{
-                      width: `${Math.max((stage.count / maxCount) * 100, 4)}%`,
-                      backgroundColor: stage.color || 'hsl(212 67% 51%)',
-                    }}
-                  />
-                </div>
-              </div>
-            );
-          })}
-        </div>
+          ))
+        )}
 
         <div className="pt-3 border-t">
           <div className="flex items-center justify-between">
@@ -1066,14 +1009,9 @@ export default function AdminDeals({ embedded = false }: { embedded?: boolean })
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {stats?.pipelineByProgram && stats.pipelineByProgram.length > 0 && (
-          <PipelineByProgram programs={stats.pipelineByProgram} />
-        )}
-        {stats?.stageStats && stats.stageStats.length > 0 && (
-          <PipelineByStage stageStats={stats.stageStats} />
-        )}
-      </div>
+      {stats?.pipelineByProgram && stats.pipelineByProgram.length > 0 && (
+        <PipelineByProgram programs={stats.pipelineByProgram} />
+      )}
 
       <div className="flex flex-wrap gap-2">
         <Badge variant="outline" className="gap-1.5 cursor-pointer hover:bg-accent">
