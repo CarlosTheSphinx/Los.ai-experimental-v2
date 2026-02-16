@@ -347,7 +347,10 @@ export const projects = pgTable("projects", {
   borrowerPortalToken: varchar("borrower_portal_token", { length: 255 }).unique(),
   borrowerPortalEnabled: boolean("borrower_portal_enabled").default(true),
   borrowerPortalLastViewed: timestamp("borrower_portal_last_viewed"),
-  
+
+  brokerPortalToken: varchar("broker_portal_token", { length: 255 }).unique(),
+  brokerPortalEnabled: boolean("broker_portal_enabled").default(true),
+
   notes: text("notes"),
   internalNotes: text("internal_notes"),
   isArchived: boolean("is_archived").default(false),
@@ -2397,4 +2400,19 @@ export const dealStories = pgTable("deal_stories", {
 
 export const insertDealStorySchema = createInsertSchema(dealStories).omit({ id: true, createdAt: true, updatedAt: true });
 export type DealStory = typeof dealStories.$inferSelect;
+
+// Platform Settings - global configuration for the platform
+export const platformSettings = pgTable("platform_settings", {
+  id: serial("id").primaryKey(),
+  aiAgentsEnabled: boolean("ai_agents_enabled").default(true).notNull(),
+  commercialLendingEnabled: boolean("commercial_lending_enabled").default(true).notNull(),
+  documentTemplatesEnabled: boolean("document_templates_enabled").default(true).notNull(),
+  smartProspectingEnabled: boolean("smart_prospecting_enabled").default(false).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  updatedBy: integer("updated_by").references(() => users.id, { onDelete: 'set null' }),
+});
+
+export const insertPlatformSettingsSchema = createInsertSchema(platformSettings).omit({ id: true, updatedAt: true });
+export type PlatformSettings = typeof platformSettings.$inferSelect;
+export type InsertPlatformSettings = z.infer<typeof insertPlatformSettingsSchema>;
 export type InsertDealStory = z.infer<typeof insertDealStorySchema>;

@@ -310,4 +310,93 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
       res.status(500).json({ error: 'Failed to complete upload' });
     }
   });
+
+  // ==================== BROKER PORTAL ENDPOINT ====================
+
+  app.get('/api/broker-portal/:token', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+
+      const project = await storage.getProjectByBrokerToken(token);
+      if (!project) {
+        return res.status(404).json({ error: 'Deal not found or link is invalid' });
+      }
+
+      if (!project.brokerPortalEnabled) {
+        return res.status(403).json({ error: 'Broker portal is disabled for this deal' });
+      }
+
+      // Fetch program name
+      let programName: string | null = null;
+      if (project.programId) {
+        const [program] = await db.select({ name: loanPrograms.name }).from(loanPrograms).where(eq(loanPrograms.id, project.programId));
+        if (program) programName = program.name;
+      }
+
+      // Get all stages
+      const stages = await db.select().from(projectStages)
+        .where(eq(projectStages.projectId, project.id))
+        .orderBy(asc(projectStages.stageOrder));
+
+      // Get all documents with files
+      const allDocs = await db.select().from(dealDocuments)
+        .where(eq(dealDocuments.dealId, project.id))
+        .orderBy(asc(dealDocuments.sortOrder));
+
+      const docsWithFiles = await Promise.all(allDocs.map(async (doc) => {
+        const files = await db.select().from(dealDocumentFiles)
+          .where(eq(dealDocumentFiles.documentId, doc.id))
+          .orderBy(asc(dealDocumentFiles.sortOrder));
+        return { ...doc, files };
+      }));
+
+      // Return full deal data for broker
+      res.json({
+        deal: {
+          id: project.id,
+          programName,
+          dealName: project.projectName,
+          borrowerName: project.borrowerName,
+          borrowerEmail: project.borrowerEmail,
+          borrowerPhone: project.borrowerPhone,
+          propertyAddress: project.propertyAddress,
+          status: project.status,
+          currentStage: project.currentStage,
+          progressPercentage: project.progressPercentage,
+          loanAmount: project.loanAmount,
+          interestRate: project.interestRate,
+          loanTermMonths: project.loanTermMonths,
+          loanType: project.loanType,
+          targetCloseDate: project.targetCloseDate,
+          applicationDate: project.applicationDate,
+        },
+        stages: stages.map(s => ({
+          id: s.id,
+          stageName: s.stageName,
+          stageKey: s.stageKey,
+          stageOrder: s.stageOrder,
+          status: s.status,
+        })),
+        documents: docsWithFiles.map(doc => ({
+          id: doc.id,
+          documentName: doc.documentName,
+          documentCategory: doc.documentCategory,
+          documentDescription: doc.documentDescription,
+          status: doc.status,
+          isRequired: doc.isRequired,
+          uploadedAt: doc.uploadedAt,
+          reviewedAt: doc.reviewedAt,
+          files: doc.files.map(f => ({
+            id: f.id,
+            fileName: f.fileName,
+            fileSize: f.fileSize,
+            uploadedAt: f.uploadedAt,
+          })),
+        })),
+      });
+    } catch (error) {
+      console.error('Broker portal error:', error);
+      res.status(500).json({ error: 'Failed to load broker portal' });
+    }
+  });
 }

@@ -70,6 +70,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   ShieldQuestion,
+  LinkIcon,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -899,6 +900,10 @@ export default function AdminDealDetail() {
   const [editTargetCloseDateOpen, setEditTargetCloseDateOpen] = useState(false);
   const [targetCloseDateValue, setTargetCloseDateValue] = useState<string>("");
 
+  // Portal link state
+  const [borrowerPortalCopied, setBorrowerPortalCopied] = useState(false);
+  const [brokerPortalCopied, setBrokerPortalCopied] = useState(false);
+
   const updateTargetCloseDateMutation = useMutation({
     mutationFn: async (targetCloseDate: string) => {
       return apiRequest("PATCH", `/api/admin/projects/${linkedProjectId}`, { targetCloseDate });
@@ -954,6 +959,57 @@ export default function AdminDealDetail() {
       case 'medium': return <Badge variant="secondary" className="text-xs">Medium</Badge>;
       default: return null;
     }
+  };
+
+  // Portal link mutations
+  const generateBorrowerLinkMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/admin/projects/${linkedProjectId}/generate-borrower-link`);
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
+      toast({ title: "Borrower portal link generated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to generate borrower link", variant: "destructive" });
+    },
+  });
+
+  const generateBrokerLinkMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/admin/projects/${linkedProjectId}/generate-broker-link`);
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
+      toast({ title: "Broker portal link generated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to generate broker link", variant: "destructive" });
+    },
+  });
+
+  const updatePortalSettingsMutation = useMutation({
+    mutationFn: async (settings: { borrowerPortalEnabled?: boolean; brokerPortalEnabled?: boolean }) => {
+      return apiRequest("PUT", `/api/admin/projects/${linkedProjectId}/portal-settings`, settings);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
+      toast({ title: "Portal settings updated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update portal settings", variant: "destructive" });
+    },
+  });
+
+  const copyToClipboard = async (text: string, label: string) => {
+    await navigator.clipboard.writeText(text);
+    toast({ title: `${label} copied to clipboard` });
+    if (label.includes("Borrower")) setBorrowerPortalCopied(true);
+    if (label.includes("Broker")) setBrokerPortalCopied(true);
+    setTimeout(() => {
+      setBorrowerPortalCopied(false);
+      setBrokerPortalCopied(false);
+    }, 2000);
   };
 
   const createDocumentMutation = useMutation({
@@ -1497,6 +1553,167 @@ export default function AdminDealDetail() {
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">No properties added</p>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Share Deal Links Card */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <LinkIcon className="h-4 w-4" />
+                Share Deal Links
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm">
+              {/* Borrower Portal Link */}
+              <div className="space-y-2">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Borrower Portal Link</div>
+                {data?.borrowerPortalToken ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={`${window.location.origin}/portal/${data.borrowerPortalToken}`}
+                        className="flex-1 px-3 py-2 text-xs border rounded-md bg-muted/50 cursor-pointer"
+                      />
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() =>
+                          copyToClipboard(`${window.location.origin}/portal/${data.borrowerPortalToken}`, "Borrower link")
+                        }
+                        className="flex-shrink-0"
+                      >
+                        {borrowerPortalCopied ? (
+                          <Check className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => generateBorrowerLinkMutation.mutate()}
+                        disabled={generateBorrowerLinkMutation.isPending}
+                      >
+                        {generateBorrowerLinkMutation.isPending ? (
+                          <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                        )}
+                        Generate New Link
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          updatePortalSettingsMutation.mutate({
+                            borrowerPortalEnabled: !data?.borrowerPortalEnabled,
+                          })
+                        }
+                        disabled={updatePortalSettingsMutation.isPending}
+                      >
+                        {data?.borrowerPortalEnabled ? "Disable" : "Enable"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => generateBorrowerLinkMutation.mutate()}
+                      disabled={generateBorrowerLinkMutation.isPending}
+                    >
+                      {generateBorrowerLinkMutation.isPending ? (
+                        <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                      ) : (
+                        <Plus className="h-3.5 w-3.5 mr-1" />
+                      )}
+                      Generate Link
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t pt-3" />
+
+              {/* Broker Portal Link */}
+              <div className="space-y-2">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Broker Portal Link</div>
+                {data?.brokerPortalToken ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={`${window.location.origin}/broker-portal/${data.brokerPortalToken}`}
+                        className="flex-1 px-3 py-2 text-xs border rounded-md bg-muted/50 cursor-pointer"
+                      />
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() =>
+                          copyToClipboard(`${window.location.origin}/broker-portal/${data.brokerPortalToken}`, "Broker link")
+                        }
+                        className="flex-shrink-0"
+                      >
+                        {brokerPortalCopied ? (
+                          <Check className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => generateBrokerLinkMutation.mutate()}
+                        disabled={generateBrokerLinkMutation.isPending}
+                      >
+                        {generateBrokerLinkMutation.isPending ? (
+                          <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                        )}
+                        Generate New Link
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          updatePortalSettingsMutation.mutate({
+                            brokerPortalEnabled: !data?.brokerPortalEnabled,
+                          })
+                        }
+                        disabled={updatePortalSettingsMutation.isPending}
+                      >
+                        {data?.brokerPortalEnabled ? "Disable" : "Enable"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => generateBrokerLinkMutation.mutate()}
+                      disabled={generateBrokerLinkMutation.isPending}
+                    >
+                      {generateBrokerLinkMutation.isPending ? (
+                        <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                      ) : (
+                        <Plus className="h-3.5 w-3.5 mr-1" />
+                      )}
+                      Generate Link
+                    </Button>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>

@@ -29,6 +29,7 @@ import {
   PinOff,
   Eye,
   X,
+  Globe,
 } from "lucide-react";
 import {
   Select,
@@ -73,6 +74,7 @@ interface NavItem {
   showBadge?: boolean;
   requiredPermission?: PermissionKey;
   shortcut?: string;
+  superAdminOnly?: boolean;
 }
 
 const brokerNavItems: NavItem[] = [
@@ -94,6 +96,7 @@ const borrowerNavItems: NavItem[] = [
 ];
 
 const adminNavItems: NavItem[] = [
+  { href: "/admin/platform", label: "Platform", icon: Globe, superAdminOnly: true },
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, shortcut: "⌘1" },
   { href: "/admin/processor", label: "One-Click Processing", icon: Zap, requiredPermission: "processor.view" },
   { href: "/admin/deals", label: "Pipeline", icon: FileText, requiredPermission: "pipeline.view", shortcut: "⌘2" },
@@ -107,6 +110,7 @@ const adminNavItems: NavItem[] = [
   { href: "/admin/onboarding", label: "Onboarding", icon: BookOpen, requiredPermission: "onboarding.view" },
   { href: "/admin/digests", label: "Digests", icon: CalendarDays, requiredPermission: "digests.view" },
   { href: "/admin/users", label: "Users", icon: Users, requiredPermission: "users.view", shortcut: "⌘3" },
+  { href: "/admin/team-permissions", label: "Permissions", icon: Shield, requiredPermission: "users.manage" },
   { href: "/messages", label: "Messages", icon: MessageSquare, showBadge: true, requiredPermission: "messages.view" },
   { href: "/admin/settings", label: "Settings", icon: Settings, requiredPermission: "settings.view" },
 ];
@@ -148,6 +152,7 @@ function AppLayoutContent({ children }: AppLayoutProps) {
   const showAdminSection = isAdmin && !effectiveViewAsBorrower && !effectiveViewAsLender;
 
   const filteredAdminItems = adminNavItems.filter(item => {
+    if (item.superAdminOnly && !isSuperAdmin) return false;
     if (!item.requiredPermission) return true;
     if (isSuperAdmin) return true;
     return hasPermission(item.requiredPermission);
