@@ -1434,6 +1434,7 @@ export default function AdminPrograms() {
                                           <div className="flex items-center gap-2 flex-wrap pl-5">
                                             <div className="flex items-center gap-1">
                                               <Eye className="h-3 w-3 text-muted-foreground" />
+                                              <span className="text-xs text-muted-foreground">Visibility</span>
                                               <Select value={doc.visibility} onValueChange={(v) => updateInlineDocument(doc.id, "visibility", v)}>
                                                 <SelectTrigger className="h-7 text-xs w-[150px]" data-testid={`select-doc-visibility-${doc.id}`}>
                                                   <SelectValue />
@@ -1447,6 +1448,7 @@ export default function AdminPrograms() {
                                             </div>
                                             <div className="flex items-center gap-1">
                                               <UserCheck className="h-3 w-3 text-muted-foreground" />
+                                              <span className="text-xs text-muted-foreground">Assigned to</span>
                                               <Select value={doc.assignedTo} onValueChange={(v) => updateInlineDocument(doc.id, "assignedTo", v)}>
                                                 <SelectTrigger className="h-7 text-xs w-[150px]" data-testid={`select-doc-assigned-${doc.id}`}>
                                                   <SelectValue />
@@ -1491,6 +1493,7 @@ export default function AdminPrograms() {
                                           <div className="flex items-center gap-2 flex-wrap pl-5">
                                             <div className="flex items-center gap-1">
                                               <Eye className="h-3 w-3 text-muted-foreground" />
+                                              <span className="text-xs text-muted-foreground">Visibility</span>
                                               <Select value={task.visibility} onValueChange={(v) => updateInlineTask(task.id, "visibility", v)}>
                                                 <SelectTrigger className="h-7 text-xs w-[150px]" data-testid={`select-task-visibility-${task.id}`}>
                                                   <SelectValue />
@@ -1504,6 +1507,7 @@ export default function AdminPrograms() {
                                             </div>
                                             <div className="flex items-center gap-1">
                                               <UserCheck className="h-3 w-3 text-muted-foreground" />
+                                              <span className="text-xs text-muted-foreground">Assigned to</span>
                                               <Select value={task.assignedTo} onValueChange={(v) => updateInlineTask(task.id, "assignedTo", v)}>
                                                 <SelectTrigger className="h-7 text-xs w-[150px]" data-testid={`select-task-assigned-${task.id}`}>
                                                   <SelectValue />
@@ -1587,6 +1591,7 @@ export default function AdminPrograms() {
                                     <div className="flex items-center gap-2 flex-wrap pl-5">
                                       <div className="flex items-center gap-1">
                                         <Eye className="h-3 w-3 text-muted-foreground" />
+                                        <span className="text-xs text-muted-foreground">Visibility</span>
                                         <Select value={doc.visibility} onValueChange={(v) => updateInlineDocument(doc.id, "visibility", v)}>
                                           <SelectTrigger className="h-7 text-xs w-[150px]" data-testid={`select-unassigned-doc-visibility-${doc.id}`}>
                                             <SelectValue />
@@ -1600,6 +1605,7 @@ export default function AdminPrograms() {
                                       </div>
                                       <div className="flex items-center gap-1">
                                         <UserCheck className="h-3 w-3 text-muted-foreground" />
+                                        <span className="text-xs text-muted-foreground">Assigned to</span>
                                         <Select value={doc.assignedTo} onValueChange={(v) => updateInlineDocument(doc.id, "assignedTo", v)}>
                                           <SelectTrigger className="h-7 text-xs w-[150px]" data-testid={`select-unassigned-doc-assigned-${doc.id}`}>
                                             <SelectValue />
@@ -1646,6 +1652,7 @@ export default function AdminPrograms() {
                                     <div className="flex items-center gap-2 flex-wrap pl-5">
                                       <div className="flex items-center gap-1">
                                         <Eye className="h-3 w-3 text-muted-foreground" />
+                                        <span className="text-xs text-muted-foreground">Visibility</span>
                                         <Select value={task.visibility} onValueChange={(v) => updateInlineTask(task.id, "visibility", v)}>
                                           <SelectTrigger className="h-7 text-xs w-[150px]" data-testid={`select-unassigned-task-visibility-${task.id}`}>
                                             <SelectValue />
@@ -1659,6 +1666,7 @@ export default function AdminPrograms() {
                                       </div>
                                       <div className="flex items-center gap-1">
                                         <UserCheck className="h-3 w-3 text-muted-foreground" />
+                                        <span className="text-xs text-muted-foreground">Assigned to</span>
                                         <Select value={task.assignedTo} onValueChange={(v) => updateInlineTask(task.id, "assignedTo", v)}>
                                           <SelectTrigger className="h-7 text-xs w-[150px]" data-testid={`select-unassigned-task-assigned-${task.id}`}>
                                             <SelectValue />
