@@ -7526,6 +7526,8 @@ export async function registerRoutes(
               documentCategory: doc.documentCategory || 'other',
               documentDescription: doc.documentDescription || null,
               isRequired: doc.isRequired !== false,
+              assignedTo: doc.assignedTo || 'borrower',
+              visibility: doc.visibility || 'all',
               sortOrder: index,
               stepId: doc.stepIndex != null ? (stepIndexToId.get(doc.stepIndex) ?? null) : null,
             }));
@@ -7542,6 +7544,8 @@ export async function registerRoutes(
               taskDescription: task.taskDescription || null,
               taskCategory: task.taskCategory || 'other',
               priority: task.priority || 'medium',
+              assignToRole: task.assignedTo || 'admin',
+              visibility: task.visibility || 'all',
               sortOrder: index,
               stepId: task.stepIndex != null ? (stepIndexToId.get(task.stepIndex) ?? null) : null,
             }));
@@ -7638,6 +7642,8 @@ export async function registerRoutes(
               documentCategory: doc.documentCategory || 'other',
               documentDescription: doc.documentDescription || null,
               isRequired: doc.isRequired !== false,
+              assignedTo: doc.assignedTo || 'borrower',
+              visibility: doc.visibility || 'all',
               sortOrder: index,
               stepId: doc.stepIndex != null ? (stepIndexToId.get(doc.stepIndex) ?? null) : null,
             }));
@@ -7655,6 +7661,8 @@ export async function registerRoutes(
               taskDescription: task.taskDescription || null,
               taskCategory: task.taskCategory || 'other',
               priority: task.priority || 'medium',
+              assignToRole: task.assignedTo || 'admin',
+              visibility: task.visibility || 'all',
               sortOrder: index,
               stepId: task.stepIndex != null ? (stepIndexToId.get(task.stepIndex) ?? null) : null,
             }));
@@ -7721,7 +7729,7 @@ export async function registerRoutes(
   app.post('/api/admin/programs/:programId/documents', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const { programId } = req.params;
-      const { documentName, documentCategory, documentDescription, isRequired, sortOrder, stepId } = req.body;
+      const { documentName, documentCategory, documentDescription, isRequired, sortOrder, stepId, assignedTo, visibility } = req.body;
       
       if (!documentName || !documentCategory) {
         return res.status(400).json({ error: 'Document name and category are required' });
@@ -7733,6 +7741,8 @@ export async function registerRoutes(
         documentCategory,
         documentDescription,
         isRequired: isRequired !== false,
+        assignedTo: assignedTo || 'borrower',
+        visibility: visibility || 'all',
         sortOrder: sortOrder || 0,
         stepId: stepId || null,
       }).returning();
@@ -7820,7 +7830,7 @@ export async function registerRoutes(
   app.post('/api/admin/programs/:programId/tasks', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const { programId } = req.params;
-      const { taskName, taskDescription, taskCategory, priority, sortOrder, stepId, assignToRole } = req.body;
+      const { taskName, taskDescription, taskCategory, priority, sortOrder, stepId, assignToRole, assignedTo, visibility } = req.body;
       
       if (!taskName) {
         return res.status(400).json({ error: 'Task name is required' });
@@ -7834,7 +7844,8 @@ export async function registerRoutes(
         priority: priority || 'medium',
         sortOrder: sortOrder || 0,
         stepId: stepId || null,
-        assignToRole: assignToRole || 'admin',
+        assignToRole: assignedTo || assignToRole || 'admin',
+        visibility: visibility || 'all',
       }).returning();
       
       res.json({ task });

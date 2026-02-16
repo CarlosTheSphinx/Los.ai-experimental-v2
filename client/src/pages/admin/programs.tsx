@@ -45,6 +45,8 @@ import {
   AlertTriangle,
   Info,
   ArrowLeft,
+  Eye,
+  UserCheck,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -81,6 +83,8 @@ interface ProgramDocument {
   documentCategory: string;
   documentDescription: string | null;
   isRequired: boolean;
+  assignedTo: string | null;
+  visibility: string | null;
   sortOrder: number;
 }
 
@@ -91,6 +95,8 @@ interface ProgramTask {
   taskName: string;
   taskDescription: string | null;
   taskCategory: string | null;
+  assignToRole: string | null;
+  visibility: string | null;
   priority: string;
   sortOrder: number;
 }
@@ -177,6 +183,8 @@ export default function AdminPrograms() {
     documentDescription: string;
     isRequired: boolean;
     stepIndex: number | null;
+    assignedTo: string;
+    visibility: string;
   }
 
   interface InlineTask {
@@ -186,6 +194,8 @@ export default function AdminPrograms() {
     taskCategory: string;
     priority: string;
     stepIndex: number | null;
+    assignedTo: string;
+    visibility: string;
   }
 
   interface InlineStep {
@@ -194,6 +204,20 @@ export default function AdminPrograms() {
     stepDefinitionId: number | null;
     isRequired: boolean;
   }
+
+  const visibilityOptions = [
+    { value: "admin", label: "Team Only" },
+    { value: "broker", label: "Team + Broker" },
+    { value: "all", label: "Team + Broker + Borrower" },
+    { value: "borrower", label: "Team + Borrower" },
+  ];
+
+  const assignedToOptions = [
+    { value: "admin", label: "Team Only" },
+    { value: "broker", label: "Team + Broker" },
+    { value: "all", label: "Team + Broker + Borrower" },
+    { value: "borrower", label: "Team + Borrower" },
+  ];
 
   // Form states
   const [programForm, setProgramForm] = useState({
@@ -225,6 +249,8 @@ export default function AdminPrograms() {
     documentDescription: "",
     isRequired: true,
     stepId: null as number | null,
+    assignedTo: "borrower",
+    visibility: "all",
   });
 
   const [taskForm, setTaskForm] = useState({
@@ -233,6 +259,8 @@ export default function AdminPrograms() {
     taskCategory: "other",
     priority: "medium",
     stepId: null as number | null,
+    assignedTo: "admin",
+    visibility: "all",
   });
 
 
@@ -436,7 +464,7 @@ export default function AdminPrograms() {
     setInlineSteps([]);
   };
 
-  const addInlineDocument = () => {
+  const addInlineDocument = (stepIdx: number | null = null) => {
     setInlineDocuments([
       ...inlineDocuments,
       {
@@ -445,7 +473,9 @@ export default function AdminPrograms() {
         documentCategory: "borrower_docs",
         documentDescription: "",
         isRequired: true,
-        stepIndex: null,
+        stepIndex: stepIdx,
+        assignedTo: "borrower",
+        visibility: "all",
       },
     ]);
   };
@@ -462,7 +492,7 @@ export default function AdminPrograms() {
     setInlineDocuments(inlineDocuments.filter((doc) => doc.id !== id));
   };
 
-  const addInlineTask = () => {
+  const addInlineTask = (stepIdx: number | null = null) => {
     setInlineTasks([
       ...inlineTasks,
       {
@@ -471,7 +501,9 @@ export default function AdminPrograms() {
         taskDescription: "",
         taskCategory: "other",
         priority: "medium",
-        stepIndex: null,
+        stepIndex: stepIdx,
+        assignedTo: "admin",
+        visibility: "all",
       },
     ]);
   };
@@ -519,6 +551,8 @@ export default function AdminPrograms() {
       documentDescription: "",
       isRequired: true,
       stepId: null,
+      assignedTo: "borrower",
+      visibility: "all",
     });
   };
 
@@ -529,6 +563,8 @@ export default function AdminPrograms() {
       taskCategory: "other",
       priority: "medium",
       stepId: null,
+      assignedTo: "admin",
+      visibility: "all",
     });
   };
 
@@ -587,6 +623,8 @@ export default function AdminPrograms() {
           documentDescription: doc.documentDescription || "",
           isRequired: doc.isRequired,
           stepIndex: doc.stepId != null ? (stepIdToIndex.get(doc.stepId) ?? null) : null,
+          assignedTo: doc.assignedTo || "borrower",
+          visibility: doc.visibility || "all",
         }))
       );
       setInlineTasks(
@@ -597,6 +635,8 @@ export default function AdminPrograms() {
           taskCategory: task.taskCategory || "other",
           priority: task.priority || "medium",
           stepIndex: task.stepId != null ? (stepIdToIndex.get(task.stepId) ?? null) : null,
+          assignedTo: task.assignToRole || "admin",
+          visibility: task.visibility || "all",
         }))
       );
       setEditDataInitialized(true);
@@ -1065,16 +1105,7 @@ export default function AdminPrograms() {
                                             type="button"
                                             variant="ghost"
                                             size="sm"
-                                            onClick={() => {
-                                              setInlineDocuments(prev => [...prev, {
-                                                id: crypto.randomUUID(),
-                                                documentName: "",
-                                                documentCategory: "borrower_docs",
-                                                documentDescription: "",
-                                                isRequired: true,
-                                                stepIndex: index,
-                                              }]);
-                                            }}
+                                            onClick={() => addInlineDocument(index)}
                                             data-testid={`button-add-stage-doc-${index}`}
                                           >
                                             <FileText className="h-3 w-3 mr-1" />
@@ -1084,16 +1115,7 @@ export default function AdminPrograms() {
                                             type="button"
                                             variant="ghost"
                                             size="sm"
-                                            onClick={() => {
-                                              setInlineTasks(prev => [...prev, {
-                                                id: crypto.randomUUID(),
-                                                taskName: "",
-                                                taskDescription: "",
-                                                taskCategory: "other",
-                                                priority: "medium",
-                                                stepIndex: index,
-                                              }]);
-                                            }}
+                                            onClick={() => addInlineTask(index)}
                                             data-testid={`button-add-stage-task-${index}`}
                                           >
                                             <ListChecks className="h-3 w-3 mr-1" />
@@ -1102,34 +1124,118 @@ export default function AdminPrograms() {
                                         </div>
                                       </div>
                                       {stageDocs.map((doc) => (
-                                        <div key={doc.id} className="flex items-center gap-2 text-sm border rounded-md px-2 py-1.5 bg-muted/30">
-                                          <FileText className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                                          <Input
-                                            className="text-sm border-0 bg-transparent focus-visible:ring-0"
-                                            placeholder="Document name"
-                                            value={doc.documentName}
-                                            onChange={(e) => updateInlineDocument(doc.id, "documentName", e.target.value)}
-                                            data-testid={`input-stage-doc-name-${index}-${doc.id}`}
-                                          />
-                                          {doc.isRequired && <Badge variant="secondary" className="text-xs flex-shrink-0">Req</Badge>}
-                                          <Button type="button" variant="ghost" size="sm" className="flex-shrink-0" onClick={() => removeInlineDocument(doc.id)} data-testid={`button-remove-stage-doc-${index}-${doc.id}`}>
-                                            <X className="h-3 w-3" />
-                                          </Button>
+                                        <div key={doc.id} className="space-y-1.5 border rounded-md px-2 py-1.5 bg-muted/30">
+                                          <div className="flex items-center gap-2">
+                                            <FileText className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                                            <Input
+                                              className="text-sm border-0 bg-transparent focus-visible:ring-0"
+                                              placeholder="Document name"
+                                              value={doc.documentName}
+                                              onChange={(e) => updateInlineDocument(doc.id, "documentName", e.target.value)}
+                                              data-testid={`input-stage-doc-name-${index}-${doc.id}`}
+                                            />
+                                            {doc.isRequired && <Badge variant="secondary" className="text-xs flex-shrink-0">Req</Badge>}
+                                            <Button type="button" variant="ghost" size="sm" className="flex-shrink-0" onClick={() => removeInlineDocument(doc.id)} data-testid={`button-remove-stage-doc-${index}-${doc.id}`}>
+                                              <X className="h-3 w-3" />
+                                            </Button>
+                                          </div>
+                                          <div className="flex items-center gap-2 flex-wrap pl-5">
+                                            <div className="flex items-center gap-1">
+                                              <Eye className="h-3 w-3 text-muted-foreground" />
+                                              <Select value={doc.visibility} onValueChange={(v) => updateInlineDocument(doc.id, "visibility", v)}>
+                                                <SelectTrigger className="h-7 text-xs w-[150px]" data-testid={`select-doc-visibility-${doc.id}`}>
+                                                  <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                  {visibilityOptions.map(opt => (
+                                                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                                  ))}
+                                                </SelectContent>
+                                              </Select>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                              <UserCheck className="h-3 w-3 text-muted-foreground" />
+                                              <Select value={doc.assignedTo} onValueChange={(v) => updateInlineDocument(doc.id, "assignedTo", v)}>
+                                                <SelectTrigger className="h-7 text-xs w-[150px]" data-testid={`select-doc-assigned-${doc.id}`}>
+                                                  <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                  {assignedToOptions.map(opt => (
+                                                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                                  ))}
+                                                </SelectContent>
+                                              </Select>
+                                            </div>
+                                            <Select value={doc.stepIndex != null ? String(doc.stepIndex) : "none"} onValueChange={(v) => updateInlineDocument(doc.id, "stepIndex", v === "none" ? null : parseInt(v))}>
+                                              <SelectTrigger className="h-7 text-xs w-[130px]" data-testid={`select-doc-stage-${doc.id}`}>
+                                                <SelectValue placeholder="Stage" />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                <SelectItem value="none">No stage</SelectItem>
+                                                {inlineSteps.map((s, si) => {
+                                                  const sName = s.stepName || (availableSteps?.find(av => av.id === s.stepDefinitionId)?.name) || `Stage ${si + 1}`;
+                                                  return sName.trim() ? <SelectItem key={s.id} value={String(si)}>{sName}</SelectItem> : null;
+                                                })}
+                                              </SelectContent>
+                                            </Select>
+                                          </div>
                                         </div>
                                       ))}
                                       {stageTasks.map((task) => (
-                                        <div key={task.id} className="flex items-center gap-2 text-sm border rounded-md px-2 py-1.5 bg-muted/30">
-                                          <ListChecks className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                                          <Input
-                                            className="text-sm border-0 bg-transparent focus-visible:ring-0"
-                                            placeholder="Task name"
-                                            value={task.taskName}
-                                            onChange={(e) => updateInlineTask(task.id, "taskName", e.target.value)}
-                                            data-testid={`input-stage-task-name-${index}-${task.id}`}
-                                          />
-                                          <Button type="button" variant="ghost" size="sm" className="flex-shrink-0" onClick={() => removeInlineTask(task.id)} data-testid={`button-remove-stage-task-${index}-${task.id}`}>
-                                            <X className="h-3 w-3" />
-                                          </Button>
+                                        <div key={task.id} className="space-y-1.5 border rounded-md px-2 py-1.5 bg-muted/30">
+                                          <div className="flex items-center gap-2">
+                                            <ListChecks className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                                            <Input
+                                              className="text-sm border-0 bg-transparent focus-visible:ring-0"
+                                              placeholder="Task name"
+                                              value={task.taskName}
+                                              onChange={(e) => updateInlineTask(task.id, "taskName", e.target.value)}
+                                              data-testid={`input-stage-task-name-${index}-${task.id}`}
+                                            />
+                                            <Button type="button" variant="ghost" size="sm" className="flex-shrink-0" onClick={() => removeInlineTask(task.id)} data-testid={`button-remove-stage-task-${index}-${task.id}`}>
+                                              <X className="h-3 w-3" />
+                                            </Button>
+                                          </div>
+                                          <div className="flex items-center gap-2 flex-wrap pl-5">
+                                            <div className="flex items-center gap-1">
+                                              <Eye className="h-3 w-3 text-muted-foreground" />
+                                              <Select value={task.visibility} onValueChange={(v) => updateInlineTask(task.id, "visibility", v)}>
+                                                <SelectTrigger className="h-7 text-xs w-[150px]" data-testid={`select-task-visibility-${task.id}`}>
+                                                  <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                  {visibilityOptions.map(opt => (
+                                                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                                  ))}
+                                                </SelectContent>
+                                              </Select>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                              <UserCheck className="h-3 w-3 text-muted-foreground" />
+                                              <Select value={task.assignedTo} onValueChange={(v) => updateInlineTask(task.id, "assignedTo", v)}>
+                                                <SelectTrigger className="h-7 text-xs w-[150px]" data-testid={`select-task-assigned-${task.id}`}>
+                                                  <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                  {assignedToOptions.map(opt => (
+                                                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                                  ))}
+                                                </SelectContent>
+                                              </Select>
+                                            </div>
+                                            <Select value={task.stepIndex != null ? String(task.stepIndex) : "none"} onValueChange={(v) => updateInlineTask(task.id, "stepIndex", v === "none" ? null : parseInt(v))}>
+                                              <SelectTrigger className="h-7 text-xs w-[130px]" data-testid={`select-task-stage-${task.id}`}>
+                                                <SelectValue placeholder="Stage" />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                <SelectItem value="none">No stage</SelectItem>
+                                                {inlineSteps.map((s, si) => {
+                                                  const sName = s.stepName || (availableSteps?.find(av => av.id === s.stepDefinitionId)?.name) || `Stage ${si + 1}`;
+                                                  return sName.trim() ? <SelectItem key={s.id} value={String(si)}>{sName}</SelectItem> : null;
+                                                })}
+                                              </SelectContent>
+                                            </Select>
+                                          </div>
                                         </div>
                                       ))}
                                     </div>
@@ -1152,93 +1258,147 @@ export default function AdminPrograms() {
                       {(() => {
                         const unassignedDocs = inlineDocuments.filter(d => d.stepIndex === null);
                         const unassignedTasks = inlineTasks.filter(t => t.stepIndex === null);
-                        return (unassignedDocs.length > 0 || unassignedTasks.length > 0 || inlineSteps.length > 0) ? (
+                        return (
                           <div className="space-y-3 border-t pt-4">
                             <div className="flex items-center justify-between gap-2 flex-wrap">
-                              <Label className="text-sm font-medium text-muted-foreground">Unassigned Items</Label>
+                              <Label className="text-sm font-medium text-muted-foreground">{inlineSteps.length > 0 ? "Unassigned Items" : "Documents & Tasks"}</Label>
                               <div className="flex items-center gap-1">
-                                <Button type="button" variant="ghost" size="sm" onClick={addInlineDocument} data-testid="button-add-inline-document">
+                                <Button type="button" variant="ghost" size="sm" onClick={() => addInlineDocument()} data-testid="button-add-inline-document">
                                   <FileText className="h-3 w-3 mr-1" />
                                   Doc
                                 </Button>
-                                <Button type="button" variant="ghost" size="sm" onClick={addInlineTask} data-testid="button-add-inline-task">
+                                <Button type="button" variant="ghost" size="sm" onClick={() => addInlineTask()} data-testid="button-add-inline-task">
                                   <ListChecks className="h-3 w-3 mr-1" />
                                   Task
                                 </Button>
                               </div>
                             </div>
                             {unassignedDocs.length === 0 && unassignedTasks.length === 0 ? (
-                              <p className="text-xs text-muted-foreground text-center py-2" data-testid="text-no-unassigned">No unassigned documents or tasks</p>
+                              <p className="text-xs text-muted-foreground text-center py-2" data-testid="text-no-unassigned">No unassigned documents or tasks. Use the buttons above to add some.</p>
                             ) : (
                               <div className="space-y-2">
                                 {unassignedDocs.map((doc) => (
-                                  <div key={doc.id} className="flex items-center gap-2 text-sm border rounded-md px-2 py-1.5">
-                                    <FileText className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                                    <Input
-                                      className="text-sm border-0 bg-transparent focus-visible:ring-0"
-                                      placeholder="Document name"
-                                      value={doc.documentName}
-                                      onChange={(e) => updateInlineDocument(doc.id, "documentName", e.target.value)}
-                                      data-testid={`input-unassigned-doc-${doc.id}`}
-                                    />
-                                    {inlineSteps.length > 0 && (
-                                      <Select
-                                        value="none"
-                                        onValueChange={(v) => updateInlineDocument(doc.id, "stepIndex", v === "none" ? null : parseInt(v))}
-                                      >
-                                        <SelectTrigger className="w-[120px] text-xs" data-testid={`select-assign-doc-${doc.id}`}>
-                                          <SelectValue placeholder="Assign..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="none">No stage</SelectItem>
-                                          {inlineSteps.map((s, si) => {
-                                            const name = s.stepName || (availableSteps?.find(av => av.id === s.stepDefinitionId)?.name) || `Stage ${si + 1}`;
-                                            return name.trim() ? <SelectItem key={s.id} value={String(si)}>{name}</SelectItem> : null;
-                                          })}
-                                        </SelectContent>
-                                      </Select>
-                                    )}
-                                    <Button type="button" variant="ghost" size="sm" className="flex-shrink-0" onClick={() => removeInlineDocument(doc.id)} data-testid={`button-remove-unassigned-doc-${doc.id}`}>
-                                      <X className="h-3 w-3" />
-                                    </Button>
+                                  <div key={doc.id} className="space-y-1.5 border rounded-md px-2 py-1.5">
+                                    <div className="flex items-center gap-2">
+                                      <FileText className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                                      <Input
+                                        className="text-sm border-0 bg-transparent focus-visible:ring-0"
+                                        placeholder="Document name"
+                                        value={doc.documentName}
+                                        onChange={(e) => updateInlineDocument(doc.id, "documentName", e.target.value)}
+                                        data-testid={`input-unassigned-doc-${doc.id}`}
+                                      />
+                                      <Button type="button" variant="ghost" size="sm" className="flex-shrink-0" onClick={() => removeInlineDocument(doc.id)} data-testid={`button-remove-unassigned-doc-${doc.id}`}>
+                                        <X className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-wrap pl-5">
+                                      <div className="flex items-center gap-1">
+                                        <Eye className="h-3 w-3 text-muted-foreground" />
+                                        <Select value={doc.visibility} onValueChange={(v) => updateInlineDocument(doc.id, "visibility", v)}>
+                                          <SelectTrigger className="h-7 text-xs w-[150px]" data-testid={`select-unassigned-doc-visibility-${doc.id}`}>
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {visibilityOptions.map(opt => (
+                                              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <UserCheck className="h-3 w-3 text-muted-foreground" />
+                                        <Select value={doc.assignedTo} onValueChange={(v) => updateInlineDocument(doc.id, "assignedTo", v)}>
+                                          <SelectTrigger className="h-7 text-xs w-[150px]" data-testid={`select-unassigned-doc-assigned-${doc.id}`}>
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {assignedToOptions.map(opt => (
+                                              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      {inlineSteps.length > 0 && (
+                                        <Select value="none" onValueChange={(v) => updateInlineDocument(doc.id, "stepIndex", v === "none" ? null : parseInt(v))}>
+                                          <SelectTrigger className="h-7 text-xs w-[130px]" data-testid={`select-assign-doc-${doc.id}`}>
+                                            <SelectValue placeholder="Assign stage..." />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="none">No stage</SelectItem>
+                                            {inlineSteps.map((s, si) => {
+                                              const name = s.stepName || (availableSteps?.find(av => av.id === s.stepDefinitionId)?.name) || `Stage ${si + 1}`;
+                                              return name.trim() ? <SelectItem key={s.id} value={String(si)}>{name}</SelectItem> : null;
+                                            })}
+                                          </SelectContent>
+                                        </Select>
+                                      )}
+                                    </div>
                                   </div>
                                 ))}
                                 {unassignedTasks.map((task) => (
-                                  <div key={task.id} className="flex items-center gap-2 text-sm border rounded-md px-2 py-1.5">
-                                    <ListChecks className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                                    <Input
-                                      className="text-sm border-0 bg-transparent focus-visible:ring-0"
-                                      placeholder="Task name"
-                                      value={task.taskName}
-                                      onChange={(e) => updateInlineTask(task.id, "taskName", e.target.value)}
-                                      data-testid={`input-unassigned-task-${task.id}`}
-                                    />
-                                    {inlineSteps.length > 0 && (
-                                      <Select
-                                        value="none"
-                                        onValueChange={(v) => updateInlineTask(task.id, "stepIndex", v === "none" ? null : parseInt(v))}
-                                      >
-                                        <SelectTrigger className="w-[120px] text-xs" data-testid={`select-assign-task-${task.id}`}>
-                                          <SelectValue placeholder="Assign..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="none">No stage</SelectItem>
-                                          {inlineSteps.map((s, si) => {
-                                            const name = s.stepName || (availableSteps?.find(av => av.id === s.stepDefinitionId)?.name) || `Stage ${si + 1}`;
-                                            return name.trim() ? <SelectItem key={s.id} value={String(si)}>{name}</SelectItem> : null;
-                                          })}
-                                        </SelectContent>
-                                      </Select>
-                                    )}
-                                    <Button type="button" variant="ghost" size="sm" className="flex-shrink-0" onClick={() => removeInlineTask(task.id)} data-testid={`button-remove-unassigned-task-${task.id}`}>
-                                      <X className="h-3 w-3" />
-                                    </Button>
+                                  <div key={task.id} className="space-y-1.5 border rounded-md px-2 py-1.5">
+                                    <div className="flex items-center gap-2">
+                                      <ListChecks className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                                      <Input
+                                        className="text-sm border-0 bg-transparent focus-visible:ring-0"
+                                        placeholder="Task name"
+                                        value={task.taskName}
+                                        onChange={(e) => updateInlineTask(task.id, "taskName", e.target.value)}
+                                        data-testid={`input-unassigned-task-${task.id}`}
+                                      />
+                                      <Button type="button" variant="ghost" size="sm" className="flex-shrink-0" onClick={() => removeInlineTask(task.id)} data-testid={`button-remove-unassigned-task-${task.id}`}>
+                                        <X className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-wrap pl-5">
+                                      <div className="flex items-center gap-1">
+                                        <Eye className="h-3 w-3 text-muted-foreground" />
+                                        <Select value={task.visibility} onValueChange={(v) => updateInlineTask(task.id, "visibility", v)}>
+                                          <SelectTrigger className="h-7 text-xs w-[150px]" data-testid={`select-unassigned-task-visibility-${task.id}`}>
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {visibilityOptions.map(opt => (
+                                              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <UserCheck className="h-3 w-3 text-muted-foreground" />
+                                        <Select value={task.assignedTo} onValueChange={(v) => updateInlineTask(task.id, "assignedTo", v)}>
+                                          <SelectTrigger className="h-7 text-xs w-[150px]" data-testid={`select-unassigned-task-assigned-${task.id}`}>
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {assignedToOptions.map(opt => (
+                                              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      {inlineSteps.length > 0 && (
+                                        <Select value="none" onValueChange={(v) => updateInlineTask(task.id, "stepIndex", v === "none" ? null : parseInt(v))}>
+                                          <SelectTrigger className="h-7 text-xs w-[130px]" data-testid={`select-assign-task-${task.id}`}>
+                                            <SelectValue placeholder="Assign stage..." />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="none">No stage</SelectItem>
+                                            {inlineSteps.map((s, si) => {
+                                              const name = s.stepName || (availableSteps?.find(av => av.id === s.stepDefinitionId)?.name) || `Stage ${si + 1}`;
+                                              return name.trim() ? <SelectItem key={s.id} value={String(si)}>{name}</SelectItem> : null;
+                                            })}
+                                          </SelectContent>
+                                        </Select>
+                                      )}
+                                    </div>
                                   </div>
                                 ))}
                               </div>
                             )}
                           </div>
-                        ) : null;
+                        );
                       })()}
                     </div>
                   </div>
@@ -2123,6 +2283,38 @@ export default function AdminPrograms() {
               />
               <Label>Required Document</Label>
             </div>
+            <div className="space-y-2">
+              <Label>Visibility</Label>
+              <Select
+                value={documentForm.visibility}
+                onValueChange={(v) => setDocumentForm({ ...documentForm, visibility: v })}
+              >
+                <SelectTrigger data-testid="select-doc-visibility-standalone">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {visibilityOptions.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Assigned To</Label>
+              <Select
+                value={documentForm.assignedTo}
+                onValueChange={(v) => setDocumentForm({ ...documentForm, assignedTo: v })}
+              >
+                <SelectTrigger data-testid="select-doc-assigned-standalone">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {assignedToOptions.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             {programDetails?.workflowSteps && programDetails.workflowSteps.length > 0 && (
               <div className="space-y-2">
                 <Label>Assign to Stage</Label>
@@ -2238,6 +2430,38 @@ export default function AdminPrograms() {
                 }
                 data-testid="input-task-description"
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Visibility</Label>
+              <Select
+                value={taskForm.visibility}
+                onValueChange={(v) => setTaskForm({ ...taskForm, visibility: v })}
+              >
+                <SelectTrigger data-testid="select-task-visibility-standalone">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {visibilityOptions.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Assigned To</Label>
+              <Select
+                value={taskForm.assignedTo}
+                onValueChange={(v) => setTaskForm({ ...taskForm, assignedTo: v })}
+              >
+                <SelectTrigger data-testid="select-task-assigned-standalone">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {assignedToOptions.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             {programDetails?.workflowSteps && programDetails.workflowSteps.length > 0 && (
               <div className="space-y-2">
