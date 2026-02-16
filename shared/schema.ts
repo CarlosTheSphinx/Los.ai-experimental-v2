@@ -727,6 +727,9 @@ export const loanPrograms = pgTable("loan_programs", {
   minInterestRate: real("min_interest_rate").default(8),
   maxInterestRate: real("max_interest_rate").default(15),
   
+  minUnits: integer("min_units"),
+  maxUnits: integer("max_units"),
+  
   termOptions: text("term_options"), // comma-separated: "6, 12, 18, 24"
   eligiblePropertyTypes: text("eligible_property_types").array(), // ['single-family', 'multi-family', 'commercial']
   
@@ -735,6 +738,7 @@ export const loanPrograms = pgTable("loan_programs", {
   
   reviewGuidelines: text("review_guidelines"),
   creditPolicyId: integer("credit_policy_id"),
+  createdBy: integer("created_by").references(() => users.id, { onDelete: 'set null' }),
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -2090,6 +2094,7 @@ export const creditPolicies = pgTable("credit_policies", {
   description: text("description"),
   sourceFileName: varchar("source_file_name", { length: 500 }),
   isActive: boolean("is_active").default(true),
+  createdBy: integer("created_by").references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
