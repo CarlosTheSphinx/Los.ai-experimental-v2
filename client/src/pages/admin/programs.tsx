@@ -175,6 +175,14 @@ export default function AdminPrograms() {
     priority: string;
   }
 
+  interface InlineStep {
+    id: string;
+    stepName: string;
+    stepDefinitionId: number | null;
+    estimatedDays: string;
+    isRequired: boolean;
+  }
+
   // Form states
   const [programForm, setProgramForm] = useState({
     name: "",
@@ -196,6 +204,7 @@ export default function AdminPrograms() {
 
   const [inlineDocuments, setInlineDocuments] = useState<InlineDocument[]>([]);
   const [inlineTasks, setInlineTasks] = useState<InlineTask[]>([]);
+  const [inlineSteps, setInlineSteps] = useState<InlineStep[]>([]);
 
   const [documentForm, setDocumentForm] = useState({
     documentName: "",
@@ -222,6 +231,10 @@ export default function AdminPrograms() {
     queryKey: ["/api/admin/credit-policies"],
   });
 
+  const { data: availableSteps } = useQuery<{ id: number; name: string; key: string; description: string | null; color: string | null; icon: string | null }[]>({
+    queryKey: ["/api/admin/workflow-steps"],
+  });
+
   const { data: programDetails, isLoading: loadingDetails } = useQuery<{
     program: LoanProgram;
     documents: ProgramDocument[];
@@ -241,11 +254,15 @@ export default function AdminPrograms() {
       const validTasks = inlineTasks
         .filter(task => task.taskName.trim())
         .map(({ id, ...task }) => task);
+      const validSteps = inlineSteps
+        .filter(step => step.stepName.trim() || step.stepDefinitionId)
+        .map(({ id, ...step }) => step);
       
       return apiRequest("POST", "/api/admin/programs", {
         ...data,
         documents: validDocuments,
         tasks: validTasks,
+        steps: validSteps,
       });
     },
     onSuccess: () => {
@@ -254,6 +271,7 @@ export default function AdminPrograms() {
       resetProgramForm();
       setInlineDocuments([]);
       setInlineTasks([]);
+      setInlineSteps([]);
       toast({ title: "Program created successfully" });
     },
     onError: () => {
@@ -382,6 +400,7 @@ export default function AdminPrograms() {
     });
     setInlineDocuments([]);
     setInlineTasks([]);
+    setInlineSteps([]);
   };
 
   const addInlineDocument = () => {
@@ -432,6 +451,31 @@ export default function AdminPrograms() {
 
   const removeInlineTask = (id: string) => {
     setInlineTasks(inlineTasks.filter((task) => task.id !== id));
+  };
+
+  const addInlineStep = () => {
+    setInlineSteps([
+      ...inlineSteps,
+      {
+        id: crypto.randomUUID(),
+        stepName: "",
+        stepDefinitionId: null,
+        estimatedDays: "",
+        isRequired: true,
+      },
+    ]);
+  };
+
+  const updateInlineStep = (id: string, field: keyof InlineStep, value: any) => {
+    setInlineSteps(
+      inlineSteps.map((step) =>
+        step.id === id ? { ...step, [field]: value } : step
+      )
+    );
+  };
+
+  const removeInlineStep = (id: string) => {
+    setInlineSteps(inlineSteps.filter((step) => step.id !== id));
   };
 
   const resetDocumentForm = () => {
@@ -997,6 +1041,111 @@ export default function AdminPrograms() {
                                 size="icon"
                                 onClick={() => removeInlineTask(task.id)}
                                 data-testid={`button-remove-task-${index}`}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Inline Workflow Steps Section */}
+                  <div className="space-y-3 border-t pt-4">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-base font-semibold flex items-center gap-2">
+                        <Workflow className="h-4 w-4" />
+                        Workflow Steps ({inlineSteps.length})
+                      </Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addInlineStep}
+                        data-testid="button-add-inline-step"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Step
+                      </Button>
+                    </div>
+                    {inlineSteps.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No workflow steps added yet. Click "Add Step" to add one.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        {inlineSteps.map((step, index) => (
+                          <Card key={step.id} className="p-3">
+                            <div className="flex items-start gap-2">
+                              <div className="flex-1 space-y-2">
+                                <Select
+                                  value={String(step.stepDefinitionId || "custom")}
+                                  onValueChange={(v) => {
+                                    if (v === "custom") {
+                                      updateInlineStep(step.id, "stepDefinitionId", null);
+                                      updateInlineStep(step.id, "stepName", "");
+                                    } else {
+                                      const defId = parseInt(v);
+                                      const def = availableSteps?.find((s) => s.id === defId);
+                                      updateInlineStep(step.id, "stepDefinitionId", defId);
+                                      if (def) {
+                                        updateInlineStep(step.id, "stepName", def.name);
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <SelectTrigger data-testid={`select-step-def-${index}`}>
+                                    <SelectValue placeholder="Select a step..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {availableSteps?.map((s) => (
+                                      <SelectItem key={s.id} value={String(s.id)}>
+                                        {s.name}
+                                      </SelectItem>
+                                    ))}
+                                    <SelectItem value="custom">Custom...</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                {(!step.stepDefinitionId) && (
+                                  <Input
+                                    placeholder="Custom step name"
+                                    value={step.stepName}
+                                    onChange={(e) =>
+                                      updateInlineStep(step.id, "stepName", e.target.value)
+                                    }
+                                    data-testid={`input-step-name-${index}`}
+                                  />
+                                )}
+                                <div className="flex items-center gap-3">
+                                  <Input
+                                    type="number"
+                                    placeholder="Est. days"
+                                    value={step.estimatedDays}
+                                    onChange={(e) =>
+                                      updateInlineStep(step.id, "estimatedDays", e.target.value)
+                                    }
+                                    className="w-28"
+                                    data-testid={`input-step-days-${index}`}
+                                  />
+                                  <div className="flex items-center gap-2">
+                                    <Switch
+                                      checked={step.isRequired}
+                                      onCheckedChange={(v) =>
+                                        updateInlineStep(step.id, "isRequired", v)
+                                      }
+                                      data-testid={`switch-step-required-${index}`}
+                                    />
+                                    <Label className="text-sm">Required</Label>
+                                  </div>
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeInlineStep(step.id)}
+                                data-testid={`button-remove-step-${index}`}
                               >
                                 <X className="h-4 w-4" />
                               </Button>

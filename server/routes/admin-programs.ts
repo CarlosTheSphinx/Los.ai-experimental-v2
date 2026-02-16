@@ -126,6 +126,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         isActive,
         documents,
         tasks,
+        steps,
         creditPolicyId
       } = req.body;
 
@@ -185,6 +186,43 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
               sortOrder: index,
             }));
             await tx.insert(programTaskTemplates).values(taskEntries);
+          }
+        }
+
+        // Create inline workflow steps if provided
+        if (steps && Array.isArray(steps) && steps.length > 0) {
+          for (let i = 0; i < steps.length; i++) {
+            const step = steps[i];
+            let stepDefId = step.stepDefinitionId;
+
+            // If no existing step definition, create a new one
+            if (!stepDefId && step.stepName?.trim()) {
+              const key = step.stepName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+              const existing = await tx.select().from(workflowStepDefinitions).where(eq(workflowStepDefinitions.key, key));
+              if (existing.length > 0) {
+                stepDefId = existing[0].id;
+              } else {
+                const maxOrder = await tx.select({ max: sql<number>`COALESCE(MAX(sort_order), 0)` }).from(workflowStepDefinitions);
+                const [newStep] = await tx.insert(workflowStepDefinitions).values({
+                  name: step.stepName.trim(),
+                  key,
+                  sortOrder: (maxOrder[0]?.max || 0) + 1,
+                  isActive: true,
+                  isDefault: false,
+                }).returning();
+                stepDefId = newStep.id;
+              }
+            }
+
+            if (stepDefId) {
+              await tx.insert(programWorkflowSteps).values({
+                programId: program.id,
+                stepDefinitionId: stepDefId,
+                stepOrder: i + 1,
+                isRequired: step.isRequired !== false,
+                estimatedDays: step.estimatedDays ? parseInt(step.estimatedDays) : null,
+              });
+            }
           }
         }
 
