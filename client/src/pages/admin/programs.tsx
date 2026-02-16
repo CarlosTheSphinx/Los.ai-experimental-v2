@@ -47,6 +47,8 @@ import {
   ArrowLeft,
   Eye,
   UserCheck,
+  Copy,
+  BookTemplate,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -68,6 +70,7 @@ interface LoanProgram {
   termOptions: string | null;
   eligiblePropertyTypes: string[] | null;
   isActive: boolean;
+  isTemplate: boolean;
   sortOrder: number | null;
   reviewGuidelines: string | null;
   createdAt: string;
@@ -378,6 +381,32 @@ export default function AdminPrograms() {
     },
     onError: () => {
       toast({ title: "Failed to delete program", variant: "destructive" });
+    },
+  });
+
+  const duplicateProgram = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("POST", `/api/admin/programs/${id}/duplicate`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/programs"] });
+      toast({ title: "Program duplicated successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to duplicate program", variant: "destructive" });
+    },
+  });
+
+  const toggleTemplate = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("PATCH", `/api/admin/programs/${id}/template`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/programs"] });
+      toast({ title: "Template status updated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update template status", variant: "destructive" });
     },
   });
 
@@ -1424,11 +1453,17 @@ export default function AdminPrograms() {
                   <CardContent className="p-6">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 space-y-4">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 flex-wrap">
                           <h3 className="font-semibold text-lg">{program.name}</h3>
                           <Badge variant={program.isActive ? "default" : "secondary"}>
                             {program.isActive ? "Active" : "Inactive"}
                           </Badge>
+                          {program.isTemplate && (
+                            <Badge variant="outline" className="gap-1">
+                              <BookTemplate className="h-3 w-3" />
+                              Template
+                            </Badge>
+                          )}
                         </div>
                         {program.description && (
                           <p className="text-muted-foreground text-sm">
@@ -1491,7 +1526,7 @@ export default function AdminPrograms() {
                             </div>
                           )}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <Button
                           variant="outline"
                           size="sm"
@@ -1501,6 +1536,28 @@ export default function AdminPrograms() {
                         >
                           <Workflow className="h-4 w-4" />
                           Configure Workflow
+                        </Button>
+                        <Button
+                          variant={program.isTemplate ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => toggleTemplate.mutate(program.id)}
+                          data-testid={`button-template-${program.id}`}
+                          className="gap-1"
+                          disabled={toggleTemplate.isPending}
+                        >
+                          <BookTemplate className="h-4 w-4" />
+                          {program.isTemplate ? "Template" : "Make Template"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => duplicateProgram.mutate(program.id)}
+                          data-testid={`button-duplicate-${program.id}`}
+                          className="gap-1"
+                          disabled={duplicateProgram.isPending}
+                        >
+                          <Copy className="h-4 w-4" />
+                          Duplicate
                         </Button>
                         <Switch
                           checked={program.isActive}

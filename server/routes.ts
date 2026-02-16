@@ -7702,6 +7702,124 @@ export async function registerRoutes(
     }
   });
   
+  // Toggle program template status
+  app.patch('/api/admin/programs/:id/template', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const pid = parseInt(req.params.id);
+      const [program] = await db.select().from(loanPrograms).where(eq(loanPrograms.id, pid));
+      if (!program) return res.status(404).json({ error: 'Program not found' });
+      const user = await storage.getUserById(req.user!.id);
+      if (user?.role !== 'super_admin' && program.createdBy !== req.user!.id) {
+        return res.status(403).json({ error: 'Not authorized' });
+      }
+      const [updated] = await db.update(loanPrograms)
+        .set({ isTemplate: !program.isTemplate, updatedAt: new Date() })
+        .where(eq(loanPrograms.id, pid))
+        .returning();
+      res.json({ program: updated });
+    } catch (error) {
+      console.error('Toggle template error:', error);
+      res.status(500).json({ error: 'Failed to toggle template status' });
+    }
+  });
+
+  // Duplicate a program with all stages, documents, and tasks
+  app.post('/api/admin/programs/:id/duplicate', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const pid = parseInt(req.params.id);
+      const [source] = await db.select().from(loanPrograms).where(eq(loanPrograms.id, pid));
+      if (!source) return res.status(404).json({ error: 'Program not found' });
+      const user = await storage.getUserById(req.user!.id);
+      if (user?.role !== 'super_admin' && source.createdBy !== req.user!.id) {
+        return res.status(403).json({ error: 'Not authorized' });
+      }
+
+      const result = await db.transaction(async (tx) => {
+        const [newProgram] = await tx.insert(loanPrograms).values({
+          name: `${source.name} (Copy)`,
+          description: source.description,
+          loanType: source.loanType,
+          minLoanAmount: source.minLoanAmount,
+          maxLoanAmount: source.maxLoanAmount,
+          minLtv: source.minLtv,
+          maxLtv: source.maxLtv,
+          minInterestRate: source.minInterestRate,
+          maxInterestRate: source.maxInterestRate,
+          minUnits: source.minUnits,
+          maxUnits: source.maxUnits,
+          termOptions: source.termOptions,
+          eligiblePropertyTypes: source.eligiblePropertyTypes,
+          isActive: false,
+          isTemplate: false,
+          sortOrder: source.sortOrder,
+          reviewGuidelines: source.reviewGuidelines,
+          creditPolicyId: source.creditPolicyId,
+          createdBy: req.user!.id,
+        }).returning();
+
+        const oldSteps = await tx.select().from(programWorkflowSteps)
+          .where(eq(programWorkflowSteps.programId, pid))
+          .orderBy(programWorkflowSteps.stepOrder);
+        const oldStepIdToNewId = new Map<number, number>();
+        for (const step of oldSteps) {
+          const [newStep] = await tx.insert(programWorkflowSteps).values({
+            programId: newProgram.id,
+            stepDefinitionId: step.stepDefinitionId,
+            stepOrder: step.stepOrder,
+            isRequired: step.isRequired,
+            estimatedDays: step.estimatedDays,
+          }).returning();
+          oldStepIdToNewId.set(step.id, newStep.id);
+        }
+
+        const oldDocs = await tx.select().from(programDocumentTemplates)
+          .where(eq(programDocumentTemplates.programId, pid))
+          .orderBy(programDocumentTemplates.sortOrder);
+        if (oldDocs.length > 0) {
+          await tx.insert(programDocumentTemplates).values(
+            oldDocs.map(doc => ({
+              programId: newProgram.id,
+              documentName: doc.documentName,
+              documentCategory: doc.documentCategory,
+              documentDescription: doc.documentDescription,
+              isRequired: doc.isRequired,
+              assignedTo: doc.assignedTo,
+              visibility: doc.visibility,
+              sortOrder: doc.sortOrder,
+              stepId: doc.stepId ? (oldStepIdToNewId.get(doc.stepId) ?? null) : null,
+            }))
+          );
+        }
+
+        const oldTasks = await tx.select().from(programTaskTemplates)
+          .where(eq(programTaskTemplates.programId, pid))
+          .orderBy(programTaskTemplates.sortOrder);
+        if (oldTasks.length > 0) {
+          await tx.insert(programTaskTemplates).values(
+            oldTasks.map(task => ({
+              programId: newProgram.id,
+              taskName: task.taskName,
+              taskDescription: task.taskDescription,
+              taskCategory: task.taskCategory,
+              priority: task.priority,
+              assignToRole: task.assignToRole,
+              visibility: task.visibility,
+              sortOrder: task.sortOrder,
+              stepId: task.stepId ? (oldStepIdToNewId.get(task.stepId) ?? null) : null,
+            }))
+          );
+        }
+
+        return newProgram;
+      });
+
+      res.json({ program: result });
+    } catch (error) {
+      console.error('Duplicate program error:', error);
+      res.status(500).json({ error: 'Failed to duplicate program' });
+    }
+  });
+
   // Delete loan program
   app.delete('/api/admin/programs/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
