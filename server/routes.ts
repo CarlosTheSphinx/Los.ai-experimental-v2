@@ -3,7 +3,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, documentReviewResults, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema, projectActivity, projectTasks } from "@shared/schema";
+import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, documentReviewResults, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema, projectActivity, projectTasks, platformSettings } from "@shared/schema";
 import { priceQuote, validateRuleset, SAMPLE_RTL_RULESET, SAMPLE_DSCR_RULESET, type PricingInputs, analyzeGuidelines, refineProposal } from "./pricing";
 import { getDocumentTemplatesForLoanType } from "./document-templates";
 import { eq, desc, asc, inArray, and, gt, gte, lte, sql, isNull, or } from "drizzle-orm";
@@ -4171,6 +4171,57 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Update permissions error:', error);
       res.status(500).json({ error: 'Failed to update permissions' });
+    }
+  });
+
+  // Team Permissions - Get all permissions for all roles (admin only)
+  app.get('/api/admin/team-permissions', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      await storage.initializeDefaultPermissions();
+      const allPermissions = await storage.getAllPermissions();
+
+      // Group permissions by role
+      const grouped: Record<string, Record<string, boolean>> = {};
+      for (const perm of allPermissions) {
+        if (!grouped[perm.role]) {
+          grouped[perm.role] = {};
+        }
+        grouped[perm.role][perm.permissionKey] = perm.enabled;
+      }
+
+      res.json(grouped);
+    } catch (error) {
+      console.error('Get team permissions error:', error);
+      res.status(500).json({ error: 'Failed to load permissions' });
+    }
+  });
+
+  // Team Permissions - Update a single permission (admin only)
+  app.put('/api/admin/team-permissions', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { role, permissionKey, enabled } = req.body;
+
+      if (!role || !permissionKey || enabled === undefined) {
+        return res.status(400).json({ error: 'Missing role, permissionKey, or enabled field' });
+      }
+
+      if (!['staff', 'processor'].includes(role)) {
+        return res.status(400).json({ error: 'Can only configure permissions for staff and processor roles' });
+      }
+
+      await storage.upsertPermission(role, permissionKey, enabled, req.user!.id);
+
+      await storage.createAdminActivity({
+        userId: req.user!.id,
+        actionType: 'permissions_updated',
+        actionDescription: `Updated permission ${permissionKey} for role: ${role}`,
+        metadata: { role, permissionKey, enabled }
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Update team permission error:', error);
+      res.status(500).json({ error: 'Failed to update permission' });
     }
   });
 
@@ -14234,6 +14285,286 @@ Return JSON only:
     } catch (error) {
       console.error('Error updating branding settings:', error);
       res.status(500).json({ error: 'Failed to update branding settings' });
+    }
+  });
+
+  // ===================== SHAREABLE LINK ENDPOINTS =====================
+
+  app.post('/api/admin/projects/:id/generate-borrower-link', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const projectId = parseInt(req.params.id);
+      if (!projectId) {
+        return res.status(400).json({ error: 'Project ID is required' });
+      }
+
+      const project = await storage.getProjectByIdInternal(projectId);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+
+      const token = uuidv4();
+      const updated = await db.update(projects)
+        .set({ borrowerPortalToken: token, lastUpdated: new Date() })
+        .where(eq(projects.id, projectId))
+        .returning();
+
+      if (!updated[0]) {
+        return res.status(500).json({ error: 'Failed to generate link' });
+      }
+
+      res.json({ token, url: `${req.protocol}://${req.get('host')}/portal/${token}` });
+    } catch (error) {
+      console.error('Generate borrower link error:', error);
+      res.status(500).json({ error: 'Failed to generate borrower link' });
+    }
+  });
+
+  app.post('/api/admin/projects/:id/generate-broker-link', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const projectId = parseInt(req.params.id);
+      if (!projectId) {
+        return res.status(400).json({ error: 'Project ID is required' });
+      }
+
+      const project = await storage.getProjectByIdInternal(projectId);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+
+      const token = uuidv4();
+      const updated = await db.update(projects)
+        .set({ brokerPortalToken: token, lastUpdated: new Date() })
+        .where(eq(projects.id, projectId))
+        .returning();
+
+      if (!updated[0]) {
+        return res.status(500).json({ error: 'Failed to generate link' });
+      }
+
+      res.json({ token, url: `${req.protocol}://${req.get('host')}/broker-portal/${token}` });
+    } catch (error) {
+      console.error('Generate broker link error:', error);
+      res.status(500).json({ error: 'Failed to generate broker link' });
+    }
+  });
+
+  app.put('/api/admin/projects/:id/portal-settings', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const projectId = parseInt(req.params.id);
+      const { borrowerPortalEnabled, brokerPortalEnabled } = req.body;
+
+      if (!projectId) {
+        return res.status(400).json({ error: 'Project ID is required' });
+      }
+
+      const project = await storage.getProjectByIdInternal(projectId);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+
+      const updates: any = { lastUpdated: new Date() };
+      if (borrowerPortalEnabled !== undefined) updates.borrowerPortalEnabled = borrowerPortalEnabled;
+      if (brokerPortalEnabled !== undefined) updates.brokerPortalEnabled = brokerPortalEnabled;
+
+      const updated = await db.update(projects)
+        .set(updates)
+        .where(eq(projects.id, projectId))
+        .returning();
+
+      if (!updated[0]) {
+        return res.status(500).json({ error: 'Failed to update settings' });
+      }
+
+      res.json({
+        borrowerPortalEnabled: updated[0].borrowerPortalEnabled,
+        brokerPortalEnabled: updated[0].brokerPortalEnabled,
+      });
+    } catch (error) {
+      console.error('Update portal settings error:', error);
+      res.status(500).json({ error: 'Failed to update portal settings' });
+    }
+  });
+
+  // ==================== SUPER ADMIN ROUTES ====================
+
+  // Super Admin Dashboard - Get all platform stats and data
+  app.get('/api/super-admin/dashboard', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      // Get platform overview stats
+      const totalLenderAccounts = await db.select({ count: sql<number>`count(*)` })
+        .from(users)
+        .where(eq(users.role, 'admin'));
+
+      const totalBrokers = await db.select({ count: sql<number>`count(*)` })
+        .from(users)
+        .where(eq(users.userType, 'broker'));
+
+      const totalBorrowers = await db.select({ count: sql<number>`count(*)` })
+        .from(users)
+        .where(eq(users.userType, 'borrower'));
+
+      const totalDeals = await db.select({ count: sql<number>`count(*)` })
+        .from(projects);
+
+      const totalVolume = await db.select({ sum: sql<number>`COALESCE(sum(loan_amount), 0)` })
+        .from(projects);
+
+      // Get lender accounts with team and deal stats
+      const lenderAdmins = await db.select({
+        id: users.id,
+        companyName: users.companyName,
+        adminName: users.fullName,
+        adminEmail: users.email,
+        isActive: users.isActive,
+        createdAt: users.createdAt,
+      })
+        .from(users)
+        .where(eq(users.role, 'admin'));
+
+      const lenderAccounts = await Promise.all(lenderAdmins.map(async (admin) => {
+        // Count team members from same company
+        const teamCount = await db.select({ count: sql<number>`count(*)` })
+          .from(users)
+          .where(
+            and(
+              eq(users.companyName, admin.companyName!),
+              or(
+                eq(users.role, 'admin'),
+                eq(users.role, 'staff'),
+                eq(users.role, 'processor')
+              )
+            )
+          );
+
+        // Count active deals for this lender
+        const dealsCount = await db.select({ count: sql<number>`count(*)` })
+          .from(projects)
+          .where(
+            and(
+              eq(projects.userId, admin.id),
+              eq(projects.status, 'active')
+            )
+          );
+
+        // Sum loan volume for this lender
+        const volume = await db.select({ sum: sql<number>`COALESCE(sum(loan_amount), 0)` })
+          .from(projects)
+          .where(eq(projects.userId, admin.id));
+
+        return {
+          id: admin.id,
+          companyName: admin.companyName || 'N/A',
+          adminName: admin.adminName || 'N/A',
+          adminEmail: admin.adminEmail,
+          teamMembersCount: teamCount[0]?.count || 0,
+          activeDealsCount: dealsCount[0]?.count || 0,
+          totalLoanVolume: volume[0]?.sum || 0,
+          isActive: admin.isActive,
+          createdAt: admin.createdAt?.toISOString() || new Date().toISOString(),
+        };
+      }));
+
+      // Get recent signups (last 10)
+      const recentSignups = await db.select({
+        id: users.id,
+        email: users.email,
+        fullName: users.fullName,
+        role: users.role,
+        userType: users.userType,
+        companyName: users.companyName,
+        createdAt: users.createdAt,
+      })
+        .from(users)
+        .orderBy(desc(users.createdAt))
+        .limit(10);
+
+      // Get platform settings
+      const settings = await db.select().from(platformSettings).limit(1);
+      const platformSettingsData = settings[0] || {
+        aiAgentsEnabled: true,
+        commercialLendingEnabled: true,
+        documentTemplatesEnabled: true,
+        smartProspectingEnabled: false,
+      };
+
+      res.json({
+        stats: {
+          totalLenderAccounts: totalLenderAccounts[0]?.count || 0,
+          totalBrokers: totalBrokers[0]?.count || 0,
+          totalBorrowers: totalBorrowers[0]?.count || 0,
+          totalDeals: totalDeals[0]?.count || 0,
+          totalLoanVolume: totalVolume[0]?.sum || 0,
+        },
+        lenderAccounts,
+        recentSignups: recentSignups.map(s => ({
+          ...s,
+          createdAt: s.createdAt?.toISOString() || new Date().toISOString(),
+        })),
+        platformSettings: {
+          aiAgentsEnabled: platformSettingsData.aiAgentsEnabled,
+          commercialLendingEnabled: platformSettingsData.commercialLendingEnabled,
+          documentTemplatesEnabled: platformSettingsData.documentTemplatesEnabled,
+          smartProspectingEnabled: platformSettingsData.smartProspectingEnabled,
+        },
+      });
+    } catch (error) {
+      console.error('Super admin dashboard error:', error);
+      res.status(500).json({ error: 'Failed to load dashboard' });
+    }
+  });
+
+  // Super Admin Settings - Update platform-wide feature flags
+  app.patch('/api/super-admin/settings', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { aiAgentsEnabled, commercialLendingEnabled, documentTemplatesEnabled, smartProspectingEnabled } = req.body;
+
+      // Get existing settings or create default
+      let settings = await db.select().from(platformSettings).limit(1);
+
+      const updates: any = {};
+      if (aiAgentsEnabled !== undefined) updates.aiAgentsEnabled = aiAgentsEnabled;
+      if (commercialLendingEnabled !== undefined) updates.commercialLendingEnabled = commercialLendingEnabled;
+      if (documentTemplatesEnabled !== undefined) updates.documentTemplatesEnabled = documentTemplatesEnabled;
+      if (smartProspectingEnabled !== undefined) updates.smartProspectingEnabled = smartProspectingEnabled;
+
+      updates.updatedAt = new Date();
+      updates.updatedBy = req.user!.id;
+
+      if (settings.length === 0) {
+        // Create new settings record
+        const created = await db.insert(platformSettings)
+          .values(updates)
+          .returning();
+
+        res.json({
+          success: true,
+          settings: {
+            aiAgentsEnabled: created[0].aiAgentsEnabled,
+            commercialLendingEnabled: created[0].commercialLendingEnabled,
+            documentTemplatesEnabled: created[0].documentTemplatesEnabled,
+            smartProspectingEnabled: created[0].smartProspectingEnabled,
+          },
+        });
+      } else {
+        // Update existing settings
+        const updated = await db.update(platformSettings)
+          .set(updates)
+          .where(eq(platformSettings.id, settings[0].id))
+          .returning();
+
+        res.json({
+          success: true,
+          settings: {
+            aiAgentsEnabled: updated[0].aiAgentsEnabled,
+            commercialLendingEnabled: updated[0].commercialLendingEnabled,
+            documentTemplatesEnabled: updated[0].documentTemplatesEnabled,
+            smartProspectingEnabled: updated[0].smartProspectingEnabled,
+          },
+        });
+      }
+    } catch (error) {
+      console.error('Super admin settings error:', error);
+      res.status(500).json({ error: 'Failed to update settings' });
     }
   });
 
