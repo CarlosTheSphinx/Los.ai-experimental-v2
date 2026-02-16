@@ -13051,7 +13051,7 @@ Return JSON only:
     city: z.string().min(1),
     state: z.string().length(2),
     zip: z.string().min(1),
-    propertyType: z.enum(["MULTIFAMILY", "INDUSTRIAL", "RETAIL", "OFFICE", "MIXED_USE", "HOSPITALITY", "SELF_STORAGE", "LAND", "OTHER"]),
+    propertyType: z.enum(["SINGLE_FAMILY_RESIDENCE", "TWO_FOUR_UNIT", "MULTIFAMILY", "RENTAL_PORTFOLIO", "MIXED_USE", "INFILL_LOT", "LAND", "OFFICE", "RETAIL", "HOSPITALITY", "INDUSTRIAL", "MEDICAL", "AGRICULTURAL", "SPECIAL_PURPOSE"]),
     occupancyType: z.enum(["STABILIZED", "VALUE_ADD", "LEASE_UP", "GROUND_UP", "OTHER"]),
     unitsOrSqft: z.number().positive(),
     yearBuilt: z.number().nullable().optional(),
