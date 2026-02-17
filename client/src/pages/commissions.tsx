@@ -17,7 +17,6 @@ import {
   Briefcase,
   ArrowRight,
   Loader2,
-  Percent,
   MapPin,
 } from "lucide-react";
 
@@ -88,7 +87,6 @@ export default function CommissionsPage() {
   const commissions = data?.commissions || [];
 
   const totalCommission = commissions.reduce((sum, c) => sum + (c.commission || 0), 0);
-  const totalPointsAmount = commissions.reduce((sum, c) => sum + (c.pointsAmount || 0), 0);
   const fundedDeals = commissions.filter((c) => c.status === "funded" || c.status === "completed");
   const totalFundedCommission = fundedDeals.reduce((sum, c) => sum + (c.commission || 0), 0);
   const totalLoanVolume = commissions.reduce((sum, c) => sum + (c.loanAmount || 0), 0);
@@ -110,7 +108,7 @@ export default function CommissionsPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Card data-testid="card-total-commission">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Commission</CardTitle>
@@ -130,17 +128,6 @@ export default function CommissionsPage() {
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-funded-commission">{formatCurrency(totalFundedCommission)}</div>
             <p className="text-xs text-muted-foreground mt-1">{fundedDeals.length} funded deal{fundedDeals.length !== 1 ? "s" : ""}</p>
-          </CardContent>
-        </Card>
-
-        <Card data-testid="card-points-earned">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Points Earned</CardTitle>
-            <Percent className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-points-earned">{formatCurrency(totalPointsAmount)}</div>
-            <p className="text-xs text-muted-foreground mt-1">From origination points</p>
           </CardContent>
         </Card>
 
