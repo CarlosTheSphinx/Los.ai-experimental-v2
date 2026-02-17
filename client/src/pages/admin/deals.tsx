@@ -266,7 +266,7 @@ function PipelineByProgram({ programs }: { programs: ProgramPipeline[] }) {
               </div>
               {program.stages.length > 0 ? (
                 <div className="overflow-x-auto py-2">
-                  <div className="flex items-start" style={{ minWidth: program.stages.length * 90 }}>
+                  <div className="flex items-start">
                     {program.stages.map((stage, idx) => {
                       const color = stage.color || getStageColor(programIdx, idx, program.stages.length);
                       const hasDeals = stage.count > 0;
@@ -275,7 +275,7 @@ function PipelineByProgram({ programs }: { programs: ProgramPipeline[] }) {
                       return (
                         <div
                           key={idx}
-                          className="flex flex-col items-center flex-1 min-w-[70px] relative"
+                          className="flex flex-col items-center flex-1 min-w-0"
                           data-testid={`pipeline-stage-${program.programId}-${idx}`}
                         >
                           <div className="flex items-center w-full">
@@ -287,14 +287,11 @@ function PipelineByProgram({ programs }: { programs: ProgramPipeline[] }) {
                               style={{
                                 width: 36,
                                 height: 36,
-                                backgroundColor: hasDeals ? color : 'transparent',
-                                border: hasDeals ? 'none' : `2px solid ${color}`,
-                                opacity: hasDeals ? 1 : 0.4,
+                                backgroundColor: color,
+                                opacity: hasDeals ? 1 : 0.35,
                               }}
                             >
-                              {hasDeals && (
-                                <Check className="h-5 w-5 text-white" strokeWidth={3} />
-                              )}
+                              <Check className="h-5 w-5 text-white" strokeWidth={3} />
                             </div>
                             {!isLast && (
                               <div className="flex-1 h-[2px] bg-border" />
@@ -302,18 +299,23 @@ function PipelineByProgram({ programs }: { programs: ProgramPipeline[] }) {
                           </div>
 
                           <span
-                            className="text-xs font-bold mt-1"
-                            style={{ color: hasDeals ? color : undefined }}
-                            data-testid={`pipeline-stage-count-${program.programId}-${idx}`}
-                          >
-                            {hasDeals ? stage.count : <span className="text-muted-foreground font-normal">0</span>}
-                          </span>
-
-                          <span
-                            className="text-[11px] text-muted-foreground mt-1 leading-tight text-center px-1 max-w-[90px]"
+                            className="text-[11px] mt-2 leading-tight text-center px-1 font-medium"
+                            style={{ color }}
                             data-testid={`pipeline-stage-label-${program.programId}-${idx}`}
                           >
                             {stage.label}
+                          </span>
+
+                          <span
+                            className="text-xs mt-0.5"
+                            style={{ color: hasDeals ? color : undefined }}
+                            data-testid={`pipeline-stage-count-${program.programId}-${idx}`}
+                          >
+                            {hasDeals ? (
+                              <span className="font-bold">{stage.count} {stage.count === 1 ? 'deal' : 'deals'}</span>
+                            ) : (
+                              <span className="text-muted-foreground">0</span>
+                            )}
                           </span>
                         </div>
                       );
