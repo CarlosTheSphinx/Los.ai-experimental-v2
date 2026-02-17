@@ -25,7 +25,6 @@ import {
   Pin,
   PinOff,
   Trash2,
-  X,
   Loader2,
   ChevronDown,
   AlertCircle,
@@ -34,13 +33,16 @@ import {
   Clock,
   User,
   AtSign,
+  PanelRightClose,
+  PanelRightOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DealMemoryPanelProps {
   dealId: number;
   projectId: number | null;
-  onClose: () => void;
+  collapsed?: boolean;
+  onToggle: () => void;
 }
 
 interface MemoryEntry {
@@ -111,7 +113,7 @@ function formatRelativeTime(dateStr: string) {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-export function DealMemoryPanel({ dealId, projectId, onClose }: DealMemoryPanelProps) {
+export function DealMemoryPanel({ dealId, projectId, collapsed, onToggle }: DealMemoryPanelProps) {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("memory");
   const [noteInput, setNoteInput] = useState("");
@@ -291,6 +293,21 @@ export function DealMemoryPanel({ dealId, projectId, onClose }: DealMemoryPanelP
     });
   }
 
+  if (collapsed) {
+    return (
+      <div className="flex flex-col items-center h-full border-l bg-background py-2" data-testid="deal-memory-panel-collapsed">
+        <Button size="icon" variant="ghost" onClick={onToggle} data-testid="button-expand-memory">
+          <PanelRightOpen className="h-4 w-4" />
+        </Button>
+        <div className="flex-1 flex items-center justify-center">
+          <span className="text-xs text-muted-foreground font-medium" style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}>
+            Deal Memory
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full border-l bg-background" data-testid="deal-memory-panel">
       <div className="flex items-center justify-between p-3 border-b flex-shrink-0">
@@ -298,8 +315,8 @@ export function DealMemoryPanel({ dealId, projectId, onClose }: DealMemoryPanelP
           <Brain className="h-4 w-4 text-primary" />
           <h3 className="font-semibold text-sm">Deal Memory</h3>
         </div>
-        <Button size="icon" variant="ghost" onClick={onClose} data-testid="button-close-memory">
-          <X className="h-4 w-4" />
+        <Button size="icon" variant="ghost" onClick={onToggle} data-testid="button-collapse-memory">
+          <PanelRightClose className="h-4 w-4" />
         </Button>
       </div>
 

@@ -68,7 +68,6 @@ import {
   CloudUpload,
   LinkIcon,
   Zap,
-  Brain,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -559,7 +558,7 @@ export default function AdminDealDetail() {
   const project = projectDetailData?.project;
 
   const [activeFilter, setActiveFilter] = useState<'all' | 'tasks' | 'documents' | 'activity' | 'digests' | 'checklist' | 'ai_insights'>('all');
-  const [showMemoryPanel, setShowMemoryPanel] = useState(false);
+  const [showMemoryPanel, setShowMemoryPanel] = useState(true);
   const [expandedStages, setExpandedStages] = useState<Set<number>>(new Set());
   const [stageExpandInitialized, setStageExpandInitialized] = useState(false);
 
@@ -1852,16 +1851,6 @@ export default function AdminDealDetail() {
                   </span>
                 );
               })()}
-              <Button
-                size="sm"
-                variant={showMemoryPanel ? 'default' : 'outline'}
-                onClick={() => setShowMemoryPanel(!showMemoryPanel)}
-                className="toggle-elevate"
-                data-testid="button-toggle-memory"
-              >
-                <Brain className="h-3.5 w-3.5 mr-1.5" />
-                Deal Memory
-              </Button>
               {linkedProjectId && (
                 <Button
                   size="sm"
@@ -3160,15 +3149,14 @@ export default function AdminDealDetail() {
       </Dialog>
       </div>
 
-      {showMemoryPanel && (
-        <div className="w-[380px] flex-shrink-0 h-full" data-testid="memory-sidebar">
-          <DealMemoryPanel
-            dealId={deal.id}
-            projectId={linkedProjectId}
-            onClose={() => setShowMemoryPanel(false)}
-          />
-        </div>
-      )}
+      <div className={cn("flex-shrink-0 h-full transition-all duration-200", showMemoryPanel ? "w-[380px]" : "w-10")} data-testid="memory-sidebar">
+        <DealMemoryPanel
+          dealId={deal.id}
+          projectId={linkedProjectId}
+          collapsed={!showMemoryPanel}
+          onToggle={() => setShowMemoryPanel(!showMemoryPanel)}
+        />
+      </div>
     </div>
   );
 }
