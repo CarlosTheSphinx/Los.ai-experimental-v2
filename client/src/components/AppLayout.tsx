@@ -33,6 +33,7 @@ import {
   X,
   Globe,
   GraduationCap,
+  ShieldCheck,
 } from "lucide-react";
 import {
   Select,
@@ -110,6 +111,7 @@ const adminNavItems: NavItem[] = [
   { href: "/admin/commercial/config", label: "Commercial Config", icon: ClipboardEdit, requiredPermission: "commercial.manage" },
   { href: "/admin/partners", label: "Partners", icon: Handshake, requiredPermission: "partners.view" },
   { href: "/admin/programs", label: "Programs", icon: Settings2, requiredPermission: "programs.view" },
+  { href: "/admin/credit-policies", label: "Credit Policies", icon: ShieldCheck, requiredPermission: "programs.view" },
   { href: "/admin/ai-review", label: "Lane", icon: UserCircle, requiredPermission: "programs.view" },
   { href: "/admin/ai-agents", label: "AI Agents", icon: Sparkles, requiredPermission: "agents.view" },
   { href: "/admin/onboarding", label: "Onboarding", icon: BookOpen, requiredPermission: "onboarding.view" },
