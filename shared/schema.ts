@@ -1315,8 +1315,12 @@ export const scheduledDigestDrafts = pgTable("scheduled_digest_drafts", {
   // Recipient snapshot (JSON array of recipient info at time of draft creation)
   recipients: jsonb("recipients").default('[]'),
   
-  // Status: draft, approved, sent, skipped
+  // Status: draft, approved, sent, skipped, superseded
   status: varchar("status", { length: 50 }).default("draft").notNull(),
+  
+  // Source: 'digest' for regular scheduled digests, 'ai_communication' for AI-generated
+  source: varchar("source", { length: 50 }).default("digest").notNull(),
+  sourceCommId: integer("source_comm_id"),
   
   // Approval tracking
   approvedBy: integer("approved_by").references(() => users.id, { onDelete: 'set null' }),

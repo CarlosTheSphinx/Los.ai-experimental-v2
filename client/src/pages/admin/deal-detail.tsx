@@ -1827,7 +1827,7 @@ export default function AdminDealDetail() {
                 { key: 'tasks' as const, label: 'Tasks', icon: CheckSquare },
                 { key: 'documents' as const, label: 'Documents', icon: FileText },
                 { key: 'activity' as const, label: 'Activity', icon: Activity },
-                { key: 'digests' as const, label: 'Digests', icon: BarChart3 },
+                { key: 'digests' as const, label: 'Communications', icon: BarChart3 },
                 { key: 'ai_insights' as const, label: 'AI Insights', icon: Zap },
               ]).map(filter => (
                 <Button

@@ -694,7 +694,7 @@ export function registerAgentRoutes(app: Express, deps: RouteDeps): void {
 
         let digestResult: { queued: boolean; draftId?: number; message: string } = {
           queued: false,
-          message: 'No digest config found for this deal'
+          message: 'No communication config found for this deal'
         };
 
         try {
@@ -716,70 +716,61 @@ export function registerAgentRoutes(app: Express, deps: RouteDeps): void {
             const endOfTomorrow = new Date(tomorrow);
             endOfTomorrow.setHours(23, 59, 59, 999);
 
-            const [existingDraft] = await db.select()
-              .from(scheduledDigestDrafts)
+            // Supersede any existing regular digest drafts for tomorrow
+            // AI communication takes priority over regular digests (one system message per day per deal)
+            await db.update(scheduledDigestDrafts)
+              .set({ status: 'superseded', updatedAt: new Date() })
               .where(and(
                 eq(scheduledDigestDrafts.configId, digestConfig.id),
                 gte(scheduledDigestDrafts.scheduledDate, tomorrow),
                 lte(scheduledDigestDrafts.scheduledDate, endOfTomorrow),
-                sql`${scheduledDigestDrafts.status} IN ('draft', 'approved')`
-              ))
-              .limit(1);
+                sql`${scheduledDigestDrafts.status} IN ('draft', 'approved')`,
+                eq(scheduledDigestDrafts.source, 'digest')
+              ));
 
             let finalBody = comm.editedBody || comm.body || '';
+            let finalSubject = comm.subject || 'Deal Update';
             try {
               const trimmed = finalBody.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
               const parsed = JSON.parse(trimmed);
+              if (parsed.subject) finalSubject = parsed.subject;
               if (parsed.body) finalBody = parsed.body;
             } catch {}
-            const finalSubject = comm.subject || 'Deal Update';
-            const aiSection = `\n\n--- AI Communication ---\nSubject: ${finalSubject}\n\n${finalBody}`;
 
-            if (existingDraft) {
-              const updatedBody = (existingDraft.emailBody || '') + aiSection;
-              await db.update(scheduledDigestDrafts)
-                .set({
-                  emailBody: updatedBody,
-                  updatesCount: (existingDraft.updatesCount || 0) + 1,
-                  updatedAt: new Date()
-                })
-                .where(eq(scheduledDigestDrafts.id, existingDraft.id));
+            const recipients = await db.select()
+              .from(loanDigestRecipients)
+              .where(and(
+                eq(loanDigestRecipients.configId, digestConfig.id),
+                eq(loanDigestRecipients.isActive, true)
+              ));
 
-              digestResult = { queued: true, draftId: existingDraft.id, message: 'Appended to existing digest draft for tomorrow' };
+            if (recipients.length > 0) {
+              const [newDraft] = await db.insert(scheduledDigestDrafts).values({
+                configId: digestConfig.id,
+                projectId,
+                scheduledDate: tomorrow,
+                timeOfDay: digestConfig.timeOfDay || '09:00',
+                emailSubject: finalSubject,
+                emailBody: finalBody,
+                smsBody: finalBody.substring(0, 160),
+                documentsCount: 0,
+                updatesCount: 1,
+                recipients: JSON.stringify(recipients),
+                status: 'approved',
+                source: 'ai_communication',
+                sourceCommId: comm.id,
+                approvedBy: req.user?.id,
+                approvedAt: new Date(),
+              }).returning();
+
+              digestResult = { queued: true, draftId: newDraft.id, message: 'AI communication scheduled for tomorrow (takes priority over regular digest)' };
             } else {
-              const recipients = await db.select()
-                .from(loanDigestRecipients)
-                .where(and(
-                  eq(loanDigestRecipients.configId, digestConfig.id),
-                  eq(loanDigestRecipients.isActive, true)
-                ));
-
-              if (recipients.length > 0) {
-                const emailBody = (digestConfig.emailBody || 'Hello {{recipientName}},\n\nHere is an update on your loan.\n\n{{updatesSection}}') + aiSection;
-
-                const [newDraft] = await db.insert(scheduledDigestDrafts).values({
-                  configId: digestConfig.id,
-                  projectId,
-                  scheduledDate: tomorrow,
-                  timeOfDay: digestConfig.timeOfDay || '09:00',
-                  emailSubject: digestConfig.emailSubject || 'Loan Update',
-                  emailBody,
-                  smsBody: digestConfig.smsBody,
-                  documentsCount: 0,
-                  updatesCount: 1,
-                  recipients: JSON.stringify(recipients),
-                  status: 'draft',
-                }).returning();
-
-                digestResult = { queued: true, draftId: newDraft.id, message: 'Created new digest draft for tomorrow with AI communication' };
-              } else {
-                digestResult = { queued: false, message: 'Digest config exists but has no active recipients' };
-              }
+              digestResult = { queued: false, message: 'Communication config exists but has no active recipients' };
             }
           }
         } catch (digestError) {
-          console.error('Failed to queue communication to digest (non-blocking):', digestError);
-          digestResult = { queued: false, message: 'Failed to queue to digest' };
+          console.error('Failed to queue AI communication (non-blocking):', digestError);
+          digestResult = { queued: false, message: 'Failed to queue communication' };
         }
 
         try {

@@ -177,8 +177,14 @@ export function DigestConfigPanel({ dealId }: DigestConfigPanelProps) {
   const { data: agentCommsData } = useQuery<any[]>({
     queryKey: ['/api/projects', dealId, 'agent-communications'],
   });
+  // Filter approved comms that are NOT yet scheduled as drafts (deduplicate with drafts that have source=ai_communication)
+  const scheduledCommIds = new Set(
+    (draftsData?.drafts || [])
+      .filter((d: any) => d.source === 'ai_communication' && d.sourceCommId)
+      .map((d: any) => d.sourceCommId)
+  );
   const approvedComms = (agentCommsData || []).filter(
-    (c: any) => c.status === 'approved' && !c.sentAt
+    (c: any) => c.status === 'approved' && !c.sentAt && !scheduledCommIds.has(c.id)
   );
 
   // Save config mutation
@@ -189,7 +195,7 @@ export function DigestConfigPanel({ dealId }: DigestConfigPanelProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/deals', dealId, 'digest'] });
-      toast({ title: 'Digest settings saved' });
+      toast({ title: 'Communication settings saved' });
     },
     onError: (error: Error) => {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
@@ -376,7 +382,7 @@ export function DigestConfigPanel({ dealId }: DigestConfigPanelProps) {
               data-testid="button-enable-digest"
             >
               {saveConfigMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Enable Digest Notifications
+              Enable Automated Communications
             </Button>
           </div>
         </CardContent>
@@ -391,7 +397,7 @@ export function DigestConfigPanel({ dealId }: DigestConfigPanelProps) {
           <div>
             <CardTitle className="flex items-center gap-2">
               <Bell className="h-5 w-5" />
-              Loan Digest Notifications
+              Communications
             </CardTitle>
             <CardDescription>
               Automated updates sent to borrowers and partners
@@ -782,18 +788,18 @@ export function DigestConfigPanel({ dealId }: DigestConfigPanelProps) {
 
         <Separator />
 
-        {/* Upcoming Digests / Schedule View */}
+        {/* Upcoming Communications / Schedule View */}
         <div className="space-y-4">
           <h4 className="font-medium flex items-center gap-2">
             <Calendar className="h-4 w-4" />
-            Upcoming Digests ({drafts.filter(d => d.status === 'draft' || d.status === 'approved').length})
+            Upcoming Communications ({drafts.filter(d => d.status === 'draft' || d.status === 'approved').length + approvedComms.length})
           </h4>
 
-          {drafts.length === 0 ? (
+          {drafts.filter(d => d.status !== 'superseded').length === 0 && approvedComms.length === 0 ? (
             <div className="text-center py-6 text-muted-foreground text-sm border rounded-lg">
               <Calendar className="h-8 w-8 mx-auto mb-2 opacity-40" />
-              <p>No upcoming digests scheduled.</p>
-              <p className="text-xs mt-1">Digests are created automatically based on your schedule, or when AI communications are approved.</p>
+              <p>No upcoming communications scheduled.</p>
+              <p className="text-xs mt-1">Communications are created automatically based on your schedule, or when AI communications are approved.</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -823,13 +829,22 @@ export function DigestConfigPanel({ dealId }: DigestConfigPanelProps) {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
+                        {(draft as any).source === 'ai_communication' && (
+                          <Badge variant="outline" className="text-xs bg-primary/10 border-primary/30">
+                            <Sparkles className="h-3 w-3 mr-1" />
+                            AI Priority
+                          </Badge>
+                        )}
                         <Badge variant={
                           draft.status === 'approved' ? 'default' :
                           draft.status === 'sent' ? 'default' :
                           draft.status === 'skipped' ? 'secondary' :
+                          draft.status === 'superseded' ? 'secondary' :
                           'outline'
                         }>
-                          {draft.status === 'draft' ? 'Needs Review' : draft.status.charAt(0).toUpperCase() + draft.status.slice(1)}
+                          {draft.status === 'draft' ? 'Needs Review' : 
+                           draft.status === 'superseded' ? 'Superseded by AI' :
+                           draft.status.charAt(0).toUpperCase() + draft.status.slice(1)}
                         </Badge>
                         {draft.status === 'draft' && (
                           <>
@@ -989,8 +1004,11 @@ export function DigestConfigPanel({ dealId }: DigestConfigPanelProps) {
             <div className="space-y-3">
               <h4 className="font-medium flex items-center gap-2">
                 <Sparkles className="h-4 w-4" />
-                Approved AI Communications ({approvedComms.length})
+                AI Communications ({approvedComms.length})
               </h4>
+              <p className="text-xs text-muted-foreground">
+                Approved AI communications are auto-scheduled as the next day's outbound message, taking priority over regular digests. Only one automated message per deal per day.
+              </p>
               {approvedComms.map((comm: any) => {
                 let displayBody = comm.editedBody || comm.body || '';
                 let displaySubject = comm.subject || 'Deal Update';
@@ -1002,17 +1020,20 @@ export function DigestConfigPanel({ dealId }: DigestConfigPanelProps) {
                 } catch {}
 
                 return (
-                  <div key={comm.id} className="border rounded-lg p-3 space-y-2" data-testid={`approved-comm-deal-${comm.id}`}>
+                  <div key={comm.id} className="border rounded-lg p-3 space-y-2 border-primary/30 bg-primary/5" data-testid={`approved-comm-deal-${comm.id}`}>
                     <div className="flex items-start justify-between gap-2 flex-wrap">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-medium truncate">{displaySubject}</span>
-                          <Badge variant="default" className="text-[10px]">Approved</Badge>
+                          <Badge variant="outline" className="text-[10px] bg-primary/10 border-primary/30">
+                            <Sparkles className="h-2.5 w-2.5 mr-0.5" />
+                            Scheduled
+                          </Badge>
                         </div>
                         <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
                           <span>To: {comm.recipientType || 'borrower'}</span>
                           {comm.approvedAt && (
-                            <span>{new Date(comm.approvedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+                            <span>Approved {new Date(comm.approvedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
                           )}
                         </div>
                       </div>
@@ -1050,7 +1071,7 @@ export function DigestConfigPanel({ dealId }: DigestConfigPanelProps) {
           >
             <span className="flex items-center gap-2">
               <History className="h-4 w-4" />
-              Digest History
+              Communication History
             </span>
             {showHistory ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </Button>

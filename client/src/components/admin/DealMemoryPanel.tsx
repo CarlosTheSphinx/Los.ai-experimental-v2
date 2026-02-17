@@ -89,9 +89,9 @@ const ENTRY_TYPE_CONFIG: Record<string, { icon: any; color: string; label: strin
   document_rejected: { icon: XCircle, color: "text-destructive", label: "Document Rejected" },
   stage_change: { icon: ArrowRightLeft, color: "text-info", label: "Stage Changed" },
   communication_approved: { icon: MessageSquare, color: "text-primary", label: "Communication Approved" },
-  digest_approved: { icon: CheckCircle2, color: "text-primary", label: "Digest Approved" },
-  digest_sent: { icon: Mail, color: "text-primary", label: "Digest Sent" },
-  digest_skipped: { icon: Mail, color: "text-muted-foreground", label: "Digest Skipped" },
+  digest_approved: { icon: CheckCircle2, color: "text-primary", label: "Communication Approved" },
+  digest_sent: { icon: Mail, color: "text-primary", label: "Communication Sent" },
+  digest_skipped: { icon: Mail, color: "text-muted-foreground", label: "Communication Skipped" },
   note_added: { icon: StickyNote, color: "text-warning", label: "Note Added" },
   field_change: { icon: ArrowRightLeft, color: "text-muted-foreground", label: "Field Changed" },
 };

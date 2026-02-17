@@ -10396,17 +10396,17 @@ If the user provides specific criteria, extract as many rules as you can from th
       
       // AUTO-GENERATE DRAFTS: Create drafts for any configs that don't have one yet
       for (const config of scheduledConfigs) {
-        // Check if draft already exists
-        const existingDraft = await db.select()
+        // Check if any drafts exist for this config on this date
+        const existingDrafts = await db.select()
           .from(scheduledDigestDrafts)
           .where(and(
             eq(scheduledDigestDrafts.configId, config.id),
             gte(scheduledDigestDrafts.scheduledDate, startOfTargetDay),
-            lte(scheduledDigestDrafts.scheduledDate, endOfTargetDay)
-          ))
-          .limit(1);
+            lte(scheduledDigestDrafts.scheduledDate, endOfTargetDay),
+            sql`${scheduledDigestDrafts.status} NOT IN ('superseded')`
+          ));
         
-        if (existingDraft.length === 0) {
+        if (existingDrafts.length === 0) {
           // Get recipients count for this config
           const recipientCount = await db.select({ count: sql<number>`count(*)` })
             .from(loanDigestRecipients)
@@ -10430,9 +10430,21 @@ If the user provides specific criteria, extract as many rules as you can from th
                 updatesCount: 0,
                 recipients: '[]',
                 status: 'draft',
+                source: 'digest',
               });
             } catch (e) {
               console.log('Draft already exists or could not be created:', (e as Error).message);
+            }
+          }
+        } else {
+          // If there's an AI communication draft, supersede any regular digest draft for same day
+          const aiDraft = existingDrafts.find((d: any) => d.source === 'ai_communication' && (d.status === 'draft' || d.status === 'approved'));
+          if (aiDraft) {
+            const regularDrafts = existingDrafts.filter((d: any) => d.source === 'digest' && (d.status === 'draft' || d.status === 'approved'));
+            for (const rd of regularDrafts) {
+              await db.update(scheduledDigestDrafts)
+                .set({ status: 'superseded', updatedAt: new Date() })
+                .where(eq(scheduledDigestDrafts.id, rd.id));
             }
           }
         }
@@ -10547,6 +10559,8 @@ If the user provides specific criteria, extract as many rules as you can from th
             approvedBy: draft.approvedBy,
             approvedAt: draft.approvedAt?.toISOString() || null,
             sentAt: draft.sentAt?.toISOString() || null,
+            source: (draft as any).source || 'digest',
+            sourceCommId: (draft as any).sourceCommId || null,
           } : null,
           sentDigests: sentDigests.map(s => ({
             ...s,

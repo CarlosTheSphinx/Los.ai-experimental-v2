@@ -236,11 +236,11 @@ export default function AdminDigests() {
       return apiRequest('POST', `/api/admin/digests/drafts/${draftId}/send`);
     },
     onSuccess: (data: any) => {
-      toast({ title: "Digest Sent", description: data.message });
+      toast({ title: "Communication Sent", description: data.message });
       refetch();
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to send digest", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to send communication", variant: "destructive" });
     },
   });
 
@@ -462,38 +462,61 @@ export default function AdminDigests() {
         </Badge>
       );
     }
-    switch (digest.draft.status) {
-      case 'draft':
-        return (
-          <Badge variant="secondary">
-            <Edit3 className="h-3 w-3 mr-1" />
-            Draft
-          </Badge>
-        );
-      case 'approved':
-        return (
-          <Badge className="bg-success">
-            <Check className="h-3 w-3 mr-1" />
-            Approved
-          </Badge>
-        );
-      case 'sent':
-        return (
-          <Badge variant="default">
-            <CheckCircle2 className="h-3 w-3 mr-1" />
-            Sent
-          </Badge>
-        );
-      case 'skipped':
-        return (
-          <Badge variant="outline" className="text-muted-foreground">
-            <Ban className="h-3 w-3 mr-1" />
-            Skipped
-          </Badge>
-        );
-      default:
-        return null;
-    }
+    const sourceBadge = (digest.draft as any).source === 'ai_communication' ? (
+      <Badge variant="outline" className="text-xs bg-primary/10 border-primary/30">
+        <Sparkles className="h-3 w-3 mr-1" />
+        AI
+      </Badge>
+    ) : null;
+    
+    const statusBadge = (() => {
+      switch (digest.draft.status) {
+        case 'draft':
+          return (
+            <Badge variant="secondary">
+              <Edit3 className="h-3 w-3 mr-1" />
+              Draft
+            </Badge>
+          );
+        case 'approved':
+          return (
+            <Badge className="bg-success">
+              <Check className="h-3 w-3 mr-1" />
+              Approved
+            </Badge>
+          );
+        case 'sent':
+          return (
+            <Badge variant="default">
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              Sent
+            </Badge>
+          );
+        case 'skipped':
+          return (
+            <Badge variant="outline" className="text-muted-foreground">
+              <Ban className="h-3 w-3 mr-1" />
+              Skipped
+            </Badge>
+          );
+        case 'superseded':
+          return (
+            <Badge variant="outline" className="text-muted-foreground">
+              <Ban className="h-3 w-3 mr-1" />
+              Superseded
+            </Badge>
+          );
+        default:
+          return null;
+      }
+    })();
+    
+    return (
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {sourceBadge}
+        {statusBadge}
+      </div>
+    );
   };
 
   return (
@@ -501,7 +524,7 @@ export default function AdminDigests() {
       <div className="flex items-center justify-between gap-2 md:gap-3 flex-wrap">
         <div className="flex items-center gap-2 md:gap-3 min-w-0">
           <CalendarDays className="h-5 w-5 md:h-6 md:w-6 text-muted-foreground shrink-0" />
-          <h1 className="text-xl md:text-2xl font-semibold tracking-tight truncate" data-testid="text-admin-digests-title">Daily Digests</h1>
+          <h1 className="text-xl md:text-2xl font-semibold tracking-tight truncate" data-testid="text-admin-digests-title">Communications</h1>
         </div>
         <Button
           variant="outline"
@@ -584,12 +607,12 @@ export default function AdminDigests() {
           <CardHeader className="p-4 md:p-6">
             <CardTitle className="flex items-center gap-2 text-base md:text-lg">
               <FileText className="h-4 w-4 md:h-5 md:w-5 shrink-0" />
-              <span className="truncate">Digests for {format(selectedDate, "MMM d, yyyy")}</span>
+              <span className="truncate">Communications for {format(selectedDate, "MMM d, yyyy")}</span>
             </CardTitle>
             <CardDescription className="text-xs md:text-sm">
               {digests.length === 0 
-                ? "No digests scheduled for this day"
-                : `${digests.length} digest${digests.length === 1 ? '' : 's'} scheduled`
+                ? "No communications scheduled for this day"
+                : `${digests.length} communication${digests.length === 1 ? '' : 's'} scheduled`
               }
             </CardDescription>
           </CardHeader>
@@ -662,8 +685,8 @@ export default function AdminDigests() {
             ) : digests.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <CalendarDays className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No digests scheduled for this day</p>
-                <p className="text-sm mt-2">Digests are configured on individual deal pages</p>
+                <p>No communications scheduled for this day</p>
+                <p className="text-sm mt-2">Communications are configured on individual deal pages</p>
               </div>
             ) : (
               <ScrollArea className="h-[500px] md:h-[600px] pr-2 md:pr-4">
