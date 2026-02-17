@@ -28,7 +28,12 @@ import {
   ChevronUp,
   History,
   Loader2,
-  Edit2
+  Edit2,
+  Check,
+  SkipForward,
+  Eye,
+  Save,
+  X
 } from 'lucide-react';
 
 interface DigestConfig {
@@ -78,6 +83,25 @@ interface DigestHistory {
   sentAt: string;
 }
 
+interface DigestDraft {
+  id: number;
+  configId: number;
+  projectId: number | null;
+  scheduledDate: string;
+  timeOfDay: string;
+  emailSubject: string | null;
+  emailBody: string | null;
+  smsBody: string | null;
+  documentsCount: number;
+  updatesCount: number;
+  status: string;
+  approvedBy: number | null;
+  approvedAt: string | null;
+  sentAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface DigestConfigPanelProps {
   dealId: number;
 }
@@ -110,6 +134,9 @@ export function DigestConfigPanel({ dealId }: DigestConfigPanelProps) {
   const [showHistory, setShowHistory] = useState(false);
   const [showAddRecipient, setShowAddRecipient] = useState(false);
   const [showMessageTemplate, setShowMessageTemplate] = useState(false);
+  const [editingDraftId, setEditingDraftId] = useState<number | null>(null);
+  const [previewDraftId, setPreviewDraftId] = useState<number | null>(null);
+  const [draftEdits, setDraftEdits] = useState<{ emailSubject: string; emailBody: string; smsBody: string }>({ emailSubject: '', emailBody: '', smsBody: '' });
   const [newRecipient, setNewRecipient] = useState({
     userId: null as number | null,
     recipientName: '',
@@ -137,6 +164,11 @@ export function DigestConfigPanel({ dealId }: DigestConfigPanelProps) {
   // Fetch outstanding docs for preview
   const { data: outstandingDocsData } = useQuery<{ documents: Array<{ id: number; name: string; status: string }> }>({
     queryKey: ['/api/admin/deals', dealId, 'outstanding-docs'],
+  });
+
+  // Fetch digest drafts
+  const { data: draftsData } = useQuery<{ drafts: DigestDraft[] }>({
+    queryKey: ['/api/admin/deals', dealId, 'digest/drafts'],
   });
 
   // Save config mutation
@@ -200,11 +232,58 @@ export function DigestConfigPanel({ dealId }: DigestConfigPanelProps) {
     },
   });
 
+  // Update digest draft mutation
+  const updateDraftMutation = useMutation({
+    mutationFn: async ({ draftId, data }: { draftId: number; data: { emailSubject: string; emailBody: string; smsBody: string } }) => {
+      const response = await apiRequest('PUT', `/api/admin/digest/drafts/${draftId}`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/deals', dealId, 'digest/drafts'] });
+      setEditingDraftId(null);
+      toast({ title: 'Draft updated' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  // Approve digest draft mutation
+  const approveDraftMutation = useMutation({
+    mutationFn: async (draftId: number) => {
+      const response = await apiRequest('POST', `/api/admin/digest/drafts/${draftId}/approve`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/deals', dealId, 'digest/drafts'] });
+      toast({ title: 'Digest approved', description: 'This digest will be sent at its scheduled time.' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  // Skip digest draft mutation
+  const skipDraftMutation = useMutation({
+    mutationFn: async (draftId: number) => {
+      const response = await apiRequest('POST', `/api/admin/digest/drafts/${draftId}/skip`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/deals', dealId, 'digest/drafts'] });
+      toast({ title: 'Digest skipped' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+
   const config = digestData?.config;
   const recipients = digestData?.recipients || [];
   const potentialRecipients = potentialRecipientsData?.recipients || [];
   const history = historyData?.history || [];
   const outstandingDocs = outstandingDocsData?.documents || [];
+  const drafts = draftsData?.drafts || [];
 
   // Handle enabling digest (creates config if doesn't exist)
   const handleEnableDigest = async () => {
@@ -687,6 +766,209 @@ export function DigestConfigPanel({ dealId }: DigestConfigPanelProps) {
                   Add Recipient
                 </Button>
               </div>
+            </div>
+          )}
+        </div>
+
+        <Separator />
+
+        {/* Upcoming Digests / Schedule View */}
+        <div className="space-y-4">
+          <h4 className="font-medium flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            Upcoming Digests ({drafts.filter(d => d.status === 'draft' || d.status === 'approved').length})
+          </h4>
+
+          {drafts.length === 0 ? (
+            <div className="text-center py-6 text-muted-foreground text-sm border rounded-lg">
+              <Calendar className="h-8 w-8 mx-auto mb-2 opacity-40" />
+              <p>No upcoming digests scheduled.</p>
+              <p className="text-xs mt-1">Digests are created automatically based on your schedule, or when AI communications are approved.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {drafts.map(draft => {
+                const isEditing = editingDraftId === draft.id;
+                const isPreviewing = previewDraftId === draft.id;
+                const scheduledDate = new Date(draft.scheduledDate);
+                const isToday = scheduledDate.toDateString() === new Date().toDateString();
+                const isTomorrow = scheduledDate.toDateString() === new Date(Date.now() + 86400000).toDateString();
+
+                const dateLabel = isToday ? 'Today' : isTomorrow ? 'Tomorrow' : scheduledDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                const timeLabel = draft.timeOfDay ? `${parseInt(draft.timeOfDay) > 12 ? `${parseInt(draft.timeOfDay) - 12}:00 PM` : `${parseInt(draft.timeOfDay)}:00 AM`}` : '';
+
+                return (
+                  <div key={draft.id} className="border rounded-lg overflow-hidden" data-testid={`digest-draft-${draft.id}`}>
+                    <div className="flex items-center justify-between p-3 gap-2">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex flex-col items-center text-center min-w-[56px]">
+                          <span className="text-xs font-medium">{dateLabel}</span>
+                          <span className="text-xs text-muted-foreground">{timeLabel}</span>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm truncate">{draft.emailSubject || 'No subject'}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {draft.documentsCount} docs, {draft.updatesCount} updates
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <Badge variant={
+                          draft.status === 'approved' ? 'default' :
+                          draft.status === 'sent' ? 'default' :
+                          draft.status === 'skipped' ? 'secondary' :
+                          'outline'
+                        }>
+                          {draft.status === 'draft' ? 'Needs Review' : draft.status.charAt(0).toUpperCase() + draft.status.slice(1)}
+                        </Badge>
+                        {draft.status === 'draft' && (
+                          <>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => {
+                                if (isPreviewing) {
+                                  setPreviewDraftId(null);
+                                } else {
+                                  setPreviewDraftId(draft.id);
+                                  setEditingDraftId(null);
+                                }
+                              }}
+                              data-testid={`button-preview-draft-${draft.id}`}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => {
+                                if (isEditing) {
+                                  setEditingDraftId(null);
+                                } else {
+                                  setEditingDraftId(draft.id);
+                                  setPreviewDraftId(null);
+                                  setDraftEdits({
+                                    emailSubject: draft.emailSubject || '',
+                                    emailBody: draft.emailBody || '',
+                                    smsBody: draft.smsBody || '',
+                                  });
+                                }
+                              }}
+                              data-testid={`button-edit-draft-${draft.id}`}
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => approveDraftMutation.mutate(draft.id)}
+                              disabled={approveDraftMutation.isPending}
+                              data-testid={`button-approve-draft-${draft.id}`}
+                            >
+                              <Check className="h-4 w-4 text-green-600" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => skipDraftMutation.mutate(draft.id)}
+                              disabled={skipDraftMutation.isPending}
+                              data-testid={`button-skip-draft-${draft.id}`}
+                            >
+                              <SkipForward className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
+                        {draft.status === 'approved' && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => {
+                              setPreviewDraftId(isPreviewing ? null : draft.id);
+                              setEditingDraftId(null);
+                            }}
+                            data-testid={`button-preview-approved-${draft.id}`}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {isPreviewing && (
+                      <div className="border-t p-4 bg-muted/30 space-y-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Subject</Label>
+                          <p className="text-sm font-medium">{draft.emailSubject || 'No subject'}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Email Body</Label>
+                          <div className="text-sm whitespace-pre-wrap bg-background border rounded-lg p-3 max-h-[400px] overflow-y-auto">
+                            {draft.emailBody || 'No content'}
+                          </div>
+                        </div>
+                        {draft.smsBody && (
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">SMS</Label>
+                            <p className="text-sm bg-background border rounded-lg p-3">{draft.smsBody}</p>
+                          </div>
+                        )}
+                        {draft.sentAt && (
+                          <p className="text-xs text-muted-foreground">Sent: {new Date(draft.sentAt).toLocaleString()}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {isEditing && (
+                      <div className="border-t p-4 bg-muted/30 space-y-3">
+                        <div className="space-y-2">
+                          <Label>Subject</Label>
+                          <Input
+                            value={draftEdits.emailSubject}
+                            onChange={(e) => setDraftEdits({ ...draftEdits, emailSubject: e.target.value })}
+                            data-testid={`input-draft-subject-${draft.id}`}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Email Body</Label>
+                          <Textarea
+                            value={draftEdits.emailBody}
+                            onChange={(e) => setDraftEdits({ ...draftEdits, emailBody: e.target.value })}
+                            className="min-h-[300px] font-mono text-sm"
+                            data-testid={`input-draft-body-${draft.id}`}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>SMS Body</Label>
+                          <Textarea
+                            value={draftEdits.smsBody}
+                            onChange={(e) => setDraftEdits({ ...draftEdits, smsBody: e.target.value })}
+                            className="min-h-[80px] font-mono text-sm"
+                            data-testid={`input-draft-sms-${draft.id}`}
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            onClick={() => setEditingDraftId(null)}
+                            data-testid={`button-cancel-edit-draft-${draft.id}`}
+                          >
+                            <X className="h-4 w-4 mr-1" />
+                            Cancel
+                          </Button>
+                          <Button
+                            onClick={() => updateDraftMutation.mutate({ draftId: draft.id, data: draftEdits })}
+                            disabled={updateDraftMutation.isPending}
+                            data-testid={`button-save-draft-${draft.id}`}
+                          >
+                            {updateDraftMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+                            Save Changes
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

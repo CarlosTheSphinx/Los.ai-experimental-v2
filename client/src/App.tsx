@@ -48,7 +48,7 @@ import BorrowerQuotes from "@/pages/borrower-quotes";
 import AdminCommercialSubmissions from "@/pages/admin/commercial-submissions";
 import AdminCommercialDealDetail from "@/pages/admin/commercial-deal-detail";
 import CommercialSubmissionDetail from "@/pages/commercial-submission-detail";
-import AdminAIReview from "@/pages/admin/ai-review";
+
 import AdminCommercialConfig from "@/pages/admin/commercial-config";
 
 import ProcessorDashboard from "@/pages/admin/processor-dashboard";
@@ -223,7 +223,7 @@ function MainRoutes() {
           <Route path="/admin/digests" component={() => <AdminProtectedRoute component={AdminDigests} />} />
           <Route path="/admin/document-templates" component={() => <AdminProtectedRoute component={AdminDocumentTemplates} />} />
           <Route path="/admin/document-templates/:id" component={() => <AdminProtectedRoute component={AdminTemplateEditor} />} />
-          <Route path="/admin/ai-review" component={() => <AdminProtectedRoute component={AdminAIReview} />} />
+
           <Route path="/admin/commercial-submissions" component={() => <AdminProtectedRoute component={AdminCommercialSubmissions} />} />
           <Route path="/admin/commercial/submissions/:id" component={() => <AdminProtectedRoute component={AdminCommercialDealDetail} />} />
           <Route path="/admin/commercial/config" component={() => <AdminProtectedRoute component={AdminCommercialConfig} />} />

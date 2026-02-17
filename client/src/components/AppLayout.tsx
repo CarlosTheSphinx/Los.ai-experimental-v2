@@ -22,7 +22,7 @@ import {
   Search,
   Zap,
   Send,
-  UserCircle,
+
   Target,
   BotMessageSquare,
   Pin,
@@ -112,7 +112,7 @@ const adminNavItems: NavItem[] = [
   { href: "/admin/partners", label: "Partners", icon: Handshake, requiredPermission: "partners.view" },
   { href: "/admin/programs", label: "Programs", icon: Settings2, requiredPermission: "programs.view" },
   { href: "/admin/credit-policies", label: "Credit Policies", icon: ShieldCheck, requiredPermission: "programs.view" },
-  { href: "/admin/ai-review", label: "Lane", icon: UserCircle, requiredPermission: "programs.view" },
+
   { href: "/admin/ai-agents", label: "AI Orchestration Layer", icon: Sparkles, requiredPermission: "agents.view" },
   { href: "/admin/onboarding", label: "Onboarding", icon: BookOpen, requiredPermission: "onboarding.view" },
   { href: "/admin/digests", label: "Digests", icon: CalendarDays, requiredPermission: "digests.view" },

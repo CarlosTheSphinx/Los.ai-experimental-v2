@@ -12044,6 +12044,112 @@ If the user provides specific criteria, extract as many rules as you can from th
     }
   });
 
+  // Get scheduled digest drafts for a deal
+  app.get('/api/admin/deals/:dealId/digest/drafts', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      const config = await db
+        .select()
+        .from(loanDigestConfigs)
+        .where(eq(loanDigestConfigs.dealId, dealId));
+
+      if (!config[0]) {
+        return res.json({ drafts: [] });
+      }
+
+      const drafts = await db
+        .select()
+        .from(scheduledDigestDrafts)
+        .where(eq(scheduledDigestDrafts.configId, config[0].id))
+        .orderBy(desc(scheduledDigestDrafts.scheduledDate));
+
+      res.json({ drafts });
+    } catch (error: any) {
+      console.error('Get digest drafts error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update a digest draft (edit content before sending)
+  app.put('/api/admin/digest/drafts/:draftId', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const draftId = parseInt(req.params.draftId);
+      const { emailSubject, emailBody, smsBody } = req.body;
+
+      const [updated] = await db
+        .update(scheduledDigestDrafts)
+        .set({
+          emailSubject,
+          emailBody,
+          smsBody,
+          updatedAt: new Date(),
+        })
+        .where(eq(scheduledDigestDrafts.id, draftId))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ error: 'Draft not found' });
+      }
+
+      res.json({ draft: updated });
+    } catch (error: any) {
+      console.error('Update digest draft error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Approve a digest draft
+  app.post('/api/admin/digest/drafts/:draftId/approve', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const draftId = parseInt(req.params.draftId);
+
+      const [updated] = await db
+        .update(scheduledDigestDrafts)
+        .set({
+          status: 'approved',
+          approvedBy: req.user?.id || null,
+          approvedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(scheduledDigestDrafts.id, draftId))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ error: 'Draft not found' });
+      }
+
+      res.json({ draft: updated });
+    } catch (error: any) {
+      console.error('Approve digest draft error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Skip a digest draft
+  app.post('/api/admin/digest/drafts/:draftId/skip', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const draftId = parseInt(req.params.draftId);
+
+      const [updated] = await db
+        .update(scheduledDigestDrafts)
+        .set({
+          status: 'skipped',
+          updatedAt: new Date(),
+        })
+        .where(eq(scheduledDigestDrafts.id, draftId))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ error: 'Draft not found' });
+      }
+
+      res.json({ draft: updated });
+    } catch (error: any) {
+      console.error('Skip digest draft error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Get potential recipients for a deal (borrower and partner)
   app.get('/api/admin/deals/:dealId/potential-recipients', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {

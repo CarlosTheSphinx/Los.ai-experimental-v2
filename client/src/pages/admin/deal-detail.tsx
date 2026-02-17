@@ -66,10 +66,6 @@ import {
   BarChart3,
   RefreshCw,
   CloudUpload,
-  Sparkles,
-  ShieldCheck,
-  ShieldAlert,
-  ShieldQuestion,
   LinkIcon,
   BookOpen,
   Zap,
@@ -87,7 +83,6 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { DigestConfigPanel } from "@/components/DigestConfigPanel";
 import { LoanChecklist } from "@/components/LoanChecklist";
-import { AIReviewTab } from "@/components/admin/AIReviewTab";
 import { DealStoryPanel } from "@/components/admin/DealStoryPanel";
 import { AIInsightsPanel } from "@/components/admin/AIInsightsPanel";
 
@@ -563,7 +558,7 @@ export default function AdminDealDetail() {
   );
   const project = projectDetailData?.project;
 
-  const [activeFilter, setActiveFilter] = useState<'all' | 'tasks' | 'documents' | 'activity' | 'digests' | 'checklist' | 'ai_review' | 'deal_story' | 'ai_insights'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'tasks' | 'documents' | 'activity' | 'digests' | 'checklist' | 'deal_story' | 'ai_insights'>('all');
   const [expandedStages, setExpandedStages] = useState<Set<number>>(new Set());
   const [stageExpandInitialized, setStageExpandInitialized] = useState(false);
 
@@ -762,40 +757,6 @@ export default function AdminDealDetail() {
   const [newDocName, setNewDocName] = useState("");
   const [newDocCategory, setNewDocCategory] = useState("other");
   const [newDocRequired, setNewDocRequired] = useState(true);
-  const [reviewingDocId, setReviewingDocId] = useState<number | null>(null);
-  const [expandedReviewDocId, setExpandedReviewDocId] = useState<number | null>(null);
-  const [rejectingDocId, setRejectingDocId] = useState<number | null>(null);
-  const [rejectionReason, setRejectionReason] = useState('');
-  const [rejectingFindingKey, setRejectingFindingKey] = useState<string | null>(null);
-  const [findingRejectionReason, setFindingRejectionReason] = useState('');
-
-  const { data: aiReviewsData, isLoading: aiReviewsLoading } = useQuery<{ reviews: any[] }>({
-    queryKey: [`/api/admin/projects/${linkedProjectId}/ai-reviews`],
-    enabled: !!linkedProjectId,
-  });
-
-  const aiReviewsByDocId = (aiReviewsData?.reviews || []).reduce((acc: Record<number, any>, review: any) => {
-    if (!acc[review.documentId]) acc[review.documentId] = review;
-    return acc;
-  }, {} as Record<number, any>);
-
-  const triggerAiReview = useMutation({
-    mutationFn: async (docId: number) => {
-      setReviewingDocId(docId);
-      const res = await apiRequest('POST', `/api/admin/documents/${docId}/ai-review`, { projectId: linkedProjectId });
-      return res.json();
-    },
-    onSuccess: (data: any, docId: number) => {
-      queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${linkedProjectId}/ai-reviews`] });
-      setReviewingDocId(null);
-      setExpandedReviewDocId(docId);
-      toast({ title: "AI Review Complete", description: data?.summary || "Review finished" });
-    },
-    onError: (error: any) => {
-      setReviewingDocId(null);
-      toast({ title: "AI Review Failed", description: error.message, variant: "destructive" });
-    },
-  });
 
   const [pipelineRunning, setPipelineRunning] = useState(false);
   const triggerPipeline = useMutation({
@@ -818,28 +779,6 @@ export default function AdminDealDetail() {
       setPipelineRunning(false);
       const msg = error?.message?.includes("already running") ? "A pipeline is already running for this deal." : error?.message || "Failed to start pipeline";
       toast({ title: "Pipeline Error", description: msg, variant: "destructive" });
-    },
-  });
-
-  const overrideFindingMutation = useMutation({
-    mutationFn: async ({ reviewId, findingIndex, action, reason }: { reviewId: number; findingIndex: number; action: string; reason?: string }) => {
-      const res = await apiRequest('PATCH', `/api/admin/reviews/${reviewId}/findings/${findingIndex}/override`, { action, reason });
-      return res.json();
-    },
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${linkedProjectId}/ai-reviews`] });
-      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
-      setRejectingFindingKey(null);
-      setFindingRejectionReason('');
-      if (variables.action === 'reject') {
-        setExpandedReviewDocId(null);
-        toast({ title: "Document rejected", description: "The borrower has been notified and will need to resubmit." });
-      } else {
-        toast({ title: "Rule action saved" });
-      }
-    },
-    onError: (error: any) => {
-      toast({ title: "Failed to save action", description: error.message, variant: "destructive" });
     },
   });
 
@@ -1889,7 +1828,6 @@ export default function AdminDealDetail() {
                 { key: 'activity' as const, label: 'Activity', icon: Activity },
                 { key: 'digests' as const, label: 'Digests', icon: BarChart3 },
                 { key: 'ai_insights' as const, label: 'AI Insights', icon: Zap },
-                { key: 'ai_review' as const, label: 'AI Review', icon: Sparkles },
                 { key: 'deal_story' as const, label: 'Deal Story', icon: BookOpen },
               ]).map(filter => (
                 <Button
@@ -2115,16 +2053,13 @@ export default function AdminDealDetail() {
                           </div>
                           <div className="space-y-2">
                             {stageDocs.map((doc) => {
-                              const docReview = aiReviewsByDocId[doc.id];
-                              const isReviewing = reviewingDocId === doc.id;
                               return (
                               <div key={doc.id} className="space-y-0">
                               <div
                                 className={cn(
                                   "flex items-center justify-between gap-3 p-3 rounded-lg border",
                                   (doc.status === 'approved' || doc.status === 'uploaded') && "bg-success/10 border-success/30 opacity-80",
-                                  doc.status === 'rejected' && "bg-destructive/10 border-destructive/30",
-                                  expandedReviewDocId === doc.id && "rounded-b-none"
+                                  doc.status === 'rejected' && "bg-destructive/10 border-destructive/30"
                                 )}
                                 data-testid={`doc-row-${doc.id}`}
                               >
@@ -2146,17 +2081,6 @@ export default function AdminDealDetail() {
                                       </span>
                                       {doc.isRequired && (
                                         <Badge variant="secondary" className="text-[10px] bg-warning/10 text-warning">Required</Badge>
-                                      )}
-                                      {docReview && (
-                                        <Badge
-                                          variant={docReview.overallStatus === 'pass' ? 'default' : docReview.overallStatus === 'fail' ? 'destructive' : 'secondary'}
-                                          className={cn("text-[10px] cursor-pointer", docReview.overallStatus === 'pass' && "bg-success/10 text-success")}
-                                          onClick={(e) => { e.stopPropagation(); setExpandedReviewDocId(expandedReviewDocId === doc.id ? null : doc.id); }}
-                                          data-testid={`badge-ai-review-${doc.id}`}
-                                        >
-                                          {docReview.overallStatus === 'pass' ? <ShieldCheck className="h-3 w-3 mr-0.5" /> : docReview.overallStatus === 'fail' ? <ShieldAlert className="h-3 w-3 mr-0.5" /> : <ShieldQuestion className="h-3 w-3 mr-0.5" />}
-                                          AI: {docReview.overallStatus === 'pass' ? 'Pass' : docReview.overallStatus === 'fail' ? 'Fail' : 'Review'}
-                                        </Badge>
                                       )}
                                     </div>
                                     {(doc.files?.length > 0) && (
@@ -2206,17 +2130,6 @@ export default function AdminDealDetail() {
                                           Drive
                                         </Button>
                                       )}
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={(e) => { e.stopPropagation(); triggerAiReview.mutate(doc.id); }}
-                                        disabled={isReviewing}
-                                        data-testid={`button-ai-review-${doc.id}`}
-                                        title="AI Document Review"
-                                      >
-                                        {isReviewing ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Sparkles className="h-3 w-3 mr-1" />}
-                                        {isReviewing ? 'Reviewing...' : 'AI Review'}
-                                      </Button>
                                     </>
                                   )}
                                   <input type="file" id={`file-input-${doc.id}`} className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" onChange={handleFileInputChange(doc.id)} data-testid={`input-file-${doc.id}`} multiple />
@@ -2262,256 +2175,6 @@ export default function AdminDealDetail() {
                                       </Button>
                                     </div>
                                   ))}
-                                </div>
-                              )}
-                              {expandedReviewDocId === doc.id && docReview && (
-                                <div className="border border-t-0 rounded-b-lg p-3 bg-muted/30 space-y-2" data-testid={`review-panel-${doc.id}`}>
-                                  <div className="flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-2">
-                                      {docReview.overallStatus === 'pass' ? <ShieldCheck className="h-4 w-4 text-success" /> : docReview.overallStatus === 'fail' ? <ShieldAlert className="h-4 w-4 text-destructive" /> : <ShieldQuestion className="h-4 w-4 text-warning" />}
-                                      <span className="text-sm font-medium">
-                                        AI Review: {docReview.overallStatus === 'pass' ? 'Passed' : docReview.overallStatus === 'fail' ? 'Failed' : 'Needs Review'}
-                                      </span>
-                                      {docReview.rulesUsed > 0 && (
-                                        <span className="text-[10px] text-muted-foreground">
-                                          ({docReview.rulesPassed || 0}/{docReview.rulesUsed} rules passed)
-                                        </span>
-                                      )}
-                                    </div>
-                                    <Button size="icon" variant="ghost" onClick={() => setExpandedReviewDocId(null)} data-testid={`button-close-review-${doc.id}`}>
-                                      <XCircle className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </div>
-                                  {docReview.summary && (
-                                    <p className="text-xs text-muted-foreground">{docReview.summary}</p>
-                                  )}
-                                  {docReview.findings && docReview.findings.length > 0 && (
-                                    <div className="space-y-1.5">
-                                      {docReview.findings.map((finding: any, idx: number) => {
-                                        const findingKey = `${docReview.id}-${idx}`;
-                                        const isOverridden = !!finding.overrideAction;
-                                        const showRejectInput = rejectingFindingKey === findingKey;
-                                        const canAct = (finding.status === 'fail' || finding.status === 'warning');
-
-                                        return (
-                                        <div key={idx} data-testid={`finding-row-${doc.id}-${idx}`} className={cn(
-                                          "p-2 rounded-md text-xs border",
-                                          !isOverridden && finding.status === 'pass' && "bg-success/10 border-success/30",
-                                          !isOverridden && finding.status === 'fail' && "bg-destructive/10 border-destructive/30",
-                                          !isOverridden && finding.status === 'warning' && "bg-warning/10 border-warning/30",
-                                          !isOverridden && finding.status === 'info' && "bg-info/10 border-info/30",
-                                          isOverridden && finding.overrideAction === 'override_accept' && "bg-success/10 border-success/30",
-                                          isOverridden && finding.overrideAction === 'manual_review' && "bg-warning/10 border-warning/30",
-                                          isOverridden && finding.overrideAction === 'reject' && "bg-destructive/10 border-destructive/30"
-                                        )}>
-                                          <div className="flex items-start gap-2">
-                                            <div className="flex-shrink-0 mt-0.5">
-                                              {isOverridden && finding.overrideAction === 'override_accept' ? <CheckCircle2 className="h-3.5 w-3.5 text-success" /> :
-                                               isOverridden && finding.overrideAction === 'manual_review' ? <AlertCircle className="h-3.5 w-3.5 text-warning" /> :
-                                               isOverridden && finding.overrideAction === 'reject' ? <XCircle className="h-3.5 w-3.5 text-destructive" /> :
-                                               finding.status === 'pass' ? <CheckCircle2 className="h-3.5 w-3.5 text-success" /> :
-                                               finding.status === 'fail' ? <XCircle className="h-3.5 w-3.5 text-destructive" /> :
-                                               finding.status === 'warning' ? <AlertCircle className="h-3.5 w-3.5 text-warning" /> :
-                                               <Circle className="h-3.5 w-3.5 text-info" />}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                              <div className="flex items-center gap-1.5 flex-wrap">
-                                                <span className="font-medium">{finding.ruleName || finding.title}</span>
-                                                {finding.severity && (
-                                                  <Badge variant={finding.severity === 'fail' ? 'destructive' : finding.severity === 'warn' ? 'secondary' : 'outline'} className="text-[9px] px-1 py-0">
-                                                    {finding.severity === 'fail' ? 'Required' : finding.severity === 'warn' ? 'Warning' : 'Info'}
-                                                  </Badge>
-                                                )}
-                                                {isOverridden && (
-                                                  <Badge variant={finding.overrideAction === 'override_accept' ? 'outline' : finding.overrideAction === 'reject' ? 'destructive' : 'secondary'} className="text-[9px] px-1 py-0">
-                                                    {finding.overrideAction === 'override_accept' ? 'Overridden' : finding.overrideAction === 'manual_review' ? 'Manual Review' : 'Rejected'}
-                                                  </Badge>
-                                                )}
-                                                {finding.ruleType && finding.ruleType !== 'general' && !isOverridden && (
-                                                  <Badge variant="outline" className="text-[9px] px-1 py-0">{finding.ruleType.replace('_', ' ')}</Badge>
-                                                )}
-                                                {!finding.ruleType && finding.category && !isOverridden && (
-                                                  <Badge variant="outline" className="text-[9px] px-1 py-0">{finding.category}</Badge>
-                                                )}
-                                              </div>
-                                              <p className="text-muted-foreground mt-0.5">{finding.detail}</p>
-                                              {finding.evidence && (
-                                                <div className="mt-1 p-1.5 rounded bg-background border text-[11px] italic text-muted-foreground">
-                                                  {finding.evidence}
-                                                </div>
-                                              )}
-                                              {finding.pageReference && (
-                                                <span className="text-[10px] text-muted-foreground mt-0.5 inline-block">{finding.pageReference}</span>
-                                              )}
-                                              {isOverridden && finding.overrideReason && (
-                                                <div className="mt-1 p-1.5 rounded bg-background border text-[11px] text-muted-foreground">
-                                                  Reason: {finding.overrideReason}
-                                                </div>
-                                              )}
-                                            </div>
-                                          </div>
-
-                                          {canAct && !isOverridden && !showRejectInput && (
-                                            <div className="flex items-center gap-1.5 mt-2 pt-1.5 border-t border-dashed justify-end flex-wrap">
-                                              <Button
-                                                size="sm"
-                                                variant="ghost"
-                                                className="h-7 text-[11px]"
-                                                disabled={overrideFindingMutation.isPending}
-                                                onClick={() => overrideFindingMutation.mutate({ reviewId: docReview.id, findingIndex: idx, action: 'override_accept' })}
-                                                data-testid={`button-override-accept-${doc.id}-${idx}`}
-                                              >
-                                                <CheckCircle2 className="h-3 w-3 mr-1 text-success" />
-                                                Override & Accept
-                                              </Button>
-                                              <Button
-                                                size="sm"
-                                                variant="ghost"
-                                                className="h-7 text-[11px]"
-                                                disabled={overrideFindingMutation.isPending}
-                                                onClick={() => overrideFindingMutation.mutate({ reviewId: docReview.id, findingIndex: idx, action: 'manual_review' })}
-                                                data-testid={`button-manual-review-${doc.id}-${idx}`}
-                                              >
-                                                <AlertCircle className="h-3 w-3 mr-1 text-warning" />
-                                                Review Manually
-                                              </Button>
-                                              <Button
-                                                size="sm"
-                                                variant="ghost"
-                                                className="h-7 text-[11px]"
-                                                disabled={overrideFindingMutation.isPending}
-                                                onClick={() => { setRejectingFindingKey(findingKey); setFindingRejectionReason(''); }}
-                                                data-testid={`button-reject-finding-${doc.id}-${idx}`}
-                                              >
-                                                <XCircle className="h-3 w-3 mr-1 text-destructive" />
-                                                Reject
-                                              </Button>
-                                            </div>
-                                          )}
-
-                                          {showRejectInput && (
-                                            <div className="mt-2 pt-1.5 border-t border-dashed space-y-1.5">
-                                              <Textarea
-                                                placeholder="Rejection reason (will be included in borrower notifications)..."
-                                                value={findingRejectionReason}
-                                                onChange={(e) => setFindingRejectionReason(e.target.value)}
-                                                className="text-xs resize-none"
-                                                rows={2}
-                                                data-testid={`textarea-finding-reject-${doc.id}-${idx}`}
-                                              />
-                                              <div className="flex items-center gap-1.5 justify-end">
-                                                <Button
-                                                  size="sm"
-                                                  variant="ghost"
-                                                  className="h-7 text-[11px]"
-                                                  onClick={() => { setRejectingFindingKey(null); setFindingRejectionReason(''); }}
-                                                  data-testid={`button-cancel-finding-reject-${doc.id}-${idx}`}
-                                                >
-                                                  Cancel
-                                                </Button>
-                                                <Button
-                                                  size="sm"
-                                                  variant="destructive"
-                                                  className="h-7 text-[11px]"
-                                                  disabled={!findingRejectionReason.trim() || overrideFindingMutation.isPending}
-                                                  onClick={() => overrideFindingMutation.mutate({ reviewId: docReview.id, findingIndex: idx, action: 'reject', reason: findingRejectionReason.trim() })}
-                                                  data-testid={`button-confirm-finding-reject-${doc.id}-${idx}`}
-                                                >
-                                                  {overrideFindingMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <XCircle className="h-3 w-3 mr-1" />}
-                                                  Confirm Rejection
-                                                </Button>
-                                              </div>
-                                            </div>
-                                          )}
-
-                                          {isOverridden && canAct && (
-                                            <div className="flex justify-end mt-1.5">
-                                              <Button
-                                                size="sm"
-                                                variant="ghost"
-                                                className="h-6 text-[10px] text-muted-foreground"
-                                                disabled={overrideFindingMutation.isPending}
-                                                onClick={() => overrideFindingMutation.mutate({ reviewId: docReview.id, findingIndex: idx, action: 'clear' })}
-                                                data-testid={`button-undo-override-${doc.id}-${idx}`}
-                                              >
-                                                Change Decision
-                                              </Button>
-                                            </div>
-                                          )}
-                                        </div>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
-                                  {doc.status !== 'approved' && doc.status !== 'rejected' && (
-                                    <div className="border-t pt-3 mt-3">
-                                      {rejectingDocId === doc.id ? (
-                                        <div className="space-y-2">
-                                          <label className="text-xs font-medium">Rejection Reason</label>
-                                          <Textarea
-                                            placeholder="Explain why this document is being rejected. This will be included in the borrower's loan digest notification..."
-                                            value={rejectionReason}
-                                            onChange={(e) => setRejectionReason(e.target.value)}
-                                            className="text-sm resize-none"
-                                            rows={3}
-                                            data-testid={`textarea-rejection-reason-${doc.id}`}
-                                          />
-                                          <div className="flex items-center gap-2 justify-end">
-                                            <Button
-                                              size="sm"
-                                              variant="ghost"
-                                              onClick={() => { setRejectingDocId(null); setRejectionReason(''); }}
-                                              data-testid={`button-cancel-reject-${doc.id}`}
-                                            >
-                                              Cancel
-                                            </Button>
-                                            <Button
-                                              size="sm"
-                                              variant="destructive"
-                                              disabled={!rejectionReason.trim() || updateDocumentStatus.isPending}
-                                              onClick={() => {
-                                                updateDocumentStatus.mutate(
-                                                  { docId: doc.id, status: 'rejected', reviewNotes: rejectionReason.trim() },
-                                                  { onSuccess: () => { setRejectingDocId(null); setRejectionReason(''); setExpandedReviewDocId(null); } }
-                                                );
-                                              }}
-                                              data-testid={`button-confirm-reject-${doc.id}`}
-                                            >
-                                              {updateDocumentStatus.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <XCircle className="h-3 w-3 mr-1" />}
-                                              Confirm Rejection
-                                            </Button>
-                                          </div>
-                                        </div>
-                                      ) : (
-                                        <div className="flex items-center gap-2 justify-end">
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            onClick={() => { setRejectingDocId(doc.id); setRejectionReason(''); }}
-                                            disabled={updateDocumentStatus.isPending}
-                                            data-testid={`button-review-reject-${doc.id}`}
-                                          >
-                                            <XCircle className="h-3 w-3 mr-1" />
-                                            Reject
-                                          </Button>
-                                          <Button
-                                            size="sm"
-                                            onClick={() => {
-                                              updateDocumentStatus.mutate(
-                                                { docId: doc.id, status: 'approved' },
-                                                { onSuccess: () => setExpandedReviewDocId(null) }
-                                              );
-                                            }}
-                                            disabled={updateDocumentStatus.isPending}
-                                            data-testid={`button-review-accept-${doc.id}`}
-                                          >
-                                            <Check className="h-3 w-3 mr-1" />
-                                            Accept
-                                          </Button>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
                                 </div>
                               )}
                               </div>
@@ -2736,13 +2399,6 @@ export default function AdminDealDetail() {
             queryClient.invalidateQueries({ queryKey: ["/api/projects", linkedProjectId, "agent-communications"] });
           }}
         />
-      )}
-
-      {/* AI Review view */}
-      {activeFilter === 'ai_review' && (
-        <div data-testid="ai-review-container">
-          <AIReviewTab dealId={deal.id} projectId={linkedProjectId} />
-        </div>
       )}
 
       {/* Deal Story view */}
