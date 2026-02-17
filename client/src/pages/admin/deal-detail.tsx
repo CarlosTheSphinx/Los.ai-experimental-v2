@@ -89,6 +89,7 @@ import { DigestConfigPanel } from "@/components/DigestConfigPanel";
 import { LoanChecklist } from "@/components/LoanChecklist";
 import { AIReviewTab } from "@/components/admin/AIReviewTab";
 import { DealStoryPanel } from "@/components/admin/DealStoryPanel";
+import { AIInsightsPanel } from "@/components/admin/AIInsightsPanel";
 
 interface Deal {
   id: number;
@@ -562,7 +563,7 @@ export default function AdminDealDetail() {
   );
   const project = projectDetailData?.project;
 
-  const [activeFilter, setActiveFilter] = useState<'all' | 'tasks' | 'documents' | 'activity' | 'digests' | 'checklist' | 'ai_review' | 'deal_story'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'tasks' | 'documents' | 'activity' | 'digests' | 'checklist' | 'ai_review' | 'deal_story' | 'ai_insights'>('all');
   const [expandedStages, setExpandedStages] = useState<Set<number>>(new Set());
   const [stageExpandInitialized, setStageExpandInitialized] = useState(false);
 
@@ -805,8 +806,13 @@ export default function AdminDealDetail() {
     },
     onSuccess: () => {
       setPipelineRunning(false);
-      toast({ title: "AI Pipeline Started", description: "The AI agents are analyzing this deal. Check the Deal Story tab for updates." });
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", linkedProjectId, "story"] });
+      toast({ title: "AI Pipeline Started", description: "The AI agents are analyzing this deal. Switching to AI Insights view." });
+      setActiveFilter('ai_insights');
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/projects", linkedProjectId, "story"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/projects", linkedProjectId, "findings"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/projects", linkedProjectId, "agent-communications"] });
+      }, 5000);
     },
     onError: (error: any) => {
       setPipelineRunning(false);
@@ -1882,6 +1888,7 @@ export default function AdminDealDetail() {
                 { key: 'documents' as const, label: 'Documents', icon: FileText },
                 { key: 'activity' as const, label: 'Activity', icon: Activity },
                 { key: 'digests' as const, label: 'Digests', icon: BarChart3 },
+                { key: 'ai_insights' as const, label: 'AI Insights', icon: Zap },
                 { key: 'ai_review' as const, label: 'AI Review', icon: Sparkles },
                 { key: 'deal_story' as const, label: 'Deal Story', icon: BookOpen },
               ]).map(filter => (
@@ -2717,6 +2724,18 @@ export default function AdminDealDetail() {
         <div data-testid="digest-config-container">
           <DigestConfigPanel dealId={deal.id} />
         </div>
+      )}
+
+      {/* AI Insights unified view */}
+      {activeFilter === 'ai_insights' && linkedProjectId && (
+        <AIInsightsPanel
+          projectId={linkedProjectId}
+          onPipelineComplete={() => {
+            queryClient.invalidateQueries({ queryKey: ["/api/projects", linkedProjectId, "story"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/projects", linkedProjectId, "findings"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/projects", linkedProjectId, "agent-communications"] });
+          }}
+        />
       )}
 
       {/* AI Review view */}

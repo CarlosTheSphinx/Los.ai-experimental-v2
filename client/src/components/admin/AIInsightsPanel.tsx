@@ -1,0 +1,585 @@
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import {
+  BookOpen,
+  RefreshCw,
+  Loader2,
+  FileText,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Send,
+  Zap,
+  ChevronDown,
+  ChevronRight,
+  ShieldCheck,
+  ShieldAlert,
+  ShieldQuestion,
+  Mail,
+  FileSearch,
+  ListChecks,
+  XCircle,
+  Copy,
+  Check,
+} from "lucide-react";
+
+interface AIInsightsPanelProps {
+  projectId: number;
+  onPipelineComplete?: () => void;
+}
+
+interface DealStoryData {
+  id: number;
+  projectId: number;
+  currentNarrative: string;
+  lastUpdatedSection: string | null;
+  storyVersion: number;
+  metadata: {
+    total_extractions?: number;
+    total_findings?: number;
+    total_communications?: number;
+    total_documents_received?: number;
+    policy_findings_count?: number;
+    document_requirement_findings_count?: number;
+    communications_drafted?: number;
+    communications_sent?: number;
+    open_tasks_count?: number;
+    overall_deal_health?: string;
+    last_updated_source?: string;
+    last_updated_at?: string;
+  } | null;
+  lastAgentUpdate: string | null;
+  lastHumanUpdate: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface AgentFinding {
+  id: number;
+  projectId: number;
+  programId: number | null;
+  agentRunId: number | null;
+  overallStatus: string | null;
+  policyFindings: any[] | null;
+  documentRequirementFindings: any[] | null;
+  crossDocumentConsistency: any[] | null;
+  missingDocuments: any[] | null;
+  dealHealthSummary: any | null;
+  recommendedNextActions: any[] | null;
+  createdAt: string;
+}
+
+interface AgentCommunication {
+  id: number;
+  projectId: number;
+  agentRunId: number | null;
+  recipientType: string | null;
+  recipientName: string | null;
+  recipientEmail: string | null;
+  subject: string | null;
+  body: string | null;
+  htmlBody: string | null;
+  priority: string | null;
+  status: string | null;
+  findingIds: any | null;
+  suggestedFollowUpDate: string | null;
+  internalNotes: string | null;
+  editedBody: string | null;
+  approvedBy: number | null;
+  approvedAt: string | null;
+  sentAt: string | null;
+  sentVia: string | null;
+  createdAt: string;
+}
+
+export function AIInsightsPanel({ projectId, onPipelineComplete }: AIInsightsPanelProps) {
+  const { toast } = useToast();
+  const [storyOpen, setStoryOpen] = useState(true);
+  const [findingsOpen, setFindingsOpen] = useState(true);
+  const [commsOpen, setCommsOpen] = useState(true);
+  const [copiedCommId, setCopiedCommId] = useState<number | null>(null);
+
+  const storyQuery = useQuery<DealStoryData>({
+    queryKey: ["/api/projects", projectId, "story"],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/story`, { credentials: "include" });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error("Failed to fetch deal story");
+      return res.json();
+    },
+    refetchInterval: 10000,
+  });
+
+  const findingsQuery = useQuery<AgentFinding[]>({
+    queryKey: ["/api/projects", projectId, "findings"],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/findings`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch findings");
+      return res.json();
+    },
+    refetchInterval: 10000,
+  });
+
+  const commsQuery = useQuery<AgentCommunication[]>({
+    queryKey: ["/api/projects", projectId, "agent-communications"],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/agent-communications`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch communications");
+      return res.json();
+    },
+    refetchInterval: 10000,
+  });
+
+  const runPipeline = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/agents/pipeline/start", { projectId });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "AI Pipeline Started", description: "The AI agents are analyzing this deal. Results will appear here automatically." });
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "story"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "findings"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "agent-communications"] });
+      }, 5000);
+      onPipelineComplete?.();
+    },
+    onError: (error: any) => {
+      const msg = error?.message?.includes("already running")
+        ? "A pipeline is already running for this deal."
+        : error?.message || "Failed to start pipeline";
+      toast({ title: "Pipeline Error", description: msg, variant: "destructive" });
+    },
+  });
+
+  const approveComm = useMutation({
+    mutationFn: async (commId: number) => {
+      return apiRequest("PUT", `/api/projects/${projectId}/agent-communications/${commId}/approve`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "agent-communications"] });
+      toast({ title: "Communication approved" });
+    },
+    onError: () => {
+      toast({ title: "Failed to approve", variant: "destructive" });
+    },
+  });
+
+  const story = storyQuery.data;
+  const findings = findingsQuery.data || [];
+  const communications = commsQuery.data || [];
+  const latestFinding = findings.length > 0 ? findings[0] : null;
+  const draftComms = communications.filter(c => c.status === 'draft');
+  const isLoading = storyQuery.isLoading || findingsQuery.isLoading || commsQuery.isLoading;
+
+  const parseCommBody = (comm: AgentCommunication): { subject: string; body: string } => {
+    const rawBody = comm.editedBody || comm.body || "";
+    try {
+      const trimmed = rawBody.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+      const parsed = JSON.parse(trimmed);
+      return { subject: parsed.subject || comm.subject || "No Subject", body: parsed.body || rawBody };
+    } catch {
+      return { subject: comm.subject || "No Subject", body: rawBody };
+    }
+  };
+
+  const copyCommBody = (commId: number, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedCommId(commId);
+    setTimeout(() => setCopiedCommId(null), 2000);
+    toast({ title: "Copied to clipboard" });
+  };
+
+  const healthColor = (health: string | undefined) => {
+    if (!health) return "secondary";
+    const h = health.toLowerCase();
+    if (h === "pass" || h === "approved" || h === "good" || h === "healthy") return "default";
+    if (h === "fail" || h === "critical" || h === "rejected") return "destructive";
+    return "secondary";
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4" data-testid="ai-insights-loading">
+        <Card>
+          <CardHeader><CardTitle className="flex items-center gap-2"><Zap className="h-5 w-5" /> AI Insights</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-4 w-1/2" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const hasAnyData = story || latestFinding || communications.length > 0;
+
+  return (
+    <div className="space-y-4" data-testid="ai-insights-panel">
+      {/* Header with Run Pipeline */}
+      <Card data-testid="card-ai-insights-header">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <Zap className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-base">AI Insights</h3>
+                <p className="text-xs text-muted-foreground">
+                  {hasAnyData
+                    ? `Last analyzed ${story?.lastAgentUpdate ? new Date(story.lastAgentUpdate).toLocaleString() : "recently"}`
+                    : "Run the AI pipeline to analyze this deal"}
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={() => runPipeline.mutate()}
+              disabled={runPipeline.isPending}
+              data-testid="button-run-pipeline-insights"
+            >
+              {runPipeline.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Zap className="h-4 w-4 mr-2" />
+              )}
+              {runPipeline.isPending ? "Analyzing..." : "Run AI Agents"}
+            </Button>
+          </div>
+
+          {/* Quick Stats Bar */}
+          {story?.metadata && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4" data-testid="insights-stats">
+              <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Docs Analyzed</p>
+                  <p className="text-sm font-medium">{story.metadata.total_extractions ?? story.metadata.total_documents_received ?? 0}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Findings</p>
+                  <p className="text-sm font-medium">{story.metadata.total_findings ?? 0}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                <Send className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Drafts</p>
+                  <p className="text-sm font-medium">{story.metadata.total_communications ?? draftComms.length}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Health</p>
+                  <Badge variant={healthColor(story.metadata.overall_deal_health)} className="text-[10px]">
+                    {story.metadata.overall_deal_health || "Pending"}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {!hasAnyData && (
+        <Card>
+          <CardContent className="py-12">
+            <div className="text-center space-y-3">
+              <Zap className="h-12 w-12 mx-auto text-muted-foreground/30" />
+              <h4 className="font-medium">No AI Analysis Yet</h4>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                Click "Run AI Agents" to analyze uploaded documents, check against credit policies, and draft borrower communications.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Deal Story Section */}
+      {story && (
+        <Collapsible open={storyOpen} onOpenChange={setStoryOpen}>
+          <Card data-testid="card-insights-story">
+            <CollapsibleTrigger asChild>
+              <CardHeader className="cursor-pointer flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <BookOpen className="h-4 w-4" />
+                  Deal Story
+                  <Badge variant="secondary" className="text-[10px]">v{story.storyVersion}</Badge>
+                </CardTitle>
+                {storyOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent className="pt-0">
+                <div className="prose prose-sm max-w-none dark:prose-invert space-y-0.5" data-testid="insights-narrative">
+                  {story.currentNarrative.split("\n").map((line, i) => {
+                    if (line.startsWith("## ") || line.startsWith("=== ")) {
+                      const clean = line.replace(/^(## |=== |===\s*)/g, "").replace(/\s*===$/, "");
+                      return <h3 key={i} className="text-sm font-semibold text-foreground mt-4 mb-1 first:mt-0">{clean}</h3>;
+                    }
+                    if (line.startsWith("  - ") || line.startsWith("- ")) {
+                      const content = line.replace(/^\s*-\s*/, "");
+                      const sev = content.match(/^\[(critical|warning|info|fail|pass)\]/i);
+                      return (
+                        <div key={i} className="flex items-start gap-2 ml-2 text-sm text-muted-foreground">
+                          <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-muted-foreground/50 shrink-0" />
+                          <span>
+                            {sev && <Badge variant={sev[1].toLowerCase() === "critical" || sev[1].toLowerCase() === "fail" ? "destructive" : "secondary"} className="mr-1 text-[10px] px-1 py-0">{sev[1]}</Badge>}
+                            {sev ? content.replace(sev[0], "").trim() : content}
+                          </span>
+                        </div>
+                      );
+                    }
+                    if (line.trim() === "") return <div key={i} className="h-1" />;
+                    return <p key={i} className="text-sm text-muted-foreground">{line}</p>;
+                  })}
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+      )}
+
+      {/* Agent Findings Section */}
+      {latestFinding && (
+        <Collapsible open={findingsOpen} onOpenChange={setFindingsOpen}>
+          <Card data-testid="card-insights-findings">
+            <CollapsibleTrigger asChild>
+              <CardHeader className="cursor-pointer flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <ShieldCheck className="h-4 w-4" />
+                  Agent Findings
+                  {latestFinding.overallStatus && (
+                    <Badge
+                      variant={latestFinding.overallStatus === 'pass' ? 'default' : latestFinding.overallStatus === 'fail' ? 'destructive' : 'secondary'}
+                      className={latestFinding.overallStatus === 'pass' ? 'bg-success/10 text-success text-[10px]' : 'text-[10px]'}
+                    >
+                      {latestFinding.overallStatus}
+                    </Badge>
+                  )}
+                </CardTitle>
+                {findingsOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent className="pt-0 space-y-4">
+                {/* Policy Findings */}
+                {latestFinding.policyFindings && Array.isArray(latestFinding.policyFindings) && latestFinding.policyFindings.length > 0 && (
+                  <div data-testid="findings-policy">
+                    <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
+                      <FileSearch className="h-3.5 w-3.5 text-muted-foreground" />
+                      Policy Checks
+                    </h4>
+                    <div className="space-y-1.5">
+                      {latestFinding.policyFindings.map((f: any, i: number) => (
+                        <div key={i} className="flex items-start gap-2 p-2 rounded-md bg-muted/30 text-sm">
+                          {f.status === 'pass' ? <CheckCircle2 className="h-4 w-4 text-success mt-0.5 shrink-0" /> :
+                           f.status === 'fail' ? <XCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" /> :
+                           <ShieldQuestion className="h-4 w-4 text-warning mt-0.5 shrink-0" />}
+                          <div className="flex-1 min-w-0">
+                            <span className="font-medium">{f.rule || f.name || `Finding ${i + 1}`}</span>
+                            {f.details && <p className="text-xs text-muted-foreground mt-0.5">{f.details}</p>}
+                            {f.message && <p className="text-xs text-muted-foreground mt-0.5">{f.message}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Missing Documents */}
+                {latestFinding.missingDocuments && Array.isArray(latestFinding.missingDocuments) && latestFinding.missingDocuments.length > 0 && (
+                  <div data-testid="findings-missing-docs">
+                    <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
+                      <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                      Missing Documents
+                    </h4>
+                    <div className="space-y-1">
+                      {latestFinding.missingDocuments.map((doc: any, i: number) => (
+                        <div key={i} className="flex items-center gap-2 p-2 rounded-md bg-destructive/5 text-sm">
+                          <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
+                          <span>{typeof doc === 'string' ? doc : doc.name || doc.document || JSON.stringify(doc)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Cross-Document Consistency */}
+                {latestFinding.crossDocumentConsistency && Array.isArray(latestFinding.crossDocumentConsistency) && latestFinding.crossDocumentConsistency.length > 0 && (
+                  <div data-testid="findings-consistency">
+                    <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
+                      <ListChecks className="h-3.5 w-3.5 text-muted-foreground" />
+                      Cross-Document Consistency
+                    </h4>
+                    <div className="space-y-1.5">
+                      {latestFinding.crossDocumentConsistency.map((item: any, i: number) => (
+                        <div key={i} className="flex items-start gap-2 p-2 rounded-md bg-muted/30 text-sm">
+                          {item.consistent ? <CheckCircle2 className="h-4 w-4 text-success mt-0.5 shrink-0" /> : <AlertTriangle className="h-4 w-4 text-warning mt-0.5 shrink-0" />}
+                          <span>{typeof item === 'string' ? item : item.field || item.message || JSON.stringify(item)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Document Requirement Findings */}
+                {latestFinding.documentRequirementFindings && Array.isArray(latestFinding.documentRequirementFindings) && latestFinding.documentRequirementFindings.length > 0 && (
+                  <div data-testid="findings-doc-requirements">
+                    <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
+                      <FileSearch className="h-3.5 w-3.5 text-muted-foreground" />
+                      Document Requirements
+                    </h4>
+                    <div className="space-y-1.5">
+                      {latestFinding.documentRequirementFindings.map((f: any, i: number) => (
+                        <div key={i} className="flex items-start gap-2 p-2 rounded-md bg-muted/30 text-sm">
+                          {f.met ? <CheckCircle2 className="h-4 w-4 text-success mt-0.5 shrink-0" /> : <XCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />}
+                          <span>{typeof f === 'string' ? f : f.requirement || f.name || JSON.stringify(f)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recommended Next Actions */}
+                {latestFinding.recommendedNextActions && Array.isArray(latestFinding.recommendedNextActions) && latestFinding.recommendedNextActions.length > 0 && (
+                  <div data-testid="findings-next-actions">
+                    <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
+                      <Zap className="h-3.5 w-3.5 text-muted-foreground" />
+                      Recommended Next Steps
+                    </h4>
+                    <div className="space-y-1">
+                      {latestFinding.recommendedNextActions.map((action: any, i: number) => (
+                        <div key={i} className="flex items-start gap-2 p-2 rounded-md bg-primary/5 text-sm">
+                          <span className="mt-0.5 h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary shrink-0">{i + 1}</span>
+                          <span>{typeof action === 'string' ? action : action.action || action.description || JSON.stringify(action)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Deal Health Summary */}
+                {latestFinding.dealHealthSummary && (
+                  <div data-testid="findings-health-summary" className="p-3 rounded-md border bg-muted/20">
+                    <h4 className="text-sm font-medium flex items-center gap-2 mb-1">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground" />
+                      Deal Health Summary
+                    </h4>
+                    <p className="text-sm text-muted-foreground">
+                      {typeof latestFinding.dealHealthSummary === 'string'
+                        ? latestFinding.dealHealthSummary
+                        : latestFinding.dealHealthSummary.summary || latestFinding.dealHealthSummary.message || JSON.stringify(latestFinding.dealHealthSummary)}
+                    </p>
+                  </div>
+                )}
+
+                {/* Empty findings state */}
+                {!latestFinding.policyFindings && !latestFinding.missingDocuments && !latestFinding.crossDocumentConsistency && !latestFinding.documentRequirementFindings && !latestFinding.recommendedNextActions && !latestFinding.dealHealthSummary && (
+                  <p className="text-sm text-muted-foreground py-2">No detailed findings available from the latest analysis.</p>
+                )}
+
+                <div className="text-xs text-muted-foreground pt-2 border-t">
+                  Analyzed {new Date(latestFinding.createdAt).toLocaleString()}
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+      )}
+
+      {/* Communication Drafts Section */}
+      {communications.length > 0 && (
+        <Collapsible open={commsOpen} onOpenChange={setCommsOpen}>
+          <Card data-testid="card-insights-comms">
+            <CollapsibleTrigger asChild>
+              <CardHeader className="cursor-pointer flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Mail className="h-4 w-4" />
+                  Communication Drafts
+                  {draftComms.length > 0 && (
+                    <Badge variant="secondary" className="text-[10px]">{draftComms.length} pending</Badge>
+                  )}
+                </CardTitle>
+                {commsOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent className="pt-0 space-y-3">
+                {communications.map((comm) => {
+                  const parsed = parseCommBody(comm);
+                  return (
+                    <div key={comm.id} className="border rounded-lg p-4 space-y-3" data-testid={`comm-draft-${comm.id}`}>
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-medium">{parsed.subject}</span>
+                            <Badge variant={comm.status === 'draft' ? 'secondary' : comm.status === 'approved' ? 'default' : 'outline'} className="text-[10px]">
+                              {comm.status || 'draft'}
+                            </Badge>
+                            {comm.priority && comm.priority !== 'routine' && (
+                              <Badge variant={comm.priority === 'urgent' ? 'destructive' : 'secondary'} className="text-[10px]">
+                                {comm.priority}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
+                            <span>To: {comm.recipientType || 'borrower'}</span>
+                            {comm.recipientName && <span>{comm.recipientName}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => copyCommBody(comm.id, parsed.body)}
+                            data-testid={`button-copy-comm-${comm.id}`}
+                          >
+                            {copiedCommId === comm.id ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+                          </Button>
+                          {comm.status === 'draft' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => approveComm.mutate(comm.id)}
+                              disabled={approveComm.isPending}
+                              data-testid={`button-approve-comm-${comm.id}`}
+                            >
+                              {approveComm.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
+                              Approve
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-sm text-muted-foreground whitespace-pre-wrap bg-muted/30 rounded-md p-3 max-h-64 overflow-y-auto" data-testid={`comm-body-${comm.id}`}>
+                        {parsed.body}
+                      </div>
+                      {comm.internalNotes && (
+                        <div className="text-xs text-muted-foreground italic border-t pt-2">
+                          Notes: {comm.internalNotes}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+      )}
+    </div>
+  );
+}
