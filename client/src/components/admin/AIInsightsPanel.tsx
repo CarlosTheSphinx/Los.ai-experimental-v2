@@ -69,6 +69,16 @@ interface DealStoryData {
   updatedAt: string;
 }
 
+interface DocumentExtraction {
+  id: number;
+  projectId: number;
+  dealDocumentId: number | null;
+  documentType: string;
+  extractedFields: Record<string, any>;
+  qualityAssessment: string | null;
+  createdAt: string;
+}
+
 interface AgentFinding {
   id: number;
   projectId: number;
@@ -183,6 +193,27 @@ function JsonViewer({ data, label }: { data: any; label: string }) {
   );
 }
 
+function StatusIcon({ status, className = "h-4 w-4 mt-0.5 shrink-0" }: { status: string; className?: string }) {
+  const s = (status || '').toLowerCase();
+  if (s === 'pass' || s === 'received' || s === 'consistent' || s === 'clear' || s === 'approved' || s === 'complete') {
+    return <CheckCircle2 className={`${className} text-success`} />;
+  }
+  if (s === 'fail' || s === 'missing' || s === 'rejected' || s === 'inconsistent') {
+    return <XCircle className={`${className} text-destructive`} />;
+  }
+  if (s === 'warning' || s === 'needs_review' || s === 'partial') {
+    return <AlertTriangle className={`${className} text-yellow-500`} />;
+  }
+  return <ShieldQuestion className={`${className} text-muted-foreground`} />;
+}
+
+function statusVariant(status: string): "default" | "destructive" | "secondary" {
+  const s = (status || '').toLowerCase();
+  if (s === 'pass' || s === 'clear' || s === 'approved' || s === 'complete' || s === 'consistent') return 'default';
+  if (s === 'fail' || s === 'rejected' || s === 'critical' || s === 'inconsistent') return 'destructive';
+  return 'secondary';
+}
+
 export function AIInsightsPanel({ projectId, onPipelineComplete }: AIInsightsPanelProps) {
   const { toast } = useToast();
   const [storyOpen, setStoryOpen] = useState(true);
@@ -218,6 +249,16 @@ export function AIInsightsPanel({ projectId, onPipelineComplete }: AIInsightsPan
     queryFn: async () => {
       const res = await fetch(`/api/projects/${projectId}/findings`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch findings");
+      return res.json();
+    },
+    refetchInterval: 10000,
+  });
+
+  const extractionsQuery = useQuery<DocumentExtraction[]>({
+    queryKey: ["/api/projects", projectId, "extractions"],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/extractions`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch extractions");
       return res.json();
     },
     refetchInterval: 10000,
@@ -270,6 +311,7 @@ export function AIInsightsPanel({ projectId, onPipelineComplete }: AIInsightsPan
 
   const story = storyQuery.data;
   const findings = findingsQuery.data || [];
+  const extractions = extractionsQuery.data || [];
   const communications = commsQuery.data || [];
   const latestFinding = findings.length > 0 ? findings[0] : null;
   const draftComms = communications.filter(c => c.status === 'draft');
@@ -463,8 +505,8 @@ export function AIInsightsPanel({ projectId, onPipelineComplete }: AIInsightsPan
                   Agent Findings
                   {latestFinding.overallStatus && (
                     <Badge
-                      variant={latestFinding.overallStatus === 'pass' ? 'default' : latestFinding.overallStatus === 'fail' ? 'destructive' : 'secondary'}
-                      className={latestFinding.overallStatus === 'pass' ? 'bg-success/10 text-success text-[10px]' : 'text-[10px]'}
+                      variant={statusVariant(latestFinding.overallStatus)}
+                      className={statusVariant(latestFinding.overallStatus) === 'default' ? 'bg-success/10 text-success text-[10px]' : 'text-[10px]'}
                     >
                       {latestFinding.overallStatus}
                     </Badge>
@@ -474,43 +516,76 @@ export function AIInsightsPanel({ projectId, onPipelineComplete }: AIInsightsPan
               </CardHeader>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <CardContent className="pt-0 space-y-4">
-                {/* Policy Findings */}
-                {latestFinding.policyFindings && Array.isArray(latestFinding.policyFindings) && latestFinding.policyFindings.length > 0 && (
-                  <div data-testid="findings-policy">
-                    <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
-                      <FileSearch className="h-3.5 w-3.5 text-muted-foreground" />
-                      Policy Checks
+              <CardContent className="pt-0 space-y-5">
+
+                {/* Per-Document Analysis */}
+                {extractions.length > 0 && (
+                  <div data-testid="findings-per-document">
+                    <h4 className="text-sm font-medium flex items-center gap-2 mb-3">
+                      <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                      Per-Document Analysis
+                      <Badge variant="secondary" className="text-[10px]">{extractions.length} docs</Badge>
                     </h4>
-                    <div className="space-y-1.5">
-                      {latestFinding.policyFindings.map((f: any, i: number) => (
-                        <div key={i} className="flex items-start gap-2 p-2 rounded-md bg-muted/30 text-sm">
-                          {f.status === 'pass' ? <CheckCircle2 className="h-4 w-4 text-success mt-0.5 shrink-0" /> :
-                           f.status === 'fail' ? <XCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" /> :
-                           <ShieldQuestion className="h-4 w-4 text-warning mt-0.5 shrink-0" />}
-                          <div className="flex-1 min-w-0">
-                            <span className="font-medium">{f.rule || f.name || `Finding ${i + 1}`}</span>
-                            {f.details && <p className="text-xs text-muted-foreground mt-0.5">{f.details}</p>}
-                            {f.message && <p className="text-xs text-muted-foreground mt-0.5">{f.message}</p>}
-                          </div>
-                        </div>
-                      ))}
+                    <div className="space-y-3">
+                      {extractions.map((ext) => {
+                        const docReq = latestFinding.documentRequirementFindings?.find(
+                          (f: any) => f.document === ext.documentType || f.documentType === ext.documentType
+                        );
+                        const docLabel = ext.documentType.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+                        const fieldEntries = ext.extractedFields ? Object.entries(ext.extractedFields) : [];
+                        const docStatus = docReq?.status || 'received';
+                        return (
+                          <Collapsible key={ext.id}>
+                            <CollapsibleTrigger asChild>
+                              <div className="flex items-center gap-2 p-2.5 rounded-md bg-muted/30 cursor-pointer group" data-testid={`findings-doc-${ext.id}`}>
+                                <StatusIcon status={docStatus} />
+                                <span className="font-medium text-sm flex-1">{docLabel}</span>
+                                <Badge variant="secondary" className="text-[10px]">{fieldEntries.length} fields</Badge>
+                                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-data-[state=open]:rotate-90 transition-transform" />
+                              </div>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                              <div className="ml-6 mt-1 space-y-1">
+                                {docReq?.notes && (
+                                  <p className="text-xs text-muted-foreground italic px-2 py-1">{docReq.notes}</p>
+                                )}
+                                {fieldEntries.map(([key, value]) => (
+                                  <div key={key} className="flex items-start gap-2 px-2 py-1.5 rounded text-sm">
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-success mt-0.5 shrink-0" />
+                                    <span className="text-muted-foreground min-w-0">
+                                      <span className="font-medium text-foreground">{key.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}: </span>
+                                      {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
 
-                {/* Missing Documents */}
-                {latestFinding.missingDocuments && Array.isArray(latestFinding.missingDocuments) && latestFinding.missingDocuments.length > 0 && (
-                  <div data-testid="findings-missing-docs">
+                {/* Policy Checks */}
+                {latestFinding.policyFindings && Array.isArray(latestFinding.policyFindings) && latestFinding.policyFindings.length > 0 && (
+                  <div data-testid="findings-policy">
                     <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
-                      <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                      Missing Documents
+                      <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
+                      Policy Checks
+                      <Badge variant="secondary" className="text-[10px]">
+                        {latestFinding.policyFindings.filter((f: any) => f.status === 'pass').length}/{latestFinding.policyFindings.length} passed
+                      </Badge>
                     </h4>
-                    <div className="space-y-1">
-                      {latestFinding.missingDocuments.map((doc: any, i: number) => (
-                        <div key={i} className="flex items-center gap-2 p-2 rounded-md bg-destructive/5 text-sm">
-                          <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
-                          <span>{typeof doc === 'string' ? doc : doc.name || doc.document || JSON.stringify(doc)}</span>
+                    <div className="space-y-1.5">
+                      {latestFinding.policyFindings.map((f: any, i: number) => (
+                        <div key={i} className="flex items-start gap-2 p-2 rounded-md bg-muted/30 text-sm">
+                          <StatusIcon status={f.status} />
+                          <div className="flex-1 min-w-0">
+                            <span className="font-medium">{f.rule || f.name || `Check ${i + 1}`}</span>
+                            {(f.detail || f.details) && <p className="text-xs text-muted-foreground mt-0.5">{f.detail || f.details}</p>}
+                            {f.message && <p className="text-xs text-muted-foreground mt-0.5">{f.message}</p>}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -523,30 +598,43 @@ export function AIInsightsPanel({ projectId, onPipelineComplete }: AIInsightsPan
                     <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
                       <ListChecks className="h-3.5 w-3.5 text-muted-foreground" />
                       Cross-Document Consistency
+                      <Badge variant="secondary" className="text-[10px]">
+                        {latestFinding.crossDocumentConsistency.filter((c: any) => c.result === 'consistent' || c.consistent === true).length}/{latestFinding.crossDocumentConsistency.length} consistent
+                      </Badge>
                     </h4>
                     <div className="space-y-1.5">
-                      {latestFinding.crossDocumentConsistency.map((item: any, i: number) => (
-                        <div key={i} className="flex items-start gap-2 p-2 rounded-md bg-muted/30 text-sm">
-                          {item.consistent ? <CheckCircle2 className="h-4 w-4 text-success mt-0.5 shrink-0" /> : <AlertTriangle className="h-4 w-4 text-warning mt-0.5 shrink-0" />}
-                          <span>{typeof item === 'string' ? item : item.field || item.message || JSON.stringify(item)}</span>
-                        </div>
-                      ))}
+                      {latestFinding.crossDocumentConsistency.map((item: any, i: number) => {
+                        const isConsistent = item.result === 'consistent' || item.consistent === true;
+                        return (
+                          <div key={i} className="flex items-start gap-2 p-2 rounded-md bg-muted/30 text-sm">
+                            {isConsistent
+                              ? <CheckCircle2 className="h-4 w-4 text-success mt-0.5 shrink-0" />
+                              : <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />}
+                            <div className="flex-1 min-w-0">
+                              <span className="font-medium">{item.check || item.field || `Check ${i + 1}`}</span>
+                              {(item.detail || item.details || item.message) && (
+                                <p className="text-xs text-muted-foreground mt-0.5">{item.detail || item.details || item.message}</p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
 
-                {/* Document Requirement Findings */}
-                {latestFinding.documentRequirementFindings && Array.isArray(latestFinding.documentRequirementFindings) && latestFinding.documentRequirementFindings.length > 0 && (
-                  <div data-testid="findings-doc-requirements">
+                {/* Missing Documents */}
+                {latestFinding.missingDocuments && Array.isArray(latestFinding.missingDocuments) && latestFinding.missingDocuments.length > 0 && (
+                  <div data-testid="findings-missing-docs">
                     <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
-                      <FileSearch className="h-3.5 w-3.5 text-muted-foreground" />
-                      Document Requirements
+                      <XCircle className="h-3.5 w-3.5 text-destructive" />
+                      Missing Documents
                     </h4>
-                    <div className="space-y-1.5">
-                      {latestFinding.documentRequirementFindings.map((f: any, i: number) => (
-                        <div key={i} className="flex items-start gap-2 p-2 rounded-md bg-muted/30 text-sm">
-                          {f.met ? <CheckCircle2 className="h-4 w-4 text-success mt-0.5 shrink-0" /> : <XCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />}
-                          <span>{typeof f === 'string' ? f : f.requirement || f.name || JSON.stringify(f)}</span>
+                    <div className="space-y-1">
+                      {latestFinding.missingDocuments.map((doc: any, i: number) => (
+                        <div key={i} className="flex items-center gap-2 p-2 rounded-md bg-destructive/5 text-sm">
+                          <XCircle className="h-3.5 w-3.5 text-destructive shrink-0" />
+                          <span>{typeof doc === 'string' ? doc : doc.name || doc.document || JSON.stringify(doc)}</span>
                         </div>
                       ))}
                     </div>
@@ -575,7 +663,7 @@ export function AIInsightsPanel({ projectId, onPipelineComplete }: AIInsightsPan
                 {latestFinding.dealHealthSummary && (
                   <div data-testid="findings-health-summary" className="p-3 rounded-md border bg-muted/20">
                     <h4 className="text-sm font-medium flex items-center gap-2 mb-1">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground" />
+                      <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
                       Deal Health Summary
                     </h4>
                     <p className="text-sm text-muted-foreground">
@@ -587,7 +675,7 @@ export function AIInsightsPanel({ projectId, onPipelineComplete }: AIInsightsPan
                 )}
 
                 {/* Empty findings state */}
-                {!latestFinding.policyFindings && !latestFinding.missingDocuments && !latestFinding.crossDocumentConsistency && !latestFinding.documentRequirementFindings && !latestFinding.recommendedNextActions && !latestFinding.dealHealthSummary && (
+                {!latestFinding.policyFindings && !latestFinding.missingDocuments && !latestFinding.crossDocumentConsistency && extractions.length === 0 && !latestFinding.recommendedNextActions && !latestFinding.dealHealthSummary && (
                   <p className="text-sm text-muted-foreground py-2">No detailed findings available from the latest analysis.</p>
                 )}
 
