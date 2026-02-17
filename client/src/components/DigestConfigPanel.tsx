@@ -135,7 +135,7 @@ export function DigestConfigPanel({ dealId }: DigestConfigPanelProps) {
   const queryClient = useQueryClient();
   const [showHistory, setShowHistory] = useState(false);
   const [showAddRecipient, setShowAddRecipient] = useState(false);
-  const [showMessageTemplate, setShowMessageTemplate] = useState(false);
+  const [showMessageTemplate, setShowMessageTemplate] = useState(true);
   const [activeTemplateField, setActiveTemplateField] = useState<'subject' | 'emailBody' | 'smsBody'>('emailBody');
   const subjectRef = useRef<HTMLInputElement>(null);
   const emailBodyRef = useRef<HTMLTextAreaElement>(null);

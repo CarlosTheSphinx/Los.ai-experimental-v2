@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -157,6 +157,36 @@ export default function AdminDigests() {
   const [showSaveTemplateDialog, setShowSaveTemplateDialog] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState("");
   const [selectedDraftIds, setSelectedDraftIds] = useState<Set<number>>(new Set());
+  const [activeEditField, setActiveEditField] = useState<'subject' | 'emailBody' | 'smsBody'>('emailBody');
+  const editSubjectRef = useRef<HTMLInputElement>(null);
+  const editEmailBodyRef = useRef<HTMLTextAreaElement>(null);
+  const editSmsBodyRef = useRef<HTMLTextAreaElement>(null);
+
+  const insertEditMergeTag = useCallback((tag: string) => {
+    const tagText = `{{${tag}}}`;
+    if (activeEditField === 'subject' && editSubjectRef.current) {
+      const el = editSubjectRef.current;
+      const start = el.selectionStart ?? el.value.length;
+      const end = el.selectionEnd ?? start;
+      const newVal = el.value.substring(0, start) + tagText + el.value.substring(end);
+      setEditForm(prev => ({ ...prev, emailSubject: newVal }));
+      setTimeout(() => { el.focus(); el.setSelectionRange(start + tagText.length, start + tagText.length); }, 0);
+    } else if (activeEditField === 'emailBody' && editEmailBodyRef.current) {
+      const el = editEmailBodyRef.current;
+      const start = el.selectionStart ?? el.value.length;
+      const end = el.selectionEnd ?? start;
+      const newVal = el.value.substring(0, start) + tagText + el.value.substring(end);
+      setEditForm(prev => ({ ...prev, emailBody: newVal }));
+      setTimeout(() => { el.focus(); el.setSelectionRange(start + tagText.length, start + tagText.length); }, 0);
+    } else if (activeEditField === 'smsBody' && editSmsBodyRef.current) {
+      const el = editSmsBodyRef.current;
+      const start = el.selectionStart ?? el.value.length;
+      const end = el.selectionEnd ?? start;
+      const newVal = el.value.substring(0, start) + tagText + el.value.substring(end);
+      setEditForm(prev => ({ ...prev, smsBody: newVal }));
+      setTimeout(() => { el.focus(); el.setSelectionRange(start + tagText.length, start + tagText.length); }, 0);
+    }
+  }, [activeEditField]);
 
   const dateStr = format(selectedDate, "yyyy-MM-dd");
 
@@ -1004,42 +1034,96 @@ export default function AdminDigests() {
               </TabsList>
 
               <TabsContent value="edit" className="space-y-4 mt-4">
+                <div className="border rounded-lg p-3 bg-muted/30 space-y-2">
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Click a merge tag to insert it at your cursor position in the active field.
+                  </p>
+                  <div className="space-y-2">
+                    <div>
+                      <p className="text-[10px] font-medium text-muted-foreground mb-1 uppercase tracking-wider">Borrower</p>
+                      <div className="flex flex-wrap gap-1">
+                        {['recipientName', 'portalLink'].map(tag => (
+                          <Badge key={tag} variant="secondary" className="cursor-pointer font-mono text-xs" onClick={() => insertEditMergeTag(tag)} data-testid={`edit-merge-tag-${tag}`}>
+                            <Copy className="h-3 w-3 mr-1 opacity-60" />{`{{${tag}}}`}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-medium text-muted-foreground mb-1 uppercase tracking-wider">Deal Info</p>
+                      <div className="flex flex-wrap gap-1">
+                        {['dealId', 'propertyAddress', 'loanAmount', 'loanType', 'currentStage', 'targetCloseDate'].map(tag => (
+                          <Badge key={tag} variant="secondary" className="cursor-pointer font-mono text-xs" onClick={() => insertEditMergeTag(tag)} data-testid={`edit-merge-tag-${tag}`}>
+                            <Copy className="h-3 w-3 mr-1 opacity-60" />{`{{${tag}}}`}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-medium text-muted-foreground mb-1 uppercase tracking-wider">Content Blocks</p>
+                      <div className="flex flex-wrap gap-1">
+                        {['documentsSection', 'updatesSection', 'documentsCount'].map(tag => (
+                          <Badge key={tag} variant="secondary" className="cursor-pointer font-mono text-xs" onClick={() => insertEditMergeTag(tag)} data-testid={`edit-merge-tag-${tag}`}>
+                            <Copy className="h-3 w-3 mr-1 opacity-60" />{`{{${tag}}}`}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="emailSubject">Email Subject</Label>
+                  <Label htmlFor="emailSubject" className="flex items-center gap-2">
+                    Email Subject
+                    {activeEditField === 'subject' && <Badge variant="outline" className="text-[10px] font-normal">Active</Badge>}
+                  </Label>
                   <Input
+                    ref={editSubjectRef}
                     id="emailSubject"
                     value={editForm.emailSubject}
                     onChange={(e) => setEditForm({ ...editForm, emailSubject: e.target.value })}
+                    onFocus={() => setActiveEditField('subject')}
                     placeholder="Enter email subject..."
+                    className="font-mono text-sm"
                     data-testid="input-draft-email-subject"
                   />
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="emailBody">Email Body</Label>
+                  <Label htmlFor="emailBody" className="flex items-center gap-2">
+                    Email Body
+                    {activeEditField === 'emailBody' && <Badge variant="outline" className="text-[10px] font-normal">Active</Badge>}
+                  </Label>
                   <Textarea
+                    ref={editEmailBodyRef}
                     id="emailBody"
                     value={editForm.emailBody}
                     onChange={(e) => setEditForm({ ...editForm, emailBody: e.target.value })}
+                    onFocus={() => setActiveEditField('emailBody')}
                     placeholder="Enter email body..."
                     rows={10}
+                    className="font-mono text-sm"
                     data-testid="input-draft-email-body"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Merge tags: {"{{recipientName}}"}, {"{{propertyAddress}}"}, {"{{documentsSection}}"}, {"{{updatesSection}}"}, {"{{documentsCount}}"}, {"{{portalLink}}"}
-                  </p>
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="smsBody">SMS Message</Label>
+                  <Label htmlFor="smsBody" className="flex items-center gap-2">
+                    SMS Message
+                    {activeEditField === 'smsBody' && <Badge variant="outline" className="text-[10px] font-normal">Active</Badge>}
+                  </Label>
                   <Textarea
+                    ref={editSmsBodyRef}
                     id="smsBody"
                     value={editForm.smsBody}
                     onChange={(e) => setEditForm({ ...editForm, smsBody: e.target.value })}
+                    onFocus={() => setActiveEditField('smsBody')}
                     placeholder="Enter SMS message..."
                     rows={3}
+                    className="font-mono text-sm"
                     data-testid="input-draft-sms-body"
                   />
+                  <p className="text-xs text-muted-foreground">SMS messages should be concise (under 160 characters recommended)</p>
                 </div>
               </TabsContent>
 
