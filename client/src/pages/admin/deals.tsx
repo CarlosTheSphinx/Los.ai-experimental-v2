@@ -245,88 +245,102 @@ function getStageColor(programIdx: number, stageIdx: number, totalStages: number
 
 function PipelineByProgram({ programs }: { programs: ProgramPipeline[] }) {
   const totalDeals = programs.reduce((sum, p) => sum + p.totalDeals, 0);
+  const [selectedProgramId, setSelectedProgramId] = useState<string>('');
+
+  const selectedProgram = programs.find(p => String(p.programId) === selectedProgramId) || programs[0];
+  const programIdx = selectedProgram ? programs.indexOf(selectedProgram) : 0;
 
   return (
     <Card data-testid="card-pipeline-by-program">
       <CardHeader className="pb-3">
-        <CardTitle className="text-lg">Pipeline by Program</CardTitle>
-        <CardDescription>Programs and their stages from left to right</CardDescription>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <CardTitle className="text-lg">Pipeline by Program</CardTitle>
+            <CardDescription>Select a program to view its stages</CardDescription>
+          </div>
+          {programs.length > 0 && (
+            <Select
+              value={String(selectedProgram?.programId || '')}
+              onValueChange={setSelectedProgramId}
+            >
+              <SelectTrigger className="w-[240px]" data-testid="select-pipeline-program">
+                <SelectValue placeholder="Select program" />
+              </SelectTrigger>
+              <SelectContent>
+                {programs.map(p => (
+                  <SelectItem key={p.programId} value={String(p.programId)}>
+                    {p.programName} ({p.totalDeals} {p.totalDeals === 1 ? 'deal' : 'deals'})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4">
         {programs.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">No deals in pipeline</p>
-        ) : (
-          programs.map((program, programIdx) => (
-            <div key={program.programId} className="space-y-3" data-testid={`pipeline-program-${program.programId}`}>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-foreground">{program.programName}</span>
-                <Badge variant="secondary" className="text-xs">
-                  {program.totalDeals} {program.totalDeals === 1 ? 'deal' : 'deals'}
-                </Badge>
-              </div>
-              {program.stages.length > 0 ? (
-                <div className="overflow-x-auto py-2">
-                  <div className="flex items-start">
-                    {program.stages.map((stage, idx) => {
-                      const color = stage.color || getStageColor(programIdx, idx, program.stages.length);
-                      const hasDeals = stage.count > 0;
-                      const isLast = idx === program.stages.length - 1;
+        ) : selectedProgram ? (
+          <div data-testid={`pipeline-program-${selectedProgram.programId}`}>
+            {selectedProgram.stages.length > 0 ? (
+              <div className="overflow-x-auto py-4">
+                <div className="flex items-start">
+                  {selectedProgram.stages.map((stage, idx) => {
+                    const color = stage.color || getStageColor(programIdx, idx, selectedProgram.stages.length);
+                    const hasDeals = stage.count > 0;
+                    const isLast = idx === selectedProgram.stages.length - 1;
 
-                      return (
-                        <div
-                          key={idx}
-                          className="flex flex-col items-center flex-1 min-w-0"
-                          data-testid={`pipeline-stage-${program.programId}-${idx}`}
-                        >
-                          <div className="flex items-center w-full">
-                            <div className={`flex-1 h-[2px] ${idx > 0 ? 'bg-border' : 'bg-transparent'}`} />
-                            <div
-                              className="relative flex items-center justify-center flex-shrink-0 rounded-full"
-                              style={{
-                                width: 36,
-                                height: 36,
-                                backgroundColor: color,
-                                opacity: hasDeals ? 1 : 0.35,
-                              }}
-                            >
-                              <Check className="h-5 w-5 text-white" strokeWidth={3} />
-                            </div>
-                            <div className={`flex-1 h-[2px] ${!isLast ? 'bg-border' : 'bg-transparent'}`} />
+                    return (
+                      <div
+                        key={idx}
+                        className="flex flex-col items-center flex-1 min-w-0"
+                        data-testid={`pipeline-stage-${selectedProgram.programId}-${idx}`}
+                      >
+                        <div className="flex items-center w-full">
+                          <div className={`flex-1 h-[2px] ${idx > 0 ? 'bg-border' : 'bg-transparent'}`} />
+                          <div
+                            className="relative flex items-center justify-center flex-shrink-0 rounded-full"
+                            style={{
+                              width: 36,
+                              height: 36,
+                              backgroundColor: color,
+                              opacity: hasDeals ? 1 : 0.35,
+                            }}
+                          >
+                            <Check className="h-5 w-5 text-white" strokeWidth={3} />
                           </div>
-
-                          <span
-                            className="text-[11px] mt-2 leading-tight text-center px-1 font-medium"
-                            style={{ color }}
-                            data-testid={`pipeline-stage-label-${program.programId}-${idx}`}
-                          >
-                            {stage.label}
-                          </span>
-
-                          <span
-                            className="text-xs mt-0.5"
-                            style={{ color: hasDeals ? color : undefined }}
-                            data-testid={`pipeline-stage-count-${program.programId}-${idx}`}
-                          >
-                            {hasDeals ? (
-                              <span className="font-bold">{stage.count} {stage.count === 1 ? 'deal' : 'deals'}</span>
-                            ) : (
-                              <span className="text-muted-foreground">0</span>
-                            )}
-                          </span>
+                          <div className={`flex-1 h-[2px] ${!isLast ? 'bg-border' : 'bg-transparent'}`} />
                         </div>
-                      );
-                    })}
-                  </div>
+
+                        <span
+                          className="text-[11px] mt-2 leading-tight text-center px-1 font-medium"
+                          style={{ color }}
+                          data-testid={`pipeline-stage-label-${selectedProgram.programId}-${idx}`}
+                        >
+                          {stage.label}
+                        </span>
+
+                        <span
+                          className="text-xs mt-0.5"
+                          style={{ color: hasDeals ? color : undefined }}
+                          data-testid={`pipeline-stage-count-${selectedProgram.programId}-${idx}`}
+                        >
+                          {hasDeals ? (
+                            <span className="font-bold">{stage.count} {stage.count === 1 ? 'deal' : 'deals'}</span>
+                          ) : (
+                            <span className="text-muted-foreground">0</span>
+                          )}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">No workflow stages configured</p>
-              )}
-              {program !== programs[programs.length - 1] && (
-                <div className="border-b" />
-              )}
-            </div>
-          ))
-        )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">No workflow stages configured for this program</p>
+            )}
+          </div>
+        ) : null}
 
         <div className="pt-3 border-t">
           <div className="flex items-center justify-between">
