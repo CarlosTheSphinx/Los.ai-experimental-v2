@@ -387,20 +387,20 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
             {isSuperAdmin && (
               <div className="px-2 py-1 group-data-[collapsible=icon]:hidden">
                 <div className="flex items-center gap-1.5 mb-1.5">
-                  <Eye className="h-3 w-3 text-muted-foreground" />
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">View As</span>
+                  <Eye className="h-3 w-3" style={{ color: '#2E7FD6' }} />
+                  <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: '#2E7FD6' }}>View As</span>
                 </div>
                 <Select
                   value={viewAsMode}
                   onValueChange={(value) => setViewAsMode(value as ViewAsMode)}
                 >
-                  <SelectTrigger className="h-8 text-xs" data-testid="select-view-as-mode">
+                  <SelectTrigger className="h-8 text-xs" style={{ color: '#2E7FD6' }} data-testid="select-view-as-mode">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="super_admin">Super Admin</SelectItem>
-                    <SelectItem value="lender">Lender / Broker</SelectItem>
-                    <SelectItem value="borrower">Borrower</SelectItem>
+                    <SelectItem value="super_admin" className="text-xs" style={{ color: '#2E7FD6' }}>Super Admin</SelectItem>
+                    <SelectItem value="lender" className="text-xs" style={{ color: '#2E7FD6' }}>Lender / Broker</SelectItem>
+                    <SelectItem value="borrower" className="text-xs" style={{ color: '#2E7FD6' }}>Borrower</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
