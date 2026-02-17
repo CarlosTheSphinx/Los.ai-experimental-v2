@@ -27,6 +27,8 @@ import {
   BotMessageSquare,
   Pin,
   PinOff,
+  PanelLeftOpen,
+  PanelLeftClose,
   Eye,
   X,
   Globe,
@@ -239,28 +241,37 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
       >
       <Sidebar collapsible="icon">
         <SidebarHeader className="p-3 border-b border-sidebar-border space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col items-start gap-1">
-              <div className="flex items-center gap-0 group-data-[collapsible=icon]:hidden">
+          <div className="flex items-center justify-between gap-1">
+            <div className="flex flex-col items-start gap-1 group-data-[collapsible=icon]:hidden">
+              <div className="flex items-center gap-0">
                 <span className="text-lg font-bold text-foreground">Lendry.</span>
                 <span className="text-lg font-bold text-primary">AI</span>
               </div>
-              <div className="hidden group-data-[collapsible=icon]:flex items-center justify-center">
-                <span className="text-base font-bold text-primary">L.AI</span>
-              </div>
-              <span className="text-[10px] text-muted-foreground font-medium group-data-[collapsible=icon]:hidden">
+              <span className="text-[10px] text-muted-foreground font-medium">
                 Intelligent Lending Platform
               </span>
+            </div>
+            <div className="hidden group-data-[collapsible=icon]:flex w-full items-center justify-center">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground"
+                onClick={() => setSidebarPinned(true)}
+                title="Expand sidebar"
+                data-testid="button-expand-sidebar"
+              >
+                <PanelLeftOpen className="h-4 w-4" />
+              </Button>
             </div>
             <Button
               variant="ghost"
               size="icon"
               className="text-muted-foreground group-data-[collapsible=icon]:hidden"
               onClick={() => setSidebarPinned(!sidebarPinned)}
-              title={sidebarPinned ? "Unpin sidebar" : "Pin sidebar open"}
+              title={sidebarPinned ? "Collapse sidebar" : "Pin sidebar open"}
               data-testid="button-pin-sidebar"
             >
-              {sidebarPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+              {sidebarPinned ? <PanelLeftClose className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
             </Button>
           </div>
           <Button
