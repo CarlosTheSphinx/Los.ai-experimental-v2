@@ -122,6 +122,23 @@ interface PreviewData {
   smsBody: string;
 }
 
+interface ApprovedComm {
+  id: number;
+  projectId: number;
+  recipientType: string;
+  recipientName: string | null;
+  recipientEmail: string | null;
+  subject: string;
+  body: string;
+  editedBody: string | null;
+  priority: string;
+  status: string;
+  approvedAt: string | null;
+  sentAt: string | null;
+  createdAt: string;
+  projectName: string | null;
+}
+
 export default function AdminDigests() {
   const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -275,6 +292,11 @@ export default function AdminDigests() {
       toast({ title: "Error", description: "Failed to skip drafts", variant: "destructive" });
     },
   });
+
+  const { data: approvedCommsData, isLoading: isLoadingApprovedComms } = useQuery<{ communications: ApprovedComm[] }>({
+    queryKey: ["/api/admin/approved-communications"],
+  });
+  const approvedComms = approvedCommsData?.communications || [];
 
   const digests = data?.digests || [];
 
@@ -769,6 +791,90 @@ export default function AdminDigests() {
           </CardContent>
         </Card>
       </div>
+
+      <Card data-testid="approved-comms-section">
+        <CardHeader className="p-4 md:p-6">
+          <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+            <Sparkles className="h-4 w-4 md:h-5 md:w-5 shrink-0" />
+            <span>Approved AI Communications</span>
+            {approvedComms.length > 0 && (
+              <Badge variant="secondary" className="text-xs">{approvedComms.length}</Badge>
+            )}
+          </CardTitle>
+          <CardDescription className="text-xs md:text-sm">
+            AI-generated communications that have been approved and are ready to send
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoadingApprovedComms ? (
+            <div className="space-y-3">
+              {[1, 2].map((i) => (
+                <Skeleton key={i} className="h-24" />
+              ))}
+            </div>
+          ) : approvedComms.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Sparkles className="h-10 w-10 mx-auto mb-3 opacity-50" />
+              <p className="text-sm">No approved communications pending</p>
+              <p className="text-xs mt-1">Approve AI communications from the deal detail page</p>
+            </div>
+          ) : (
+          <div className="space-y-3">
+            {approvedComms.map((comm) => {
+                let displayBody = comm.editedBody || comm.body || '';
+                let displaySubject = comm.subject || 'Deal Update';
+                try {
+                  const trimmed = displayBody.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+                  const parsed = JSON.parse(trimmed);
+                  if (parsed.subject) displaySubject = parsed.subject;
+                  if (parsed.body) displayBody = parsed.body;
+                } catch {}
+
+                return (
+                  <div key={comm.id} className="border rounded-lg p-3 md:p-4 space-y-2" data-testid={`approved-comm-${comm.id}`}>
+                    <div className="flex items-start justify-between gap-2 flex-wrap">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium truncate">{displaySubject}</span>
+                          <Badge className="bg-success text-[10px]">Approved</Badge>
+                          {comm.priority && comm.priority !== 'routine' && (
+                            <Badge variant={comm.priority === 'urgent' ? 'destructive' : 'secondary'} className="text-[10px]">
+                              {comm.priority}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
+                          <span>Deal: {comm.projectName || `DEAL-${comm.projectId}`}</span>
+                          <span>To: {comm.recipientType || 'borrower'}</span>
+                          {comm.approvedAt && (
+                            <span>Approved {format(new Date(comm.approvedAt), "MMM d, h:mm a")}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => {
+                            navigator.clipboard.writeText(displayBody);
+                            toast({ title: "Copied to clipboard" });
+                          }}
+                          data-testid={`button-copy-approved-${comm.id}`}
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="text-sm text-muted-foreground whitespace-pre-wrap bg-muted/30 rounded-md p-3 max-h-48 overflow-y-auto">
+                      {displayBody.length > 300 ? displayBody.substring(0, 300) + '...' : displayBody}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Dialog open={!!editingDigest} onOpenChange={() => setEditingDigest(null)}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">

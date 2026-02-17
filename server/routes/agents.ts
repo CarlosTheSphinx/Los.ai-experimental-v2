@@ -6,7 +6,7 @@
 import type { Express, Response } from 'express';
 import type { AuthRequest } from '../auth';
 import type { RouteDeps } from './types';
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, or } from 'drizzle-orm';
 import {
   agentConfigurations,
   agentRuns,
@@ -607,6 +607,52 @@ export function registerAgentRoutes(app: Express, deps: RouteDeps): void {
   );
 
   /**
+   * GET /api/admin/approved-communications
+   * Get all approved but unsent AI communications across all deals
+   */
+  app.get(
+    '/api/admin/approved-communications',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const comms = await db
+          .select({
+            id: agentCommunications.id,
+            projectId: agentCommunications.projectId,
+            recipientType: agentCommunications.recipientType,
+            recipientName: agentCommunications.recipientName,
+            recipientEmail: agentCommunications.recipientEmail,
+            subject: agentCommunications.subject,
+            body: agentCommunications.body,
+            editedBody: agentCommunications.editedBody,
+            priority: agentCommunications.priority,
+            status: agentCommunications.status,
+            approvedAt: agentCommunications.approvedAt,
+            approvedBy: agentCommunications.approvedBy,
+            sentAt: agentCommunications.sentAt,
+            createdAt: agentCommunications.createdAt,
+            projectName: projects.projectName,
+          })
+          .from(agentCommunications)
+          .leftJoin(projects, eq(agentCommunications.projectId, projects.id))
+          .where(
+            and(
+              eq(agentCommunications.status, 'approved'),
+              sql`${agentCommunications.sentAt} IS NULL`
+            )
+          )
+          .orderBy(desc(agentCommunications.approvedAt));
+
+        res.json({ communications: comms });
+      } catch (error) {
+        console.error('Error fetching approved communications:', error);
+        res.status(500).json({ error: 'Failed to fetch approved communications' });
+      }
+    }
+  );
+
+  /**
    * PUT /api/projects/:id/agent-communications/:commId/approve
    * Approve a drafted communication
    */
@@ -635,7 +681,6 @@ export function registerAgentRoutes(app: Express, deps: RouteDeps): void {
             status: 'approved',
             approvedAt: new Date(),
             approvedBy: req.user?.id,
-            updatedAt: new Date()
           })
           .where(and(
             eq(agentCommunications.id, commId),
@@ -656,7 +701,10 @@ export function registerAgentRoutes(app: Express, deps: RouteDeps): void {
           const [digestConfig] = await db.select()
             .from(loanDigestConfigs)
             .where(and(
-              eq(loanDigestConfigs.projectId, projectId),
+              or(
+                eq(loanDigestConfigs.projectId, projectId),
+                eq(loanDigestConfigs.dealId, projectId)
+              ),
               eq(loanDigestConfigs.isEnabled, true)
             ))
             .limit(1);
