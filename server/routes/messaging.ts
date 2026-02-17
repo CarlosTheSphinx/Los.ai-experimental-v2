@@ -1,8 +1,8 @@
 import type { Express, Response } from 'express';
 import type { AuthRequest } from '../auth';
 import type { RouteDeps } from './types';
-import { eq, desc, and, sql } from 'drizzle-orm';
-import { messageThreads, messages, messageReads, users } from '@shared/schema';
+import { eq, desc, and, sql, gt } from 'drizzle-orm';
+import { messageThreads, messages, messageReads, users, projects } from '@shared/schema';
 
 export function registerMessagingRoutes(app: Express, deps: RouteDeps) {
   const { storage, db, authenticateUser, requireAdmin } = deps;
@@ -42,14 +42,65 @@ export function registerMessagingRoutes(app: Express, deps: RouteDeps) {
           .limit(100);
       }
 
-      // Get user info for each thread
-      const threadsWithUsers = await Promise.all(threads.map(async (thread) => {
-        const user = await db.select({ fullName: users.fullName, email: users.email })
+      const currentUserId = userId;
+      const threadsWithContext = await Promise.all(threads.map(async (thread) => {
+        const threadUser = await db.select({ fullName: users.fullName, email: users.email, userType: users.userType })
           .from(users).where(eq(users.id, thread.userId)).limit(1);
-        return { ...thread, userName: user[0]?.fullName || user[0]?.email || 'Unknown' };
+
+        let dealName = null;
+        let dealIdentifier = null;
+        let propertyAddress = null;
+        if (thread.dealId) {
+          const deal = await db.select({
+            projectName: projects.projectName,
+            propertyAddress: projects.propertyAddress,
+          }).from(projects).where(eq(projects.id, thread.dealId)).limit(1);
+          if (deal[0]) {
+            dealName = deal[0].projectName;
+            dealIdentifier = `DEAL-${thread.dealId}`;
+            propertyAddress = deal[0].propertyAddress;
+          }
+        }
+
+        const lastMsg = await db.select({ body: messages.body, createdAt: messages.createdAt })
+          .from(messages)
+          .where(eq(messages.threadId, thread.id))
+          .orderBy(desc(messages.createdAt))
+          .limit(1);
+
+        let unreadCount = 0;
+        const readRecord = await db.select().from(messageReads)
+          .where(and(eq(messageReads.threadId, thread.id), eq(messageReads.userId, currentUserId)))
+          .limit(1);
+
+        if (readRecord[0]) {
+          const unreadResult = await db.select({ count: sql<number>`count(*)::int` })
+            .from(messages)
+            .where(and(
+              eq(messages.threadId, thread.id),
+              gt(messages.createdAt, readRecord[0].lastReadAt)
+            ));
+          unreadCount = unreadResult[0]?.count || 0;
+        } else {
+          const allCount = await db.select({ count: sql<number>`count(*)::int` })
+            .from(messages)
+            .where(eq(messages.threadId, thread.id));
+          unreadCount = allCount[0]?.count || 0;
+        }
+
+        return {
+          ...thread,
+          userName: threadUser[0]?.fullName || threadUser[0]?.email || 'Unknown',
+          userType: threadUser[0]?.userType || null,
+          dealName,
+          dealIdentifier,
+          propertyAddress,
+          lastMessagePreview: lastMsg[0]?.body?.substring(0, 100) || null,
+          unreadCount,
+        };
       }));
 
-      res.json({ threads: threadsWithUsers });
+      res.json({ threads: threadsWithContext });
     } catch (error) {
       console.error('Get threads error:', error);
       res.status(500).json({ error: 'Failed to get threads' });

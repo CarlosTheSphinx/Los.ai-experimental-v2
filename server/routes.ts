@@ -3,7 +3,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, documentReviewResults, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema, projectActivity, projectTasks, platformSettings, dealMemoryEntries, dealNotes, insertDealMemoryEntrySchema, insertDealNoteSchema } from "@shared/schema";
+import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, documentReviewResults, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema, projectActivity, projectTasks, platformSettings, dealMemoryEntries, dealNotes, insertDealMemoryEntrySchema, insertDealNoteSchema, notifications } from "@shared/schema";
 import { priceQuote, validateRuleset, SAMPLE_RTL_RULESET, SAMPLE_DSCR_RULESET, type PricingInputs, analyzeGuidelines, refineProposal } from "./pricing";
 import { getDocumentTemplatesForLoanType } from "./document-templates";
 import { eq, desc, asc, inArray, and, gt, gte, lte, sql, isNull, or } from "drizzle-orm";
@@ -3308,6 +3308,16 @@ export async function registerRoutes(
         });
       } catch (e) { console.error('Memory entry error:', e); }
 
+      const uploaderInfo = await db.select({ firstName: users.firstName, lastName: users.lastName }).from(users).where(eq(users.id, userId)).limit(1);
+      const uploaderName = uploaderInfo[0] ? `${uploaderInfo[0].firstName || ''} ${uploaderInfo[0].lastName || ''}`.trim() || 'A borrower' : 'A borrower';
+      notifyDealAdmins(
+        projectId,
+        'document_uploaded',
+        'New Document Uploaded',
+        `${uploaderName} uploaded "${fileName || 'a document'}" to DEAL-${projectId}`,
+        userId
+      ).catch(err => console.error('Notification error:', err));
+
       // Google Drive sync (non-blocking)
       try {
         const { isDriveIntegrationEnabled, syncDocumentToDrive } = await import('./services/googleDrive');
@@ -3432,6 +3442,16 @@ export async function registerRoutes(
           metadata: { documentId: docId, category: updated?.documentCategory },
         });
       } catch (e) { console.error('Memory entry error:', e); }
+
+      const brokerInfo = await db.select({ firstName: users.firstName, lastName: users.lastName }).from(users).where(eq(users.id, userId)).limit(1);
+      const brokerName = brokerInfo[0] ? `${brokerInfo[0].firstName || ''} ${brokerInfo[0].lastName || ''}`.trim() || 'A broker' : 'A broker';
+      notifyDealAdmins(
+        projectId,
+        'document_uploaded',
+        'New Document Uploaded',
+        `${brokerName} uploaded "${updated?.documentName || fileName || 'a document'}" to DEAL-${projectId}`,
+        userId
+      ).catch(err => console.error('Notification error:', err));
 
       try {
         const { isDriveIntegrationEnabled, syncDealDocumentToDrive } = await import('./services/googleDrive');
@@ -3777,6 +3797,37 @@ export async function registerRoutes(
       await db.update(messageThreads)
         .set({ lastMessageAt: new Date() })
         .where(eq(messageThreads.id, threadId));
+
+      // Notification trigger: notify the other party about the new message
+      try {
+        const senderInfo = await db.select({ firstName: users.firstName, lastName: users.lastName }).from(users).where(eq(users.id, userId)).limit(1);
+        const senderName = senderInfo[0] ? `${senderInfo[0].firstName || ''} ${senderInfo[0].lastName || ''}`.trim() || 'Someone' : 'Someone';
+        const preview = body.length > 80 ? body.substring(0, 80) + '...' : body;
+        const dealId = thread[0].dealId;
+
+        if (senderRole === 'user') {
+          notifyDealAdmins(
+            dealId,
+            'new_message',
+            'New Message Received',
+            `${senderName} sent a message on DEAL-${dealId}: "${preview}"`,
+            userId
+          ).catch(err => console.error('Message notification error:', err));
+        } else {
+          if (thread[0].userId !== userId) {
+            createNotification({
+              userId: thread[0].userId,
+              type: 'new_message',
+              title: 'New Message From Your Lender',
+              message: `You have a new message on DEAL-${dealId}: "${preview}"`,
+              dealId,
+              link: `/messages`,
+            }).catch(err => console.error('Message notification error:', err));
+          }
+        }
+      } catch (notifErr) {
+        console.error('Message notification error:', notifErr);
+      }
 
       res.json({ message: newMessage[0] });
     } catch (error) {
@@ -15473,6 +15524,120 @@ Return JSON only:
     } catch (error) {
       console.error('Seed deal memory error:', error);
       res.status(500).json({ error: 'Failed to seed deal memory' });
+    }
+  });
+
+  // ==================== NOTIFICATIONS API ====================
+
+  async function createNotification(data: {
+    userId: number;
+    type: string;
+    title: string;
+    message: string;
+    dealId?: number;
+    link?: string;
+  }) {
+    try {
+      const result = await db.insert(notifications).values({
+        userId: data.userId,
+        type: data.type,
+        title: data.title,
+        message: data.message,
+        dealId: data.dealId || null,
+        link: data.link || null,
+        isRead: false,
+      }).returning();
+      return result[0];
+    } catch (err) {
+      console.error('Failed to create notification:', err);
+      return null;
+    }
+  }
+
+  async function notifyDealAdmins(dealId: number, type: string, title: string, message: string, excludeUserId?: number) {
+    try {
+      const deal = await db.select().from(projects).where(eq(projects.id, dealId)).limit(1);
+      if (!deal[0]) return;
+
+      const adminUsers = await db.select({ id: users.id }).from(users)
+        .where(or(eq(users.role, 'admin'), eq(users.role, 'super_admin'), eq(users.role, 'staff')));
+
+      for (const admin of adminUsers) {
+        if (excludeUserId && admin.id === excludeUserId) continue;
+        await createNotification({
+          userId: admin.id,
+          type,
+          title,
+          message,
+          dealId,
+          link: `/admin/deals/${dealId}`,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to notify deal admins:', err);
+    }
+  }
+
+  app.get('/api/notifications', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+
+      const results = await db.select().from(notifications)
+        .where(eq(notifications.userId, userId))
+        .orderBy(desc(notifications.createdAt))
+        .limit(limit)
+        .offset(offset);
+
+      res.json({ notifications: results });
+    } catch (error) {
+      console.error('Get notifications error:', error);
+      res.status(500).json({ error: 'Failed to fetch notifications' });
+    }
+  });
+
+  app.get('/api/notifications/unread-count', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const result = await db.select({ count: sql<number>`count(*)::int` }).from(notifications)
+        .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+
+      res.json({ count: result[0]?.count || 0 });
+    } catch (error) {
+      console.error('Get unread count error:', error);
+      res.status(500).json({ error: 'Failed to fetch unread count' });
+    }
+  });
+
+  app.post('/api/notifications/:id/read', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const notifId = parseInt(req.params.id);
+      const userId = req.user!.id;
+
+      await db.update(notifications)
+        .set({ isRead: true })
+        .where(and(eq(notifications.id, notifId), eq(notifications.userId, userId)));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Mark notification read error:', error);
+      res.status(500).json({ error: 'Failed to mark notification as read' });
+    }
+  });
+
+  app.post('/api/notifications/read-all', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+
+      await db.update(notifications)
+        .set({ isRead: true })
+        .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Mark all read error:', error);
+      res.status(500).json({ error: 'Failed to mark all notifications as read' });
     }
   });
 

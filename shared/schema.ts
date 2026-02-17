@@ -2556,3 +2556,20 @@ export const dealNotes = pgTable("deal_notes", {
 export const insertDealNoteSchema = createInsertSchema(dealNotes).omit({ id: true, createdAt: true, updatedAt: true });
 export type DealNote = typeof dealNotes.$inferSelect;
 export type InsertDealNote = z.infer<typeof insertDealNoteSchema>;
+
+// ==================== NOTIFICATIONS SYSTEM ====================
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  type: varchar("type", { length: 50 }).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  dealId: integer("deal_id").references(() => projects.id, { onDelete: 'cascade' }),
+  link: varchar("link", { length: 500 }),
+  isRead: boolean("is_read").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;

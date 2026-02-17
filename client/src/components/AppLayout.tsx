@@ -63,6 +63,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useBranding } from "@/hooks/use-branding";
 import { InboxBadge } from "@/components/InboxBadge";
+import { NotificationBell } from "@/components/NotificationBell";
 import { CommandPalette } from "@/components/CommandPalette";
 import { ProcessorAssistant } from "@/components/admin/ProcessorAssistant";
 import { TrainingChecklist } from "@/components/TrainingChecklist";
@@ -461,6 +462,15 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
             </Button>
           </div>
         )}
+        <div className="flex items-center justify-end gap-1 px-3 py-1.5 border-b shrink-0">
+          <Link href="/messages">
+            <Button variant="ghost" size="icon" className="relative" data-testid="button-header-messages">
+              <MessageSquare className="h-5 w-5" />
+              <InboxBadge />
+            </Button>
+          </Link>
+          <NotificationBell />
+        </div>
         <main className="flex-1 overflow-auto">
           {children}
         </main>

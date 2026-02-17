@@ -347,7 +347,7 @@ export default function MessagesPage() {
       </div>
 
       <div className="flex h-[calc(100vh-200px)] gap-4">
-        <Card className="w-80 flex flex-col">
+        <Card className="w-96 flex flex-col">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2">
               <MessageCircle className="h-5 w-5" />
@@ -366,67 +366,96 @@ export default function MessagesPage() {
               </div>
             ) : (
               <div className="p-2">
-                {threads.map((thread) => (
-                  <div
-                    key={thread.id}
-                    className={`group w-full text-left p-3 rounded-lg mb-1 transition-colors ${
-                      thread.id === activeThreadId
-                        ? "bg-primary/10 border border-primary/20"
-                        : "hover:bg-muted"
-                    }`}
-                    data-testid={`thread-item-${thread.id}`}
-                  >
-                    <button
-                      onClick={() => setActiveThreadId(thread.id)}
-                      className="w-full text-left"
+                {threads.map((thread) => {
+                  const t = thread as any;
+                  return (
+                    <div
+                      key={thread.id}
+                      className={`group w-full text-left p-3 rounded-lg mb-1 transition-colors ${
+                        thread.id === activeThreadId
+                          ? "bg-primary/10 border border-primary/20"
+                          : "hover:bg-muted"
+                      }`}
+                      data-testid={`thread-item-${thread.id}`}
                     >
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-sm truncate">
-                            {thread.userName || "User"}
+                      <button
+                        onClick={() => setActiveThreadId(thread.id)}
+                        className="w-full text-left"
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <div className="flex items-center justify-center h-8 w-8 rounded-full bg-muted text-xs font-semibold shrink-0">
+                              {getInitials(t.userName)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`text-sm truncate ${t.unreadCount > 0 ? 'font-bold' : 'font-semibold'}`}>
+                                  {t.userName || "User"}
+                                </span>
+                                {t.userType && (
+                                  <Badge variant="secondary" className="text-[10px] h-4 px-1.5 shrink-0">
+                                    {t.userType === 'borrower' ? 'Borrower' : 'Broker'}
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="text-xs text-muted-foreground truncate">
+                                {thread.subject || (t.dealIdentifier ? t.dealIdentifier : "General")}
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-xs text-muted-foreground truncate">
-                            {thread.subject || (thread.dealId ? `Deal #${thread.dealId}` : "General")}
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            {t.unreadCount > 0 && (
+                              <span className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
+                                {t.unreadCount}
+                              </span>
+                            )}
+                            <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                              {format(new Date(thread.lastMessageAt), "MMM d")}
+                            </span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                          {thread.unreadCount && thread.unreadCount > 0 && (
-                            <span className="h-2 w-2 rounded-full bg-blue-500 flex-shrink-0" />
-                          )}
-                          <span className="text-xs text-muted-foreground whitespace-nowrap">
-                            {format(new Date(thread.lastMessageAt), "MMM d")}
-                          </span>
+                        {t.dealIdentifier && (
+                          <div className="flex items-center gap-1.5 ml-10 mb-1">
+                            <Badge variant="outline" className="text-[10px] h-4 px-1.5">
+                              {t.dealIdentifier}
+                            </Badge>
+                            {t.propertyAddress && (
+                              <span className="text-[10px] text-muted-foreground truncate">
+                                {t.propertyAddress}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        <div className="text-xs text-muted-foreground line-clamp-1 ml-10">
+                          {t.lastMessagePreview || "No messages yet"}
                         </div>
-                      </div>
-                      <div className="text-xs text-muted-foreground line-clamp-2">
-                        {(thread as any).lastMessagePreview || "No messages yet"}
-                      </div>
-                    </button>
+                      </button>
 
-                    <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={(e) => toggleStarred(thread.id, e)}
-                        className="p-1 hover:bg-muted rounded transition-colors"
-                      >
-                        <Star
-                          className={`h-4 w-4 ${
-                            starredThreadIds.has(thread.id)
-                              ? "fill-yellow-500 text-yellow-500"
-                              : "text-muted-foreground"
-                          }`}
-                        />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                        }}
-                        className="p-1 hover:bg-muted rounded transition-colors"
-                      >
-                        <Archive className="h-4 w-4 text-muted-foreground" />
-                      </button>
+                      <div className="flex items-center gap-1 mt-1.5 ml-10 invisible group-hover:visible">
+                        <button
+                          onClick={(e) => toggleStarred(thread.id, e)}
+                          className="p-1 rounded transition-colors"
+                        >
+                          <Star
+                            className={`h-3.5 w-3.5 ${
+                              starredThreadIds.has(thread.id)
+                                ? "fill-yellow-500 text-yellow-500"
+                                : "text-muted-foreground"
+                            }`}
+                          />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                          }}
+                          className="p-1 rounded transition-colors"
+                        >
+                          <Archive className="h-3.5 w-3.5 text-muted-foreground" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </ScrollArea>
@@ -437,27 +466,42 @@ export default function MessagesPage() {
             <>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 flex-1">
-                    <div className="flex items-center justify-center h-10 w-10 rounded-full bg-muted text-sm font-semibold">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="flex items-center justify-center h-10 w-10 rounded-full bg-muted text-sm font-semibold shrink-0">
                       {getInitials((activeThread as any).userName)}
                     </div>
-                    <div>
-                      <CardTitle className="text-lg">
+                    <div className="flex-1 min-w-0">
+                      <CardTitle className="text-lg truncate">
                         {(activeThread as any).userName || "User"}
                       </CardTitle>
-                      <p className="text-xs text-muted-foreground">
-                        {activeThread.subject || (activeThread.dealId ? `Deal #${activeThread.dealId}` : "General Conversation")}
-                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-xs text-muted-foreground">
+                          {activeThread.subject || "Conversation"}
+                        </p>
+                        {activeThread.dealId && (
+                          <Badge variant="outline" className="text-[10px] h-4 px-1.5">
+                            DEAL-{activeThread.dealId}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <div className="flex items-center gap-1 shrink-0">
+                    {isAdmin && activeThread.dealId && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setLocation(`/admin/deals/${activeThread.dealId}`)}
+                        title="Go to deal"
+                        data-testid="button-go-to-deal"
+                      >
+                        <Briefcase className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <Button variant="ghost" size="icon">
                       <Phone className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <FileText className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Button variant="ghost" size="icon">
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>
                   </div>
