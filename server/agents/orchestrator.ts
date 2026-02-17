@@ -14,6 +14,7 @@ import {
   agentCommunications,
   dealStories,
   projects,
+  dealDocuments,
   type AgentPipelineRun,
 } from "@shared/schema";
 import { eq, and, desc, asc } from "drizzle-orm";
@@ -303,7 +304,6 @@ async function compileContextForAgent(
   }
 
   if (agentType === "communication" || agentIndex === 2) {
-    // Communication agent gets findings summary
     const findings = await db
       .select()
       .from(agentFindings)
@@ -322,6 +322,42 @@ async function compileContextForAgent(
         }
       )
       .join("\n\n");
+
+    const allDocs = await db
+      .select()
+      .from(dealDocuments)
+      .where(eq(dealDocuments.dealId, projectId));
+
+    const received = allDocs.filter(d => d.status === 'uploaded' || d.status === 'approved' || d.status === 'reviewed');
+    const outstanding = allDocs.filter(d => d.status === 'pending');
+    const rejected = allDocs.filter(d => d.status === 'rejected');
+
+    context.document_status_report = {
+      total: allDocs.length,
+      received: received.map(d => ({ name: d.documentName, category: d.documentCategory, status: d.status })),
+      outstanding: outstanding.map(d => ({ name: d.documentName, category: d.documentCategory, required: d.isRequired })),
+      rejected: rejected.map(d => ({ name: d.documentName, category: d.documentCategory, notes: d.notes })),
+    };
+
+    const project = await db
+      .select({
+        borrowerPortalToken: projects.borrowerPortalToken,
+        brokerPortalToken: projects.brokerPortalToken,
+      })
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .then(rows => rows[0]);
+
+    const baseUrl = process.env.REPLIT_DEV_DOMAIN
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+      : (process.env.BASE_URL || 'https://app.sphinxcap.com');
+
+    if (project?.borrowerPortalToken) {
+      context.borrower_portal_url = `${baseUrl}/portal/${project.borrowerPortalToken}`;
+    }
+    if (project?.brokerPortalToken) {
+      context.broker_portal_url = `${baseUrl}/portal/broker/${project.brokerPortalToken}`;
+    }
 
     context.communication_type = "status_update";
     context.recipient_name = "Borrower";
