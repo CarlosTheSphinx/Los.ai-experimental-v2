@@ -82,7 +82,6 @@ import { cn } from "@/lib/utils";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { DigestConfigPanel } from "@/components/DigestConfigPanel";
-import { LoanChecklist } from "@/components/LoanChecklist";
 import { AIInsightsPanel } from "@/components/admin/AIInsightsPanel";
 import { DealMemoryPanel } from "@/components/admin/DealMemoryPanel";
 
@@ -558,7 +557,8 @@ export default function AdminDealDetail() {
   );
   const project = projectDetailData?.project;
 
-  const [activeFilter, setActiveFilter] = useState<'all' | 'tasks' | 'documents' | 'activity' | 'digests' | 'checklist' | 'ai_insights'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'completed' | 'todo' | 'digests' | 'ai_insights'>('all');
+  const [subFilter, setSubFilter] = useState<'all' | 'documents' | 'tasks'>('all');
   const [showMemoryPanel, setShowMemoryPanel] = useState(true);
   const [expandedStages, setExpandedStages] = useState<Set<number>>(new Set());
   const [stageExpandInitialized, setStageExpandInitialized] = useState(false);
@@ -1797,11 +1797,9 @@ export default function AdminDealDetail() {
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap">
               {([
-                { key: 'all' as const, label: 'All Items', icon: ListChecks },
-                { key: 'checklist' as const, label: 'Checklist', icon: CheckSquare },
-                { key: 'tasks' as const, label: 'Tasks', icon: CheckSquare },
-                { key: 'documents' as const, label: 'Documents', icon: FileText },
-                { key: 'activity' as const, label: 'Activity', icon: Activity },
+                { key: 'all' as const, label: 'All', icon: ListChecks },
+                { key: 'completed' as const, label: 'Completed', icon: CheckCircle2 },
+                { key: 'todo' as const, label: 'To-Do', icon: Circle },
                 { key: 'digests' as const, label: 'Communications', icon: BarChart3 },
                 { key: 'ai_insights' as const, label: 'AI Insights', icon: Zap },
               ]).map(filter => (
@@ -1839,11 +1837,25 @@ export default function AdminDealDetail() {
               )}
             </div>
           </div>
+          {(activeFilter === 'all' || activeFilter === 'completed' || activeFilter === 'todo') && (
+            <div className="mt-3 pt-3 border-t">
+              <Select value={subFilter} onValueChange={(v) => setSubFilter(v as 'all' | 'documents' | 'tasks')}>
+                <SelectTrigger className="w-[200px]" data-testid="select-sub-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Documents & Tasks</SelectItem>
+                  <SelectItem value="documents">Documents Only</SelectItem>
+                  <SelectItem value="tasks">Tasks Only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* Stage-based workflow content */}
-      {(activeFilter === 'all' || activeFilter === 'tasks' || activeFilter === 'documents') && (
+      {(activeFilter === 'all' || activeFilter === 'completed' || activeFilter === 'todo') && (
         <div className="space-y-4" data-testid="stages-workflow">
           {projectStages.length > 0 ? (
             projectStages.map((stage, stageIndex) => {
@@ -1852,10 +1864,29 @@ export default function AdminDealDetail() {
               const isCompleted = derivedStatus === 'completed';
               const isActive = derivedStatus === 'in_progress';
               const progress = computeStageProgress(stage);
-              const stageTasks = stage.tasks || [];
-              const stageDocs = getStageDocuments(stage);
-              const showTasks = activeFilter === 'all' || activeFilter === 'tasks';
-              const showDocs = activeFilter === 'all' || activeFilter === 'documents';
+              const allStageTasks = stage.tasks || [];
+              const allStageDocs = getStageDocuments(stage);
+
+              const showTasks = subFilter === 'all' || subFilter === 'tasks';
+              const showDocs = subFilter === 'all' || subFilter === 'documents';
+
+              const stageTasks = allStageTasks.filter(t => {
+                if (activeFilter === 'completed') return t.status === 'completed';
+                if (activeFilter === 'todo') return t.status !== 'completed';
+                return true;
+              });
+              const stageDocs = allStageDocs.filter(d => {
+                const isDocCompleted = d.status === 'approved' || d.status === 'uploaded';
+                if (activeFilter === 'completed') return isDocCompleted;
+                if (activeFilter === 'todo') return !isDocCompleted;
+                return true;
+              });
+
+              const visibleTaskCount = showTasks ? stageTasks.length : 0;
+              const visibleDocCount = showDocs ? stageDocs.length : 0;
+              if ((activeFilter === 'completed' || activeFilter === 'todo') && visibleTaskCount === 0 && visibleDocCount === 0) {
+                return null;
+              }
 
               return (
                 <Card
@@ -2209,17 +2240,39 @@ export default function AdminDealDetail() {
           )}
 
           {/* Show unassigned documents that aren't linked to any stage */}
-          {(activeFilter === 'all' || activeFilter === 'documents') && getUnassignedDocuments().length > 0 && (
+          {(subFilter === 'all' || subFilter === 'documents') && (() => {
+            const unassigned = getUnassignedDocuments().filter(d => {
+              const isDocCompleted = d.status === 'approved' || d.status === 'uploaded';
+              if (activeFilter === 'completed') return isDocCompleted;
+              if (activeFilter === 'todo') return !isDocCompleted;
+              return true;
+            });
+            return unassigned.length > 0;
+          })() && (
             <Card className="mt-4" data-testid="card-unassigned-docs">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <FileText className="h-4 w-4" />
-                  General Documents ({getUnassignedDocuments().filter(d => d.status === 'approved' || d.status === 'uploaded').length}/{getUnassignedDocuments().length})
+                  General Documents ({(() => {
+                    const filtered = getUnassignedDocuments().filter(d => {
+                      const isDocCompleted = d.status === 'approved' || d.status === 'uploaded';
+                      if (activeFilter === 'completed') return isDocCompleted;
+                      if (activeFilter === 'todo') return !isDocCompleted;
+                      return true;
+                    });
+                    const completed = filtered.filter(d => d.status === 'approved' || d.status === 'uploaded').length;
+                    return `${completed}/${filtered.length}`;
+                  })()})
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {getUnassignedDocuments().map((doc) => (
+                  {getUnassignedDocuments().filter(d => {
+                    const isDocCompleted = d.status === 'approved' || d.status === 'uploaded';
+                    if (activeFilter === 'completed') return isDocCompleted;
+                    if (activeFilter === 'todo') return !isDocCompleted;
+                    return true;
+                  }).map((doc) => (
                     <div
                       key={doc.id}
                       className={cn(
@@ -2267,94 +2320,49 @@ export default function AdminDealDetail() {
               </CardContent>
             </Card>
           )}
-        </div>
-      )}
 
-      {/* Unified Checklist View */}
-      {activeFilter === 'checklist' && linkedProjectId && (
-        <LoanChecklist
-          dealId={linkedProjectId}
-          mode="admin"
-          onUploadDoc={(docId) => {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.onchange = async (e) => {
-              const file = (e.target as HTMLInputElement).files?.[0];
-              if (file) {
-                try {
-                  const urlRes = await apiRequest('POST', `/api/admin/deals/${dealId}/documents/${docId}/upload-url`, {
-                    name: file.name, size: file.size, contentType: file.type
-                  });
-                  const urlData = await urlRes.json();
-                  let objPath: string;
-                  if (urlData.useDirectUpload) {
-                    const fd = new FormData();
-                    fd.append('file', file);
-                    const dr = await fetch(urlData.uploadURL, { method: 'POST', body: fd, credentials: 'include' });
-                    if (!dr.ok) throw new Error('Upload failed');
-                    objPath = (await dr.json()).objectPath;
-                  } else {
-                    await fetch(urlData.uploadURL, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
-                    objPath = urlData.objectPath;
-                  }
-                  await apiRequest('POST', `/api/admin/deals/${dealId}/documents/${docId}/upload-complete`, {
-                    objectPath: objPath, fileName: file.name, fileSize: file.size, mimeType: file.type
-                  });
-                  queryClient.invalidateQueries({ queryKey: ['/api/checklist', linkedProjectId, 'admin'] });
-                  toast({ title: "Document uploaded" });
-                } catch (err: any) {
-                  toast({ title: "Upload failed", description: err.message, variant: "destructive" });
-                }
-              }
-            };
-            input.click();
-          }}
-          onReviewDoc={async (docId, decision, notes) => {
-            try {
-              await apiRequest('PATCH', `/api/admin/deals/${dealId}/documents/${docId}`, {
-                status: decision, reviewNotes: notes || ''
+          {(activeFilter === 'completed' || activeFilter === 'todo') && projectStages.length > 0 && (() => {
+            const hasVisibleStages = projectStages.some(stage => {
+              const allTasks = stage.tasks || [];
+              const allDocs = getStageDocuments(stage);
+              const filteredTasks = allTasks.filter(t => activeFilter === 'completed' ? t.status === 'completed' : t.status !== 'completed');
+              const filteredDocs = allDocs.filter(d => {
+                const done = d.status === 'approved' || d.status === 'uploaded';
+                return activeFilter === 'completed' ? done : !done;
               });
-              queryClient.invalidateQueries({ queryKey: ['/api/checklist', linkedProjectId, 'admin'] });
-              toast({ title: `Document ${decision}` });
-            } catch (err: any) {
-              toast({ title: "Review failed", description: err.message, variant: "destructive" });
-            }
-          }}
-          pollingInterval={10000}
-          showTasks={true}
-        />
-      )}
-
-      {/* Activity view */}
-      {activeFilter === 'activity' && (
-        <Card data-testid="card-activity">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Activity className="h-4 w-4" />
-              Activity Timeline
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {projectActivity.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">No activity yet</div>
-            ) : (
-              <div className="space-y-4">
-                {projectActivity.map((item, i) => (
-                  <div key={item.id} className="flex gap-3">
-                    <div className="flex flex-col items-center">
-                      <div className="h-2 w-2 rounded-full bg-primary" />
-                      {i < projectActivity.length - 1 && <div className="flex-1 w-px bg-border" />}
-                    </div>
-                    <div className="flex-1 pb-4">
-                      <div className="text-sm">{item.activityDescription}</div>
-                      <div className="text-xs text-muted-foreground mt-1">{formatDateTime(item.createdAt)}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              const visT = (subFilter === 'all' || subFilter === 'tasks') ? filteredTasks.length : 0;
+              const visD = (subFilter === 'all' || subFilter === 'documents') ? filteredDocs.length : 0;
+              return visT + visD > 0;
+            });
+            const hasUnassigned = (subFilter === 'all' || subFilter === 'documents') && getUnassignedDocuments().some(d => {
+              const done = d.status === 'approved' || d.status === 'uploaded';
+              return activeFilter === 'completed' ? done : !done;
+            });
+            return !hasVisibleStages && !hasUnassigned;
+          })() && (
+            <Card>
+              <CardContent className="py-12 text-center">
+                {activeFilter === 'completed' ? (
+                  <>
+                    <CheckCircle2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-medium">No completed items yet</h3>
+                    <p className="text-muted-foreground">
+                      Completed {subFilter === 'tasks' ? 'tasks' : subFilter === 'documents' ? 'documents' : 'items'} will appear here.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Circle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-medium">All caught up</h3>
+                    <p className="text-muted-foreground">
+                      No outstanding {subFilter === 'tasks' ? 'tasks' : subFilter === 'documents' ? 'documents' : 'items'} remaining.
+                    </p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* Digests view */}
