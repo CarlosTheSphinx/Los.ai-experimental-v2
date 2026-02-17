@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -36,6 +38,9 @@ import {
   Brain,
   MessageSquare,
   ScanSearch,
+  Pencil,
+  Save,
+  X,
 } from "lucide-react";
 
 interface AIInsightsPanelProps {
@@ -222,6 +227,9 @@ export function AIInsightsPanel({ projectId, onPipelineComplete }: AIInsightsPan
   const [copiedCommId, setCopiedCommId] = useState<number | null>(null);
   const [debugOpen, setDebugOpen] = useState(true);
   const [selectedRunIndex, setSelectedRunIndex] = useState(0);
+  const [editingCommId, setEditingCommId] = useState<number | null>(null);
+  const [editBody, setEditBody] = useState("");
+  const [editSubject, setEditSubject] = useState("");
 
   const pipelineRunsQuery = useQuery<PipelineRun[]>({
     queryKey: ["/api/projects", projectId, "pipeline-runs"],
@@ -312,6 +320,28 @@ export function AIInsightsPanel({ projectId, onPipelineComplete }: AIInsightsPan
       toast({ title: "Failed to approve", variant: "destructive" });
     },
   });
+
+  const editComm = useMutation({
+    mutationFn: async ({ commId, body, subject }: { commId: number; body?: string; subject?: string }) => {
+      const res = await apiRequest("PATCH", `/api/projects/${projectId}/agent-communications/${commId}`, { body, subject });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "agent-communications"] });
+      setEditingCommId(null);
+      toast({ title: "Communication updated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to save changes", variant: "destructive" });
+    },
+  });
+
+  const startEditing = (comm: AgentCommunication) => {
+    const parsed = parseCommBody(comm);
+    setEditingCommId(comm.id);
+    setEditBody(parsed.body);
+    setEditSubject(parsed.subject);
+  };
 
   const story = storyQuery.data;
   const findings = findingsQuery.data || [];
@@ -777,52 +807,104 @@ export function AIInsightsPanel({ projectId, onPipelineComplete }: AIInsightsPan
               <CardContent className="pt-0 space-y-3">
                 {communications.map((comm) => {
                   const parsed = parseCommBody(comm);
+                  const isEditing = editingCommId === comm.id;
                   return (
                     <div key={comm.id} className="border rounded-lg p-4 space-y-3" data-testid={`comm-draft-${comm.id}`}>
                       <div className="flex items-start justify-between gap-3 flex-wrap">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-medium">{parsed.subject}</span>
-                            <Badge variant={comm.status === 'draft' ? 'secondary' : comm.status === 'approved' ? 'default' : 'outline'} className="text-[10px]">
-                              {comm.status || 'draft'}
-                            </Badge>
-                            {comm.priority && comm.priority !== 'routine' && (
-                              <Badge variant={comm.priority === 'urgent' ? 'destructive' : 'secondary'} className="text-[10px]">
-                                {comm.priority}
+                          {isEditing ? (
+                            <Input
+                              value={editSubject}
+                              onChange={(e) => setEditSubject(e.target.value)}
+                              className="text-sm font-medium mb-1"
+                              data-testid={`input-edit-subject-${comm.id}`}
+                            />
+                          ) : (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-medium">{parsed.subject}</span>
+                              <Badge variant={comm.status === 'draft' ? 'secondary' : comm.status === 'approved' ? 'default' : 'outline'} className="text-[10px]">
+                                {comm.status || 'draft'}
                               </Badge>
-                            )}
-                          </div>
+                              {comm.priority && comm.priority !== 'routine' && (
+                                <Badge variant={comm.priority === 'urgent' ? 'destructive' : 'secondary'} className="text-[10px]">
+                                  {comm.priority}
+                                </Badge>
+                              )}
+                            </div>
+                          )}
                           <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
                             <span>To: {comm.recipientType || 'borrower'}</span>
                             {comm.recipientName && <span>{comm.recipientName}</span>}
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => copyCommBody(comm.id, parsed.body)}
-                            data-testid={`button-copy-comm-${comm.id}`}
-                          >
-                            {copiedCommId === comm.id ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
-                          </Button>
-                          {comm.status === 'draft' && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => approveComm.mutate(comm.id)}
-                              disabled={approveComm.isPending}
-                              data-testid={`button-approve-comm-${comm.id}`}
-                            >
-                              {approveComm.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
-                              Approve
-                            </Button>
+                          {isEditing ? (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => editComm.mutate({ commId: comm.id, body: editBody, subject: editSubject })}
+                                disabled={editComm.isPending}
+                                data-testid={`button-save-comm-${comm.id}`}
+                              >
+                                {editComm.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
+                                Save
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => setEditingCommId(null)}
+                                data-testid={`button-cancel-edit-${comm.id}`}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => startEditing(comm)}
+                                data-testid={`button-edit-comm-${comm.id}`}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => copyCommBody(comm.id, parsed.body)}
+                                data-testid={`button-copy-comm-${comm.id}`}
+                              >
+                                {copiedCommId === comm.id ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+                              </Button>
+                              {comm.status === 'draft' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => approveComm.mutate(comm.id)}
+                                  disabled={approveComm.isPending}
+                                  data-testid={`button-approve-comm-${comm.id}`}
+                                >
+                                  {approveComm.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
+                                  Approve
+                                </Button>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>
-                      <div className="text-sm text-muted-foreground whitespace-pre-wrap bg-muted/30 rounded-md p-3 max-h-64 overflow-y-auto" data-testid={`comm-body-${comm.id}`}>
-                        {parsed.body}
-                      </div>
+                      {isEditing ? (
+                        <Textarea
+                          value={editBody}
+                          onChange={(e) => setEditBody(e.target.value)}
+                          className="text-sm min-h-[120px] resize-y"
+                          data-testid={`textarea-edit-body-${comm.id}`}
+                        />
+                      ) : (
+                        <div className="text-sm text-muted-foreground whitespace-pre-wrap bg-muted/30 rounded-md p-3 max-h-64 overflow-y-auto" data-testid={`comm-body-${comm.id}`}>
+                          {parsed.body}
+                        </div>
+                      )}
                       {comm.internalNotes && (
                         <div className="text-xs text-muted-foreground italic border-t pt-2">
                           Notes: {comm.internalNotes}

@@ -23,7 +23,8 @@ import {
   users,
   loanDigestConfigs,
   loanDigestRecipients,
-  scheduledDigestDrafts
+  scheduledDigestDrafts,
+  dealMemoryEntries
 } from '@shared/schema';
 import { asc, gte, lte, sql } from 'drizzle-orm';
 import { startPipeline, getPipelineStatus, getPipelineHistory } from '../agents/orchestrator';
@@ -733,6 +734,18 @@ export function registerAgentRoutes(app: Express, deps: RouteDeps): void {
           digestResult = { queued: false, message: 'Failed to queue to digest' };
         }
 
+        try {
+          await db.insert(dealMemoryEntries).values({
+            dealId: projectId,
+            entryType: 'communication_approved',
+            title: `Communication approved: ${comm.subject || 'Deal Update'}`,
+            description: `To: ${comm.recipientType || 'borrower'}${comm.recipientName ? ` (${comm.recipientName})` : ''}`,
+            sourceType: 'admin',
+            sourceUserId: req.user?.id || null,
+            metadata: { commId: comm.id, subject: comm.subject, recipientType: comm.recipientType },
+          });
+        } catch (e) { console.error('Memory entry error:', e); }
+
         res.json({
           success: true,
           message: 'Communication approved',
@@ -742,6 +755,55 @@ export function registerAgentRoutes(app: Express, deps: RouteDeps): void {
       } catch (error) {
         console.error('Error approving communication:', error);
         res.status(500).json({ error: 'Failed to approve communication' });
+      }
+    }
+  );
+
+  /**
+   * PATCH /api/projects/:id/agent-communications/:commId
+   * Edit a communication's body/subject
+   */
+  app.patch(
+    '/api/projects/:id/agent-communications/:commId',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const projectId = parseInt(req.params.id);
+        const commId = parseInt(req.params.commId);
+        const { body, subject } = req.body;
+
+        if (body === undefined && subject === undefined) {
+          return res.status(400).json({ error: 'Body or subject required' });
+        }
+        if (body !== undefined && typeof body !== 'string') {
+          return res.status(400).json({ error: 'Body must be a string' });
+        }
+        if (subject !== undefined && typeof subject !== 'string') {
+          return res.status(400).json({ error: 'Subject must be a string' });
+        }
+
+        const updateFields: any = {};
+        if (body !== undefined) updateFields.editedBody = body;
+        if (subject !== undefined) updateFields.subject = subject;
+
+        const [comm] = await db
+          .update(agentCommunications)
+          .set(updateFields)
+          .where(and(
+            eq(agentCommunications.id, commId),
+            eq(agentCommunications.projectId, projectId)
+          ))
+          .returning();
+
+        if (!comm) {
+          return res.status(404).json({ error: 'Communication not found' });
+        }
+
+        res.json({ success: true, communication: comm });
+      } catch (error) {
+        console.error('Error editing communication:', error);
+        res.status(500).json({ error: 'Failed to edit communication' });
       }
     }
   );
