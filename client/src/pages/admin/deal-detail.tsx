@@ -1606,14 +1606,32 @@ export default function AdminDealDetail() {
               {/* Borrower Portal Link */}
               <div className="space-y-2">
                 <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Borrower Portal Link</div>
-                {data?.borrowerPortalToken ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => generateBorrowerLinkMutation.mutate()}
+                    disabled={generateBorrowerLinkMutation.isPending}
+                    data-testid="button-generate-borrower-link"
+                  >
+                    {generateBorrowerLinkMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                    ) : data?.borrowerPortalToken ? (
+                      <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                    ) : (
+                      <Plus className="h-3.5 w-3.5 mr-1" />
+                    )}
+                    {data?.borrowerPortalToken ? 'Regenerate' : 'Generate Link'}
+                  </Button>
+                  {data?.borrowerPortalToken && (
+                    <>
                       <input
                         type="text"
                         readOnly
                         value={`${window.location.origin}/portal/${data.borrowerPortalToken}`}
-                        className="flex-1 px-3 py-2 text-xs border rounded-md bg-muted/50 cursor-pointer"
+                        className="flex-1 min-w-0 px-3 py-1.5 text-xs border rounded-md bg-muted/50 cursor-pointer"
+                        onClick={() => copyToClipboard(`${window.location.origin}/portal/${data.borrowerPortalToken}`, "Borrower link")}
+                        data-testid="input-borrower-link"
                       />
                       <Button
                         size="icon"
@@ -1622,27 +1640,13 @@ export default function AdminDealDetail() {
                           copyToClipboard(`${window.location.origin}/portal/${data.borrowerPortalToken}`, "Borrower link")
                         }
                         className="flex-shrink-0"
+                        data-testid="button-copy-borrower-link"
                       >
                         {borrowerPortalCopied ? (
                           <Check className="h-4 w-4 text-green-600" />
                         ) : (
                           <Copy className="h-4 w-4" />
                         )}
-                      </Button>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => generateBorrowerLinkMutation.mutate()}
-                        disabled={generateBorrowerLinkMutation.isPending}
-                      >
-                        {generateBorrowerLinkMutation.isPending ? (
-                          <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-3.5 w-3.5 mr-1" />
-                        )}
-                        Generate New Link
                       </Button>
                       <Button
                         size="sm"
@@ -1653,28 +1657,13 @@ export default function AdminDealDetail() {
                           })
                         }
                         disabled={updatePortalSettingsMutation.isPending}
+                        data-testid="button-toggle-borrower-portal"
                       >
                         {data?.borrowerPortalEnabled ? "Disable" : "Enable"}
                       </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => generateBorrowerLinkMutation.mutate()}
-                      disabled={generateBorrowerLinkMutation.isPending}
-                    >
-                      {generateBorrowerLinkMutation.isPending ? (
-                        <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                      ) : (
-                        <Plus className="h-3.5 w-3.5 mr-1" />
-                      )}
-                      Generate Link
-                    </Button>
-                  </div>
-                )}
+                    </>
+                  )}
+                </div>
               </div>
 
               <div className="border-t pt-3" />
@@ -1682,14 +1671,32 @@ export default function AdminDealDetail() {
               {/* Broker Portal Link */}
               <div className="space-y-2">
                 <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Broker Portal Link</div>
-                {data?.brokerPortalToken ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => generateBrokerLinkMutation.mutate()}
+                    disabled={generateBrokerLinkMutation.isPending}
+                    data-testid="button-generate-broker-link"
+                  >
+                    {generateBrokerLinkMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                    ) : data?.brokerPortalToken ? (
+                      <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                    ) : (
+                      <Plus className="h-3.5 w-3.5 mr-1" />
+                    )}
+                    {data?.brokerPortalToken ? 'Regenerate' : 'Generate Link'}
+                  </Button>
+                  {data?.brokerPortalToken && (
+                    <>
                       <input
                         type="text"
                         readOnly
                         value={`${window.location.origin}/broker-portal/${data.brokerPortalToken}`}
-                        className="flex-1 px-3 py-2 text-xs border rounded-md bg-muted/50 cursor-pointer"
+                        className="flex-1 min-w-0 px-3 py-1.5 text-xs border rounded-md bg-muted/50 cursor-pointer"
+                        onClick={() => copyToClipboard(`${window.location.origin}/broker-portal/${data.brokerPortalToken}`, "Broker link")}
+                        data-testid="input-broker-link"
                       />
                       <Button
                         size="icon"
@@ -1698,27 +1705,13 @@ export default function AdminDealDetail() {
                           copyToClipboard(`${window.location.origin}/broker-portal/${data.brokerPortalToken}`, "Broker link")
                         }
                         className="flex-shrink-0"
+                        data-testid="button-copy-broker-link"
                       >
                         {brokerPortalCopied ? (
                           <Check className="h-4 w-4 text-green-600" />
                         ) : (
                           <Copy className="h-4 w-4" />
                         )}
-                      </Button>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => generateBrokerLinkMutation.mutate()}
-                        disabled={generateBrokerLinkMutation.isPending}
-                      >
-                        {generateBrokerLinkMutation.isPending ? (
-                          <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-3.5 w-3.5 mr-1" />
-                        )}
-                        Generate New Link
                       </Button>
                       <Button
                         size="sm"
@@ -1729,28 +1722,13 @@ export default function AdminDealDetail() {
                           })
                         }
                         disabled={updatePortalSettingsMutation.isPending}
+                        data-testid="button-toggle-broker-portal"
                       >
                         {data?.brokerPortalEnabled ? "Disable" : "Enable"}
                       </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => generateBrokerLinkMutation.mutate()}
-                      disabled={generateBrokerLinkMutation.isPending}
-                    >
-                      {generateBrokerLinkMutation.isPending ? (
-                        <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                      ) : (
-                        <Plus className="h-3.5 w-3.5 mr-1" />
-                      )}
-                      Generate Link
-                    </Button>
-                  </div>
-                )}
+                    </>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
