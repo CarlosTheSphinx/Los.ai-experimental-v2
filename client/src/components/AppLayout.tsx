@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import {
   Calculator,
@@ -67,6 +67,8 @@ import type { PermissionKey } from "@shared/schema";
 
 interface AppLayoutProps {
   children: React.ReactNode;
+  sidebarPinnedProp?: boolean;
+  setSidebarPinnedProp?: (v: boolean) => void;
 }
 
 interface NavItem {
@@ -121,15 +123,41 @@ type ViewAsMode = "super_admin" | "lender" | "borrower";
 
 const VIEW_AS_STORAGE_KEY = "lendry_view_as_mode";
 
-function AppLayoutContent({ children }: AppLayoutProps) {
+function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }: AppLayoutProps) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
   const { setOpenMobile, isMobile, open, setOpen } = useSidebar();
   const { hasPermission, isSuperAdmin } = usePermissions();
   const { branding } = useBranding();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [sidebarPinned, setSidebarPinned] = useState(false);
+  const sidebarPinned = sidebarPinnedProp ?? false;
+  const setSidebarPinned = setSidebarPinnedProp ?? (() => {});
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [sidebarHovered, setSidebarHovered] = useState(false);
+  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSidebarMouseEnter = () => {
+    if (isMobile || sidebarPinned) return;
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = setTimeout(() => {
+      setSidebarHovered(true);
+    }, 200);
+  };
+
+  const handleSidebarMouseLeave = () => {
+    if (isMobile || sidebarPinned) return;
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = setTimeout(() => {
+      setSidebarHovered(false);
+    }, 300);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    };
+  }, []);
+
   const [viewAsMode, setViewAsMode] = useState<ViewAsMode>(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem(VIEW_AS_STORAGE_KEY);
@@ -196,16 +224,23 @@ function AppLayoutContent({ children }: AppLayoutProps) {
 
   return (
     <div className="flex h-screen w-full bg-background">
+      <div
+        onMouseEnter={handleSidebarMouseEnter}
+        onMouseLeave={handleSidebarMouseLeave}
+        className="relative h-full"
+        data-sidebar-hovered={sidebarHovered && !sidebarPinned ? "true" : "false"}
+        style={sidebarHovered && !sidebarPinned ? { zIndex: 50 } : undefined}
+      >
       <Sidebar collapsible="icon">
-        <SidebarHeader className="p-4 border-b border-sidebar-border space-y-3">
+        <SidebarHeader className="p-3 border-b border-sidebar-border space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex flex-col items-start gap-1">
               <div className="flex items-center gap-0 group-data-[collapsible=icon]:hidden">
                 <span className="text-lg font-bold text-foreground">Lendry.</span>
                 <span className="text-lg font-bold text-primary">AI</span>
               </div>
-              <div className="hidden group-data-[collapsible=icon]:flex items-center justify-center h-10 w-10">
-                <span className="text-sm font-bold text-primary">L</span>
+              <div className="hidden group-data-[collapsible=icon]:flex items-center justify-center">
+                <span className="text-base font-bold text-primary">L.AI</span>
               </div>
               <span className="text-[10px] text-muted-foreground font-medium group-data-[collapsible=icon]:hidden">
                 Intelligent Lending Platform
@@ -214,11 +249,12 @@ function AppLayoutContent({ children }: AppLayoutProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6 text-muted-foreground hover:text-foreground group-data-[collapsible=icon]:hidden"
+              className="text-muted-foreground group-data-[collapsible=icon]:hidden"
               onClick={() => setSidebarPinned(!sidebarPinned)}
               title={sidebarPinned ? "Unpin sidebar" : "Pin sidebar open"}
+              data-testid="button-pin-sidebar"
             >
-              {sidebarPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+              {sidebarPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
             </Button>
           </div>
           <Button
@@ -233,11 +269,11 @@ function AppLayoutContent({ children }: AppLayoutProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="w-full h-8 hidden group-data-[collapsible=icon]:flex items-center justify-center text-muted-foreground"
+            className="w-full hidden group-data-[collapsible=icon]:flex items-center justify-center text-muted-foreground"
             onClick={() => setCommandPaletteOpen(true)}
             title="Search (⌘K)"
           >
-            <Search className="h-4 w-4" />
+            <Search className="h-5 w-5" />
           </Button>
         </SidebarHeader>
         <SidebarContent>
@@ -265,7 +301,7 @@ function AppLayoutContent({ children }: AppLayoutProps) {
                           data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                           onClick={handleNavClick}
                         >
-                          <Icon className="h-5 w-5" />
+                          <Icon className="h-5 w-5 shrink-0" />
                           <span className="flex items-center gap-1 flex-1">
                             {item.label}
                             {'showBadge' in item && item.showBadge && <InboxBadge />}
@@ -309,7 +345,7 @@ function AppLayoutContent({ children }: AppLayoutProps) {
                             data-testid={`nav-admin-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                             onClick={handleNavClick}
                           >
-                            <Icon className="h-5 w-5" />
+                            <Icon className="h-5 w-5 shrink-0" />
                             <span className="flex items-center gap-1 flex-1">
                               {item.label}
                               {'showBadge' in item && item.showBadge && <InboxBadge />}
@@ -383,6 +419,7 @@ function AppLayoutContent({ children }: AppLayoutProps) {
           </div>
         </SidebarFooter>
       </Sidebar>
+      </div>
 
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
         {isPreviewingOtherRole && (
@@ -436,15 +473,38 @@ function AppLayoutContent({ children }: AppLayoutProps) {
   );
 }
 
+const SIDEBAR_PINNED_KEY = "lendry_sidebar_pinned";
+
 export function AppLayout({ children }: AppLayoutProps) {
+  const [pinned, setPinned] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem(SIDEBAR_PINNED_KEY) === "true";
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_PINNED_KEY, String(pinned));
+  }, [pinned]);
+
   const style = {
     "--sidebar-width": "17rem",
-    "--sidebar-width-icon": "3.5rem",
+    "--sidebar-width-icon": "4.5rem",
   };
 
   return (
-    <SidebarProvider style={style as React.CSSProperties}>
-      <AppLayoutContent>{children}</AppLayoutContent>
+    <SidebarProvider
+      defaultOpen={pinned}
+      open={pinned}
+      onOpenChange={setPinned}
+      style={style as React.CSSProperties}
+    >
+      <AppLayoutContent
+        sidebarPinnedProp={pinned}
+        setSidebarPinnedProp={setPinned}
+      >
+        {children}
+      </AppLayoutContent>
     </SidebarProvider>
   );
 }
