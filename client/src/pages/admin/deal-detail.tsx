@@ -338,7 +338,7 @@ function getDocumentStatusBadge(status: string) {
   const styles: Record<string, string> = {
     pending: "bg-warning/10 text-warning",
     uploaded: "bg-info/10 text-info",
-    ai_reviewed: "bg-info/15 text-info",
+    ai_reviewed: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
     approved: "bg-success/10 text-success",
     rejected: "bg-destructive/10 text-destructive",
     not_applicable: "bg-muted text-muted-foreground",
@@ -2006,7 +2006,7 @@ export default function AdminDealDetail() {
                     data-testid="button-approve-all-docs"
                   >
                     {approveAllDocsMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />}
-                    Approve All ({aiReviewedCount})
+                    Approve All & Push To Drive ({aiReviewedCount})
                   </Button>
                 ) : null;
               })()}
@@ -2251,7 +2251,7 @@ export default function AdminDealDetail() {
                                 className={cn(
                                   "flex items-center justify-between gap-3 p-3 rounded-lg border",
                                   doc.status === 'approved' && "bg-success/10 border-success/30 opacity-80",
-                                  doc.status === 'ai_reviewed' && "bg-info/5 border-info/30",
+                                  doc.status === 'ai_reviewed' && "bg-violet-50 border-violet-200 dark:bg-violet-900/10 dark:border-violet-800",
                                   doc.status === 'rejected' && "bg-destructive/10 border-destructive/30"
                                 )}
                                 data-testid={`doc-row-${doc.id}`}
@@ -2340,7 +2340,7 @@ export default function AdminDealDetail() {
                                         <XCircle className="h-3 w-3 mr-1" />Reject
                                       </Button>
                                       <Button size="sm" onClick={(e) => { e.stopPropagation(); updateDocumentStatus.mutate({ docId: doc.id, status: 'approved' }); }} disabled={updateDocumentStatus.isPending} data-testid={`button-approve-${doc.id}`}>
-                                        <Check className="h-3 w-3 mr-1" />Approve
+                                        <Check className="h-3 w-3 mr-1" />Approve & Push To Drive
                                       </Button>
                                     </>
                                   )}
@@ -2465,7 +2465,7 @@ export default function AdminDealDetail() {
                       className={cn(
                         "flex items-center justify-between gap-3 p-3 rounded-lg border",
                         doc.status === 'approved' && "bg-success/10 border-success/30 opacity-80",
-                        doc.status === 'ai_reviewed' && "bg-info/5 border-info/30",
+                        doc.status === 'ai_reviewed' && "bg-violet-50 border-violet-200 dark:bg-violet-900/10 dark:border-violet-800",
                         doc.status === 'rejected' && "bg-destructive/10 border-destructive/30"
                       )}
                       data-testid={`doc-row-${doc.id}`}

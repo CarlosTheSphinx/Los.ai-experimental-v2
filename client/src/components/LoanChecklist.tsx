@@ -107,7 +107,7 @@ function getStatusBadge(status: string, type: "document" | "task") {
       case "approved":
         return <Badge variant="default" className="bg-success">Approved</Badge>;
       case "ai_reviewed":
-        return <Badge variant="secondary" className="bg-info/15 text-info border-info/30">AI Reviewed</Badge>;
+        return <Badge variant="secondary" className="bg-violet-100 text-violet-700 border-violet-300 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-700">AI Reviewed</Badge>;
       case "uploaded":
       case "submitted":
         return <Badge variant="secondary">Under Review</Badge>;
@@ -139,7 +139,7 @@ function getStatusIcon(status: string, type: "document" | "task") {
       case "approved":
         return <CheckCircle2 className="h-5 w-5 text-success shrink-0" />;
       case "ai_reviewed":
-        return <CheckSquare className="h-5 w-5 text-info shrink-0" />;
+        return <CheckSquare className="h-5 w-5 text-violet-600 dark:text-violet-400 shrink-0" />;
       case "uploaded":
       case "submitted":
         return <Clock className="h-5 w-5 text-info shrink-0" />;
@@ -301,7 +301,7 @@ export function LoanChecklist({
                 ) : (
                   <CheckCircle2 className="h-4 w-4 mr-2" />
                 )}
-                Approve All ({aiReviewedCount})
+                Approve All & Push To Drive ({aiReviewedCount})
               </Button>
             )}
           </div>
@@ -423,7 +423,7 @@ function ChecklistItemRow({
     <div
       className={`flex items-center gap-3 p-3 rounded-md border transition-colors ${
         item.status === "rejected" ? "border-destructive/50 bg-destructive/5" :
-        item.status === "ai_reviewed" ? "border-info/30 bg-info/5" :
+        item.status === "ai_reviewed" ? "border-violet-200 bg-violet-50 dark:border-violet-800 dark:bg-violet-900/10" :
         "border-border"
       } ${item.status === "approved" ? "border-success/30 bg-success/5" : ""}`}
       data-testid={`checklist-item-${item.id}`}
@@ -434,7 +434,7 @@ function ChecklistItemRow({
           <span className={`text-sm font-medium ${
             item.status === "approved" ? "text-success" :
             item.status === "rejected" ? "text-destructive" :
-            item.status === "ai_reviewed" ? "text-info" :
+            item.status === "ai_reviewed" ? "text-violet-600 dark:text-violet-400" :
             (item.status === "uploaded" || item.status === "submitted") ? "text-info" :
             "text-foreground"
           }`}>
@@ -497,7 +497,7 @@ function ChecklistItemRow({
               onClick={() => onReviewDoc(item.itemId, "approved")}
               data-testid={`button-approve-${item.id}`}
             >
-              Approve
+              Approve & Push To Drive
             </Button>
             <Button
               variant="outline"
