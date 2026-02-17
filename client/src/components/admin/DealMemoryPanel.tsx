@@ -88,6 +88,7 @@ const ENTRY_TYPE_CONFIG: Record<string, { icon: any; color: string; label: strin
   document_approved: { icon: CheckCircle2, color: "text-success", label: "Document Approved" },
   document_rejected: { icon: XCircle, color: "text-destructive", label: "Document Rejected" },
   stage_change: { icon: ArrowRightLeft, color: "text-info", label: "Stage Changed" },
+  digest_approved: { icon: CheckCircle2, color: "text-primary", label: "Digest Approved" },
   digest_sent: { icon: Mail, color: "text-primary", label: "Digest Sent" },
   digest_skipped: { icon: Mail, color: "text-muted-foreground", label: "Digest Skipped" },
   note_added: { icon: StickyNote, color: "text-warning", label: "Note Added" },

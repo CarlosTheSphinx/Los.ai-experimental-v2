@@ -3296,6 +3296,18 @@ export async function registerRoutes(
         visibleToBorrower: true,
       });
 
+      try {
+        await db.insert(dealMemoryEntries).values({
+          dealId: projectId,
+          entryType: 'document_received',
+          title: `${fileName || 'Document'} uploaded`,
+          description: documentCategory ? `Category: ${documentCategory}` : undefined,
+          sourceType: 'user',
+          sourceUserId: userId,
+          metadata: { documentId: doc.id, category: documentCategory },
+        });
+      } catch (e) { console.error('Memory entry error:', e); }
+
       // Google Drive sync (non-blocking)
       try {
         const { isDriveIntegrationEnabled, syncDocumentToDrive } = await import('./services/googleDrive');
@@ -3408,6 +3420,18 @@ export async function registerRoutes(
         activityDescription: `Broker uploaded: ${updated?.documentName || fileName || 'Document'}`,
         visibleToBorrower: true,
       });
+
+      try {
+        await db.insert(dealMemoryEntries).values({
+          dealId: projectId,
+          entryType: 'document_received',
+          title: `${updated?.documentName || fileName || 'Document'} uploaded`,
+          description: updated?.documentCategory ? `Category: ${updated.documentCategory}` : undefined,
+          sourceType: 'user',
+          sourceUserId: userId,
+          metadata: { documentId: docId, category: updated?.documentCategory },
+        });
+      } catch (e) { console.error('Memory entry error:', e); }
 
       try {
         const { isDriveIntegrationEnabled, syncDealDocumentToDrive } = await import('./services/googleDrive');
@@ -4391,6 +4415,17 @@ export async function registerRoutes(
         description: `Project moved to stage: ${targetStage.stageName}`,
         performedBy: req.user!.id,
       });
+
+      try {
+        await db.insert(dealMemoryEntries).values({
+          dealId: projectId,
+          entryType: 'stage_change',
+          title: `Moved to stage: ${targetStage.stageName}`,
+          sourceType: 'admin',
+          sourceUserId: req.user!.id,
+          metadata: { stageKey: targetStageKey, stageName: targetStage.stageName },
+        });
+      } catch (e) { console.error('Memory entry error:', e); }
 
       res.json({ success: true, currentStage: targetStageKey });
     } catch (error) {
@@ -6189,7 +6224,7 @@ export async function registerRoutes(
         return res.status(404).json({ error: 'Document not found' });
       }
       
-      // Log activity and digest when document is approved or rejected
+      // Log activity, digest, and deal memory when document is approved or rejected
       if (status === 'approved' || status === 'rejected') {
         const actionText = status === 'approved' ? 'approved' : 'rejected';
 
@@ -6204,6 +6239,18 @@ export async function registerRoutes(
         } catch (activityError) {
           console.error('Failed to log document review activity:', activityError);
         }
+
+        try {
+          await db.insert(dealMemoryEntries).values({
+            dealId,
+            entryType: status === 'approved' ? 'document_approved' : 'document_rejected',
+            title: `${updated.documentName || updated.documentCategory || 'Document'} ${actionText}`,
+            description: reviewNotes || undefined,
+            sourceType: 'admin',
+            sourceUserId: req.user!.id,
+            metadata: { documentId: docId, category: updated.documentCategory },
+          });
+        } catch (e) { console.error('Memory entry error:', e); }
 
         try {
           const [project] = await db.select({ id: projects.id })
@@ -6811,6 +6858,18 @@ export async function registerRoutes(
       } catch (e) {
         // Non-critical, continue
       }
+
+      try {
+        await db.insert(dealMemoryEntries).values({
+          dealId,
+          entryType: 'stage_change',
+          title: `Stage changed to: ${targetStage.stageName}`,
+          description: previousStageKey ? `From "${previousStageKey}" to "${targetStage.stageName}"` : undefined,
+          sourceType: 'admin',
+          sourceUserId: (req as any).user?.id || null,
+          metadata: { stageKey: targetStage.stageKey, stageName: targetStage.stageName, previousStageKey },
+        });
+      } catch (e) { console.error('Memory entry error:', e); }
       
       // Send notification if stage changed
       if (project.userId && previousStageKey !== targetStage.stageKey) {
@@ -10954,6 +11013,25 @@ If the user provides specific criteria, extract as many rules as you can from th
       if (!updated) {
         return res.status(404).json({ error: 'Draft not found' });
       }
+
+      if (updated.projectId) {
+        try {
+          const existing = await db.select({ id: dealMemoryEntries.id }).from(dealMemoryEntries)
+            .where(and(eq(dealMemoryEntries.dealId, updated.projectId), eq(dealMemoryEntries.entryType, 'digest_approved'), sql`metadata->>'draftId' = ${String(updated.id)}`))
+            .limit(1);
+          if (existing.length === 0) {
+            await db.insert(dealMemoryEntries).values({
+              dealId: updated.projectId,
+              entryType: 'digest_approved',
+              title: `Digest approved: ${updated.emailSubject || 'Loan Update'}`,
+              description: `Scheduled for ${new Date(updated.scheduledDate).toLocaleDateString()} at ${updated.timeOfDay}`,
+              sourceType: 'admin',
+              sourceUserId: req.user!.id,
+              metadata: { draftId: updated.id },
+            });
+          }
+        } catch (e) { console.error('Memory entry error:', e); }
+      }
       
       res.json({ success: true, draft: updated });
     } catch (error) {
@@ -10977,6 +11055,25 @@ If the user provides specific criteria, extract as many rules as you can from th
       
       if (!updated) {
         return res.status(404).json({ error: 'Draft not found' });
+      }
+
+      if (updated.projectId) {
+        try {
+          const existing = await db.select({ id: dealMemoryEntries.id }).from(dealMemoryEntries)
+            .where(and(eq(dealMemoryEntries.dealId, updated.projectId), eq(dealMemoryEntries.entryType, 'digest_skipped'), sql`metadata->>'draftId' = ${String(updated.id)}`))
+            .limit(1);
+          if (existing.length === 0) {
+            await db.insert(dealMemoryEntries).values({
+              dealId: updated.projectId,
+              entryType: 'digest_skipped',
+              title: `Digest skipped: ${updated.emailSubject || 'Loan Update'}`,
+              description: `Was scheduled for ${new Date(updated.scheduledDate).toLocaleDateString()}`,
+              sourceType: 'admin',
+              sourceUserId: req.user!.id,
+              metadata: { draftId: updated.id },
+            });
+          }
+        } catch (e) { console.error('Memory entry error:', e); }
       }
       
       res.json({ success: true, draft: updated });
@@ -11398,6 +11495,19 @@ If the user provides specific criteria, extract as many rules as you can from th
               updatedAt: new Date(),
             })
             .where(eq(scheduledDigestDrafts.id, draft.id));
+
+          if (draft.projectId) {
+            try {
+              await db.insert(dealMemoryEntries).values({
+                dealId: draft.projectId,
+                entryType: 'digest_sent',
+                title: `Digest sent: ${draft.emailSubject || 'Loan Update'}`,
+                description: `Delivered to ${JSON.parse(draft.recipients as string || '[]').length} recipient(s) (${draft.documentsCount} docs, ${draft.updatesCount} updates)`,
+                sourceType: 'system',
+                metadata: { draftId: draft.id, status: 'sent' },
+              });
+            } catch (e) { console.error('Memory entry error:', e); }
+          }
           
           processed++;
         } catch (err: any) {
@@ -12059,6 +12169,25 @@ If the user provides specific criteria, extract as many rules as you can from th
         return res.status(404).json({ error: 'Draft not found' });
       }
 
+      if (updated.projectId) {
+        try {
+          const existing = await db.select({ id: dealMemoryEntries.id }).from(dealMemoryEntries)
+            .where(and(eq(dealMemoryEntries.dealId, updated.projectId), eq(dealMemoryEntries.entryType, 'digest_approved'), sql`metadata->>'draftId' = ${String(updated.id)}`))
+            .limit(1);
+          if (existing.length === 0) {
+            await db.insert(dealMemoryEntries).values({
+              dealId: updated.projectId,
+              entryType: 'digest_approved',
+              title: `Digest approved: ${updated.emailSubject || 'Loan Update'}`,
+              description: `Scheduled for ${new Date(updated.scheduledDate).toLocaleDateString()} at ${updated.timeOfDay}`,
+              sourceType: 'admin',
+              sourceUserId: req.user?.id || null,
+              metadata: { draftId: updated.id },
+            });
+          }
+        } catch (e) { console.error('Memory entry error:', e); }
+      }
+
       res.json({ draft: updated });
     } catch (error: any) {
       console.error('Approve digest draft error:', error);
@@ -12082,6 +12211,25 @@ If the user provides specific criteria, extract as many rules as you can from th
 
       if (!updated) {
         return res.status(404).json({ error: 'Draft not found' });
+      }
+
+      if (updated.projectId) {
+        try {
+          const existing = await db.select({ id: dealMemoryEntries.id }).from(dealMemoryEntries)
+            .where(and(eq(dealMemoryEntries.dealId, updated.projectId), eq(dealMemoryEntries.entryType, 'digest_skipped'), sql`metadata->>'draftId' = ${String(updated.id)}`))
+            .limit(1);
+          if (existing.length === 0) {
+            await db.insert(dealMemoryEntries).values({
+              dealId: updated.projectId,
+              entryType: 'digest_skipped',
+              title: `Digest skipped: ${updated.emailSubject || 'Loan Update'}`,
+              description: `Was scheduled for ${new Date(updated.scheduledDate).toLocaleDateString()}`,
+              sourceType: 'admin',
+              sourceUserId: req.user?.id || null,
+              metadata: { draftId: updated.id },
+            });
+          }
+        } catch (e) { console.error('Memory entry error:', e); }
       }
 
       res.json({ draft: updated });
