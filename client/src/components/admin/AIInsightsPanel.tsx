@@ -298,11 +298,15 @@ export function AIInsightsPanel({ projectId, onPipelineComplete }: AIInsightsPan
 
   const approveComm = useMutation({
     mutationFn: async (commId: number) => {
-      return apiRequest("PUT", `/api/projects/${projectId}/agent-communications/${commId}/approve`);
+      const res = await apiRequest("PUT", `/api/projects/${projectId}/agent-communications/${commId}/approve`);
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "agent-communications"] });
-      toast({ title: "Communication approved" });
+      const digestMsg = data?.digest?.queued
+        ? ` Queued for next digest.`
+        : '';
+      toast({ title: `Communication approved.${digestMsg}` });
     },
     onError: () => {
       toast({ title: "Failed to approve", variant: "destructive" });
