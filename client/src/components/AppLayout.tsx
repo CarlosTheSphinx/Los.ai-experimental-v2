@@ -495,7 +495,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   const style = {
     "--sidebar-width": "17rem",
-    "--sidebar-width-icon": "4.5rem",
+    "--sidebar-width-icon": "3.25rem",
   };
 
   return (
