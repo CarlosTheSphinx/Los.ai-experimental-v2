@@ -2010,21 +2010,10 @@ export default function AdminDealDetail() {
                   </Button>
                 ) : null;
               })()}
-              {linkedProjectId && (
-                <Button
-                  size="sm"
-                  onClick={(e) => { e.stopPropagation(); triggerPipeline.mutate(); }}
-                  disabled={pipelineRunning}
-                  data-testid="button-trigger-pipeline"
-                >
-                  {pipelineRunning ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Zap className="h-3.5 w-3.5 mr-1.5" />}
-                  {pipelineRunning ? 'Running...' : 'AI Agents'}
-                </Button>
-              )}
             </div>
           </div>
           {(activeFilter === 'all' || activeFilter === 'completed' || activeFilter === 'todo') && (
-            <div className="mt-3 pt-3 border-t">
+            <div className="mt-3 pt-3 border-t flex items-center justify-between gap-4 flex-wrap">
               <Select value={subFilter} onValueChange={(v) => setSubFilter(v as 'all' | 'documents' | 'tasks')}>
                 <SelectTrigger className="w-[200px]" data-testid="select-sub-filter">
                   <SelectValue />
@@ -2035,6 +2024,17 @@ export default function AdminDealDetail() {
                   <SelectItem value="tasks">Tasks Only</SelectItem>
                 </SelectContent>
               </Select>
+              {linkedProjectId && (
+                <Button
+                  onClick={(e) => { e.stopPropagation(); triggerPipeline.mutate(); }}
+                  disabled={pipelineRunning}
+                  className="bg-success hover:bg-success/90 text-white text-base px-6 py-3 h-auto font-semibold"
+                  data-testid="button-trigger-pipeline"
+                >
+                  {pipelineRunning ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <Zap className="h-5 w-5 mr-2" />}
+                  {pipelineRunning ? 'PROCESSING...' : 'AUTOMATIC PROCESSING'}
+                </Button>
+              )}
             </div>
           )}
         </CardContent>
@@ -2236,10 +2236,11 @@ export default function AdminDealDetail() {
                                 variant="outline"
                                 onClick={(e) => { e.stopPropagation(); triggerPipeline.mutate(); }}
                                 disabled={pipelineRunning}
+                                className="bg-success/10 text-success border-success/30 hover:bg-success/20"
                                 data-testid={`button-ai-agents-stage-${stage.id}`}
                               >
                                 {pipelineRunning ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Zap className="h-3.5 w-3.5 mr-1.5" />}
-                                {pipelineRunning ? 'Running...' : 'AI Agents'}
+                                {pipelineRunning ? 'Processing...' : 'Auto Process'}
                               </Button>
                             )}
                           </div>
