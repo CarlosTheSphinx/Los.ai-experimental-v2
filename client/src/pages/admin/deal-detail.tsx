@@ -85,6 +85,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { DigestConfigPanel } from "@/components/DigestConfigPanel";
 import { LoanChecklist } from "@/components/LoanChecklist";
+import { AIReviewTab } from "@/components/admin/AIReviewTab";
 
 interface Deal {
   id: number;
@@ -551,7 +552,7 @@ export default function AdminDealDetail() {
   );
   const project = projectDetailData?.project;
 
-  const [activeFilter, setActiveFilter] = useState<'all' | 'tasks' | 'documents' | 'activity' | 'digests' | 'checklist'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'tasks' | 'documents' | 'activity' | 'digests' | 'checklist' | 'ai_review'>('all');
   const [expandedStages, setExpandedStages] = useState<Set<number>>(new Set());
   const [stageExpandInitialized, setStageExpandInitialized] = useState(false);
 
@@ -1859,6 +1860,7 @@ export default function AdminDealDetail() {
                 { key: 'documents' as const, label: 'Documents', icon: FileText },
                 { key: 'activity' as const, label: 'Activity', icon: Activity },
                 { key: 'digests' as const, label: 'Digests', icon: BarChart3 },
+                { key: 'ai_review' as const, label: 'AI Review', icon: Sparkles },
               ]).map(filter => (
                 <Button
                   key={filter.key}
@@ -2656,6 +2658,13 @@ export default function AdminDealDetail() {
       {activeFilter === 'digests' && (
         <div data-testid="digest-config-container">
           <DigestConfigPanel dealId={deal.id} />
+        </div>
+      )}
+
+      {/* AI Review view */}
+      {activeFilter === 'ai_review' && (
+        <div data-testid="ai-review-container">
+          <AIReviewTab dealId={deal.id} projectId={linkedProjectId} />
         </div>
       )}
 

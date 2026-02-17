@@ -36,6 +36,8 @@ import {
   Clock,
   Zap,
   TrendingUp,
+  Play,
+  GitBranch,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -597,6 +599,38 @@ export default function AIAgentsPage() {
   const [selectedAgentType, setSelectedAgentType] = useState<string>("");
   const [runHistoryAgentFilter, setRunHistoryAgentFilter] = useState("");
 
+  // Pipeline settings
+  const { data: pipelineSettings } = useQuery({
+    queryKey: ["/api/admin/agents/pipeline/settings"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/agents/pipeline/settings");
+      if (!res.ok) return { autoRunPipeline: false };
+      return res.json();
+    },
+  });
+
+  const { mutate: toggleAutoRun } = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      return apiRequest("PATCH", "/api/admin/agents/pipeline/settings", {
+        autoRunPipeline: enabled,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/agents/pipeline/settings"] });
+      toast({ title: "Updated", description: "Pipeline auto-trigger setting saved." });
+    },
+  });
+
+  // Recent pipeline runs
+  const { data: recentPipelineRuns } = useQuery({
+    queryKey: ["/api/admin/agents/pipeline/recent"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/agents/pipeline/recent");
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
   // Fetch configurations
   const { data: configurations, isLoading: configLoading } = useQuery({
     queryKey: ["/api/admin/agents/configurations"],
@@ -736,6 +770,111 @@ export default function AIAgentsPage() {
           />
         ))}
       </div>
+
+      {/* Pipeline Orchestration Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <GitBranch className="h-5 w-5" />
+                Pipeline Orchestration
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Chain agents together: Document Intelligence → Processor → Communication
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                variant={pipelineSettings?.autoRunPipeline ? "default" : "outline"}
+                size="sm"
+                onClick={() => toggleAutoRun(!pipelineSettings?.autoRunPipeline)}
+              >
+                <Zap className="h-4 w-4 mr-1.5" />
+                {pipelineSettings?.autoRunPipeline ? "Auto-trigger: ON" : "Auto-trigger: OFF"}
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {/* Pipeline Flow Visualization */}
+          <div className="flex items-center justify-center gap-2 mb-6 py-4 bg-muted/30 rounded-lg">
+            {["document_intelligence", "processor", "communication"].map((type, i) => (
+              <div key={type} className="flex items-center gap-2">
+                <div className="flex items-center gap-2 px-4 py-2 rounded-lg border bg-background">
+                  {AGENT_CONFIGS[type]?.icon}
+                  <span className="text-sm font-medium">{AGENT_CONFIGS[type]?.name}</span>
+                </div>
+                {i < 2 && (
+                  <div className="text-muted-foreground text-lg">→</div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Recent Pipeline Runs */}
+          {recentPipelineRuns && recentPipelineRuns.length > 0 ? (
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                Recent Pipeline Runs
+              </h4>
+              <div className="overflow-x-auto border rounded-lg">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted border-b">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium">Deal</th>
+                      <th className="px-4 py-2 text-left font-medium">Status</th>
+                      <th className="px-4 py-2 text-left font-medium">Progress</th>
+                      <th className="px-4 py-2 text-left font-medium">Duration</th>
+                      <th className="px-4 py-2 text-left font-medium">Trigger</th>
+                      <th className="px-4 py-2 text-left font-medium">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentPipelineRuns.slice(0, 10).map((run: any) => (
+                      <tr key={run.id} className="border-b hover:bg-muted/50">
+                        <td className="px-4 py-2">Deal #{run.projectId}</td>
+                        <td className="px-4 py-2">
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-xs capitalize",
+                              run.status === "completed" && "bg-emerald-50 text-emerald-700 border-emerald-200",
+                              run.status === "running" && "bg-blue-50 text-blue-700 border-blue-200",
+                              run.status === "failed" && "bg-red-50 text-red-700 border-red-200"
+                            )}
+                          >
+                            {run.status === "running" && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                            {run.status === "completed" && <CheckCircle2 className="h-3 w-3 mr-1" />}
+                            {run.status === "failed" && <XCircle className="h-3 w-3 mr-1" />}
+                            {run.status}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-2 text-muted-foreground">
+                          Step {(run.currentAgentIndex || 0) + 1} / {(run.agentSequence || []).length || 3}
+                        </td>
+                        <td className="px-4 py-2 text-muted-foreground">
+                          {run.totalDurationMs ? `${Math.round(run.totalDurationMs / 1000)}s` : "—"}
+                        </td>
+                        <td className="px-4 py-2">
+                          <Badge variant="outline" className="text-xs">{run.triggerType}</Badge>
+                        </td>
+                        <td className="px-4 py-2 text-muted-foreground">
+                          {run.startedAt ? format(new Date(run.startedAt), "MMM d, HH:mm") : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-6 text-muted-foreground text-sm">
+              No pipeline runs yet. Start a pipeline from any deal's AI Review tab.
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Configuration Editor Dialog */}
       {selectedAgentType && (

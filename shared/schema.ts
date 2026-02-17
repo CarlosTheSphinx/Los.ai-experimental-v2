@@ -23,6 +23,7 @@ export const users = pgTable("users", {
   onboardingCompleted: boolean("onboarding_completed").default(false),
   partnershipAgreementSignedAt: timestamp("partnership_agreement_signed_at"),
   trainingCompletedAt: timestamp("training_completed_at"),
+  lenderTrainingCompleted: boolean("lender_training_completed").default(false),
   isTestUser: boolean("is_test_user").default(false),
   googleId: varchar("google_id", { length: 255 }).unique(),
   avatarUrl: varchar("avatar_url", { length: 500 }),
@@ -2408,6 +2409,7 @@ export const platformSettings = pgTable("platform_settings", {
   commercialLendingEnabled: boolean("commercial_lending_enabled").default(true).notNull(),
   documentTemplatesEnabled: boolean("document_templates_enabled").default(true).notNull(),
   smartProspectingEnabled: boolean("smart_prospecting_enabled").default(false).notNull(),
+  autoRunPipeline: boolean("auto_run_pipeline").default(false).notNull(),
   updatedAt: timestamp("updated_at").defaultNow(),
   updatedBy: integer("updated_by").references(() => users.id, { onDelete: 'set null' }),
 });
@@ -2416,3 +2418,76 @@ export const insertPlatformSettingsSchema = createInsertSchema(platformSettings)
 export type PlatformSettings = typeof platformSettings.$inferSelect;
 export type InsertPlatformSettings = z.infer<typeof insertPlatformSettingsSchema>;
 export type InsertDealStory = z.infer<typeof insertDealStorySchema>;
+
+// Agent Pipeline Runs - tracks full pipeline executions (Agent 1 → 2 → 3) for a deal
+export const agentPipelineRuns = pgTable("agent_pipeline_runs", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  status: varchar("status", { length: 50 }).default("queued").notNull(), // queued, running, completed, failed, cancelled
+  agentSequence: jsonb("agent_sequence").notNull(), // ['document_intelligence', 'processor', 'communication']
+  currentAgentIndex: integer("current_agent_index").default(0).notNull(),
+  triggerType: varchar("trigger_type", { length: 50 }).default("manual").notNull(), // manual, auto_upload, auto_stage_change
+  triggeredBy: integer("triggered_by").references(() => users.id, { onDelete: 'set null' }),
+  errorMessage: text("error_message"),
+  totalDurationMs: integer("total_duration_ms"),
+  startedAt: timestamp("started_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertAgentPipelineRunSchema = createInsertSchema(agentPipelineRuns).omit({ id: true, startedAt: true });
+export type AgentPipelineRun = typeof agentPipelineRuns.$inferSelect;
+export type InsertAgentPipelineRun = z.infer<typeof insertAgentPipelineRunSchema>;
+
+// Pipeline Step Logs - tracks each agent's execution within a pipeline run
+export const pipelineStepLogs = pgTable("pipeline_step_logs", {
+  id: serial("id").primaryKey(),
+  pipelineRunId: integer("pipeline_run_id").references(() => agentPipelineRuns.id, { onDelete: 'cascade' }).notNull(),
+  agentType: varchar("agent_type", { length: 100 }).notNull(),
+  agentRunId: integer("agent_run_id").references(() => agentRuns.id, { onDelete: 'set null' }),
+  sequenceIndex: integer("sequence_index").notNull(),
+  status: varchar("status", { length: 50 }).default("pending").notNull(), // pending, running, completed, failed, skipped
+  outputSummary: jsonb("output_summary"), // high-level results from this agent step
+  inputContext: jsonb("input_context"), // what was passed from the previous agent
+  durationMs: integer("duration_ms"),
+  errorMessage: text("error_message"),
+  executedAt: timestamp("executed_at"),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertPipelineStepLogSchema = createInsertSchema(pipelineStepLogs).omit({ id: true });
+export type PipelineStepLog = typeof pipelineStepLogs.$inferSelect;
+export type InsertPipelineStepLog = z.infer<typeof insertPipelineStepLogSchema>;
+
+// Lender Training Steps - configurable training content for lender onboarding
+export const lenderTrainingSteps = pgTable("lender_training_steps", {
+  id: serial("id").primaryKey(),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  targetPage: varchar("target_page", { length: 255 }).notNull(), // e.g., '/admin/programs'
+  contentHtml: text("content_html"), // rich HTML content for overlay
+  videoUrl: text("video_url"), // optional training video link
+  sortOrder: integer("sort_order").default(0).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  isRequired: boolean("is_required").default(true).notNull(),
+  createdBy: integer("created_by").references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertLenderTrainingStepSchema = createInsertSchema(lenderTrainingSteps).omit({ id: true, createdAt: true, updatedAt: true });
+export type LenderTrainingStep = typeof lenderTrainingSteps.$inferSelect;
+export type InsertLenderTrainingStep = z.infer<typeof insertLenderTrainingStepSchema>;
+
+// Lender Training Progress - tracks each user's training completion
+export const lenderTrainingProgress = pgTable("lender_training_progress", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  stepId: integer("step_id").references(() => lenderTrainingSteps.id, { onDelete: 'cascade' }).notNull(),
+  status: varchar("status", { length: 50 }).default("not_started").notNull(), // not_started, in_progress, completed
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertLenderTrainingProgressSchema = createInsertSchema(lenderTrainingProgress).omit({ id: true, createdAt: true });
+export type LenderTrainingProgress = typeof lenderTrainingProgress.$inferSelect;
+export type InsertLenderTrainingProgress = z.infer<typeof insertLenderTrainingProgressSchema>;

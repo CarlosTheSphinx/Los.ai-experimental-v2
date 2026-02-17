@@ -38,6 +38,7 @@ export interface ExecuteAgentParams {
   triggeredBy?: number;
   triggerType: string;
   contextData: Record<string, any>;
+  onComplete?: (result: ExecuteAgentResult) => void | Promise<void>;
 }
 
 export interface ExecuteAgentResult {
@@ -211,7 +212,7 @@ export async function executeAgent(
 
     console.log(`✅ ${params.agentType} agent completed in ${durationMs}ms`);
 
-    return {
+    const result: ExecuteAgentResult = {
       success: true,
       response: response.text,
       agentRunId: agentRun.id,
@@ -219,6 +220,17 @@ export async function executeAgent(
       outputTokens,
       durationMs,
     };
+
+    // Invoke onComplete callback if provided (used by pipeline orchestrator)
+    if (params.onComplete) {
+      try {
+        await params.onComplete(result);
+      } catch (cbError) {
+        console.error(`⚠️ onComplete callback error:`, cbError);
+      }
+    }
+
+    return result;
   } catch (error) {
     const durationMs = Date.now() - startTime;
     const errorMessage = error instanceof Error ? error.message : String(error);

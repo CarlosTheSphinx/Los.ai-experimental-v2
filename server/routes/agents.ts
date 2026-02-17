@@ -10,14 +10,18 @@ import { eq, desc, and } from 'drizzle-orm';
 import {
   agentConfigurations,
   agentRuns,
+  agentPipelineRuns,
+  pipelineStepLogs,
   documentExtractions,
   agentFindings,
   agentCommunications,
   agentCorrections,
   dealStories,
+  platformSettings,
   projects,
   users
 } from '@shared/schema';
+import { startPipeline, getPipelineStatus, getPipelineHistory } from '../agents/orchestrator';
 
 // ==================== DEFAULT AGENT PROMPTS ====================
 
@@ -832,6 +836,190 @@ export function registerAgentRoutes(app: Express, deps: RouteDeps): void {
       } catch (error) {
         console.error('Error overriding finding:', error);
         res.status(500).json({ error: 'Failed to override finding' });
+      }
+    }
+  );
+
+  // ==================== PIPELINE ORCHESTRATION ====================
+
+  /**
+   * POST /api/admin/agents/pipeline/start
+   * Start the full AI pipeline (Doc Intel → Processor → Communication) for a deal
+   */
+  app.post(
+    '/api/admin/agents/pipeline/start',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const { projectId, agentSequence } = req.body;
+
+        if (!projectId) {
+          return res.status(400).json({ error: 'projectId is required' });
+        }
+
+        // Verify project exists
+        const [project] = await db
+          .select()
+          .from(projects)
+          .where(eq(projects.id, parseInt(projectId)));
+
+        if (!project) {
+          return res.status(404).json({ error: 'Project not found' });
+        }
+
+        // Check if there's already a running pipeline for this project
+        const [existingRun] = await db
+          .select()
+          .from(agentPipelineRuns)
+          .where(and(
+            eq(agentPipelineRuns.projectId, parseInt(projectId)),
+            eq(agentPipelineRuns.status, 'running')
+          ));
+
+        if (existingRun) {
+          return res.status(409).json({
+            error: 'A pipeline is already running for this deal',
+            pipelineRunId: existingRun.id,
+          });
+        }
+
+        // Start the pipeline (runs asynchronously)
+        const sequence = agentSequence || ['document_intelligence', 'processor', 'communication'];
+        const pipelineRun = await startPipeline(
+          parseInt(projectId),
+          req.user?.id || null,
+          'manual',
+          sequence
+        );
+
+        res.status(202).json({
+          success: true,
+          pipelineRunId: pipelineRun.id,
+          status: pipelineRun.status,
+          message: 'Pipeline started'
+        });
+      } catch (error) {
+        console.error('Error starting pipeline:', error);
+        res.status(500).json({ error: 'Failed to start pipeline' });
+      }
+    }
+  );
+
+  /**
+   * GET /api/projects/:id/pipeline/status
+   * Get current pipeline status for a deal
+   */
+  app.get(
+    '/api/projects/:id/pipeline/status',
+    authenticateUser,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const projectId = parseInt(req.params.id);
+        const status = await getPipelineStatus(projectId);
+        res.json(status);
+      } catch (error) {
+        console.error('Error getting pipeline status:', error);
+        res.status(500).json({ error: 'Failed to get pipeline status' });
+      }
+    }
+  );
+
+  /**
+   * GET /api/projects/:id/pipeline/history
+   * Get pipeline run history for a deal
+   */
+  app.get(
+    '/api/projects/:id/pipeline/history',
+    authenticateUser,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const projectId = parseInt(req.params.id);
+        const limit = parseInt(req.query.limit as string) || 10;
+        const history = await getPipelineHistory(projectId, limit);
+        res.json(history);
+      } catch (error) {
+        console.error('Error getting pipeline history:', error);
+        res.status(500).json({ error: 'Failed to get pipeline history' });
+      }
+    }
+  );
+
+  /**
+   * GET /api/admin/agents/pipeline/settings
+   * Get auto-trigger settings
+   */
+  app.get(
+    '/api/admin/agents/pipeline/settings',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const [settings] = await db.select().from(platformSettings).limit(1);
+        res.json({
+          autoRunPipeline: settings?.autoRunPipeline ?? false,
+        });
+      } catch (error) {
+        console.error('Error getting pipeline settings:', error);
+        res.status(500).json({ error: 'Failed to get pipeline settings' });
+      }
+    }
+  );
+
+  /**
+   * PATCH /api/admin/agents/pipeline/settings
+   * Update auto-trigger settings
+   */
+  app.patch(
+    '/api/admin/agents/pipeline/settings',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const { autoRunPipeline } = req.body;
+
+        const [existing] = await db.select().from(platformSettings).limit(1);
+
+        if (existing) {
+          await db
+            .update(platformSettings)
+            .set({ autoRunPipeline: !!autoRunPipeline, updatedAt: new Date() })
+            .where(eq(platformSettings.id, existing.id));
+        } else {
+          await db.insert(platformSettings).values({
+            autoRunPipeline: !!autoRunPipeline,
+          });
+        }
+
+        res.json({ success: true, autoRunPipeline: !!autoRunPipeline });
+      } catch (error) {
+        console.error('Error updating pipeline settings:', error);
+        res.status(500).json({ error: 'Failed to update pipeline settings' });
+      }
+    }
+  );
+
+  /**
+   * GET /api/admin/agents/pipeline/recent
+   * Get recent pipeline runs across all deals (for AI Agents dashboard)
+   */
+  app.get(
+    '/api/admin/agents/pipeline/recent',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const limit = parseInt(req.query.limit as string) || 20;
+        const runs = await db
+          .select()
+          .from(agentPipelineRuns)
+          .orderBy(desc(agentPipelineRuns.startedAt))
+          .limit(limit);
+
+        res.json(runs);
+      } catch (error) {
+        console.error('Error fetching recent pipeline runs:', error);
+        res.status(500).json({ error: 'Failed to fetch recent pipeline runs' });
       }
     }
   );
