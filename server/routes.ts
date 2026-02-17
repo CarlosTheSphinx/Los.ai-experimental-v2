@@ -48,6 +48,24 @@ import { registerAiAssistantRoutes } from './routes/ai-assistant';
 import { registerAgentRoutes } from './routes/agents';
 import { registerLenderTrainingRoutes } from './routes/lenderTraining';
 
+/**
+ * Auto-trigger pipeline when documents are uploaded to a deal.
+ * Checks if auto-trigger is enabled in platform settings before starting.
+ */
+async function maybeAutoTriggerPipeline(projectId: number, triggeredBy: number | null) {
+  try {
+    const [settings] = await db.select().from(platformSettings).limit(1);
+    if (!settings?.autoRunPipeline) return;
+    const { startPipeline } = await import('./agents/orchestrator');
+    startPipeline(projectId, triggeredBy, "auto_upload").catch(err => {
+      console.error(`Auto-trigger pipeline failed for project ${projectId}:`, err.message);
+    });
+    console.log(`Pipeline auto-triggered for project ${projectId} (document upload)`);
+  } catch (err: any) {
+    console.error('Auto-trigger check error:', err.message);
+  }
+}
+
 // Initialize Apify client
 const APIFY_TOKEN = process.env.APIFY_TOKEN;
 if (!APIFY_TOKEN) {
@@ -3252,6 +3270,8 @@ export async function registerRoutes(
         console.error('Drive sync check error:', driveErr.message);
       }
 
+      maybeAutoTriggerPipeline(projectId, userId);
+
       res.json({ document: doc });
     } catch (error) {
       console.error('Project doc upload complete error:', error);
@@ -3361,6 +3381,8 @@ export async function registerRoutes(
       } catch (driveErr: any) {
         console.error('Drive sync check error:', driveErr.message);
       }
+
+      maybeAutoTriggerPipeline(projectId, userId);
 
       res.json({ document: updated, file: newFile });
     } catch (error) {
@@ -6324,6 +6346,8 @@ export async function registerRoutes(
       } catch (driveErr: any) {
         console.error('Drive sync check error:', driveErr.message);
       }
+
+      maybeAutoTriggerPipeline(dealId, req.user!.id);
       
       res.json({ document: updated, file: newFile });
     } catch (error) {

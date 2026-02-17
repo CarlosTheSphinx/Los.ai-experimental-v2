@@ -12,6 +12,7 @@ import {
   agentRuns,
   agentPipelineRuns,
   pipelineStepLogs,
+  pipelineAgentSteps,
   documentExtractions,
   agentFindings,
   agentCommunications,
@@ -21,6 +22,7 @@ import {
   projects,
   users
 } from '@shared/schema';
+import { asc } from 'drizzle-orm';
 import { startPipeline, getPipelineStatus, getPipelineHistory } from '../agents/orchestrator';
 
 // ==================== DEFAULT AGENT PROMPTS ====================
@@ -1112,6 +1114,139 @@ export function registerAgentRoutes(app: Express, deps: RouteDeps): void {
       } catch (error) {
         console.error('Error seeding default agents:', error);
         res.status(500).json({ error: 'Failed to seed default agents' });
+      }
+    }
+  );
+
+  // ==================== PIPELINE AGENT STEPS CRUD ====================
+
+  app.get(
+    '/api/admin/agents/pipeline/steps',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const steps = await db
+          .select()
+          .from(pipelineAgentSteps)
+          .orderBy(asc(pipelineAgentSteps.stepOrder));
+        res.json(steps);
+      } catch (error) {
+        console.error('Error getting pipeline steps:', error);
+        res.status(500).json({ error: 'Failed to get pipeline steps' });
+      }
+    }
+  );
+
+  app.post(
+    '/api/admin/agents/pipeline/steps',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const { agentType, name, description, stepOrder, isEnabled, triggerCondition, inputMapping, outputMapping, retryOnFailure, maxRetries, timeoutSeconds } = req.body;
+        const maxOrder = await db.select().from(pipelineAgentSteps).orderBy(desc(pipelineAgentSteps.stepOrder)).limit(1);
+        const nextOrder = stepOrder ?? ((maxOrder[0]?.stepOrder ?? -1) + 1);
+        const [step] = await db.insert(pipelineAgentSteps).values({
+          agentType,
+          name,
+          description: description || null,
+          stepOrder: nextOrder,
+          isEnabled: isEnabled ?? true,
+          triggerCondition: triggerCondition || { type: 'previous_step_complete', config: {} },
+          inputMapping: inputMapping || {},
+          outputMapping: outputMapping || {},
+          retryOnFailure: retryOnFailure ?? false,
+          maxRetries: maxRetries ?? 1,
+          timeoutSeconds: timeoutSeconds ?? 300,
+          createdBy: req.user!.id,
+        }).returning();
+        res.json(step);
+      } catch (error) {
+        console.error('Error creating pipeline step:', error);
+        res.status(500).json({ error: 'Failed to create pipeline step' });
+      }
+    }
+  );
+
+  app.put(
+    '/api/admin/agents/pipeline/steps/:id',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const stepId = parseInt(req.params.id);
+        const { name, description, isEnabled, triggerCondition, inputMapping, outputMapping, retryOnFailure, maxRetries, timeoutSeconds } = req.body;
+        const updateData: any = { updatedAt: new Date() };
+        if (name !== undefined) updateData.name = name;
+        if (description !== undefined) updateData.description = description;
+        if (isEnabled !== undefined) updateData.isEnabled = isEnabled;
+        if (triggerCondition !== undefined) updateData.triggerCondition = triggerCondition;
+        if (inputMapping !== undefined) updateData.inputMapping = inputMapping;
+        if (outputMapping !== undefined) updateData.outputMapping = outputMapping;
+        if (retryOnFailure !== undefined) updateData.retryOnFailure = retryOnFailure;
+        if (maxRetries !== undefined) updateData.maxRetries = maxRetries;
+        if (timeoutSeconds !== undefined) updateData.timeoutSeconds = timeoutSeconds;
+
+        const [updated] = await db
+          .update(pipelineAgentSteps)
+          .set(updateData)
+          .where(eq(pipelineAgentSteps.id, stepId))
+          .returning();
+        if (!updated) return res.status(404).json({ error: 'Step not found' });
+        res.json(updated);
+      } catch (error) {
+        console.error('Error updating pipeline step:', error);
+        res.status(500).json({ error: 'Failed to update pipeline step' });
+      }
+    }
+  );
+
+  app.delete(
+    '/api/admin/agents/pipeline/steps/:id',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const stepId = parseInt(req.params.id);
+        const [deleted] = await db
+          .delete(pipelineAgentSteps)
+          .where(eq(pipelineAgentSteps.id, stepId))
+          .returning();
+        if (!deleted) return res.status(404).json({ error: 'Step not found' });
+        const remaining = await db.select().from(pipelineAgentSteps).orderBy(asc(pipelineAgentSteps.stepOrder));
+        for (let i = 0; i < remaining.length; i++) {
+          if (remaining[i].stepOrder !== i) {
+            await db.update(pipelineAgentSteps).set({ stepOrder: i }).where(eq(pipelineAgentSteps.id, remaining[i].id));
+          }
+        }
+        res.json({ success: true });
+      } catch (error) {
+        console.error('Error deleting pipeline step:', error);
+        res.status(500).json({ error: 'Failed to delete pipeline step' });
+      }
+    }
+  );
+
+  app.put(
+    '/api/admin/agents/pipeline/steps/reorder',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const { stepIds } = req.body;
+        if (!Array.isArray(stepIds)) return res.status(400).json({ error: 'stepIds array required' });
+        for (let i = 0; i < stepIds.length; i++) {
+          await db
+            .update(pipelineAgentSteps)
+            .set({ stepOrder: i, updatedAt: new Date() })
+            .where(eq(pipelineAgentSteps.id, stepIds[i]));
+        }
+        const steps = await db.select().from(pipelineAgentSteps).orderBy(asc(pipelineAgentSteps.stepOrder));
+        res.json(steps);
+      } catch (error) {
+        console.error('Error reordering pipeline steps:', error);
+        res.status(500).json({ error: 'Failed to reorder pipeline steps' });
       }
     }
   );

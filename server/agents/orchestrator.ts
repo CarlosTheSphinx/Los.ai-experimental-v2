@@ -8,6 +8,7 @@ import { db } from "../db";
 import {
   agentPipelineRuns,
   pipelineStepLogs,
+  pipelineAgentSteps,
   documentExtractions,
   agentFindings,
   agentCommunications,
@@ -15,7 +16,7 @@ import {
   projects,
   type AgentPipelineRun,
 } from "@shared/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, asc } from "drizzle-orm";
 import { executeAgent, type AgentType } from "./agentRunner";
 
 const DEFAULT_SEQUENCE: AgentType[] = [
@@ -25,49 +26,67 @@ const DEFAULT_SEQUENCE: AgentType[] = [
 ];
 
 /**
+ * Load the pipeline sequence from the database (pipeline_agent_steps table).
+ * Falls back to the hardcoded DEFAULT_SEQUENCE if no steps are configured.
+ */
+export async function getConfiguredPipelineSequence(): Promise<AgentType[]> {
+  try {
+    const steps = await db
+      .select()
+      .from(pipelineAgentSteps)
+      .where(eq(pipelineAgentSteps.isEnabled, true))
+      .orderBy(asc(pipelineAgentSteps.stepOrder));
+
+    if (steps.length > 0) {
+      return steps.map(s => s.agentType as AgentType);
+    }
+  } catch (error) {
+    console.error("Failed to load pipeline steps from DB, using defaults:", error);
+  }
+  return DEFAULT_SEQUENCE;
+}
+
+/**
  * Start a new pipeline run for a deal
  */
 export async function startPipeline(
   projectId: number,
   triggeredBy: number | null,
   triggerType: string = "manual",
-  agentSequence: AgentType[] = DEFAULT_SEQUENCE
+  agentSequence?: AgentType[]
 ): Promise<AgentPipelineRun> {
-  console.log(`🚀 Starting pipeline for project ${projectId} — sequence: ${agentSequence.join(" → ")}`);
+  const sequence = agentSequence || await getConfiguredPipelineSequence();
+  console.log(`Starting pipeline for project ${projectId} — sequence: ${sequence.join(" → ")}`);
 
-  // Create pipeline run record
   const [pipelineRun] = await db
     .insert(agentPipelineRuns)
     .values({
       projectId,
       status: "running",
-      agentSequence: agentSequence as any,
+      agentSequence: sequence as any,
       currentAgentIndex: 0,
       triggerType,
       triggeredBy,
     })
     .returning();
 
-  // Create step log placeholders for each agent in the sequence
-  for (let i = 0; i < agentSequence.length; i++) {
+  for (let i = 0; i < sequence.length; i++) {
     await db.insert(pipelineStepLogs).values({
       pipelineRunId: pipelineRun.id,
-      agentType: agentSequence[i],
+      agentType: sequence[i],
       sequenceIndex: i,
       status: i === 0 ? "running" : "pending",
       executedAt: i === 0 ? new Date() : null,
     });
   }
 
-  // Kick off the first agent
   try {
-    await executeNextAgent(pipelineRun.id, projectId, agentSequence, 0, triggeredBy);
+    await executeNextAgent(pipelineRun.id, projectId, sequence, 0, triggeredBy);
   } catch (error) {
-    console.error(`❌ Pipeline failed at agent index 0:`, error);
+    console.error(`Pipeline failed at agent index 0:`, error);
     await markPipelineFailed(pipelineRun.id, error instanceof Error ? error.message : String(error));
   }
 
-  // Return updated pipeline run
   const [updated] = await db
     .select()
     .from(agentPipelineRuns)

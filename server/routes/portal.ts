@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from 'express';
 import type { RouteDeps } from './types';
 import { eq, asc, and } from 'drizzle-orm';
-import { dealDocuments, dealDocumentFiles, projectStages, loanPrograms, projectActivity } from '@shared/schema';
+import { dealDocuments, dealDocumentFiles, projectStages, loanPrograms, projectActivity, platformSettings } from '@shared/schema';
 
 export function registerPortalRoutes(app: Express, deps: RouteDeps) {
   const { storage, db, objectStorageService } = deps;
@@ -302,6 +302,18 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
         }
       } catch (driveErr: any) {
         console.error('Drive sync check error:', driveErr.message);
+      }
+
+      try {
+        const [settings] = await db.select().from(platformSettings).limit(1);
+        if (settings?.autoRunPipeline) {
+          const { startPipeline } = await import('../agents/orchestrator');
+          startPipeline(project.id, null, "auto_upload").catch(err => {
+            console.error(`Auto-trigger pipeline failed for portal project ${project.id}:`, err.message);
+          });
+        }
+      } catch (triggerErr: any) {
+        console.error('Portal auto-trigger check error:', triggerErr.message);
       }
 
       res.json({ document: updated, file: newFile });

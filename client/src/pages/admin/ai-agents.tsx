@@ -22,6 +22,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Switch } from "@/components/ui/switch";
 import {
   FileSearch,
   Shield,
@@ -38,6 +39,16 @@ import {
   TrendingUp,
   Play,
   GitBranch,
+  ArrowUp,
+  ArrowDown,
+  ArrowRight,
+  Pencil,
+  Plus,
+  Trash2,
+  Save,
+  RotateCcw,
+  Timer,
+  Power,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -78,6 +89,45 @@ interface AgentRun {
   dealTitle?: string;
   userEmail?: string;
 }
+
+interface PipelineAgentStep {
+  id: number;
+  agentType: string;
+  name: string;
+  description: string | null;
+  stepOrder: number;
+  isEnabled: boolean;
+  triggerCondition: { type: string; config: Record<string, any> };
+  inputMapping: { sources?: string[] };
+  outputMapping: { delivers?: string[] };
+  retryOnFailure: boolean;
+  maxRetries: number;
+  timeoutSeconds: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const TRIGGER_TYPES = [
+  { value: "document_uploaded", label: "Document Uploaded", description: "Fires when new documents are uploaded to the deal" },
+  { value: "previous_step_complete", label: "Previous Step Complete", description: "Fires when the preceding agent finishes successfully" },
+  { value: "stage_change", label: "Stage Change", description: "Fires when a deal moves to a new stage" },
+  { value: "manual", label: "Manual Only", description: "Only runs when manually triggered by an admin" },
+  { value: "scheduled", label: "Scheduled", description: "Runs on a time-based schedule" },
+];
+
+const AVAILABLE_DATA_SOURCES = [
+  "deal_documents", "document_metadata", "document_extractions",
+  "credit_policies", "loan_program_rules", "agent_findings",
+  "deal_context", "borrower_info", "broker_info", "financial_data",
+  "property_appraisals", "title_reports", "insurance_docs",
+];
+
+const AVAILABLE_OUTPUTS = [
+  "extracted_fields", "document_classification", "quality_assessment", "anomalies",
+  "risk_assessment", "policy_findings", "financial_metrics", "conditions",
+  "email_drafts", "sms_notifications", "status_updates", "condition_letters",
+  "deal_summary", "compliance_flags", "missing_documents",
+];
 
 interface AgentCardConfig {
   type: string;
@@ -593,6 +643,491 @@ function RunHistoryTable({
   );
 }
 
+function PipelineStepEditor({
+  step,
+  onSave,
+  onClose,
+}: {
+  step: PipelineAgentStep;
+  onSave: (data: Partial<PipelineAgentStep>) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(step.name);
+  const [description, setDescription] = useState(step.description || "");
+  const [triggerType, setTriggerType] = useState(step.triggerCondition?.type || "previous_step_complete");
+  const [triggerConfig, setTriggerConfig] = useState(JSON.stringify(step.triggerCondition?.config || {}, null, 2));
+  const [inputSources, setInputSources] = useState<string[]>(step.inputMapping?.sources || []);
+  const [outputDelivers, setOutputDelivers] = useState<string[]>(step.outputMapping?.delivers || []);
+  const [retryOnFailure, setRetryOnFailure] = useState(step.retryOnFailure);
+  const [maxRetries, setMaxRetries] = useState(step.maxRetries);
+  const [timeoutSeconds, setTimeoutSeconds] = useState(step.timeoutSeconds);
+
+  const handleSave = () => {
+    let parsedConfig = {};
+    try { parsedConfig = JSON.parse(triggerConfig); } catch {}
+    onSave({
+      name,
+      description: description || null,
+      triggerCondition: { type: triggerType, config: parsedConfig },
+      inputMapping: { sources: inputSources },
+      outputMapping: { delivers: outputDelivers },
+      retryOnFailure,
+      maxRetries,
+      timeoutSeconds,
+    });
+  };
+
+  const toggleSource = (source: string) => {
+    setInputSources(prev => prev.includes(source) ? prev.filter(s => s !== source) : [...prev, source]);
+  };
+
+  const toggleOutput = (output: string) => {
+    setOutputDelivers(prev => prev.includes(output) ? prev.filter(o => o !== output) : [...prev, output]);
+  };
+
+  return (
+    <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2">
+          <Pencil className="h-5 w-5" />
+          Configure: {step.name}
+        </DialogTitle>
+        <DialogDescription>
+          Set up triggers, data flow, and behavior for this pipeline step
+        </DialogDescription>
+      </DialogHeader>
+
+      <div className="space-y-6 py-4">
+        <div className="space-y-2">
+          <Label>Step Name</Label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} data-testid="input-step-name" />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Description</Label>
+          <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} data-testid="input-step-description" />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Trigger Condition</Label>
+          <Select value={triggerType} onValueChange={setTriggerType}>
+            <SelectTrigger data-testid="select-trigger-type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TRIGGER_TYPES.map(t => (
+                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {TRIGGER_TYPES.find(t => t.value === triggerType)?.description}
+          </p>
+          {triggerType !== "manual" && triggerType !== "previous_step_complete" && (
+            <div className="space-y-1">
+              <Label className="text-xs">Trigger Configuration (JSON)</Label>
+              <Textarea value={triggerConfig} onChange={(e) => setTriggerConfig(e.target.value)} rows={3} className="font-mono text-xs" data-testid="input-trigger-config" />
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label>Input Data Sources</Label>
+          <p className="text-xs text-muted-foreground mb-2">What data this agent receives from the deal and previous agents</p>
+          <div className="flex flex-wrap gap-1.5">
+            {AVAILABLE_DATA_SOURCES.map(source => (
+              <Badge
+                key={source}
+                variant={inputSources.includes(source) ? "default" : "outline"}
+                className="cursor-pointer text-xs"
+                onClick={() => toggleSource(source)}
+                data-testid={`badge-source-${source}`}
+              >
+                {source.replace(/_/g, " ")}
+              </Badge>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Output Deliverables</Label>
+          <p className="text-xs text-muted-foreground mb-2">What this agent produces and passes to the next step</p>
+          <div className="flex flex-wrap gap-1.5">
+            {AVAILABLE_OUTPUTS.map(output => (
+              <Badge
+                key={output}
+                variant={outputDelivers.includes(output) ? "default" : "outline"}
+                className="cursor-pointer text-xs"
+                onClick={() => toggleOutput(output)}
+                data-testid={`badge-output-${output}`}
+              >
+                {output.replace(/_/g, " ")}
+              </Badge>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Switch checked={retryOnFailure} onCheckedChange={setRetryOnFailure} data-testid="switch-retry" />
+              <Label className="text-sm">Retry on Failure</Label>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Max Retries</Label>
+            <Input type="number" min={1} max={5} value={maxRetries} onChange={(e) => setMaxRetries(parseInt(e.target.value) || 1)} disabled={!retryOnFailure} data-testid="input-max-retries" />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Timeout (seconds)</Label>
+            <Input type="number" min={30} max={1800} value={timeoutSeconds} onChange={(e) => setTimeoutSeconds(parseInt(e.target.value) || 300)} data-testid="input-timeout" />
+          </div>
+        </div>
+      </div>
+
+      <DialogFooter>
+        <Button variant="outline" onClick={onClose} data-testid="button-cancel-step">Cancel</Button>
+        <Button onClick={handleSave} data-testid="button-save-step">
+          <Save className="h-4 w-4 mr-1.5" />
+          Save Configuration
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  );
+}
+
+function PipelineOrchestrationEditor({
+  pipelineSettings,
+  toggleAutoRun,
+  recentPipelineRuns,
+}: {
+  pipelineSettings: any;
+  toggleAutoRun: (enabled: boolean) => void;
+  recentPipelineRuns: any[];
+}) {
+  const { toast } = useToast();
+  const [editingStep, setEditingStep] = useState<PipelineAgentStep | null>(null);
+
+  const { data: pipelineSteps = [], isLoading } = useQuery({
+    queryKey: ["/api/admin/agents/pipeline/steps"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/agents/pipeline/steps", { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json() as Promise<PipelineAgentStep[]>;
+    },
+  });
+
+  const { mutate: updateStep } = useMutation({
+    mutationFn: async ({ id, ...data }: Partial<PipelineAgentStep> & { id: number }) => {
+      return apiRequest("PUT", `/api/admin/agents/pipeline/steps/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/agents/pipeline/steps"] });
+      setEditingStep(null);
+      toast({ title: "Updated", description: "Pipeline step configuration saved." });
+    },
+  });
+
+  const { mutate: reorderSteps } = useMutation({
+    mutationFn: async (stepIds: number[]) => {
+      return apiRequest("PUT", "/api/admin/agents/pipeline/steps/reorder", { stepIds });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/agents/pipeline/steps"] });
+    },
+  });
+
+  const { mutate: toggleStepEnabled } = useMutation({
+    mutationFn: async ({ id, isEnabled }: { id: number; isEnabled: boolean }) => {
+      return apiRequest("PUT", `/api/admin/agents/pipeline/steps/${id}`, { isEnabled });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/agents/pipeline/steps"] });
+    },
+  });
+
+  const moveStep = (stepId: number, direction: "up" | "down") => {
+    const sorted = [...pipelineSteps].sort((a, b) => a.stepOrder - b.stepOrder);
+    const idx = sorted.findIndex(s => s.id === stepId);
+    if (direction === "up" && idx > 0) {
+      const ids = sorted.map(s => s.id);
+      [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]];
+      reorderSteps(ids);
+    } else if (direction === "down" && idx < sorted.length - 1) {
+      const ids = sorted.map(s => s.id);
+      [ids[idx], ids[idx + 1]] = [ids[idx + 1], ids[idx]];
+      reorderSteps(ids);
+    }
+  };
+
+  const sortedSteps = [...pipelineSteps].sort((a, b) => a.stepOrder - b.stepOrder);
+  const enabledSteps = sortedSteps.filter(s => s.isEnabled);
+
+  const getAgentIcon = (agentType: string) => {
+    return AGENT_CONFIGS[agentType]?.icon || <Settings className="w-5 h-5" />;
+  };
+
+  return (
+    <>
+      <Card data-testid="card-pipeline-orchestration">
+        <CardHeader>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <GitBranch className="h-5 w-5" />
+                Pipeline Orchestration
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Configure the agent chain: order, triggers, and data flow between each step
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                variant={pipelineSettings?.autoRunPipeline ? "default" : "outline"}
+                size="sm"
+                onClick={() => toggleAutoRun(!pipelineSettings?.autoRunPipeline)}
+                data-testid="button-toggle-auto-trigger"
+              >
+                <Zap className="h-4 w-4 mr-1.5" />
+                {pipelineSettings?.autoRunPipeline ? "Auto-trigger: ON" : "Auto-trigger: OFF"}
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {isLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full" />
+            </div>
+          ) : (
+            <>
+              {/* Visual Flow Summary */}
+              <div className="flex items-center justify-center gap-1.5 py-3 px-4 bg-muted/30 rounded-lg overflow-x-auto">
+                {enabledSteps.map((step, i) => (
+                  <div key={step.id} className="flex items-center gap-1.5 shrink-0">
+                    <div className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-sm font-medium",
+                      "bg-background"
+                    )}>
+                      {getAgentIcon(step.agentType)}
+                      <span>{step.name}</span>
+                    </div>
+                    {i < enabledSteps.length - 1 && (
+                      <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                    )}
+                  </div>
+                ))}
+                {enabledSteps.length === 0 && (
+                  <span className="text-sm text-muted-foreground">No active agents in pipeline</span>
+                )}
+              </div>
+
+              {/* Detailed Step Cards */}
+              <div className="space-y-3">
+                {sortedSteps.map((step, idx) => {
+                  const triggerLabel = TRIGGER_TYPES.find(t => t.value === step.triggerCondition?.type)?.label || step.triggerCondition?.type;
+                  const inputCount = step.inputMapping?.sources?.length || 0;
+                  const outputCount = step.outputMapping?.delivers?.length || 0;
+                  return (
+                    <div
+                      key={step.id}
+                      className={cn(
+                        "border rounded-lg p-4 transition-opacity",
+                        !step.isEnabled && "opacity-50"
+                      )}
+                      data-testid={`pipeline-step-card-${step.id}`}
+                    >
+                      <div className="flex items-start gap-3 flex-wrap">
+                        {/* Reorder + Icon */}
+                        <div className="flex flex-col items-center gap-0.5 pt-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => moveStep(step.id, "up")}
+                            disabled={idx === 0}
+                            data-testid={`button-move-up-${step.id}`}
+                          >
+                            <ArrowUp className="h-3.5 w-3.5" />
+                          </Button>
+                          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-muted">
+                            {getAgentIcon(step.agentType)}
+                          </div>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => moveStep(step.id, "down")}
+                            disabled={idx === sortedSteps.length - 1}
+                            data-testid={`button-move-down-${step.id}`}
+                          >
+                            <ArrowDown className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+
+                        {/* Step Info */}
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-foreground">{step.name}</span>
+                            <Badge variant="secondary" className="text-xs">Step {idx + 1}</Badge>
+                            <Badge variant="outline" className="text-xs">
+                              <Zap className="h-3 w-3 mr-1" />
+                              {triggerLabel}
+                            </Badge>
+                          </div>
+                          {step.description && (
+                            <p className="text-sm text-muted-foreground">{step.description}</p>
+                          )}
+
+                          {/* Data Flow */}
+                          <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+                            <span className="flex items-center gap-1">
+                              <ArrowDown className="h-3 w-3" />
+                              {inputCount} input{inputCount !== 1 ? "s" : ""}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <ArrowUp className="h-3 w-3" />
+                              {outputCount} output{outputCount !== 1 ? "s" : ""}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Timer className="h-3 w-3" />
+                              {step.timeoutSeconds}s timeout
+                            </span>
+                            {step.retryOnFailure && (
+                              <span className="flex items-center gap-1">
+                                <RotateCcw className="h-3 w-3" />
+                                {step.maxRetries} retries
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Input/Output Tags */}
+                          {(inputCount > 0 || outputCount > 0) && (
+                            <div className="space-y-1.5">
+                              {inputCount > 0 && (
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mr-1">Receives:</span>
+                                  {step.inputMapping.sources!.slice(0, 4).map(s => (
+                                    <Badge key={s} variant="outline" className="text-[10px] py-0">{s.replace(/_/g, " ")}</Badge>
+                                  ))}
+                                  {inputCount > 4 && <Badge variant="outline" className="text-[10px] py-0">+{inputCount - 4} more</Badge>}
+                                </div>
+                              )}
+                              {outputCount > 0 && (
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mr-1">Delivers:</span>
+                                  {step.outputMapping.delivers!.slice(0, 4).map(o => (
+                                    <Badge key={o} variant="outline" className="text-[10px] py-0">{o.replace(/_/g, " ")}</Badge>
+                                  ))}
+                                  {outputCount > 4 && <Badge variant="outline" className="text-[10px] py-0">+{outputCount - 4} more</Badge>}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Switch
+                            checked={step.isEnabled}
+                            onCheckedChange={(enabled) => toggleStepEnabled({ id: step.id, isEnabled: enabled })}
+                            data-testid={`switch-enable-${step.id}`}
+                          />
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => setEditingStep(step)}
+                            data-testid={`button-edit-step-${step.id}`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Recent Pipeline Runs */}
+              {recentPipelineRuns && recentPipelineRuns.length > 0 ? (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                    Recent Pipeline Runs
+                  </h4>
+                  <div className="overflow-x-auto border rounded-lg">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted border-b">
+                        <tr>
+                          <th className="px-4 py-2 text-left font-medium">Deal</th>
+                          <th className="px-4 py-2 text-left font-medium">Status</th>
+                          <th className="px-4 py-2 text-left font-medium">Progress</th>
+                          <th className="px-4 py-2 text-left font-medium">Duration</th>
+                          <th className="px-4 py-2 text-left font-medium">Trigger</th>
+                          <th className="px-4 py-2 text-left font-medium">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {recentPipelineRuns.slice(0, 10).map((run: any) => (
+                          <tr key={run.id} className="border-b hover-elevate">
+                            <td className="px-4 py-2">Deal #{run.projectId}</td>
+                            <td className="px-4 py-2">
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "text-xs capitalize",
+                                  run.status === "completed" && "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800",
+                                  run.status === "running" && "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800",
+                                  run.status === "failed" && "bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800"
+                                )}
+                              >
+                                {run.status === "running" && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                                {run.status === "completed" && <CheckCircle2 className="h-3 w-3 mr-1" />}
+                                {run.status === "failed" && <XCircle className="h-3 w-3 mr-1" />}
+                                {run.status}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-2 text-muted-foreground">
+                              Step {(run.currentAgentIndex || 0) + 1} / {(run.agentSequence || []).length || 3}
+                            </td>
+                            <td className="px-4 py-2 text-muted-foreground">
+                              {run.totalDurationMs ? `${Math.round(run.totalDurationMs / 1000)}s` : "\u2014"}
+                            </td>
+                            <td className="px-4 py-2">
+                              <Badge variant="outline" className="text-xs">{run.triggerType}</Badge>
+                            </td>
+                            <td className="px-4 py-2 text-muted-foreground">
+                              {run.startedAt ? format(new Date(run.startedAt), "MMM d, HH:mm") : "\u2014"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-6 text-muted-foreground text-sm">
+                  No pipeline runs yet. Start a pipeline from any deal's AI Review tab.
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Step Editor Dialog */}
+      <Dialog open={!!editingStep} onOpenChange={(open) => { if (!open) setEditingStep(null); }}>
+        {editingStep && (
+          <PipelineStepEditor
+            step={editingStep}
+            onSave={(data) => updateStep({ id: editingStep.id, ...data })}
+            onClose={() => setEditingStep(null)}
+          />
+        )}
+      </Dialog>
+    </>
+  );
+}
+
 export default function AIAgentsPage() {
   const { toast } = useToast();
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
@@ -772,109 +1307,11 @@ export default function AIAgentsPage() {
       </div>
 
       {/* Pipeline Orchestration Section */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <GitBranch className="h-5 w-5" />
-                Pipeline Orchestration
-              </CardTitle>
-              <CardDescription className="mt-1">
-                Chain agents together: Document Intelligence → Processor → Communication
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-3">
-              <Button
-                variant={pipelineSettings?.autoRunPipeline ? "default" : "outline"}
-                size="sm"
-                onClick={() => toggleAutoRun(!pipelineSettings?.autoRunPipeline)}
-              >
-                <Zap className="h-4 w-4 mr-1.5" />
-                {pipelineSettings?.autoRunPipeline ? "Auto-trigger: ON" : "Auto-trigger: OFF"}
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {/* Pipeline Flow Visualization */}
-          <div className="flex items-center justify-center gap-2 mb-6 py-4 bg-muted/30 rounded-lg">
-            {["document_intelligence", "processor", "communication"].map((type, i) => (
-              <div key={type} className="flex items-center gap-2">
-                <div className="flex items-center gap-2 px-4 py-2 rounded-lg border bg-background">
-                  {AGENT_CONFIGS[type]?.icon}
-                  <span className="text-sm font-medium">{AGENT_CONFIGS[type]?.name}</span>
-                </div>
-                {i < 2 && (
-                  <div className="text-muted-foreground text-lg">→</div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Recent Pipeline Runs */}
-          {recentPipelineRuns && recentPipelineRuns.length > 0 ? (
-            <div className="space-y-2">
-              <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                Recent Pipeline Runs
-              </h4>
-              <div className="overflow-x-auto border rounded-lg">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted border-b">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-medium">Deal</th>
-                      <th className="px-4 py-2 text-left font-medium">Status</th>
-                      <th className="px-4 py-2 text-left font-medium">Progress</th>
-                      <th className="px-4 py-2 text-left font-medium">Duration</th>
-                      <th className="px-4 py-2 text-left font-medium">Trigger</th>
-                      <th className="px-4 py-2 text-left font-medium">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentPipelineRuns.slice(0, 10).map((run: any) => (
-                      <tr key={run.id} className="border-b hover:bg-muted/50">
-                        <td className="px-4 py-2">Deal #{run.projectId}</td>
-                        <td className="px-4 py-2">
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-xs capitalize",
-                              run.status === "completed" && "bg-emerald-50 text-emerald-700 border-emerald-200",
-                              run.status === "running" && "bg-blue-50 text-blue-700 border-blue-200",
-                              run.status === "failed" && "bg-red-50 text-red-700 border-red-200"
-                            )}
-                          >
-                            {run.status === "running" && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-                            {run.status === "completed" && <CheckCircle2 className="h-3 w-3 mr-1" />}
-                            {run.status === "failed" && <XCircle className="h-3 w-3 mr-1" />}
-                            {run.status}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-2 text-muted-foreground">
-                          Step {(run.currentAgentIndex || 0) + 1} / {(run.agentSequence || []).length || 3}
-                        </td>
-                        <td className="px-4 py-2 text-muted-foreground">
-                          {run.totalDurationMs ? `${Math.round(run.totalDurationMs / 1000)}s` : "—"}
-                        </td>
-                        <td className="px-4 py-2">
-                          <Badge variant="outline" className="text-xs">{run.triggerType}</Badge>
-                        </td>
-                        <td className="px-4 py-2 text-muted-foreground">
-                          {run.startedAt ? format(new Date(run.startedAt), "MMM d, HH:mm") : "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center py-6 text-muted-foreground text-sm">
-              No pipeline runs yet. Start a pipeline from any deal's AI Review tab.
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <PipelineOrchestrationEditor
+        pipelineSettings={pipelineSettings}
+        toggleAutoRun={toggleAutoRun}
+        recentPipelineRuns={recentPipelineRuns}
+      />
 
       {/* Configuration Editor Dialog */}
       {selectedAgentType && (

@@ -2458,6 +2458,32 @@ export const insertPipelineStepLogSchema = createInsertSchema(pipelineStepLogs).
 export type PipelineStepLog = typeof pipelineStepLogs.$inferSelect;
 export type InsertPipelineStepLog = z.infer<typeof insertPipelineStepLogSchema>;
 
+// Pipeline Agent Steps - configurable pipeline chain with ordering, triggers, and data mappings
+export const pipelineAgentSteps = pgTable("pipeline_agent_steps", {
+  id: serial("id").primaryKey(),
+  agentType: varchar("agent_type", { length: 100 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  stepOrder: integer("step_order").default(0).notNull(),
+  isEnabled: boolean("is_enabled").default(true).notNull(),
+  triggerCondition: jsonb("trigger_condition").default({
+    type: "previous_step_complete",
+    config: {},
+  }).notNull(),
+  inputMapping: jsonb("input_mapping").default({}).notNull(),
+  outputMapping: jsonb("output_mapping").default({}).notNull(),
+  retryOnFailure: boolean("retry_on_failure").default(false).notNull(),
+  maxRetries: integer("max_retries").default(1).notNull(),
+  timeoutSeconds: integer("timeout_seconds").default(300).notNull(),
+  createdBy: integer("created_by").references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertPipelineAgentStepSchema = createInsertSchema(pipelineAgentSteps).omit({ id: true, createdAt: true, updatedAt: true });
+export type PipelineAgentStep = typeof pipelineAgentSteps.$inferSelect;
+export type InsertPipelineAgentStep = z.infer<typeof insertPipelineAgentStepSchema>;
+
 // Lender Training Steps - configurable training content for lender onboarding
 export const lenderTrainingSteps = pgTable("lender_training_steps", {
   id: serial("id").primaryKey(),
