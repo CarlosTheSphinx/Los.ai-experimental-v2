@@ -52,6 +52,7 @@ import {
   CalendarDays,
   Circle,
   CheckCircle2,
+  Check,
   Clock,
   LayoutGrid,
   List,
@@ -264,34 +265,60 @@ function PipelineByProgram({ programs }: { programs: ProgramPipeline[] }) {
                 </Badge>
               </div>
               {program.stages.length > 0 ? (
-                <div className="flex items-stretch gap-0 overflow-x-auto">
-                  {program.stages.map((stage, idx) => {
-                    const color = getStageColor(programIdx, idx, program.stages.length);
-                    return (
-                      <div
-                        key={idx}
-                        className="flex-1 min-w-0 flex flex-col items-center text-center relative"
-                        data-testid={`pipeline-stage-${program.programId}-${idx}`}
-                      >
+                <div className="overflow-x-auto py-2">
+                  <div className="flex items-start" style={{ minWidth: program.stages.length * 90 }}>
+                    {program.stages.map((stage, idx) => {
+                      const color = stage.color || getStageColor(programIdx, idx, program.stages.length);
+                      const hasDeals = stage.count > 0;
+                      const isLast = idx === program.stages.length - 1;
+
+                      return (
                         <div
-                          className="w-full py-3 px-2 flex flex-col items-center justify-center gap-1"
-                          style={{
-                            backgroundColor: color,
-                            opacity: stage.count > 0 ? 1 : 0.5,
-                            borderTopLeftRadius: idx === 0 ? '0.375rem' : 0,
-                            borderBottomLeftRadius: idx === 0 ? '0.375rem' : 0,
-                            borderTopRightRadius: idx === program.stages.length - 1 ? '0.375rem' : 0,
-                            borderBottomRightRadius: idx === program.stages.length - 1 ? '0.375rem' : 0,
-                          }}
+                          key={idx}
+                          className="flex flex-col items-center flex-1 min-w-[70px] relative"
+                          data-testid={`pipeline-stage-${program.programId}-${idx}`}
                         >
-                          <span className="text-lg font-bold text-white drop-shadow-sm">{stage.count}</span>
+                          <div className="flex items-center w-full">
+                            {idx > 0 && (
+                              <div className="flex-1 h-[2px] bg-border" />
+                            )}
+                            <div
+                              className="relative flex items-center justify-center flex-shrink-0 rounded-full"
+                              style={{
+                                width: 36,
+                                height: 36,
+                                backgroundColor: hasDeals ? color : 'transparent',
+                                border: hasDeals ? 'none' : `2px solid ${color}`,
+                                opacity: hasDeals ? 1 : 0.4,
+                              }}
+                            >
+                              {hasDeals && (
+                                <Check className="h-5 w-5 text-white" strokeWidth={3} />
+                              )}
+                            </div>
+                            {!isLast && (
+                              <div className="flex-1 h-[2px] bg-border" />
+                            )}
+                          </div>
+
+                          <span
+                            className="text-xs font-bold mt-1"
+                            style={{ color: hasDeals ? color : undefined }}
+                            data-testid={`pipeline-stage-count-${program.programId}-${idx}`}
+                          >
+                            {hasDeals ? stage.count : <span className="text-muted-foreground font-normal">0</span>}
+                          </span>
+
+                          <span
+                            className="text-[11px] text-muted-foreground mt-1 leading-tight text-center px-1 max-w-[90px]"
+                            data-testid={`pipeline-stage-label-${program.programId}-${idx}`}
+                          >
+                            {stage.label}
+                          </span>
                         </div>
-                        <span className="text-[11px] text-muted-foreground mt-1.5 leading-tight px-0.5 truncate w-full">
-                          {stage.label}
-                        </span>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground">No workflow stages configured</p>
