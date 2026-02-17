@@ -1465,12 +1465,12 @@ export default function AdminDealDetail() {
             </Card>
             <Card className="p-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-warning/10 flex items-center justify-center">
+                <div className="h-10 w-10 rounded-lg bg-warning/10 flex items-center justify-center flex-shrink-0">
                   <Building2 className="h-5 w-5 text-warning" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <div className="text-xs text-muted-foreground">Property</div>
-                  <div className="font-semibold truncate" data-testid="text-property-type">{deal.loanData?.propertyType || '\u2014'}</div>
+                  <div className="font-semibold text-sm break-words" data-testid="text-property-type">{deal.loanData?.propertyType || '\u2014'}</div>
                 </div>
               </div>
             </Card>
