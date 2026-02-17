@@ -2281,10 +2281,10 @@ export type InsertAgentConfiguration = z.infer<typeof insertAgentConfigurationSc
 // Document Extractions - stores Agent 1's structured output per document
 export const documentExtractions = pgTable("document_extractions", {
   id: serial("id").primaryKey(),
-  dealDocumentId: integer("deal_document_id").references(() => dealDocuments.id, { onDelete: 'cascade' }).notNull(),
+  dealDocumentId: integer("deal_document_id").references(() => dealDocuments.id, { onDelete: 'cascade' }),
   projectId: integer("project_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
   documentType: varchar("document_type", { length: 100 }).notNull(),
-  extractedFields: jsonb("extracted_fields").notNull(),
+  extractedFields: jsonb("extracted_fields").default({}),
   qualityAssessment: jsonb("quality_assessment"),
   anomalies: jsonb("anomalies"),
   confidenceScore: real("confidence_score"),

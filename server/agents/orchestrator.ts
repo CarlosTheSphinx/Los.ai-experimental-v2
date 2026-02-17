@@ -18,6 +18,7 @@ import {
 } from "@shared/schema";
 import { eq, and, desc, asc } from "drizzle-orm";
 import { executeAgent, type AgentType } from "./agentRunner";
+import { extractAllDealDocuments } from "./documentExtractor";
 
 const DEFAULT_SEQUENCE: AgentType[] = [
   "document_intelligence",
@@ -156,7 +157,13 @@ async function executeNextAgent(
     // Parse agent response and store structured output
     let outputSummary: any = {};
     try {
-      outputSummary = JSON.parse(result.response);
+      let responseText = result.response;
+      // Strip markdown code fences if present (```json ... ```)
+      const codeFenceMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (codeFenceMatch) {
+        responseText = codeFenceMatch[1].trim();
+      }
+      outputSummary = JSON.parse(responseText);
     } catch {
       outputSummary = { raw_response: result.response };
     }
@@ -233,9 +240,46 @@ async function compileContextForAgent(
   const context: Record<string, any> = {};
 
   if (agentType === "document_intelligence" || agentIndex === 0) {
-    // First agent gets basic deal data — no previous agent output
-    context.declared_doc_type = "auto_detect";
-    context.extracted_text = "[Documents attached to this deal will be analyzed]";
+    try {
+      const docContents = await extractAllDealDocuments(projectId);
+      const uploadedDocs = docContents.filter(d => d.textLength > 0);
+      const pendingDocs = docContents.filter(d => d.textLength === 0 && !d.error);
+      const failedDocs = docContents.filter(d => !!d.error);
+
+      context.total_documents = docContents.length;
+      context.uploaded_documents_count = uploadedDocs.length;
+      context.pending_documents_count = pendingDocs.length;
+
+      context.documents = uploadedDocs.map(d => ({
+        deal_document_id: d.dealDocumentId,
+        document_name: d.documentName,
+        category: d.documentCategory,
+        page_count: d.pageCount,
+        text_length: d.textLength,
+        text_truncated: d.textLength > 8000,
+        text_content: d.textContent,
+      }));
+
+      context.pending_documents = pendingDocs.map(d => ({
+        deal_document_id: d.dealDocumentId,
+        document_name: d.documentName,
+        category: d.documentCategory,
+        status: d.status,
+      }));
+
+      if (failedDocs.length > 0) {
+        context.extraction_errors = failedDocs.map(d => ({
+          document_name: d.documentName,
+          error: d.error,
+        }));
+      }
+
+      console.log(`📄 Document Intelligence context: ${uploadedDocs.length} docs with text, ${pendingDocs.length} pending`);
+    } catch (error) {
+      console.error("Failed to extract deal documents:", error);
+      context.documents = [];
+      context.extraction_error = error instanceof Error ? error.message : String(error);
+    }
     return context;
   }
 
@@ -250,7 +294,7 @@ async function compileContextForAgent(
     context.document_summaries = extractions
       .map(
         (e) =>
-          `Document: ${e.documentType || "Unknown"}\nExtracted: ${JSON.stringify(e.extractedData)}\nConfidence: ${e.confidenceScore}%`
+          `Document: ${e.documentType || "Unknown"}\nExtracted Fields: ${JSON.stringify(e.extractedFields || {})}\nQuality: ${JSON.stringify(e.qualityAssessment || {})}\nAnomalies: ${JSON.stringify(e.anomalies || [])}\nConfidence: ${e.confidenceScore}%`
       )
       .join("\n\n---\n\n");
 
@@ -268,8 +312,14 @@ async function compileContextForAgent(
 
     context.findings_summary = findings
       .map(
-        (f) =>
-          `[${f.severity?.toUpperCase()}] ${f.category}: ${f.title}\n${f.description}`
+        (f) => {
+          const healthSummary = f.dealHealthSummary
+            ? (typeof f.dealHealthSummary === 'object'
+                ? (f.dealHealthSummary as any).summary || JSON.stringify(f.dealHealthSummary)
+                : String(f.dealHealthSummary))
+            : "";
+          return `Status: ${f.overallStatus || "pending"}\nHealth: ${healthSummary}\nMissing Documents: ${JSON.stringify(f.missingDocuments || [])}\nRecommended Actions: ${JSON.stringify(f.recommendedNextActions || [])}`;
+        }
       )
       .join("\n\n");
 
@@ -293,38 +343,42 @@ async function storeAgentOutput(
 ): Promise<void> {
   try {
     if (agentType === "document_intelligence") {
-      await db.insert(documentExtractions).values({
-        projectId,
-        agentRunId,
-        documentType: output.confirmed_doc_type || "auto_detected",
-        extractedData: output.extracted_fields || output,
-        confidenceScore: output.confidence_score || 0,
-        qualityAssessment: output.quality_assessment || null,
-        anomalies: output.anomalies || null,
-        recommendations: output.recommendations || null,
-      });
-    } else if (agentType === "processor") {
-      // Store each finding as a separate record
-      const keyFindings = output.key_findings || [output];
-      for (const finding of Array.isArray(keyFindings) ? keyFindings : [keyFindings]) {
-        await db.insert(agentFindings).values({
+      const docResults = output.documents || [output];
+      const docs = Array.isArray(docResults) ? docResults : [docResults];
+
+      for (const doc of docs) {
+        await db.insert(documentExtractions).values({
           projectId,
           agentRunId,
-          category: finding.category || "general",
-          title: finding.title || finding.finding || "Finding",
-          description: finding.description || finding.detail || JSON.stringify(finding),
-          severity: finding.severity || output.risk_assessment?.level || "info",
-          data: finding,
+          dealDocumentId: doc.deal_document_id || null,
+          documentType: doc.confirmed_doc_type || doc.document_type || "auto_detected",
+          extractedFields: doc.extracted_fields || {},
+          qualityAssessment: doc.quality_assessment || null,
+          anomalies: doc.anomalies || null,
+          confidenceScore: doc.confidence_score || 0,
+          classificationMatch: doc.classification_match ?? true,
+          confirmedDocType: doc.confirmed_doc_type || null,
         });
       }
+    } else if (agentType === "processor") {
+      await db.insert(agentFindings).values({
+        projectId,
+        agentRunId,
+        overallStatus: output.overallStatus || output.overall_status || "incomplete_data",
+        policyFindings: output.policyFindings || output.policy_findings || null,
+        documentRequirementFindings: output.documentRequirementFindings || output.document_requirement_findings || null,
+        crossDocumentConsistency: output.crossDocumentConsistency || output.cross_document_consistency || null,
+        missingDocuments: output.missingDocuments || output.missing_documents || null,
+        dealHealthSummary: output.dealHealthSummary || output.deal_health_summary || null,
+        recommendedNextActions: output.recommendedNextActions || output.recommended_next_actions || null,
+      });
     } else if (agentType === "communication") {
       await db.insert(agentCommunications).values({
         projectId,
         agentRunId,
-        communicationType: output.tone || "status_update",
-        recipientType: "borrower",
+        recipientType: output.recipient_type || "borrower",
         subject: output.subject || "Deal Update",
-        body: output.body || output.raw_response || "",
+        body: typeof output.body === 'string' ? output.body : JSON.stringify(output.body || output),
         status: "draft",
       });
     }
@@ -367,11 +421,15 @@ async function compileDealStory(projectId: number): Promise<void> {
     }
 
     if (findings.length > 0) {
-      const critical = findings.filter((f) => f.severity === "critical").length;
-      const warnings = findings.filter((f) => f.severity === "warning").length;
+      const latestFinding = findings[findings.length - 1];
+      const status = latestFinding.overallStatus || "pending_review";
+      const healthSummary = latestFinding.dealHealthSummary
+        ? (typeof latestFinding.dealHealthSummary === 'object'
+            ? (latestFinding.dealHealthSummary as any).summary || JSON.stringify(latestFinding.dealHealthSummary)
+            : String(latestFinding.dealHealthSummary))
+        : "No health summary available.";
       sections.push(
-        `## Processor Findings\n${findings.length} finding(s): ${critical} critical, ${warnings} warnings.\n` +
-          findings.map((f) => `- [${f.severity}] ${f.title}: ${f.description}`).join("\n")
+        `## Processor Findings\nOverall Status: **${status}**\n${healthSummary}`
       );
     }
 
