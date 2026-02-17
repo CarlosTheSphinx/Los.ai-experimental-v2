@@ -459,12 +459,6 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
             </Button>
           </div>
         )}
-        <header className="flex items-center gap-2 p-2 md:p-3 border-b border-border bg-card/80 backdrop-blur-md shrink-0">
-          <SidebarTrigger data-testid="button-toggle-sidebar" className="shrink-0" />
-          <span className="text-sm font-medium text-muted-foreground truncate md:hidden">
-            {user?.firstName ? `Hi, ${user.firstName}` : 'Lendry.AI'}
-          </span>
-        </header>
         <main className="flex-1 overflow-auto">
           {children}
         </main>
