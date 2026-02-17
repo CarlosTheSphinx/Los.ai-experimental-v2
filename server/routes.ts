@@ -4060,9 +4060,29 @@ export async function registerRoutes(
         updates.completedBy = req.user?.fullName || req.user?.email || 'Admin';
       }
       
+      const existingTask = await storage.getTaskById(id);
+
       const updated = await storage.updateTask(id, updates);
       if (!updated) {
         return res.status(404).json({ error: 'Task not found' });
+      }
+
+      if (assignedTo) {
+        const assigneeId = parseInt(String(assignedTo));
+        const previousId = existingTask?.assignedTo ? parseInt(String(existingTask.assignedTo)) : null;
+        if (!isNaN(assigneeId) && assigneeId !== req.user!.id && assigneeId !== previousId) {
+          const assignerName = req.user!.fullName || req.user!.email || 'Someone';
+          const taskTitle = updated.taskTitle || 'a task';
+          const projectId = updated.projectId;
+          await createNotification({
+            userId: assigneeId,
+            type: 'task_assigned',
+            title: 'Task Assigned',
+            message: `${assignerName} assigned you "${taskTitle}"`,
+            dealId: projectId || undefined,
+            link: projectId ? `/admin/deals/${projectId}` : undefined,
+          });
+        }
       }
       
       res.json(updated);
@@ -4783,6 +4803,20 @@ export async function registerRoutes(
           const assignee = await storage.getUserById(parseInt(assignedTo));
           const assigneeName = assignee?.fullName || assignee?.email || 'someone';
           activityDesc = activityDesc ? `${activityDesc}, assigned to ${assigneeName}` : `Task "${task.taskTitle}" assigned to ${assigneeName}`;
+
+          const assigneeId = parseInt(String(assignedTo));
+          const previousId = task.assignedTo ? parseInt(String(task.assignedTo)) : null;
+          if (!isNaN(assigneeId) && assigneeId !== req.user!.id && assigneeId !== previousId) {
+            const assignerName = req.user!.fullName || req.user!.email || 'Someone';
+            await createNotification({
+              userId: assigneeId,
+              type: 'task_assigned',
+              title: 'Task Assigned',
+              message: `${assignerName} assigned you "${task.taskTitle}"`,
+              dealId: projectId,
+              link: `/admin/deals/${projectId}`,
+            });
+          }
         } else {
           activityDesc = activityDesc ? `${activityDesc}, unassigned` : `Task "${task.taskTitle}" unassigned`;
         }
@@ -7356,7 +7390,23 @@ export async function registerRoutes(
         .set(updateData)
         .where(eq(dealTasks.id, taskId))
         .returning();
-      
+
+      if (assignedTo !== undefined && assignedTo) {
+        const assigneeId = parseInt(assignedTo);
+        if (!isNaN(assigneeId) && assigneeId !== req.user!.id && assigneeId !== existingTask?.assignedTo) {
+          const assignerName = req.user!.fullName || req.user!.email || 'Someone';
+          const taskLabel = updated.taskName || 'a task';
+          await createNotification({
+            userId: assigneeId,
+            type: 'task_assigned',
+            title: 'Task Assigned',
+            message: `${assignerName} assigned you "${taskLabel}" on DEAL-${dealId}`,
+            dealId,
+            link: `/admin/deals/${dealId}`,
+          });
+        }
+      }
+
       // Send notification if task was just completed
       if (status === 'completed' && !wasCompleted) {
         const deal = await db.select({ userId: savedQuotes.userId })
@@ -15332,6 +15382,22 @@ Return JSON only:
         sourceType: 'admin',
         sourceUserId: req.user!.id,
       });
+
+      if (parsedMentions.length > 0) {
+        const snippet = content.length > 80 ? content.substring(0, 80) + '...' : content;
+        for (const mention of parsedMentions) {
+          if (mention.userId && mention.userId !== req.user!.id) {
+            await createNotification({
+              userId: mention.userId,
+              type: 'mention_in_note',
+              title: 'Mentioned in Note',
+              message: `${userName} mentioned you in a note on DEAL-${dealId}: "${snippet}"`,
+              dealId,
+              link: `/admin/deals/${dealId}`,
+            });
+          }
+        }
+      }
 
       const noteWithUser = {
         ...note,
