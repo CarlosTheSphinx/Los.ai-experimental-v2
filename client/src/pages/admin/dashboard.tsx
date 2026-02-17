@@ -366,6 +366,7 @@ function TaskBoard() {
                       onEdit={() => openEditDialog(task)}
                       priorityColor={priorityColor}
                       isCompleting={completingIds.has(task.id)}
+                      showDealContext
                     />
                   ))}
                 </div>
@@ -390,6 +391,7 @@ function TaskBoard() {
                         onEdit={() => openEditDialog(task)}
                         priorityColor={priorityColor}
                         isCompleting={completingIds.has(task.id)}
+                        showDealContext
                       />
                     ))}
                   </div>
@@ -518,13 +520,15 @@ function TaskBoard() {
   );
 }
 
-function TaskRow({ task, onComplete, onEdit, priorityColor, isCompleting }: {
+function TaskRow({ task, onComplete, onEdit, priorityColor, isCompleting, showDealContext = false }: {
   task: TaskBoardItem;
   onComplete: () => void;
   onEdit: () => void;
   priorityColor: (p: string | null) => string;
   isCompleting: boolean;
+  showDealContext?: boolean;
 }) {
+  const dealId = `DEAL-${task.projectId}`;
   return (
     <div 
       className={cn(
@@ -546,7 +550,7 @@ function TaskRow({ task, onComplete, onEdit, priorityColor, isCompleting }: {
         )}
       </button>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm truncate">{task.taskTitle}</span>
           {task.priority && task.priority !== "medium" && (
             <span className={cn("text-[10px] uppercase font-semibold", priorityColor(task.priority))}>
@@ -554,11 +558,24 @@ function TaskRow({ task, onComplete, onEdit, priorityColor, isCompleting }: {
             </span>
           )}
         </div>
-        {task.dueDate && (
-          <span className="text-[11px] text-muted-foreground">
-            Due {format(parseISO(task.dueDate), "MMM d")}
-          </span>
-        )}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {showDealContext && (
+            <>
+              <span className="text-[11px] font-mono font-medium text-primary" data-testid={`text-deal-id-${task.id}`}>
+                {dealId}
+              </span>
+              <span className="text-[11px] text-muted-foreground" data-testid={`text-borrower-${task.id}`}>
+                {task.borrowerName || "—"}
+              </span>
+              {task.dueDate && <span className="text-[11px] text-muted-foreground">·</span>}
+            </>
+          )}
+          {task.dueDate && (
+            <span className="text-[11px] text-muted-foreground">
+              Due {format(parseISO(task.dueDate), "MMM d")}
+            </span>
+          )}
+        </div>
       </div>
       <Button
         variant="ghost"
