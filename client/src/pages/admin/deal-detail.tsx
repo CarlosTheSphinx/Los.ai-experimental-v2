@@ -67,8 +67,8 @@ import {
   RefreshCw,
   CloudUpload,
   LinkIcon,
-  BookOpen,
   Zap,
+  Brain,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -83,8 +83,8 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { DigestConfigPanel } from "@/components/DigestConfigPanel";
 import { LoanChecklist } from "@/components/LoanChecklist";
-import { DealStoryPanel } from "@/components/admin/DealStoryPanel";
 import { AIInsightsPanel } from "@/components/admin/AIInsightsPanel";
+import { DealMemoryPanel } from "@/components/admin/DealMemoryPanel";
 
 interface Deal {
   id: number;
@@ -558,7 +558,8 @@ export default function AdminDealDetail() {
   );
   const project = projectDetailData?.project;
 
-  const [activeFilter, setActiveFilter] = useState<'all' | 'tasks' | 'documents' | 'activity' | 'digests' | 'checklist' | 'deal_story' | 'ai_insights'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'tasks' | 'documents' | 'activity' | 'digests' | 'checklist' | 'ai_insights'>('all');
+  const [showMemoryPanel, setShowMemoryPanel] = useState(false);
   const [expandedStages, setExpandedStages] = useState<Set<number>>(new Set());
   const [stageExpandInitialized, setStageExpandInitialized] = useState(false);
 
@@ -1203,7 +1204,8 @@ export default function AdminDealDetail() {
   const progressPercentage = project?.progressPercentage || 0;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
+    <div className="flex h-full">
+      <div className={cn("flex-1 overflow-y-auto p-6 space-y-6 transition-all duration-200", showMemoryPanel ? "max-w-[calc(100%-380px)]" : "max-w-6xl mx-auto")}>
       {/* Header matching Loans page */}
       <div className="flex items-center gap-4">
         <Link href="/admin/deals">
@@ -1828,7 +1830,6 @@ export default function AdminDealDetail() {
                 { key: 'activity' as const, label: 'Activity', icon: Activity },
                 { key: 'digests' as const, label: 'Digests', icon: BarChart3 },
                 { key: 'ai_insights' as const, label: 'AI Insights', icon: Zap },
-                { key: 'deal_story' as const, label: 'Deal Story', icon: BookOpen },
               ]).map(filter => (
                 <Button
                   key={filter.key}
@@ -1851,6 +1852,16 @@ export default function AdminDealDetail() {
                   </span>
                 );
               })()}
+              <Button
+                size="sm"
+                variant={showMemoryPanel ? 'default' : 'outline'}
+                onClick={() => setShowMemoryPanel(!showMemoryPanel)}
+                className="toggle-elevate"
+                data-testid="button-toggle-memory"
+              >
+                <Brain className="h-3.5 w-3.5 mr-1.5" />
+                Deal Memory
+              </Button>
               {linkedProjectId && (
                 <Button
                   size="sm"
@@ -2399,11 +2410,6 @@ export default function AdminDealDetail() {
             queryClient.invalidateQueries({ queryKey: ["/api/projects", linkedProjectId, "agent-communications"] });
           }}
         />
-      )}
-
-      {/* Deal Story view */}
-      {activeFilter === 'deal_story' && linkedProjectId && (
-        <DealStoryPanel projectId={linkedProjectId} />
       )}
 
       <Dialog open={syncDialogOpen} onOpenChange={setSyncDialogOpen}>
@@ -3152,6 +3158,17 @@ export default function AdminDealDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
+
+      {showMemoryPanel && (
+        <div className="w-[380px] flex-shrink-0 h-full" data-testid="memory-sidebar">
+          <DealMemoryPanel
+            dealId={deal.id}
+            projectId={linkedProjectId}
+            onClose={() => setShowMemoryPanel(false)}
+          />
+        </div>
+      )}
     </div>
   );
 }

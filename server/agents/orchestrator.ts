@@ -15,6 +15,10 @@ import {
   dealStories,
   projects,
   dealDocuments,
+  dealMemoryEntries,
+  dealNotes,
+  users,
+  digestHistory,
   type AgentPipelineRun,
 } from "@shared/schema";
 import { eq, and, desc, asc } from "drizzle-orm";
@@ -357,6 +361,79 @@ async function compileContextForAgent(
     }
     if (project?.brokerPortalToken) {
       context.broker_portal_url = `${baseUrl}/portal/broker/${project.brokerPortalToken}`;
+    }
+
+    // Inject deal memory - past events and communications for AI context
+    const memoryEntries = await db
+      .select()
+      .from(dealMemoryEntries)
+      .where(eq(dealMemoryEntries.dealId, projectId))
+      .orderBy(desc(dealMemoryEntries.createdAt))
+      .limit(50);
+
+    if (memoryEntries.length > 0) {
+      context.deal_memory = memoryEntries.map(e => 
+        `[${new Date(e.createdAt!).toLocaleDateString()}] ${e.entryType}: ${e.title}${e.description ? ` - ${e.description}` : ''}`
+      ).join('\n');
+    }
+
+    // Inject admin notes - especially AI instructions
+    const adminNotes = await db
+      .select({
+        id: dealNotes.id,
+        content: dealNotes.content,
+        noteType: dealNotes.noteType,
+        createdAt: dealNotes.createdAt,
+        userName: users.fullName,
+      })
+      .from(dealNotes)
+      .leftJoin(users, eq(dealNotes.userId, users.id))
+      .where(eq(dealNotes.dealId, projectId))
+      .orderBy(desc(dealNotes.createdAt))
+      .limit(30);
+
+    if (adminNotes.length > 0) {
+      const aiInstructions = adminNotes.filter(n => n.noteType === 'ai_instruction');
+      const regularNotes = adminNotes.filter(n => n.noteType !== 'ai_instruction');
+      
+      if (aiInstructions.length > 0) {
+        context.ai_instructions = aiInstructions.map(n =>
+          `[${new Date(n.createdAt!).toLocaleDateString()}] ${n.userName || 'Admin'}: ${n.content}`
+        ).join('\n');
+      }
+      if (regularNotes.length > 0) {
+        context.admin_notes = regularNotes.map(n =>
+          `[${new Date(n.createdAt!).toLocaleDateString()}] ${n.userName || 'Admin'}: ${n.content}`
+        ).join('\n');
+      }
+    }
+
+    // Inject past agent communications to avoid repeating messages
+    const pastComms = await db
+      .select()
+      .from(agentCommunications)
+      .where(eq(agentCommunications.projectId, projectId))
+      .orderBy(desc(agentCommunications.createdAt))
+      .limit(5);
+
+    if (pastComms.length > 0) {
+      context.past_agent_messages = pastComms.map(c =>
+        `[${new Date(c.createdAt!).toLocaleDateString()}] To: ${c.recipientType} | Subject: ${c.subject}\nStatus: ${c.status}\nBody preview: ${(c.body || '').substring(0, 200)}...`
+      ).join('\n\n---\n\n');
+    }
+
+    // Inject past digest history to avoid repeating communications
+    const pastDigests = await db
+      .select()
+      .from(digestHistory)
+      .where(eq(digestHistory.projectId, projectId))
+      .orderBy(desc(digestHistory.sentAt))
+      .limit(5);
+
+    if (pastDigests.length > 0) {
+      context.past_communications = pastDigests.map(d =>
+        `[${new Date(d.sentAt!).toLocaleDateString()}] Sent to: ${d.recipientAddress} via ${d.deliveryMethod} (${d.documentsCount} docs, ${d.updatesCount} updates) Status: ${d.status}`
+      ).join('\n');
     }
 
     context.communication_type = "status_update";

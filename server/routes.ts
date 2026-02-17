@@ -3,7 +3,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, documentReviewResults, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema, projectActivity, projectTasks, platformSettings } from "@shared/schema";
+import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, documentReviewResults, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema, projectActivity, projectTasks, platformSettings, dealMemoryEntries, dealNotes, insertDealMemoryEntrySchema, insertDealNoteSchema } from "@shared/schema";
 import { priceQuote, validateRuleset, SAMPLE_RTL_RULESET, SAMPLE_DSCR_RULESET, type PricingInputs, analyzeGuidelines, refineProposal } from "./pricing";
 import { getDocumentTemplatesForLoanType } from "./document-templates";
 import { eq, desc, asc, inArray, and, gt, gte, lte, sql, isNull, or } from "drizzle-orm";
@@ -14857,6 +14857,339 @@ Return JSON only:
     } catch (error) {
       console.error('Super admin settings error:', error);
       res.status(500).json({ error: 'Failed to update settings' });
+    }
+  });
+
+  // ==================== DEAL MEMORY ENTRIES API ====================
+
+  app.get('/api/admin/deals/:dealId/memory', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      if (isNaN(dealId)) return res.status(400).json({ error: 'Invalid deal ID' });
+
+      const entries = await db
+        .select({
+          id: dealMemoryEntries.id,
+          dealId: dealMemoryEntries.dealId,
+          entryType: dealMemoryEntries.entryType,
+          title: dealMemoryEntries.title,
+          description: dealMemoryEntries.description,
+          metadata: dealMemoryEntries.metadata,
+          sourceType: dealMemoryEntries.sourceType,
+          sourceUserId: dealMemoryEntries.sourceUserId,
+          createdAt: dealMemoryEntries.createdAt,
+          sourceUserFullName: users.fullName,
+          sourceUserEmail: users.email,
+        })
+        .from(dealMemoryEntries)
+        .leftJoin(users, eq(dealMemoryEntries.sourceUserId, users.id))
+        .where(eq(dealMemoryEntries.dealId, dealId))
+        .orderBy(desc(dealMemoryEntries.createdAt));
+
+      res.json({ entries });
+    } catch (error) {
+      console.error('Get deal memory entries error:', error);
+      res.status(500).json({ error: 'Failed to fetch memory entries' });
+    }
+  });
+
+  app.post('/api/admin/deals/:dealId/memory', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      if (isNaN(dealId)) return res.status(400).json({ error: 'Invalid deal ID' });
+
+      const body = insertDealMemoryEntrySchema.parse({
+        ...req.body,
+        dealId,
+        sourceUserId: req.user!.id,
+        sourceType: 'admin',
+      });
+
+      const [entry] = await db.insert(dealMemoryEntries).values(body).returning();
+      res.json(entry);
+    } catch (error) {
+      console.error('Create deal memory entry error:', error);
+      res.status(500).json({ error: 'Failed to create memory entry' });
+    }
+  });
+
+  // ==================== DEAL NOTES API ====================
+
+  app.get('/api/admin/deals/:dealId/notes', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      if (isNaN(dealId)) return res.status(400).json({ error: 'Invalid deal ID' });
+
+      const notes = await db
+        .select({
+          id: dealNotes.id,
+          dealId: dealNotes.dealId,
+          userId: dealNotes.userId,
+          content: dealNotes.content,
+          noteType: dealNotes.noteType,
+          mentions: dealNotes.mentions,
+          isPinned: dealNotes.isPinned,
+          parentNoteId: dealNotes.parentNoteId,
+          createdAt: dealNotes.createdAt,
+          updatedAt: dealNotes.updatedAt,
+          authorId: users.id,
+          authorFullName: users.fullName,
+          authorEmail: users.email,
+          authorRole: users.role,
+        })
+        .from(dealNotes)
+        .leftJoin(users, eq(dealNotes.userId, users.id))
+        .where(eq(dealNotes.dealId, dealId))
+        .orderBy(asc(dealNotes.createdAt));
+
+      res.json({ notes });
+    } catch (error) {
+      console.error('Get deal notes error:', error);
+      res.status(500).json({ error: 'Failed to fetch notes' });
+    }
+  });
+
+  app.post('/api/admin/deals/:dealId/notes', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      if (isNaN(dealId)) return res.status(400).json({ error: 'Invalid deal ID' });
+
+      const { content, noteType, mentions, parentNoteId } = req.body;
+      if (!content || typeof content !== 'string') {
+        return res.status(400).json({ error: 'Content is required' });
+      }
+
+      const parsedMentions = mentions || [];
+      const mentionMatches = content.match(/@[\w\s]+/g);
+      if (mentionMatches && parsedMentions.length === 0) {
+        const allUsers = await db.select({ id: users.id, fullName: users.fullName, email: users.email }).from(users);
+        for (const match of mentionMatches) {
+          const name = match.slice(1).trim();
+          const matchedUser = allUsers.find(u =>
+            u.fullName?.toLowerCase() === name.toLowerCase() ||
+            u.email?.split('@')[0].toLowerCase() === name.toLowerCase()
+          );
+          if (matchedUser) {
+            parsedMentions.push({ userId: matchedUser.id, username: matchedUser.fullName || matchedUser.email });
+          }
+        }
+      }
+
+      const noteData = insertDealNoteSchema.parse({
+        dealId,
+        userId: req.user!.id,
+        content,
+        noteType: noteType || 'note',
+        mentions: parsedMentions.length > 0 ? parsedMentions : null,
+        isPinned: false,
+        parentNoteId: parentNoteId || null,
+      });
+
+      const [note] = await db.insert(dealNotes).values(noteData).returning();
+
+      const currentUser = await storage.getUserById(req.user!.id);
+      const userName = currentUser?.fullName || currentUser?.email || 'Unknown';
+
+      await db.insert(dealMemoryEntries).values({
+        dealId,
+        entryType: 'note_added',
+        title: `Note by ${userName}`,
+        description: content,
+        sourceType: 'admin',
+        sourceUserId: req.user!.id,
+      });
+
+      const noteWithUser = {
+        ...note,
+        authorId: currentUser?.id,
+        authorFullName: currentUser?.fullName,
+        authorEmail: currentUser?.email,
+        authorRole: currentUser?.role,
+      };
+
+      res.json(noteWithUser);
+    } catch (error) {
+      console.error('Create deal note error:', error);
+      res.status(500).json({ error: 'Failed to create note' });
+    }
+  });
+
+  app.put('/api/admin/deals/:dealId/notes/:noteId', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const noteId = parseInt(req.params.noteId);
+      if (isNaN(noteId)) return res.status(400).json({ error: 'Invalid note ID' });
+
+      const [existing] = await db.select().from(dealNotes).where(eq(dealNotes.id, noteId));
+      if (!existing) return res.status(404).json({ error: 'Note not found' });
+
+      if (existing.userId !== req.user!.id) {
+        return res.status(403).json({ error: 'Only the note author can update this note' });
+      }
+
+      const updates: Record<string, any> = { updatedAt: new Date() };
+      if (req.body.content !== undefined) updates.content = req.body.content;
+      if (req.body.isPinned !== undefined) updates.isPinned = req.body.isPinned;
+
+      const [updated] = await db.update(dealNotes).set(updates).where(eq(dealNotes.id, noteId)).returning();
+      res.json(updated);
+    } catch (error) {
+      console.error('Update deal note error:', error);
+      res.status(500).json({ error: 'Failed to update note' });
+    }
+  });
+
+  app.delete('/api/admin/deals/:dealId/notes/:noteId', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const noteId = parseInt(req.params.noteId);
+      if (isNaN(noteId)) return res.status(400).json({ error: 'Invalid note ID' });
+
+      const [existing] = await db.select().from(dealNotes).where(eq(dealNotes.id, noteId));
+      if (!existing) return res.status(404).json({ error: 'Note not found' });
+
+      const currentUser = await storage.getUserById(req.user!.id);
+      if (existing.userId !== req.user!.id && currentUser?.role !== 'super_admin') {
+        return res.status(403).json({ error: 'Only the note author or super admin can delete this note' });
+      }
+
+      await db.delete(dealNotes).where(eq(dealNotes.id, noteId));
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Delete deal note error:', error);
+      res.status(500).json({ error: 'Failed to delete note' });
+    }
+  });
+
+  // ==================== DEAL TEAM (for @mention autocomplete) ====================
+
+  app.get('/api/admin/deals/:dealId/team', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      if (isNaN(dealId)) return res.status(400).json({ error: 'Invalid deal ID' });
+
+      const memberMap = new Map<number, { id: number; fullName: string | null; email: string; role: string }>();
+
+      const processors = await db
+        .select({
+          id: users.id,
+          fullName: users.fullName,
+          email: users.email,
+          role: users.role,
+        })
+        .from(dealProcessors)
+        .innerJoin(users, eq(dealProcessors.userId, users.id))
+        .where(eq(dealProcessors.projectId, dealId));
+
+      for (const p of processors) {
+        memberMap.set(p.id, p);
+      }
+
+      const [project] = await db.select({ userId: projects.userId }).from(projects).where(eq(projects.id, dealId));
+      if (project?.userId) {
+        const [owner] = await db.select({ id: users.id, fullName: users.fullName, email: users.email, role: users.role }).from(users).where(eq(users.id, project.userId));
+        if (owner) memberMap.set(owner.id, owner);
+      }
+
+      const admins = await db
+        .select({ id: users.id, fullName: users.fullName, email: users.email, role: users.role })
+        .from(users)
+        .where(
+          and(
+            or(eq(users.role, 'admin'), eq(users.role, 'super_admin')),
+            eq(users.isActive, true)
+          )
+        );
+
+      for (const a of admins) {
+        memberMap.set(a.id, a);
+      }
+
+      res.json({ members: Array.from(memberMap.values()) });
+    } catch (error) {
+      console.error('Get deal team error:', error);
+      res.status(500).json({ error: 'Failed to fetch team members' });
+    }
+  });
+
+  // ==================== SEED DEAL MEMORY FROM EXISTING DATA ====================
+
+  app.post('/api/admin/deals/:dealId/memory/seed', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      if (isNaN(dealId)) return res.status(400).json({ error: 'Invalid deal ID' });
+
+      const existingEntries = await db.select({ id: dealMemoryEntries.id }).from(dealMemoryEntries).where(eq(dealMemoryEntries.dealId, dealId));
+      if (existingEntries.length > 0) {
+        return res.json({ message: 'Memory already seeded', count: existingEntries.length });
+      }
+
+      const entriesToInsert: any[] = [];
+
+      const docs = await db.select().from(dealDocuments).where(eq(dealDocuments.dealId, dealId));
+      for (const doc of docs) {
+        if (doc.status === 'uploaded' || doc.status === 'approved' || doc.status === 'reviewed') {
+          entriesToInsert.push({
+            dealId,
+            entryType: doc.status === 'approved' || doc.status === 'reviewed' ? 'document_approved' : 'document_received',
+            title: `${doc.documentName || doc.documentCategory || 'Document'} ${doc.status === 'approved' || doc.status === 'reviewed' ? 'approved' : 'received'}`,
+            description: doc.notes || undefined,
+            sourceType: 'system',
+            metadata: { documentId: doc.id, category: doc.documentCategory },
+            createdAt: doc.updatedAt || doc.createdAt || new Date(),
+          });
+        } else if (doc.status === 'rejected') {
+          entriesToInsert.push({
+            dealId,
+            entryType: 'document_rejected',
+            title: `${doc.documentName || doc.documentCategory || 'Document'} rejected`,
+            description: doc.notes || undefined,
+            sourceType: 'system',
+            metadata: { documentId: doc.id, category: doc.documentCategory },
+            createdAt: doc.updatedAt || doc.createdAt || new Date(),
+          });
+        }
+      }
+
+      const activities = await db.select().from(projectActivity)
+        .where(eq(projectActivity.projectId, dealId))
+        .orderBy(asc(projectActivity.createdAt));
+
+      for (const activity of activities) {
+        if (activity.activityType === 'stage_changed' || activity.activityDescription?.includes('stage')) {
+          entriesToInsert.push({
+            dealId,
+            entryType: 'stage_change',
+            title: activity.activityDescription || 'Stage changed',
+            sourceType: 'system',
+            sourceUserId: activity.userId,
+            createdAt: activity.createdAt || new Date(),
+          });
+        }
+      }
+
+      const digests = await db.select().from(digestHistory)
+        .where(eq(digestHistory.projectId, dealId))
+        .orderBy(asc(digestHistory.sentAt));
+
+      for (const digest of digests) {
+        entriesToInsert.push({
+          dealId,
+          entryType: 'digest_sent',
+          title: `Digest sent via ${digest.deliveryMethod}`,
+          description: `Sent to ${digest.recipientAddress} (${digest.documentsCount} docs, ${digest.updatesCount} updates)`,
+          sourceType: 'system',
+          metadata: { digestId: digest.id, deliveryMethod: digest.deliveryMethod },
+          createdAt: digest.sentAt || new Date(),
+        });
+      }
+
+      if (entriesToInsert.length > 0) {
+        await db.insert(dealMemoryEntries).values(entriesToInsert);
+      }
+
+      res.json({ message: 'Memory seeded successfully', count: entriesToInsert.length });
+    } catch (error) {
+      console.error('Seed deal memory error:', error);
+      res.status(500).json({ error: 'Failed to seed deal memory' });
     }
   });
 

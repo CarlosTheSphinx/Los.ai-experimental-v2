@@ -2517,3 +2517,38 @@ export const lenderTrainingProgress = pgTable("lender_training_progress", {
 export const insertLenderTrainingProgressSchema = createInsertSchema(lenderTrainingProgress).omit({ id: true, createdAt: true });
 export type LenderTrainingProgress = typeof lenderTrainingProgress.$inferSelect;
 export type InsertLenderTrainingProgress = z.infer<typeof insertLenderTrainingProgressSchema>;
+
+// Deal Memory Entries - auto-generated timeline of deal events for AI context
+export const dealMemoryEntries = pgTable("deal_memory_entries", {
+  id: serial("id").primaryKey(),
+  dealId: integer("deal_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  entryType: varchar("entry_type", { length: 50 }).notNull(), // document_received, document_rejected, document_approved, stage_change, digest_sent, digest_skipped, note_added, field_change
+  title: text("title").notNull(),
+  description: text("description"),
+  metadata: jsonb("metadata"), // flexible data per entry type
+  sourceType: varchar("source_type", { length: 30 }), // system, agent, admin
+  sourceUserId: integer("source_user_id").references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDealMemoryEntrySchema = createInsertSchema(dealMemoryEntries).omit({ id: true, createdAt: true });
+export type DealMemoryEntry = typeof dealMemoryEntries.$inferSelect;
+export type InsertDealMemoryEntry = z.infer<typeof insertDealMemoryEntrySchema>;
+
+// Deal Notes - admin notes, @mentions, AI instructions
+export const dealNotes = pgTable("deal_notes", {
+  id: serial("id").primaryKey(),
+  dealId: integer("deal_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  userId: integer("user_id").references(() => users.id, { onDelete: 'set null' }).notNull(),
+  content: text("content").notNull(),
+  noteType: varchar("note_type", { length: 30 }).default("note").notNull(), // note, ai_instruction, system
+  mentions: jsonb("mentions"), // array of { userId, username, position }
+  isPinned: boolean("is_pinned").default(false),
+  parentNoteId: integer("parent_note_id"), // for threaded replies
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDealNoteSchema = createInsertSchema(dealNotes).omit({ id: true, createdAt: true, updatedAt: true });
+export type DealNote = typeof dealNotes.$inferSelect;
+export type InsertDealNote = z.infer<typeof insertDealNoteSchema>;
