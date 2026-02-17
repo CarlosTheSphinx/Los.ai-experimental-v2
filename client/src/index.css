@@ -233,20 +233,12 @@
   background: hsl(210 35% 35%);
 }
 
-/* Thin scrollbar for collapsed sidebar so it doesn't cover icons */
+/* Hide scrollbar in collapsed sidebar but keep scroll functionality */
 [data-collapsible="icon"] [data-sidebar="content"] {
-  scrollbar-width: thin;
-  padding-right: 4px;
+  scrollbar-width: none;
 }
 [data-collapsible="icon"] [data-sidebar="content"]::-webkit-scrollbar {
-  width: 3px;
-}
-[data-collapsible="icon"] [data-sidebar="content"]::-webkit-scrollbar-track {
-  background: transparent;
-}
-[data-collapsible="icon"] [data-sidebar="content"]::-webkit-scrollbar-thumb {
-  background: hsl(210 20% 40% / 0.4);
-  border-radius: 2px;
+  display: none;
 }
 
 /* Sidebar hover-expand: overlay behavior.
