@@ -94,30 +94,29 @@ export function ProcessorAssistant({ isOpen: externalOpen, onOpenChange }: Proce
   // Fetch conversations
   const { data: conversations = [] } = useQuery({
     queryKey: ["assistant-conversations"],
-    queryFn: () =>
-      apiRequest("/api/assistant/conversations", {
-        method: "GET",
-      }),
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/assistant/conversations");
+      return res.json();
+    },
     enabled: isOpen,
   });
 
   // Fetch briefing
   const { data: briefing } = useQuery({
     queryKey: ["assistant-briefing"],
-    queryFn: () =>
-      apiRequest("/api/assistant/briefing", {
-        method: "GET",
-      }),
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/assistant/briefing");
+      return res.json();
+    },
     enabled: isOpen,
   });
 
   // Create conversation mutation
   const createConversationMutation = useMutation({
-    mutationFn: (conversationType: "daily_briefing" | "deal_review" | "general") =>
-      apiRequest("/api/assistant/conversations", {
-        method: "POST",
-        body: JSON.stringify({ conversationType }),
-      }),
+    mutationFn: async (conversationType: "daily_briefing" | "deal_review" | "general") => {
+      const res = await apiRequest("POST", "/api/assistant/conversations", { conversationType });
+      return res.json();
+    },
     onSuccess: (data: Conversation) => {
       setCurrentConversationId(data.id);
       setMessages([]);
@@ -129,15 +128,14 @@ export function ProcessorAssistant({ isOpen: externalOpen, onOpenChange }: Proce
 
   // Send message mutation
   const sendMessageMutation = useMutation({
-    mutationFn: (content: string) => {
+    mutationFn: async (content: string) => {
       if (!currentConversationId) throw new Error("No conversation");
-      return apiRequest(
+      const res = await apiRequest(
+        "POST",
         `/api/assistant/conversations/${currentConversationId}/messages`,
-        {
-          method: "POST",
-          body: JSON.stringify({ content, voiceInput: false }),
-        }
+        { content, voiceInput: false }
       );
+      return res.json();
     },
     onSuccess: (data: { response: string; actionsTaken: any[] }) => {
       setMessages((prev) => [
