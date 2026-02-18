@@ -734,7 +734,7 @@ function StepIntegrations({
   const savedFolderId = driveFolderId || googleStatus?.drive?.folderId || '';
 
   const isGoogleConnected = googleStatus?.connected || googleStatus?.gmail?.connected;
-  const isMicrosoftConnected = msStatus?.connected || msStatus?.outlook?.connected;
+  const isMicrosoftConnected = msStatus?.connected || msStatus?.outlook?.connected || msStatus?.oneDrive?.connected;
   const hasAnyConnection = isGoogleConnected || isMicrosoftConnected;
 
   // Microsoft logo SVG paths
