@@ -425,7 +425,7 @@ export default function QuotesUnified() {
                 </div>
                 )}
 
-                {!selectedProgramId && allActivePrograms.length > 0 && (
+                {!selectedProgramId && (
                   <div className="text-center py-12 text-muted-foreground">
                     <Calculator className="h-12 w-12 mx-auto mb-3 opacity-40" />
                     <p className="text-lg font-medium">Select a loan program above to get started</p>
