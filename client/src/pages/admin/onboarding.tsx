@@ -136,6 +136,7 @@ export default function AdminOnboarding() {
   });
 
   const emailConnected = googleStatusData?.gmail?.connected || false;
+  const resendConnected = integrationsData?.integrations?.resend?.connected || false;
   const hasPrograms = (programsData?.programs?.length || 0) > 0;
 
   const completeOnboardingMutation = useMutation({
@@ -273,7 +274,7 @@ export default function AdminOnboarding() {
                 <StepTeamSetup
                   teamData={teamData?.users || []}
                   isLoading={teamLoading}
-                  emailConnected={emailConnected}
+                  emailConnected={resendConnected}
                   onNext={handleNext}
                   onBack={handleBack}
                   onNavigate={setLocation}
@@ -501,9 +502,9 @@ function StepTeamSetup({
             <div className="flex items-start gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md" data-testid="warning-email-not-configured">
               <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Email not configured</p>
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Email delivery not configured</p>
                 <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
-                  Team invitations require an email service (Resend) to be connected first. Go back to the Integrations step to set it up, or invitations will be saved but emails won't be sent.
+                  Team invitations require the platform email service (Resend) to be configured by your system administrator. Invitations will be saved, but emails won't be sent until this is set up.
                 </p>
               </div>
             </div>
