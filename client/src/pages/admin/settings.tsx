@@ -954,37 +954,45 @@ export default function AdminSettings() {
                       </div>
                     </div>
                   )}
-                  <div className="mt-6 border rounded-lg p-4 space-y-3" data-testid="integration-pandadoc-webhook">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-5 w-5 text-primary" />
-                      <span className="font-medium">PandaDoc Webhook URL</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Set this URL in your PandaDoc account (Settings &rarr; Integrations &rarr; Webhooks) to automatically create loan deals when documents are signed.
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        readOnly
-                        value={`${window.location.origin}/api/webhooks/pandadoc`}
-                        className="font-mono text-xs"
-                        data-testid="input-pandadoc-webhook-url"
-                      />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          navigator.clipboard.writeText(`${window.location.origin}/api/webhooks/pandadoc`);
-                          toast({ title: "Copied", description: "Webhook URL copied to clipboard" });
-                        }}
-                        data-testid="button-copy-webhook-url"
-                      >
-                        Copy
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Subscribe to events: <strong>document.completed</strong>, <strong>document.viewed</strong>, <strong>document.sent</strong>
-                    </p>
-                  </div>
+                  {isSuperAdmin ? (
+                    <>
+                      <PandaDocApiKeySection />
+
+                      <div className="mt-4 border rounded-lg p-4 space-y-3" data-testid="integration-pandadoc-webhook">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-5 w-5 text-primary" />
+                          <span className="font-medium">PandaDoc Webhook URL</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Set this URL in your PandaDoc account (Settings &rarr; Integrations &rarr; Webhooks) to automatically create loan deals when documents are signed.
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            readOnly
+                            value={`${window.location.origin}/api/webhooks/pandadoc`}
+                            className="font-mono text-xs"
+                            data-testid="input-pandadoc-webhook-url"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              navigator.clipboard.writeText(`${window.location.origin}/api/webhooks/pandadoc`);
+                              toast({ title: "Copied", description: "Webhook URL copied to clipboard" });
+                            }}
+                            data-testid="button-copy-webhook-url"
+                          >
+                            Copy
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Subscribe to events: <strong>document.completed</strong>, <strong>document.viewed</strong>, <strong>document.sent</strong>
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <PandaDocStatusReadonly />
+                  )}
 
                   <div className="mt-4 flex justify-end">
                     <Button
@@ -1078,6 +1086,162 @@ export default function AdminSettings() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function PandaDocApiKeySection() {
+  const { toast } = useToast();
+  const [apiKey, setApiKey] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const { data: pandadocStatus, isLoading: statusLoading } = useQuery<{ connected: boolean; maskedKey?: string }>({
+    queryKey: ['/api/admin/pandadoc/status'],
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async (key: string) => {
+      const res = await apiRequest('PUT', '/api/admin/settings/pandadoc_api_key', {
+        value: key,
+        description: 'PandaDoc API Key for e-signatures',
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Saved", description: "PandaDoc API key saved successfully" });
+      setApiKey('');
+      setShowKey(false);
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/pandadoc/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/integrations/status'] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to save API key", variant: "destructive" });
+    },
+  });
+
+  const testMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest('GET', '/api/admin/pandadoc/test');
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setTestResult({
+        success: data.connected,
+        message: data.connected ? `Connected to ${data.workspace || 'PandaDoc'}` : (data.error || 'Connection failed'),
+      });
+    },
+    onError: () => {
+      setTestResult({ success: false, message: 'Failed to test connection' });
+    },
+  });
+
+  return (
+    <div className="mt-6 border rounded-lg p-4 space-y-3" data-testid="integration-pandadoc-api">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <FileText className="h-5 w-5 text-primary" />
+          <span className="font-medium">PandaDoc API Key</span>
+        </div>
+        {statusLoading ? (
+          <Skeleton className="h-5 w-24" />
+        ) : pandadocStatus?.connected ? (
+          <Badge variant="default">
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Connected
+          </Badge>
+        ) : (
+          <Badge variant="secondary">
+            <XCircle className="h-3 w-3 mr-1" />
+            Not Connected
+          </Badge>
+        )}
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Connect your PandaDoc account to enable e-signatures on term sheets, commitment letters, and closing documents.
+        Get your API key from PandaDoc &rarr; Settings &rarr; Integrations &rarr; API.
+      </p>
+      {pandadocStatus?.maskedKey && (
+        <p className="text-xs text-muted-foreground">
+          Current key: <span className="font-mono">{pandadocStatus.maskedKey}</span>
+        </p>
+      )}
+      <div className="flex items-center gap-2">
+        <Input
+          type={showKey ? "text" : "password"}
+          placeholder="Enter your PandaDoc API key..."
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          className="font-mono text-xs"
+          data-testid="input-pandadoc-api-key"
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setShowKey(!showKey)}
+          data-testid="button-toggle-key-visibility"
+        >
+          {showKey ? "Hide" : "Show"}
+        </Button>
+        <Button
+          size="sm"
+          onClick={() => saveMutation.mutate(apiKey)}
+          disabled={!apiKey.trim() || saveMutation.isPending}
+          data-testid="button-save-pandadoc-key"
+        >
+          {saveMutation.isPending ? "Saving..." : "Save"}
+        </Button>
+      </div>
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => { setTestResult(null); testMutation.mutate(); }}
+          disabled={testMutation.isPending}
+          data-testid="button-test-pandadoc"
+        >
+          {testMutation.isPending ? "Testing..." : "Test Connection"}
+        </Button>
+        {testResult && (
+          <span className={`text-xs ${testResult.success ? 'text-green-600' : 'text-destructive'}`}>
+            {testResult.message}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PandaDocStatusReadonly() {
+  const { data: pandadocStatus, isLoading } = useQuery<{ connected: boolean }>({
+    queryKey: ['/api/admin/pandadoc/status'],
+  });
+
+  return (
+    <div className="mt-6 border rounded-lg p-4 space-y-3" data-testid="integration-pandadoc-readonly">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <FileText className="h-5 w-5 text-primary" />
+          <span className="font-medium">PandaDoc E-Signatures</span>
+        </div>
+        {isLoading ? (
+          <Skeleton className="h-5 w-24" />
+        ) : pandadocStatus?.connected ? (
+          <Badge variant="default">
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Connected
+          </Badge>
+        ) : (
+          <Badge variant="secondary">
+            <XCircle className="h-3 w-3 mr-1" />
+            Not Connected
+          </Badge>
+        )}
+      </div>
+      <p className="text-sm text-muted-foreground">
+        E-signature service for term sheets, commitment letters, and closing documents.
+        {!pandadocStatus?.connected && " Contact your system administrator to configure this integration."}
+      </p>
     </div>
   );
 }

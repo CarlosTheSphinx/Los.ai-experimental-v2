@@ -4,6 +4,7 @@
  */
 
 import { useState, useRef, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -12,12 +13,10 @@ import {
   Send,
   Mic,
   Square,
-  ChevronUp,
   Loader,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useVoiceRecorder } from "@/replit_integrations/audio/useVoiceRecorder";
@@ -76,6 +75,7 @@ interface ProcessorAssistantProps {
 }
 
 export function ProcessorAssistant({ isOpen: externalOpen, onOpenChange }: ProcessorAssistantProps = {}) {
+  const [, setLocation] = useLocation();
   const [internalOpen, setInternalOpen] = useState(false);
   const isOpen = externalOpen !== undefined ? externalOpen : internalOpen;
   const setIsOpen = (val: boolean) => {
@@ -94,30 +94,29 @@ export function ProcessorAssistant({ isOpen: externalOpen, onOpenChange }: Proce
   // Fetch conversations
   const { data: conversations = [] } = useQuery({
     queryKey: ["assistant-conversations"],
-    queryFn: () =>
-      apiRequest("/api/assistant/conversations", {
-        method: "GET",
-      }),
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/assistant/conversations");
+      return res.json();
+    },
     enabled: isOpen,
   });
 
   // Fetch briefing
   const { data: briefing } = useQuery({
     queryKey: ["assistant-briefing"],
-    queryFn: () =>
-      apiRequest("/api/assistant/briefing", {
-        method: "GET",
-      }),
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/assistant/briefing");
+      return res.json();
+    },
     enabled: isOpen,
   });
 
   // Create conversation mutation
   const createConversationMutation = useMutation({
-    mutationFn: (conversationType: "daily_briefing" | "deal_review" | "general") =>
-      apiRequest("/api/assistant/conversations", {
-        method: "POST",
-        body: JSON.stringify({ conversationType }),
-      }),
+    mutationFn: async (conversationType: "daily_briefing" | "deal_review" | "general") => {
+      const res = await apiRequest("POST", "/api/assistant/conversations", { conversationType });
+      return res.json();
+    },
     onSuccess: (data: Conversation) => {
       setCurrentConversationId(data.id);
       setMessages([]);
@@ -129,15 +128,14 @@ export function ProcessorAssistant({ isOpen: externalOpen, onOpenChange }: Proce
 
   // Send message mutation
   const sendMessageMutation = useMutation({
-    mutationFn: (content: string) => {
+    mutationFn: async (content: string) => {
       if (!currentConversationId) throw new Error("No conversation");
-      return apiRequest(
+      const res = await apiRequest(
+        "POST",
         `/api/assistant/conversations/${currentConversationId}/messages`,
-        {
-          method: "POST",
-          body: JSON.stringify({ content, voiceInput: false }),
-        }
+        { content, voiceInput: false }
       );
+      return res.json();
     },
     onSuccess: (data: { response: string; actionsTaken: any[] }) => {
       setMessages((prev) => [
@@ -258,21 +256,34 @@ export function ProcessorAssistant({ isOpen: externalOpen, onOpenChange }: Proce
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  // Start new briefing conversation if none exists
-  const handleStartBriefing = () => {
-    if (conversations.length === 0) {
-      createConversationMutation.mutate("daily_briefing");
-    } else {
-      const briefingConv = conversations.find(
-        (c: Conversation) => c.conversationType === "daily_briefing"
-      );
-      if (briefingConv) {
-        setCurrentConversationId(briefingConv.id);
-        setMessages(briefingConv.messages || []);
+  const hasInitialized = useRef(false);
+
+  useEffect(() => {
+    if (isOpen && !currentConversationId && !createConversationMutation.isPending && !hasInitialized.current) {
+      hasInitialized.current = true;
+      if (conversations.length > 0) {
+        const latest = conversations[conversations.length - 1] as Conversation;
+        setCurrentConversationId(latest.id);
+        setMessages(latest.messages || []);
       } else {
-        createConversationMutation.mutate("daily_briefing");
+        createConversationMutation.mutate("general");
       }
     }
+    if (!isOpen) {
+      hasInitialized.current = false;
+    }
+  }, [isOpen, conversations]);
+
+  const handleSuggestionClick = (text: string) => {
+    setInputValue(text);
+    const userMessage: Message = {
+      id: Date.now(),
+      role: "user",
+      content: text,
+      createdAt: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, userMessage]);
+    sendMessageMutation.mutate(text);
   };
 
   const currentConversation = conversations.find(
@@ -332,90 +343,39 @@ export function ProcessorAssistant({ isOpen: externalOpen, onOpenChange }: Proce
               </Button>
             </div>
 
-            {/* Main Content Area */}
-            {!currentConversationId ? (
-              // Initial state: show briefing
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {briefing ? (
-                  <>
-                    <div className="space-y-3">
-                      <h4 className="font-semibold text-sm">Daily Briefing</h4>
-                      <div className="bg-blue-50 border border-blue-200 rounded p-3">
-                        <p className="text-sm text-slate-700 line-clamp-4">
-                          {briefing.summary}
-                        </p>
-                      </div>
-
-                      {briefing.deals.length > 0 && (
-                        <div className="space-y-2">
-                          <h5 className="text-xs font-semibold text-slate-600 uppercase">
-                            Active Deals ({briefing.deals.length})
-                          </h5>
-                          {briefing.deals.map((deal) => (
-                            <div
-                              key={deal.dealId}
-                              className="border rounded p-2 text-xs"
-                            >
-                              <div className="flex justify-between items-start">
-                                <div>
-                                  <p className="font-semibold">
-                                    #{deal.dealId}: {deal.dealName}
-                                  </p>
-                                  <p className="text-slate-600">
-                                    {deal.borrowerName} • {deal.stage}
-                                  </p>
-                                </div>
-                                <Badge variant="outline">
-                                  {deal.progress}%
-                                </Badge>
-                              </div>
-                              <div className="flex gap-2 mt-2 text-slate-600">
-                                {deal.pendingDocuments.count > 0 && (
-                                  <span>
-                                    📄 {deal.pendingDocuments.count} docs
-                                  </span>
-                                )}
-                                {deal.overdueTasks.count > 0 && (
-                                  <span>
-                                    ⚠️ {deal.overdueTasks.count} overdue
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <Button
-                        onClick={handleStartBriefing}
-                        className="w-full"
-                        size="sm"
-                      >
-                        <ChevronUp className="w-4 h-4 mr-2" />
-                        Start Chat
-                      </Button>
+            {/* Main Content Area - Always Chat */}
+            <>
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {messages.length === 0 && (
+                  <div className="space-y-4 py-4">
+                    <div className="bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg rounded-bl-none max-w-xs text-sm text-slate-900 dark:text-slate-100">
+                      <p>Hi there! I'm your AI assistant. What would you like me to help you with?</p>
                     </div>
-                  </>
-                ) : (
-                  <div className="flex items-center justify-center h-full">
-                    <Loader className="w-6 h-6 text-slate-400 animate-spin" />
+                    <div className="space-y-2 pl-1">
+                      <button
+                        data-testid="suggestion-briefing"
+                        onClick={() => handleSuggestionClick("Give me a daily briefing on all my active deals")}
+                        className="w-full text-left text-sm px-3 py-2 rounded-md border border-slate-200 dark:border-slate-700 hover-elevate transition-colors"
+                      >
+                        Give me a daily briefing on my deals
+                      </button>
+                      <button
+                        data-testid="suggestion-draft"
+                        onClick={() => handleSuggestionClick("Draft a borrower update email for my most recent deal")}
+                        className="w-full text-left text-sm px-3 py-2 rounded-md border border-slate-200 dark:border-slate-700 hover-elevate transition-colors"
+                      >
+                        Draft a borrower update email
+                      </button>
+                      <button
+                        data-testid="suggestion-review"
+                        onClick={() => handleSuggestionClick("Review pending documents and tasks across all deals")}
+                        className="w-full text-left text-sm px-3 py-2 rounded-md border border-slate-200 dark:border-slate-700 hover-elevate transition-colors"
+                      >
+                        Review pending documents and tasks
+                      </button>
+                    </div>
                   </div>
                 )}
-              </div>
-            ) : (
-              // Chat state: show messages
-              <>
-                <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                  {messages.length === 0 && briefing && (
-                    <div className="text-center py-8">
-                      <p className="text-sm text-slate-600">
-                        {currentConversation?.title}
-                      </p>
-                      <p className="text-xs text-slate-500 mt-2">
-                        How can I help?
-                      </p>
-                    </div>
-                  )}
 
                   {messages.map((message) => (
                     <div
@@ -445,17 +405,42 @@ export function ProcessorAssistant({ isOpen: externalOpen, onOpenChange }: Proce
                             <div className="mt-2 space-y-1 border-t border-current opacity-80 pt-2">
                               {message.actionsTaken.map(
                                 (action, idx) => (
-                                  <div
-                                    key={idx}
-                                    className={cn(
-                                      "text-xs",
-                                      action.status === "success"
-                                        ? "text-green-300"
-                                        : "text-red-300"
-                                    )}
-                                  >
-                                    {action.status === "success" ? "✓" : "✗"}{" "}
-                                    {action.type.replace(/_/g, " ")}
+                                  <div key={idx}>
+                                    <div
+                                      className={cn(
+                                        "text-xs",
+                                        action.status === "success"
+                                          ? "text-green-300"
+                                          : "text-red-300"
+                                      )}
+                                    >
+                                      {action.status === "success" ? "✓" : "✗"}{" "}
+                                      {action.type.replace(/_/g, " ")}
+                                      {action.details?.subject && (
+                                        <span className="opacity-70 ml-1">— {action.details.subject}</span>
+                                      )}
+                                    </div>
+                                    {/* Approve/Edit buttons for draft communications */}
+                                    {(action.type === "draft_email" || action.type === "draft_sms" || action.type === "send_communication") &&
+                                      action.status === "success" &&
+                                      action.details?.communicationId && (
+                                        <div className="flex gap-2 mt-1 ml-3">
+                                          <button
+                                            onClick={() => setLocation(`/admin/deals/${action.details.dealId}?tab=communications`)}
+                                            className="text-xs bg-green-600 hover:bg-green-700 text-white px-2 py-0.5 rounded"
+                                          >
+                                            Review & Approve
+                                          </button>
+                                        </div>
+                                      )}
+                                    {/* Batch operation summary */}
+                                    {action.type.startsWith("batch_") &&
+                                      action.status === "success" &&
+                                      action.details?.total != null && (
+                                        <div className="text-xs opacity-70 ml-3">
+                                          {action.details.successful || action.details.created || action.details.updated || 0}/{action.details.total} completed
+                                        </div>
+                                      )}
                                   </div>
                                 )
                               )}
@@ -558,7 +543,6 @@ export function ProcessorAssistant({ isOpen: externalOpen, onOpenChange }: Proce
                   </div>
                 </div>
               </>
-            )}
           </motion.div>
         )}
       </AnimatePresence>

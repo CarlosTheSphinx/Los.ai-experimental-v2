@@ -4255,6 +4255,7 @@ export async function registerRoutes(
       const inviteLink = `${baseUrl}/accept-invite/${inviteToken}`;
       
       const inviterName = req.user!.fullName || req.user!.email;
+      const inviterEmail = req.user!.email;
       
       let companyName = 'Lendry.AI';
       try {
@@ -4271,7 +4272,8 @@ export async function registerRoutes(
         inviterName,
         companyName,
         assignedRole,
-        inviteLink
+        inviteLink,
+        inviterEmail
       );
       
       res.json({ 
@@ -4392,6 +4394,7 @@ export async function registerRoutes(
       const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
       const inviteLink = `${baseUrl}/accept-invite/${inviteToken}`;
       const inviterName = req.user!.fullName || req.user!.email;
+      const inviterEmail = req.user!.email;
       
       let companyName = 'Lendry.AI';
       try {
@@ -4408,7 +4411,8 @@ export async function registerRoutes(
         inviterName,
         companyName,
         user.role,
-        inviteLink
+        inviteLink,
+        inviterEmail
       );
       
       res.json({ success: true, emailSent: emailResult.success });
@@ -4476,6 +4480,102 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Admin update user error:', error);
       res.status(500).json({ error: 'Failed to update user' });
+    }
+  });
+
+  // Admin - Remove team member
+  app.delete('/api/admin/users/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = parseInt(req.params.id);
+
+      // Prevent removing yourself
+      if (userId === req.user!.id) {
+        return res.status(400).json({ error: 'You cannot remove yourself' });
+      }
+
+      // Prevent removing super_admin users (only super admins manage super admins)
+      const targetUser = await storage.getUserById(userId);
+      if (!targetUser) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      if (targetUser.role === 'super_admin') {
+        return res.status(403).json({ error: 'Cannot remove a super admin user' });
+      }
+
+      const relatedTables = [
+        { table: 'user_onboarding_progress', col: 'user_id' },
+        { table: 'lender_training_progress', col: 'user_id' },
+        { table: 'notifications', col: 'user_id' },
+        { table: 'message_reads', col: 'user_id' },
+        { table: 'ai_assistant_conversations', col: 'user_id' },
+      ];
+      for (const { table, col } of relatedTables) {
+        await db.execute(sql.raw(`DELETE FROM "${table}" WHERE "${col}" = ${userId}`));
+      }
+
+      const nullableTables = [
+        { table: 'admin_tasks', col: 'assigned_to' },
+        { table: 'admin_tasks', col: 'completed_by' },
+        { table: 'deal_documents', col: 'reviewed_by' },
+        { table: 'deal_documents', col: 'uploaded_by' },
+        { table: 'deal_document_files', col: 'uploaded_by' },
+        { table: 'deal_tasks', col: 'assigned_to' },
+        { table: 'deal_tasks', col: 'completed_by' },
+        { table: 'deal_tasks', col: 'created_by' },
+        { table: 'project_documents', col: 'reviewed_by' },
+        { table: 'project_documents', col: 'uploaded_by' },
+        { table: 'project_activity', col: 'user_id' },
+        { table: 'commercial_submissions', col: 'assigned_to' },
+        { table: 'deal_memory_entries', col: 'source_user_id' },
+        { table: 'deal_processors', col: 'user_id' },
+        { table: 'deal_processors', col: 'assigned_by' },
+        { table: 'agent_communications', col: 'approved_by' },
+        { table: 'agent_pipeline_runs', col: 'triggered_by' },
+        { table: 'agent_runs', col: 'triggered_by' },
+        { table: 'document_review_results', col: 'reviewed_by' },
+        { table: 'email_thread_deal_links', col: 'linked_by' },
+        { table: 'esign_envelopes', col: 'created_by' },
+        { table: 'loan_digest_configs', col: 'created_by' },
+        { table: 'loan_updates', col: 'performed_by' },
+        { table: 'scheduled_digest_drafts', col: 'approved_by' },
+        { table: 'submission_notes', col: 'admin_user_id' },
+        { table: 'rule_proposals', col: 'reviewed_by' },
+        { table: 'processor_daily_queue', col: 'approved_by' },
+        { table: 'processor_daily_queue', col: 'processor_id' },
+      ];
+      for (const { table, col } of nullableTables) {
+        try {
+          await db.execute(sql.raw(`UPDATE "${table}" SET "${col}" = NULL WHERE "${col}" = ${userId}`));
+        } catch (_) {}
+      }
+
+      const ownedDeleteTables = [
+        'saved_quotes',
+        'deal_notes',
+        'messages',
+        'email_accounts',
+        'loan_digest_recipients',
+        'broker_contacts',
+        'broker_outreach_messages',
+        'team_permissions',
+      ];
+      for (const table of ownedDeleteTables) {
+        try {
+          await db.execute(sql.raw(`DELETE FROM "${table}" WHERE "user_id" = ${userId}`));
+        } catch (_) {}
+      }
+
+      try {
+        await db.execute(sql.raw(`DELETE FROM "message_threads" WHERE "user_id" = ${userId}`));
+        await db.execute(sql.raw(`DELETE FROM "message_threads" WHERE "created_by" = ${userId}`));
+      } catch (_) {}
+
+      await db.delete(users).where(eq(users.id, userId));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Admin remove user error:', error);
+      res.status(500).json({ error: 'Failed to remove user' });
     }
   });
 
@@ -5230,6 +5330,10 @@ export async function registerRoutes(
     try {
       const { key } = req.params;
       const { value, description } = req.body;
+
+      if (key === 'pandadoc_api_key' && req.user?.role !== 'super_admin') {
+        return res.status(403).json({ error: 'Only super admins can manage PandaDoc API keys' });
+      }
       
       if (!value) {
         return res.status(400).json({ error: 'Value is required' });
@@ -5518,6 +5622,20 @@ export async function registerRoutes(
         connected: !!process.env.GEOAPIFY_API_KEY,
         status: process.env.GEOAPIFY_API_KEY ? 'Connected' : 'Not configured',
         details: process.env.GEOAPIFY_API_KEY ? { configured: true } : undefined
+      };
+
+      // Check PandaDoc integration (env var or system setting)
+      let pandadocKey = process.env.PANDADOC_API_KEY;
+      if (!pandadocKey) {
+        try {
+          const setting = await storage.getSettingByKey('pandadoc_api_key');
+          pandadocKey = setting?.settingValue || '';
+        } catch {}
+      }
+      integrations.pandadoc = {
+        connected: !!pandadocKey,
+        status: pandadocKey ? 'Connected' : 'Not configured',
+        details: pandadocKey ? { configured: true } : undefined
       };
       
       res.json({ integrations });
@@ -6683,9 +6801,9 @@ export async function registerRoutes(
               const borrowerName = project.borrowerName || borrowerUser?.fullName || 'Borrower';
               if (emailTo) {
                 const { getResendClient } = await import('./email');
-                const { client } = await getResendClient();
+                const { client, fromEmail } = await getResendClient();
                 await client.emails.send({
-                  from: 'Lendry.AI <onboarding@resend.dev>',
+                  from: fromEmail || 'Lendry.AI <info@lendry.ai>',
                   to: emailTo,
                   subject: `Action Required: Document Rejected - ${updated.documentName}`,
                   html: `
@@ -7118,9 +7236,9 @@ export async function registerRoutes(
                 const borrowerName = project.borrowerName || borrowerUser?.fullName || 'Borrower';
                 if (emailTo) {
                   const { getResendClient } = await import('./email');
-                  const { client } = await getResendClient();
+                  const { client, fromEmail } = await getResendClient();
                   await client.emails.send({
-                    from: 'Lendry.AI <onboarding@resend.dev>',
+                    from: fromEmail || 'Lendry.AI <info@lendry.ai>',
                     to: emailTo,
                     subject: `Action Required: Document Rejected - ${doc.documentName}`,
                     html: `
@@ -13621,6 +13739,62 @@ If the user provides specific criteria, extract as many rules as you can from th
     } catch (error: any) {
       console.error('PandaDoc get template details error:', error);
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // PandaDoc API key status - check if configured (super admin sees full details, regular admin sees connected/not)
+  app.get('/api/admin/pandadoc/status', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      // Check env var first, then system setting
+      let apiKey = process.env.PANDADOC_API_KEY;
+      if (!apiKey) {
+        const setting = await storage.getSettingByKey('pandadoc_api_key');
+        apiKey = setting?.settingValue || '';
+      }
+      const isSuperAdmin = req.user?.role === 'super_admin';
+      if (apiKey) {
+        const result: any = { connected: true };
+        if (isSuperAdmin) {
+          result.maskedKey = apiKey.length > 8
+            ? apiKey.substring(0, 4) + '****' + apiKey.substring(apiKey.length - 4)
+            : '****';
+        }
+        res.json(result);
+      } else {
+        res.json({ connected: false });
+      }
+    } catch (error: any) {
+      res.status(500).json({ connected: false, error: error.message });
+    }
+  });
+
+  // PandaDoc API key test - verify the key works (super admin only)
+  app.get('/api/admin/pandadoc/test', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      let apiKey = process.env.PANDADOC_API_KEY;
+      if (!apiKey) {
+        const setting = await storage.getSettingByKey('pandadoc_api_key');
+        apiKey = setting?.settingValue || '';
+      }
+      if (!apiKey) {
+        return res.json({ connected: false, error: 'No API key configured' });
+      }
+      // Test the key by fetching current member info
+      const response = await fetch('https://api.pandadoc.com/public/v1/members/current/', {
+        headers: { 'Authorization': `API-Key ${apiKey}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        res.json({
+          connected: true,
+          workspace: data.workspace_name || data.company_name || 'PandaDoc',
+          email: data.email,
+        });
+      } else {
+        res.json({ connected: false, error: `API returned ${response.status}: ${response.statusText}` });
+      }
+    } catch (error: any) {
+      res.json({ connected: false, error: error.message });
     }
   });
 

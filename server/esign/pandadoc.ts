@@ -1,9 +1,22 @@
 import { db } from "../db";
-import { esignEnvelopes, esignEvents, savedQuotes, documentTemplates, templateFields } from "@shared/schema";
+import { esignEnvelopes, esignEvents, savedQuotes, documentTemplates, templateFields, systemSettings } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 function getApiBase(): string {
   return process.env.PANDADOC_API_BASE_URL || "https://api.pandadoc.com/public/v1";
+}
+
+let _cachedDbApiKey: string | null = null;
+let _cacheExpiry = 0;
+
+async function getApiKeyFromDb(): Promise<string | null> {
+  if (_cachedDbApiKey && Date.now() < _cacheExpiry) return _cachedDbApiKey;
+  try {
+    const [setting] = await db.select().from(systemSettings).where(eq(systemSettings.settingKey, 'pandadoc_api_key'));
+    _cachedDbApiKey = setting?.settingValue || null;
+    _cacheExpiry = Date.now() + 60_000;
+    return _cachedDbApiKey;
+  } catch { return null; }
 }
 
 interface PandaDocRecipient {
@@ -36,23 +49,35 @@ interface PandaDocDocument {
   recipients?: any[];
 }
 
-function getApiKey(): string {
+function getApiKeySync(): string {
   const apiKey = process.env.PANDADOC_API_KEY;
   if (!apiKey) {
-    throw new Error("PANDADOC_API_KEY environment variable is not set");
+    if (_cachedDbApiKey) return _cachedDbApiKey;
+    throw new Error("PANDADOC_API_KEY environment variable is not set. Configure it in Settings > Integrations.");
   }
-  // Handle both formats: raw key or "API-Key {key}"
   if (apiKey.startsWith("API-Key ")) {
     return apiKey.replace("API-Key ", "");
   }
   return apiKey;
 }
 
+async function getApiKey(): Promise<string> {
+  const envKey = process.env.PANDADOC_API_KEY;
+  if (envKey) {
+    return envKey.startsWith("API-Key ") ? envKey.replace("API-Key ", "") : envKey;
+  }
+  const dbKey = await getApiKeyFromDb();
+  if (dbKey) {
+    return dbKey.startsWith("API-Key ") ? dbKey.replace("API-Key ", "") : dbKey;
+  }
+  throw new Error("PandaDoc API key is not configured. Set it in Settings > Integrations.");
+}
+
 async function pandaDocRequest(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<Response> {
-  const apiKey = getApiKey();
+  const apiKey = await getApiKey();
   const apiBase = getApiBase();
   const fullUrl = `${apiBase}${endpoint}`;
   
@@ -205,7 +230,7 @@ export async function getDocumentStatus(documentId: string): Promise<PandaDocDoc
 }
 
 export async function downloadSignedPdf(documentId: string): Promise<ArrayBuffer> {
-  const apiKey = getApiKey();
+  const apiKey = await getApiKey();
   const apiBase = getApiBase();
   const fullUrl = `${apiBase}/documents/${documentId}/download`;
   
@@ -321,7 +346,7 @@ export async function createDocumentFromPdf(
   }
 ): Promise<PandaDocDocument> {
   const apiBase = getApiBase();
-  const apiKey = getApiKey();
+  const apiKey = await getApiKey();
 
   const formData = new FormData();
   const blob = new Blob([pdfBuffer], { type: "application/pdf" });
@@ -601,7 +626,7 @@ export async function getDebugInfo(): Promise<{
   isSandbox: boolean;
 }> {
   const apiBase = getApiBase();
-  const apiKey = getApiKey();
+  const apiKey = await getApiKey();
   const apiKeyPrefix = apiKey.substring(0, 8) + "..." + apiKey.substring(apiKey.length - 4);
   const isSandbox = apiBase.includes("sandbox") || apiKey.toLowerCase().includes("sandbox");
 
@@ -652,7 +677,7 @@ export async function runCapabilityTest(testEmail: string): Promise<{
     }));
 
     const apiBase = getApiBase();
-    const apiKey = getApiKey();
+    const apiKey = await getApiKey();
 
     const createRes = await fetch(`${apiBase}/documents`, {
       method: "POST",
