@@ -18,6 +18,7 @@ The application is built on a modern web stack using React 18 with TypeScript fo
     -   **Borrower Portal**: Token-based public portal for borrowers to view loan progress, manage documents, and see activity timelines.
     -   **Borrower Quote Flow**: Allows borrowers to generate and accept loan quotes, which automatically create deals in the admin dashboard.
     -   **Admin Back Office**: Provides dashboards, user management, deal oversight, system settings, partner management, and loan program configuration with role-based access control.
+    -   **Admin Onboarding / Getting Started**: 5-step guided setup wizard for new lenders covering: (1) Company Profile (name, support email, sender name via tenant_branding config), (2) Team Setup (view/add team members with roles), (3) Integrations (Gmail, Google Drive folder ID, external service status grid), (4) Loan Programs walkthrough, (5) Communications & AI configuration. New lenders are redirected here until they complete setup. Also includes Training Materials and User Status management tabs.
     -   **Commercial Deal Submission Module**: An independent system for commercial loan submissions, featuring:
         -   **Pre-Screener**: AI-powered quick deal check.
         -   **Multi-Step Submission Form**: Comprehensive data collection for commercial deals.
