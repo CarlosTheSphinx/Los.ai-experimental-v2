@@ -250,7 +250,7 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
                 <span className="text-lg font-bold text-primary">AI</span>
               </div>
               <span className="text-[10px] text-muted-foreground font-medium">
-                Intelligent Lending Platform
+                Lending Automation System
               </span>
             </div>
             <div className="hidden group-data-[collapsible=icon]:flex w-full items-center justify-center">
