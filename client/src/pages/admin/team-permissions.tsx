@@ -19,7 +19,7 @@ interface PermissionState {
 
 function TeamPermissionsPage() {
   const { toast } = useToast();
-  const [selectedRole, setSelectedRole] = useState<string>("staff");
+  const [selectedRole, setSelectedRole] = useState<string>("processor");
 
   const { data, isLoading, refetch } = useQuery<PermissionState>({
     queryKey: ["team-permissions"],
@@ -63,7 +63,7 @@ function TeamPermissionsPage() {
   };
 
   const isEditableRole = (role: string) => {
-    return ["staff", "processor"].includes(role);
+    return ["processor"].includes(role);
   };
 
   if (isLoading) {
@@ -89,10 +89,8 @@ function TeamPermissionsPage() {
   }
 
   const roleOptions = [
-    { value: "staff", label: "Staff" },
     { value: "processor", label: "Processor" },
     { value: "admin", label: "Admin" },
-    { value: "super_admin", label: "Super Admin" },
   ];
 
   return (
@@ -103,7 +101,7 @@ function TeamPermissionsPage() {
           Team Permissions
         </h1>
         <p className="text-muted-foreground mt-2">
-          Configure role-based permissions for staff, processors, and admin users
+          Configure role-based permissions for processors and admin users
         </p>
       </div>
 
@@ -111,12 +109,12 @@ function TeamPermissionsPage() {
         <CardHeader>
           <CardTitle className="text-lg">Permission Management</CardTitle>
           <CardDescription>
-            Select a role to view and edit its permissions. Admin and Super Admin roles have all permissions and cannot be modified.
+            Select a role to view and edit its permissions. Admin role has all permissions and cannot be modified.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="staff" value={selectedRole} onValueChange={setSelectedRole}>
-            <TabsList className="grid w-full grid-cols-4">
+          <Tabs defaultValue="processor" value={selectedRole} onValueChange={setSelectedRole}>
+            <TabsList className="grid w-full grid-cols-2">
               {roleOptions.map((role) => (
                 <TabsTrigger key={role.value} value={role.value}>
                   <div className="flex items-center gap-2">
@@ -136,9 +134,7 @@ function TeamPermissionsPage() {
                 {!isEditableRole(role.value) && (
                   <div className="bg-muted p-4 rounded-lg border border-border">
                     <p className="text-sm text-muted-foreground">
-                      {role.value === "admin"
-                        ? "Admin users have full access to all permissions (configurable via super admin)"
-                        : "Super Admin users have unrestricted access to all features"}
+                      Admin users have full access to all permissions.
                     </p>
                   </div>
                 )}
@@ -220,20 +216,11 @@ function TeamPermissionsPage() {
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground space-y-2">
           <p>
-            <span className="font-semibold">Processor:</span> Can view quotes and
-            create new quotes. Limited access for processing workflows.
-          </p>
-          <p>
-            <span className="font-semibold">Staff:</span> Can view most resources
-            and send messages. Manage permissions to grant additional access.
+            <span className="font-semibold">Processor:</span> Can be assigned to specific deals and tasks. Permissions are customizable above.
           </p>
           <p>
             <span className="font-semibold">Admin:</span> Has full access to all
-            permissions.
-          </p>
-          <p>
-            <span className="font-semibold">Super Admin:</span> Unrestricted access.
-            Only super admins can manage team permissions.
+            permissions and settings.
           </p>
         </CardContent>
       </Card>
