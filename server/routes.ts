@@ -5251,6 +5251,17 @@ export async function registerRoutes(
     }
   });
 
+  app.delete('/api/admin/settings/:key', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { key } = req.params;
+      await storage.deleteSetting(key);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Admin delete setting error:', error);
+      res.status(500).json({ error: 'Failed to delete setting' });
+    }
+  });
+
   // Admin - Deal Stages endpoints
   app.get('/api/admin/deal-stages', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {

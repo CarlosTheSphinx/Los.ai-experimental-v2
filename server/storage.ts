@@ -685,6 +685,10 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async deleteSetting(key: string): Promise<void> {
+    await db.delete(systemSettings).where(eq(systemSettings.settingKey, key));
+  }
+
   // Admin methods - Get all users (admin view)
   async getAllUsers(filters?: { role?: string; search?: string }): Promise<User[]> {
     let query = db.select().from(users);
