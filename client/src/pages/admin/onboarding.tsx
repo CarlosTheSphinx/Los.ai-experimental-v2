@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useLocation } from 'wouter';
 import { apiRequest } from '@/lib/queryClient';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,20 +13,35 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { 
-  Plus, 
-  Pencil, 
-  Trash2, 
-  FileText, 
-  Video, 
-  ExternalLink, 
-  Shield, 
-  Users, 
+import { useAuth } from '@/hooks/use-auth';
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  FileText,
+  Video,
+  ExternalLink,
+  Shield,
+  Users,
   Loader2,
   CheckCircle2,
   Clock,
-  BookOpen
+  BookOpen,
+  Mail,
+  Layers,
+  MessageSquare,
+  ChevronRight,
+  ChevronLeft,
+  Settings,
+  ListChecks,
+  Workflow,
+  Bot,
+  Send,
+  Bell,
+  ArrowRight,
+  Check,
 } from 'lucide-react';
 
 interface OnboardingDocument {
@@ -61,7 +77,588 @@ const documentTypeLabels: Record<string, { label: string; icon: typeof FileText 
   'training_link': { label: 'Training Link', icon: ExternalLink },
 };
 
+const GUIDE_STEPS = [
+  { id: 1, label: 'Welcome & Email', icon: Mail },
+  { id: 2, label: 'Programs & Workflow', icon: Layers },
+  { id: 3, label: 'Communications & AI', icon: MessageSquare },
+];
+
 export default function AdminOnboarding() {
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
+  const [activeTab, setActiveTab] = useState<string>('guide');
+  const [currentStep, setCurrentStep] = useState(1);
+
+  const { data: accountData, isLoading: accountLoading } = useQuery<{ account: any }>({
+    queryKey: ['/api/email/account'],
+  });
+
+  const { data: programsData, isLoading: programsLoading } = useQuery<{ programs: any[] }>({
+    queryKey: ['/api/programs-with-pricing'],
+  });
+
+  const emailConnected = !!accountData?.account;
+  const hasPrograms = (programsData?.programs?.length || 0) > 0;
+
+  const handleNext = () => {
+    if (currentStep < GUIDE_STEPS.length) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
+
+  const handleBack = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  return (
+    <div className="container max-w-6xl mx-auto py-6 px-4">
+      <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-onboarding-title">Getting Started</h1>
+          <p className="text-muted-foreground">
+            Your step-by-step guide to setting up and using the platform
+          </p>
+        </div>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="mb-6">
+          <TabsTrigger value="guide" className="flex items-center gap-2" data-testid="tab-onboarding-guide">
+            <BookOpen className="h-4 w-4" />
+            Setup Guide
+          </TabsTrigger>
+          <TabsTrigger value="materials" className="flex items-center gap-2" data-testid="tab-onboarding-materials">
+            <FileText className="h-4 w-4" />
+            Training Materials
+          </TabsTrigger>
+          <TabsTrigger value="users" className="flex items-center gap-2" data-testid="tab-onboarding-users">
+            <Users className="h-4 w-4" />
+            User Status
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="guide">
+          <div className="flex flex-col lg:flex-row gap-6">
+            <div className="lg:w-64 flex-shrink-0">
+              <Card>
+                <CardContent className="p-4 space-y-1">
+                  {GUIDE_STEPS.map((step) => {
+                    const StepIcon = step.icon;
+                    const isActive = currentStep === step.id;
+                    const isCompleted = currentStep > step.id;
+                    return (
+                      <button
+                        key={step.id}
+                        onClick={() => setCurrentStep(step.id)}
+                        className={`w-full flex items-center gap-3 p-3 rounded-md text-left transition-colors ${
+                          isActive
+                            ? 'bg-primary/10 text-primary font-medium'
+                            : 'hover-elevate text-muted-foreground'
+                        }`}
+                        data-testid={`button-step-${step.id}`}
+                      >
+                        <div className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                          isCompleted
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                            : isActive
+                              ? 'bg-primary/20 text-primary'
+                              : 'bg-muted text-muted-foreground'
+                        }`}>
+                          {isCompleted ? (
+                            <Check className="h-4 w-4" />
+                          ) : (
+                            <span className="text-sm font-medium">{step.id}</span>
+                          )}
+                        </div>
+                        <span className="text-sm">{step.label}</span>
+                      </button>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="flex-1 min-w-0">
+              {currentStep === 1 && (
+                <StepWelcomeEmail
+                  emailConnected={emailConnected}
+                  emailAddress={accountData?.account?.emailAddress}
+                  userName={user?.fullName || user?.firstName || 'there'}
+                  isLoading={accountLoading}
+                  onNext={handleNext}
+                />
+              )}
+              {currentStep === 2 && (
+                <StepProgramsWorkflow
+                  hasPrograms={hasPrograms}
+                  programCount={programsData?.programs?.length || 0}
+                  isLoading={programsLoading}
+                  onNext={handleNext}
+                  onBack={handleBack}
+                  onNavigate={setLocation}
+                />
+              )}
+              {currentStep === 3 && (
+                <StepCommunicationsAI
+                  emailConnected={emailConnected}
+                  onBack={handleBack}
+                  onNavigate={setLocation}
+                />
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="materials">
+          <MaterialsManagement />
+        </TabsContent>
+
+        <TabsContent value="users">
+          <UsersStatus />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function StepWelcomeEmail({
+  emailConnected,
+  emailAddress,
+  userName,
+  isLoading,
+  onNext,
+}: {
+  emailConnected: boolean;
+  emailAddress?: string;
+  userName: string;
+  isLoading: boolean;
+  onNext: () => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-xl">Welcome, {userName}</CardTitle>
+          <CardDescription>
+            Let's get you set up. This guide will walk you through the key steps to start using the platform effectively.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="bg-muted/50 rounded-md p-4 space-y-2">
+            <h3 className="font-medium flex items-center gap-2">
+              <ListChecks className="h-4 w-4 text-primary" />
+              What we'll cover
+            </h3>
+            <ul className="space-y-2 text-sm text-muted-foreground ml-6">
+              <li className="flex items-start gap-2">
+                <span className="font-medium text-foreground">1.</span>
+                Connect your Gmail to sync and manage email conversations within the platform
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="font-medium text-foreground">2.</span>
+                Create your first loan program with stages, tasks, and document requirements
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="font-medium text-foreground">3.</span>
+                Learn how communications, notifications, and the AI assistant work
+              </li>
+            </ul>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Mail className="h-5 w-5" />
+            Connect Your Gmail
+          </CardTitle>
+          <CardDescription>
+            Link your Gmail account so you can view, manage, and link email conversations to deals — all without leaving the app.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isLoading ? (
+            <div className="flex items-center gap-3 p-4">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Checking email connection status...</span>
+            </div>
+          ) : emailConnected ? (
+            <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-900/20 rounded-md border border-green-200 dark:border-green-800">
+              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-green-800 dark:text-green-300">Gmail Connected</p>
+                <p className="text-sm text-green-700 dark:text-green-400">{emailAddress}</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>Connecting your Gmail allows you to:</p>
+                <ul className="space-y-2 ml-4">
+                  <li className="flex items-start gap-2">
+                    <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    View your email inbox directly inside the platform
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    Link email threads to specific deals for full context
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    Get notified when new emails arrive on linked deals
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    AI can suggest which deals an email belongs to
+                  </li>
+                </ul>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={() => window.location.href = '/api/email/connect'}
+                  data-testid="button-connect-gmail-onboarding"
+                >
+                  <Mail className="h-4 w-4 mr-2" />
+                  Connect Gmail
+                </Button>
+                <span className="text-sm text-muted-foreground">You can also do this later from Settings</span>
+              </div>
+            </>
+          )}
+
+          <Separator />
+
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium">Prerequisites</h4>
+            <div className="text-sm text-muted-foreground space-y-1">
+              <p>Your system administrator needs to have Google OAuth configured with the Gmail API enabled. If you see an error when connecting, reach out to your admin to verify the setup.</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="flex justify-end">
+        <Button onClick={onNext} data-testid="button-next-step-1">
+          Next: Programs & Workflow
+          <ChevronRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function StepProgramsWorkflow({
+  hasPrograms,
+  programCount,
+  isLoading,
+  onNext,
+  onBack,
+  onNavigate,
+}: {
+  hasPrograms: boolean;
+  programCount: number;
+  isLoading: boolean;
+  onNext: () => void;
+  onBack: () => void;
+  onNavigate: (path: string) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Layers className="h-5 w-5" />
+            Loan Programs
+          </CardTitle>
+          <CardDescription>
+            Programs are the foundation of your lending operations. Each program defines a loan type with its own workflow, stages, and requirements.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {isLoading ? (
+            <div className="flex items-center gap-3 p-4">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Checking your loan programs...</span>
+            </div>
+          ) : hasPrograms ? (
+            <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-900/20 rounded-md border border-green-200 dark:border-green-800">
+              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-green-800 dark:text-green-300">
+                  You have {programCount} loan program{programCount !== 1 ? 's' : ''} configured
+                </p>
+                <p className="text-sm text-green-700 dark:text-green-400">
+                  You can manage them anytime from Loan Products in the sidebar
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-md border border-amber-200 dark:border-amber-800">
+              <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-amber-800 dark:text-amber-300">No programs yet</p>
+                <p className="text-sm text-amber-700 dark:text-amber-400">
+                  Create your first loan program to start processing deals
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <h3 className="font-medium">How Programs Work</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-card border border-border rounded-md p-4 space-y-2">
+                <div className="h-9 w-9 rounded-md bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                  <Layers className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                </div>
+                <h4 className="font-medium text-sm">Stages</h4>
+                <p className="text-sm text-muted-foreground">
+                  Define the phases each deal goes through — from application to closing. Each stage represents a milestone in the loan lifecycle.
+                </p>
+              </div>
+              <div className="bg-card border border-border rounded-md p-4 space-y-2">
+                <div className="h-9 w-9 rounded-md bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                  <ListChecks className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                </div>
+                <h4 className="font-medium text-sm">Tasks</h4>
+                <p className="text-sm text-muted-foreground">
+                  Assign tasks to each stage. These are the action items that need to be completed before a deal can move to the next stage.
+                </p>
+              </div>
+              <div className="bg-card border border-border rounded-md p-4 space-y-2">
+                <div className="h-9 w-9 rounded-md bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                  <FileText className="h-4 w-4 text-green-600 dark:text-green-400" />
+                </div>
+                <h4 className="font-medium text-sm">Documents</h4>
+                <p className="text-sm text-muted-foreground">
+                  Specify which documents are needed at each stage. Borrowers and brokers will see exactly what they need to upload.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-3">
+            <h3 className="font-medium">Building Your First Program</h3>
+            <div className="text-sm text-muted-foreground space-y-2">
+              <p>When creating a program, you'll configure:</p>
+              <ol className="space-y-2 ml-4 list-decimal">
+                <li><span className="text-foreground font-medium">Loan type</span> — DSCR, Fix & Flip, Ground Up Construction, or others</li>
+                <li><span className="text-foreground font-medium">Loan parameters</span> — min/max amounts, LTV ranges, rate ranges</li>
+                <li><span className="text-foreground font-medium">Workflow stages</span> — the steps a deal moves through (e.g., Application, Processing, Underwriting, Closing)</li>
+                <li><span className="text-foreground font-medium">Stage tasks</span> — what needs to happen at each stage</li>
+                <li><span className="text-foreground font-medium">Required documents</span> — what borrowers/brokers need to upload per stage</li>
+              </ol>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => onNavigate('/admin/programs')}
+              data-testid="button-go-to-programs"
+            >
+              <Settings className="h-4 w-4 mr-2" />
+              {hasPrograms ? 'Manage Loan Programs' : 'Create Your First Program'}
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-3">
+            <h3 className="font-medium flex items-center gap-2">
+              <Workflow className="h-4 w-4 text-primary" />
+              Program-to-Deal Sync
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              When you update a program's stages, tasks, or documents, those changes automatically sync to all existing deals using that program. You don't need to update each deal individually — the system handles it for you.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="flex items-center justify-between gap-4">
+        <Button variant="outline" onClick={onBack} data-testid="button-back-step-2">
+          <ChevronLeft className="mr-2 h-4 w-4" />
+          Back
+        </Button>
+        <Button onClick={onNext} data-testid="button-next-step-2">
+          Next: Communications & AI
+          <ChevronRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function StepCommunicationsAI({
+  emailConnected,
+  onBack,
+  onNavigate,
+}: {
+  emailConnected: boolean;
+  onBack: () => void;
+  onNavigate: (path: string) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MessageSquare className="h-5 w-5" />
+            Communications
+          </CardTitle>
+          <CardDescription>
+            Stay connected with borrowers, brokers, and your team through multiple channels — all managed from one place.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-card border border-border rounded-md p-4 space-y-2">
+              <div className="h-9 w-9 rounded-md bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                <MessageSquare className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              </div>
+              <h4 className="font-medium text-sm">In-App Messages</h4>
+              <p className="text-sm text-muted-foreground">
+                Send and receive messages linked to specific deals. Borrowers see these in their portal, and you can manage all conversations from the Messages page.
+              </p>
+            </div>
+            <div className="bg-card border border-border rounded-md p-4 space-y-2">
+              <div className="h-9 w-9 rounded-md bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                <Mail className="h-4 w-4 text-green-600 dark:text-green-400" />
+              </div>
+              <h4 className="font-medium text-sm">Email Integration</h4>
+              <p className="text-sm text-muted-foreground">
+                {emailConnected
+                  ? 'Your Gmail is connected. View, search, and link email threads to deals directly from your Email Inbox.'
+                  : 'Connect your Gmail to view and link email conversations to deals without leaving the platform.'}
+              </p>
+            </div>
+            <div className="bg-card border border-border rounded-md p-4 space-y-2">
+              <div className="h-9 w-9 rounded-md bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                <Send className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+              </div>
+              <h4 className="font-medium text-sm">Loan Digests</h4>
+              <p className="text-sm text-muted-foreground">
+                Automated email and SMS updates sent to borrowers and partners with loan status, next steps, and outstanding items.
+              </p>
+            </div>
+            <div className="bg-card border border-border rounded-md p-4 space-y-2">
+              <div className="h-9 w-9 rounded-md bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
+                <Bell className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+              </div>
+              <h4 className="font-medium text-sm">Notifications</h4>
+              <p className="text-sm text-muted-foreground">
+                In-app notifications keep you informed of new documents, deal updates, messages, and email activity in real time.
+              </p>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-3">
+            <h3 className="font-medium flex items-center gap-2">
+              <Bot className="h-4 w-4 text-primary" />
+              AI Communication Agent
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              The AI button on each deal page gives you a powerful communication assistant. It can:
+            </p>
+            <ul className="space-y-2 ml-4 text-sm text-muted-foreground">
+              <li className="flex items-start gap-2">
+                <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                Draft personalized emails and messages to borrowers based on deal context
+              </li>
+              <li className="flex items-start gap-2">
+                <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                Send loan digest updates via email and SMS automatically
+              </li>
+              <li className="flex items-start gap-2">
+                <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                Use Deal Memory to understand the full history — documents received, stage changes, past communications — so it never repeats itself
+              </li>
+              <li className="flex items-start gap-2">
+                <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                Follow admin notes and instructions (prefix with /ai) to customize its behavior per deal
+              </li>
+            </ul>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-3">
+            <h3 className="font-medium">Where to Find Everything</h3>
+            <div className="space-y-2">
+              <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-md">
+                <MessageSquare className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">Messages</p>
+                  <p className="text-xs text-muted-foreground">In-app conversations and deal-linked email threads</p>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => onNavigate('/messages')} data-testid="button-go-to-messages">
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-md">
+                <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">Email Inbox</p>
+                  <p className="text-xs text-muted-foreground">Full email management with search, sync, and deal linking</p>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => onNavigate('/admin/email')} data-testid="button-go-to-email">
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-md">
+                <Bell className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">Notifications</p>
+                  <p className="text-xs text-muted-foreground">Configure notification preferences in Settings</p>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => onNavigate('/admin/settings')} data-testid="button-go-to-settings">
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-6">
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-lg">You're all set!</h3>
+              <p className="text-sm text-muted-foreground">
+                You can always come back to this guide from the Onboarding section in the sidebar. Now go ahead and start managing your deals.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="flex items-center justify-between gap-4">
+        <Button variant="outline" onClick={onBack} data-testid="button-back-step-3">
+          <ChevronLeft className="mr-2 h-4 w-4" />
+          Back
+        </Button>
+        <Button onClick={() => onNavigate('/admin/deals')} data-testid="button-go-to-dashboard">
+          Go to Deals
+          <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function MaterialsManagement() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -80,10 +677,6 @@ export default function AdminOnboarding() {
 
   const { data: documentsData, isLoading: docsLoading } = useQuery<{ documents: OnboardingDocument[] }>({
     queryKey: ['/api/admin/onboarding/documents'],
-  });
-
-  const { data: usersData, isLoading: usersLoading } = useQuery<{ users: OnboardingUser[] }>({
-    queryKey: ['/api/admin/onboarding/users'],
   });
 
   const createMutation = useMutation({
@@ -170,316 +763,292 @@ export default function AdminOnboarding() {
   };
 
   const documents = documentsData?.documents || [];
-  const users = usersData?.users || [];
 
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <CardTitle>Training Materials</CardTitle>
+            <CardDescription>
+              Configure partnership agreements and training materials for new users
+            </CardDescription>
+          </div>
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-add-document">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Document
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Add Onboarding Document</DialogTitle>
+                <DialogDescription>
+                  Create a new document for user onboarding
+                </DialogDescription>
+              </DialogHeader>
+              <DocumentForm
+                formData={formData}
+                setFormData={setFormData}
+                onSubmit={handleSubmit}
+                isPending={createMutation.isPending}
+                submitLabel="Create Document"
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {docsLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : documents.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <BookOpen className="h-12 w-12 text-muted-foreground mb-4" />
+            <p className="text-lg font-medium">No Documents</p>
+            <p className="text-muted-foreground">Add your first onboarding document to get started.</p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Document</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Target</TableHead>
+                <TableHead>Required</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {documents.map((doc) => {
+                const typeInfo = documentTypeLabels[doc.type] || { label: doc.type, icon: FileText };
+                const TypeIcon = typeInfo.icon;
+
+                return (
+                  <TableRow key={doc.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded bg-muted flex items-center justify-center">
+                          <TypeIcon className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="font-medium">{doc.title}</p>
+                          {doc.description && (
+                            <p className="text-sm text-muted-foreground truncate max-w-xs">{doc.description}</p>
+                          )}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{typeInfo.label}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">
+                        {doc.targetUserType === 'all' ? 'All Users' : doc.targetUserType === 'broker' ? 'Brokers' : 'Borrowers'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {doc.isRequired ? (
+                        <Badge variant="default">Required</Badge>
+                      ) : (
+                        <Badge variant="outline">Optional</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {doc.isActive ? (
+                        <Badge variant="default" className="bg-success">Active</Badge>
+                      ) : (
+                        <Badge variant="secondary">Inactive</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="ghost" size="icon" onClick={() => handleEdit(doc)}>
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-md">
+                            <DialogHeader>
+                              <DialogTitle>Edit Document</DialogTitle>
+                              <DialogDescription>
+                                Update the onboarding document
+                              </DialogDescription>
+                            </DialogHeader>
+                            <DocumentForm
+                              formData={formData}
+                              setFormData={setFormData}
+                              onSubmit={handleSubmit}
+                              isPending={updateMutation.isPending}
+                              submitLabel="Save Changes"
+                            />
+                          </DialogContent>
+                        </Dialog>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => deleteMutation.mutate(doc.id)}
+                          disabled={deleteMutation.isPending}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function UsersStatus() {
+  const { data: usersData, isLoading: usersLoading } = useQuery<{ users: OnboardingUser[] }>({
+    queryKey: ['/api/admin/onboarding/users'],
+  });
+
+  const users = usersData?.users || [];
   const brokersPendingOnboarding = users.filter(u => u.userType === 'broker' && !u.onboardingCompleted);
   const brokersCompleted = users.filter(u => u.userType === 'broker' && u.onboardingCompleted);
 
   return (
-    <div className="container max-w-6xl mx-auto py-6 px-4">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Onboarding Management</h1>
-          <p className="text-muted-foreground">
-            Manage partnership agreements, training materials, and track user onboarding
-          </p>
-        </div>
-      </div>
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="h-5 w-5 text-amber-500" />
+            Pending Onboarding
+          </CardTitle>
+          <CardDescription>
+            Brokers who have not completed their onboarding
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {usersLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : brokersPendingOnboarding.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8">
+              <CheckCircle2 className="h-12 w-12 text-green-500 mb-4" />
+              <p className="text-lg font-medium">All Caught Up!</p>
+              <p className="text-muted-foreground">All brokers have completed their onboarding.</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>User</TableHead>
+                  <TableHead>Agreement</TableHead>
+                  <TableHead>Training</TableHead>
+                  <TableHead>Registered</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {brokersPendingOnboarding.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{user.fullName || 'Unknown'}</p>
+                        <p className="text-sm text-muted-foreground">{user.email}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {user.partnershipAgreementSignedAt ? (
+                        <Badge variant="default" className="bg-success">
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          Signed
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">
+                          <Clock className="h-3 w-3 mr-1" />
+                          Pending
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {user.trainingCompletedAt ? (
+                        <Badge variant="default" className="bg-success">
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          Completed
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">
+                          <Clock className="h-3 w-3 mr-1" />
+                          Pending
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(user.createdAt).toLocaleDateString()}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
-      <Tabs defaultValue="documents">
-        <TabsList className="mb-6">
-          <TabsTrigger value="documents" className="flex items-center gap-2">
-            <BookOpen className="h-4 w-4" />
-            Documents
-            <Badge variant="secondary">{documents.length}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="users" className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
-            User Status
-            {brokersPendingOnboarding.length > 0 && (
-              <Badge variant="destructive">{brokersPendingOnboarding.length}</Badge>
-            )}
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="documents">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Onboarding Documents</CardTitle>
-                  <CardDescription>
-                    Configure partnership agreements and training materials for new users
-                  </CardDescription>
-                </div>
-                <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button data-testid="button-add-document">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Document
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>Add Onboarding Document</DialogTitle>
-                      <DialogDescription>
-                        Create a new document for user onboarding
-                      </DialogDescription>
-                    </DialogHeader>
-                    <DocumentForm
-                      formData={formData}
-                      setFormData={setFormData}
-                      onSubmit={handleSubmit}
-                      isPending={createMutation.isPending}
-                      submitLabel="Create Document"
-                    />
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {docsLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                </div>
-              ) : documents.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <BookOpen className="h-12 w-12 text-muted-foreground mb-4" />
-                  <p className="text-lg font-medium">No Documents</p>
-                  <p className="text-muted-foreground">Add your first onboarding document to get started.</p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Document</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Target</TableHead>
-                      <TableHead>Required</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {documents.map((doc) => {
-                      const typeInfo = documentTypeLabels[doc.type] || { label: doc.type, icon: FileText };
-                      const TypeIcon = typeInfo.icon;
-                      
-                      return (
-                        <TableRow key={doc.id}>
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <div className="h-8 w-8 rounded bg-muted flex items-center justify-center">
-                                <TypeIcon className="h-4 w-4" />
-                              </div>
-                              <div>
-                                <p className="font-medium">{doc.title}</p>
-                                {doc.description && (
-                                  <p className="text-sm text-muted-foreground truncate max-w-xs">{doc.description}</p>
-                                )}
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{typeInfo.label}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="secondary">
-                              {doc.targetUserType === 'all' ? 'All Users' : doc.targetUserType === 'broker' ? 'Brokers' : 'Borrowers'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {doc.isRequired ? (
-                              <Badge variant="default">Required</Badge>
-                            ) : (
-                              <Badge variant="outline">Optional</Badge>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {doc.isActive ? (
-                              <Badge variant="default" className="bg-success">Active</Badge>
-                            ) : (
-                              <Badge variant="secondary">Inactive</Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <Dialog>
-                                <DialogTrigger asChild>
-                                  <Button variant="ghost" size="icon" onClick={() => handleEdit(doc)}>
-                                    <Pencil className="h-4 w-4" />
-                                  </Button>
-                                </DialogTrigger>
-                                <DialogContent className="max-w-md">
-                                  <DialogHeader>
-                                    <DialogTitle>Edit Document</DialogTitle>
-                                    <DialogDescription>
-                                      Update the onboarding document
-                                    </DialogDescription>
-                                  </DialogHeader>
-                                  <DocumentForm
-                                    formData={formData}
-                                    setFormData={setFormData}
-                                    onSubmit={handleSubmit}
-                                    isPending={updateMutation.isPending}
-                                    submitLabel="Save Changes"
-                                  />
-                                </DialogContent>
-                              </Dialog>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => deleteMutation.mutate(doc.id)}
-                                disabled={deleteMutation.isPending}
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="users">
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Clock className="h-5 w-5 text-warning" />
-                  Pending Onboarding
-                </CardTitle>
-                <CardDescription>
-                  Brokers who have not completed their onboarding
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {usersLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                  </div>
-                ) : brokersPendingOnboarding.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8">
-                    <CheckCircle2 className="h-12 w-12 text-success mb-4" />
-                    <p className="text-lg font-medium">All Caught Up!</p>
-                    <p className="text-muted-foreground">All brokers have completed their onboarding.</p>
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>User</TableHead>
-                        <TableHead>Agreement</TableHead>
-                        <TableHead>Training</TableHead>
-                        <TableHead>Registered</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {brokersPendingOnboarding.map((user) => (
-                        <TableRow key={user.id}>
-                          <TableCell>
-                            <div>
-                              <p className="font-medium">{user.fullName || 'Unknown'}</p>
-                              <p className="text-sm text-muted-foreground">{user.email}</p>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {user.partnershipAgreementSignedAt ? (
-                              <Badge variant="default" className="bg-success">
-                                <CheckCircle2 className="h-3 w-3 mr-1" />
-                                Signed
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary">
-                                <Clock className="h-3 w-3 mr-1" />
-                                Pending
-                              </Badge>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {user.trainingCompletedAt ? (
-                              <Badge variant="default" className="bg-success">
-                                <CheckCircle2 className="h-3 w-3 mr-1" />
-                                Completed
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary">
-                                <Clock className="h-3 w-3 mr-1" />
-                                Pending
-                              </Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {new Date(user.createdAt).toLocaleDateString()}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-success" />
-                  Completed Onboarding
-                </CardTitle>
-                <CardDescription>
-                  Brokers who have completed their onboarding
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {brokersCompleted.length === 0 ? (
-                  <p className="text-muted-foreground text-center py-8">No brokers have completed onboarding yet.</p>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>User</TableHead>
-                        <TableHead>Agreement Signed</TableHead>
-                        <TableHead>Training Completed</TableHead>
-                        <TableHead>Registered</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {brokersCompleted.map((user) => (
-                        <TableRow key={user.id}>
-                          <TableCell>
-                            <div>
-                              <p className="font-medium">{user.fullName || 'Unknown'}</p>
-                              <p className="text-sm text-muted-foreground">{user.email}</p>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {user.partnershipAgreementSignedAt 
-                              ? new Date(user.partnershipAgreementSignedAt).toLocaleDateString()
-                              : 'N/A'}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {user.trainingCompletedAt 
-                              ? new Date(user.trainingCompletedAt).toLocaleDateString()
-                              : 'N/A'}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {new Date(user.createdAt).toLocaleDateString()}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-      </Tabs>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CheckCircle2 className="h-5 w-5 text-green-500" />
+            Completed Onboarding
+          </CardTitle>
+          <CardDescription>
+            Brokers who have completed their onboarding
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {brokersCompleted.length === 0 ? (
+            <p className="text-muted-foreground text-center py-8">No brokers have completed onboarding yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>User</TableHead>
+                  <TableHead>Agreement Signed</TableHead>
+                  <TableHead>Training Completed</TableHead>
+                  <TableHead>Registered</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {brokersCompleted.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{user.fullName || 'Unknown'}</p>
+                        <p className="text-sm text-muted-foreground">{user.email}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {user.partnershipAgreementSignedAt
+                        ? new Date(user.partnershipAgreementSignedAt).toLocaleDateString()
+                        : 'N/A'}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {user.trainingCompletedAt
+                        ? new Date(user.trainingCompletedAt).toLocaleDateString()
+                        : 'N/A'}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(user.createdAt).toLocaleDateString()}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -525,7 +1094,7 @@ function DocumentForm({
         contentType: file.type,
       });
       const { uploadURL, objectPath } = await response.json();
-      
+
       setUploadProgress(30);
 
       const uploadResponse = await fetch(uploadURL, {
@@ -615,7 +1184,7 @@ function DocumentForm({
             </div>
           )}
           {uploadedFileName && !isUploading && (
-            <p className="text-sm text-success flex items-center gap-1">
+            <p className="text-sm text-green-600 dark:text-green-400 flex items-center gap-1">
               <CheckCircle2 className="h-4 w-4" />
               Uploaded: {uploadedFileName}
             </p>
