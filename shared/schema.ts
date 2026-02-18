@@ -30,6 +30,10 @@ export const users = pgTable("users", {
   googleRefreshToken: text("google_refresh_token"),
   googleAccessToken: text("google_access_token"),
   googleTokenExpiresAt: timestamp("google_token_expires_at"),
+  inviteToken: varchar("invite_token", { length: 255 }),
+  inviteTokenExpires: timestamp("invite_token_expires"),
+  invitedBy: integer("invited_by"),
+  inviteStatus: varchar("invite_status", { length: 50 }).default("none"),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({ 
