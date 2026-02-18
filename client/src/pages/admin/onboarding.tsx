@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
-import { apiRequest } from '@/lib/queryClient';
+import { apiRequest, queryClient } from '@/lib/queryClient';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
+import { useTenantConfig } from '@/hooks/use-tenant-config';
 import {
   Plus,
   Pencil,
@@ -42,6 +43,18 @@ import {
   Bell,
   ArrowRight,
   Check,
+  Building2,
+  Plug,
+  Phone,
+  Brain,
+  MapPin,
+  XCircle,
+  AlertCircle,
+  HardDrive,
+  FolderOpen,
+  UserPlus,
+  Save,
+  RefreshCw,
 } from 'lucide-react';
 
 interface OnboardingDocument {
@@ -78,15 +91,17 @@ const documentTypeLabels: Record<string, { label: string; icon: typeof FileText 
 };
 
 const GUIDE_STEPS = [
-  { id: 1, label: 'Welcome & Email', icon: Mail },
-  { id: 2, label: 'Programs & Workflow', icon: Layers },
-  { id: 3, label: 'Communications & AI', icon: MessageSquare },
+  { id: 1, label: 'Company Profile', icon: Building2 },
+  { id: 2, label: 'Team Setup', icon: Users },
+  { id: 3, label: 'Integrations', icon: Plug },
+  { id: 4, label: 'Loan Programs', icon: Layers },
+  { id: 5, label: 'Communications & AI', icon: MessageSquare },
 ];
 
 export default function AdminOnboarding() {
   const { toast } = useToast();
   const { user } = useAuth();
-  const queryClient = useQueryClient();
+  const qc = useQueryClient();
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<string>('guide');
   const [currentStep, setCurrentStep] = useState(1);
@@ -99,6 +114,24 @@ export default function AdminOnboarding() {
     queryKey: ['/api/programs-with-pricing'],
   });
 
+  const { data: teamData, isLoading: teamLoading } = useQuery<{ users: any[] }>({
+    queryKey: ['/api/admin/users'],
+  });
+
+  const { data: integrationsData, isLoading: integrationsLoading } = useQuery<{ integrations: any }>({
+    queryKey: ['/api/admin/integrations/status'],
+  });
+
+  const { data: settingsData, isLoading: settingsLoading } = useQuery<{ settings: any[] }>({
+    queryKey: ['/api/admin/settings'],
+  });
+
+  const tenantConfig = useTenantConfig("tenant_branding", {
+    companyName: "",
+    supportEmail: "",
+    emailSenderName: "",
+  });
+
   const emailConnected = !!accountData?.account;
   const hasPrograms = (programsData?.programs?.length || 0) > 0;
 
@@ -108,7 +141,7 @@ export default function AdminOnboarding() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
+      qc.invalidateQueries({ queryKey: ['/api/auth/me'] });
       toast({ title: 'Setup complete', description: 'Welcome to the platform!' });
       setLocation('/admin/deals');
     },
@@ -128,6 +161,8 @@ export default function AdminOnboarding() {
       setCurrentStep(currentStep - 1);
     }
   };
+
+  const driveFolderSetting = settingsData?.settings?.find((s: any) => s.settingKey === 'google_drive_parent_folder_id');
 
   return (
     <div className="container max-w-6xl mx-auto py-6 px-4">
@@ -199,15 +234,36 @@ export default function AdminOnboarding() {
 
             <div className="flex-1 min-w-0">
               {currentStep === 1 && (
-                <StepWelcomeEmail
-                  emailConnected={emailConnected}
-                  emailAddress={accountData?.account?.emailAddress}
+                <StepCompanyProfile
                   userName={user?.fullName || user?.firstName || 'there'}
-                  isLoading={accountLoading}
+                  tenantConfig={tenantConfig}
                   onNext={handleNext}
                 />
               )}
               {currentStep === 2 && (
+                <StepTeamSetup
+                  teamData={teamData?.users || []}
+                  isLoading={teamLoading}
+                  onNext={handleNext}
+                  onBack={handleBack}
+                  onNavigate={setLocation}
+                />
+              )}
+              {currentStep === 3 && (
+                <StepIntegrations
+                  emailConnected={emailConnected}
+                  emailAddress={accountData?.account?.emailAddress}
+                  isEmailLoading={accountLoading}
+                  integrationsData={integrationsData?.integrations}
+                  isIntegrationsLoading={integrationsLoading}
+                  driveFolderId={driveFolderSetting?.settingValue || ''}
+                  isSettingsLoading={settingsLoading}
+                  onNext={handleNext}
+                  onBack={handleBack}
+                  onNavigate={setLocation}
+                />
+              )}
+              {currentStep === 4 && (
                 <StepProgramsWorkflow
                   hasPrograms={hasPrograms}
                   programCount={programsData?.programs?.length || 0}
@@ -217,7 +273,7 @@ export default function AdminOnboarding() {
                   onNavigate={setLocation}
                 />
               )}
-              {currentStep === 3 && (
+              {currentStep === 5 && (
                 <StepCommunicationsAI
                   emailConnected={emailConnected}
                   onboardingCompleted={!!user?.onboardingCompleted}
@@ -243,24 +299,22 @@ export default function AdminOnboarding() {
   );
 }
 
-function StepWelcomeEmail({
-  emailConnected,
-  emailAddress,
+function StepCompanyProfile({
   userName,
-  isLoading,
+  tenantConfig,
   onNext,
 }: {
-  emailConnected: boolean;
-  emailAddress?: string;
   userName: string;
-  isLoading: boolean;
+  tenantConfig: ReturnType<typeof useTenantConfig<{ companyName: string; supportEmail: string; emailSenderName: string }>>;
   onNext: () => void;
 }) {
+  const { config, updateField, save, isPending, hasChanges } = tenantConfig;
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">Welcome, {userName}</CardTitle>
+          <CardTitle className="text-xl" data-testid="text-welcome-title">Welcome, {userName}</CardTitle>
           <CardDescription>
             Let's get you set up. This guide will walk you through the key steps to start using the platform effectively.
           </CardDescription>
@@ -274,14 +328,22 @@ function StepWelcomeEmail({
             <ul className="space-y-2 text-sm text-muted-foreground ml-6">
               <li className="flex items-start gap-2">
                 <span className="font-medium text-foreground">1.</span>
-                Connect your Gmail to sync and manage email conversations within the platform
+                Set up your company profile and branding
               </li>
               <li className="flex items-start gap-2">
                 <span className="font-medium text-foreground">2.</span>
-                Create your first loan program with stages, tasks, and document requirements
+                Invite your team and configure roles
               </li>
               <li className="flex items-start gap-2">
                 <span className="font-medium text-foreground">3.</span>
+                Connect integrations like Gmail, Google Drive, and external services
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="font-medium text-foreground">4.</span>
+                Create your first loan program with stages, tasks, and document requirements
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="font-medium text-foreground">5.</span>
                 Learn how communications, notifications, and the AI assistant work
               </li>
             </ul>
@@ -292,15 +354,340 @@ function StepWelcomeEmail({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Mail className="h-5 w-5" />
-            Connect Your Gmail
+            <Building2 className="h-5 w-5" />
+            Company Profile
+            {config.companyName && (
+              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" data-testid="icon-company-set" />
+            )}
           </CardTitle>
           <CardDescription>
-            Link your Gmail account so you can view, manage, and link email conversations to deals — all without leaving the app.
+            Configure your company identity. This information is used across the platform for branding, emails, and documents.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="onboard-company-name">Company Name</Label>
+            <Input
+              id="onboard-company-name"
+              value={config.companyName}
+              onChange={(e) => updateField("companyName", e.target.value)}
+              placeholder="Your Company Name"
+              data-testid="input-onboard-company-name"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="onboard-support-email">Support Email</Label>
+            <Input
+              id="onboard-support-email"
+              type="email"
+              value={config.supportEmail}
+              onChange={(e) => updateField("supportEmail", e.target.value)}
+              placeholder="support@example.com"
+              data-testid="input-onboard-support-email"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="onboard-sender-name">Email Sender Name</Label>
+            <Input
+              id="onboard-sender-name"
+              value={config.emailSenderName}
+              onChange={(e) => updateField("emailSenderName", e.target.value)}
+              placeholder="Your Company"
+              data-testid="input-onboard-sender-name"
+            />
+          </div>
+          <Button
+            onClick={save}
+            disabled={!hasChanges || isPending}
+            size="sm"
+            data-testid="button-save-company-profile"
+          >
+            <Save className="h-4 w-4 mr-2" />
+            {isPending ? 'Saving...' : 'Save'}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <div className="flex justify-end">
+        <Button onClick={onNext} data-testid="button-next-step-1">
+          Next: Team Setup
+          <ChevronRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function StepTeamSetup({
+  teamData,
+  isLoading,
+  onNext,
+  onBack,
+  onNavigate,
+}: {
+  teamData: any[];
+  isLoading: boolean;
+  onNext: () => void;
+  onBack: () => void;
+  onNavigate: (path: string) => void;
+}) {
+  const { toast } = useToast();
+  const [newMember, setNewMember] = useState({
+    fullName: '',
+    email: '',
+    password: '',
+    role: 'staff',
+  });
+
+  const teamRoles = new Set(['processor', 'staff', 'admin', 'super_admin']);
+  const teamMembers = teamData.filter((u: any) => {
+    if (teamRoles.has(u.role)) return true;
+    if (u.roles?.some((r: string) => teamRoles.has(r))) return true;
+    return false;
+  });
+
+  const createMemberMutation = useMutation({
+    mutationFn: async (data: typeof newMember) => {
+      return await apiRequest('POST', '/api/admin/users', {
+        ...data,
+        userType: 'broker',
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      setNewMember({ fullName: '', email: '', password: '', role: 'staff' });
+      toast({ title: 'Team member added successfully' });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to add team member',
+        description: error?.message || 'Please check the form and try again',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const handleCreate = () => {
+    if (!newMember.email || !newMember.password || !newMember.fullName) {
+      toast({ title: 'Full name, email, and password are required', variant: 'destructive' });
+      return;
+    }
+    createMemberMutation.mutate(newMember);
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Your Team
+          </CardTitle>
+          <CardDescription>
+            Team members with admin, staff, or processor access. Add members here or manage permissions in detail later.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {isLoading ? (
+            <div className="flex items-center gap-3 p-4">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Loading team members...</span>
+            </div>
+          ) : teamMembers.length === 0 ? (
+            <div className="bg-muted/50 rounded-md p-4 text-sm text-muted-foreground">
+              No team members found yet. Add your first team member below.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {teamMembers.map((member: any) => (
+                <div
+                  key={member.id}
+                  className="flex items-center gap-3 p-3 bg-muted/50 rounded-md"
+                  data-testid={`team-member-${member.id}`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{member.fullName || 'No name'}</p>
+                    <p className="text-xs text-muted-foreground truncate">{member.email}</p>
+                  </div>
+                  <Badge variant={member.role === 'admin' || member.role === 'super_admin' ? 'default' : 'secondary'} data-testid={`badge-role-${member.id}`}>
+                    {member.role}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <Separator />
+
+          <div className="space-y-3">
+            <h3 className="font-medium flex items-center gap-2 text-sm">
+              <UserPlus className="h-4 w-4 text-primary" />
+              Add Team Member
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="team-add-name" className="text-xs">Full Name</Label>
+                <Input
+                  id="team-add-name"
+                  value={newMember.fullName}
+                  onChange={(e) => setNewMember({ ...newMember, fullName: e.target.value })}
+                  placeholder="Jane Smith"
+                  data-testid="input-team-add-name"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="team-add-email" className="text-xs">Email</Label>
+                <Input
+                  id="team-add-email"
+                  type="email"
+                  value={newMember.email}
+                  onChange={(e) => setNewMember({ ...newMember, email: e.target.value })}
+                  placeholder="jane@company.com"
+                  data-testid="input-team-add-email"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="team-add-password" className="text-xs">Temporary Password</Label>
+                <Input
+                  id="team-add-password"
+                  type="password"
+                  value={newMember.password}
+                  onChange={(e) => setNewMember({ ...newMember, password: e.target.value })}
+                  placeholder="Enter password"
+                  data-testid="input-team-add-password"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="team-add-role" className="text-xs">Role</Label>
+                <Select value={newMember.role} onValueChange={(val) => setNewMember({ ...newMember, role: val })}>
+                  <SelectTrigger data-testid="select-team-add-role">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="staff">Staff</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={handleCreate}
+              disabled={createMemberMutation.isPending}
+              data-testid="button-add-team-member-inline"
+            >
+              {createMemberMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                <>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Add Member
+                </>
+              )}
+            </Button>
+          </div>
+
+          <Separator />
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onNavigate('/admin/team-permissions')}
+            data-testid="button-go-to-permissions"
+          >
+            <Shield className="h-4 w-4 mr-2" />
+            Manage Permissions
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+        </CardContent>
+      </Card>
+
+      <div className="flex items-center justify-between gap-4">
+        <Button variant="outline" onClick={onBack} data-testid="button-back-step-2">
+          <ChevronLeft className="mr-2 h-4 w-4" />
+          Back
+        </Button>
+        <Button onClick={onNext} data-testid="button-next-step-2">
+          Next: Integrations
+          <ChevronRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function StepIntegrations({
+  emailConnected,
+  emailAddress,
+  isEmailLoading,
+  integrationsData,
+  isIntegrationsLoading,
+  driveFolderId,
+  isSettingsLoading,
+  onNext,
+  onBack,
+  onNavigate,
+}: {
+  emailConnected: boolean;
+  emailAddress?: string;
+  isEmailLoading: boolean;
+  integrationsData: any;
+  isIntegrationsLoading: boolean;
+  driveFolderId: string;
+  isSettingsLoading: boolean;
+  onNext: () => void;
+  onBack: () => void;
+  onNavigate: (path: string) => void;
+}) {
+  const { toast } = useToast();
+  const [localDriveFolderId, setLocalDriveFolderId] = useState(driveFolderId);
+
+  useEffect(() => {
+    setLocalDriveFolderId(driveFolderId);
+  }, [driveFolderId]);
+
+  const saveDriveMutation = useMutation({
+    mutationFn: async (folderId: string) => {
+      return await apiRequest("PUT", "/api/admin/settings/google_drive_parent_folder_id", {
+        value: folderId,
+        description: "Google Drive parent folder ID",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+      toast({ title: 'Google Drive folder ID saved' });
+    },
+    onError: () => {
+      toast({ title: 'Failed to save folder ID', variant: 'destructive' });
+    },
+  });
+
+  const externalIntegrations = [
+    { key: 'twilio', label: 'Twilio SMS', icon: Phone },
+    { key: 'resend', label: 'Resend Email', icon: Mail },
+    { key: 'openai', label: 'OpenAI', icon: Brain },
+    { key: 'apify', label: 'Apify', icon: RefreshCw },
+    { key: 'geoapify', label: 'Geoapify', icon: MapPin },
+    { key: 'pandadoc', label: 'PandaDoc', icon: FileText },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Mail className="h-5 w-5" />
+            Gmail Connection
+          </CardTitle>
+          <CardDescription>
+            Link your Gmail account so you can view, manage, and link email conversations to deals.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isEmailLoading ? (
             <div className="flex items-center gap-3 p-4">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               <span className="text-sm text-muted-foreground">Checking email connection status...</span>
@@ -330,10 +717,6 @@ function StepWelcomeEmail({
                     <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
                     Get notified when new emails arrive on linked deals
                   </li>
-                  <li className="flex items-start gap-2">
-                    <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-                    AI can suggest which deals an email belongs to
-                  </li>
                 </ul>
               </div>
               <div className="flex items-center gap-3">
@@ -348,21 +731,120 @@ function StepWelcomeEmail({
               </div>
             </>
           )}
-
-          <Separator />
-
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium">Prerequisites</h4>
-            <div className="text-sm text-muted-foreground space-y-1">
-              <p>Your system administrator needs to have Google OAuth configured with the Gmail API enabled. If you see an error when connecting, reach out to your admin to verify the setup.</p>
-            </div>
-          </div>
         </CardContent>
       </Card>
 
-      <div className="flex justify-end">
-        <Button onClick={onNext} data-testid="button-next-step-1">
-          Next: Programs & Workflow
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FolderOpen className="h-5 w-5" />
+            Google Drive
+          </CardTitle>
+          <CardDescription>
+            Configure a parent folder in Google Drive where all deal document folders will be created automatically.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isSettingsLoading ? (
+            <div className="flex items-center gap-3 p-4">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Loading settings...</span>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <Input
+                value={localDriveFolderId}
+                onChange={(e) => setLocalDriveFolderId(e.target.value)}
+                placeholder="Enter Google Drive Parent Folder ID"
+                data-testid="input-drive-folder-id"
+              />
+              <Button
+                size="sm"
+                onClick={() => saveDriveMutation.mutate(localDriveFolderId)}
+                disabled={saveDriveMutation.isPending || localDriveFolderId === driveFolderId}
+                data-testid="button-save-drive-folder"
+              >
+                {saveDriveMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Find the folder ID in your Google Drive folder's URL after /folders/
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Plug className="h-5 w-5" />
+            External Integrations
+          </CardTitle>
+          <CardDescription>
+            Status of your connected third-party services. Configure API keys and credentials in Settings.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isIntegrationsLoading ? (
+            <div className="flex items-center gap-3 p-4">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Checking integration status...</span>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {externalIntegrations.map((integration) => {
+                const IntIcon = integration.icon;
+                const status = integrationsData?.[integration.key];
+                const isConnected = status?.connected === true;
+                return (
+                  <div
+                    key={integration.key}
+                    className="flex items-center gap-3 p-3 bg-muted/50 rounded-md"
+                    data-testid={`integration-status-${integration.key}`}
+                  >
+                    <IntIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <span className="text-sm flex-1 min-w-0 truncate">{integration.label}</span>
+                    {isConnected ? (
+                      <Badge variant="default" data-testid={`badge-connected-${integration.key}`}>
+                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                        Connected
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" data-testid={`badge-not-connected-${integration.key}`}>
+                        <XCircle className="h-3 w-3 mr-1" />
+                        Not Connected
+                      </Badge>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onNavigate('/admin/settings')}
+            data-testid="button-manage-settings"
+          >
+            <Settings className="h-4 w-4 mr-2" />
+            Manage in Settings
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+        </CardContent>
+      </Card>
+
+      <div className="flex items-center justify-between gap-4">
+        <Button variant="outline" onClick={onBack} data-testid="button-back-step-3">
+          <ChevronLeft className="mr-2 h-4 w-4" />
+          Back
+        </Button>
+        <Button onClick={onNext} data-testid="button-next-step-3">
+          Next: Loan Programs
           <ChevronRight className="ml-2 h-4 w-4" />
         </Button>
       </div>
@@ -500,11 +982,11 @@ function StepProgramsWorkflow({
       </Card>
 
       <div className="flex items-center justify-between gap-4">
-        <Button variant="outline" onClick={onBack} data-testid="button-back-step-2">
+        <Button variant="outline" onClick={onBack} data-testid="button-back-step-4">
           <ChevronLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
-        <Button onClick={onNext} data-testid="button-next-step-2">
+        <Button onClick={onNext} data-testid="button-next-step-4">
           Next: Communications & AI
           <ChevronRight className="ml-2 h-4 w-4" />
         </Button>
@@ -669,7 +1151,7 @@ function StepCommunicationsAI({
       </Card>
 
       <div className="flex items-center justify-between gap-4">
-        <Button variant="outline" onClick={onBack} data-testid="button-back-step-3">
+        <Button variant="outline" onClick={onBack} data-testid="button-back-step-5">
           <ChevronLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
