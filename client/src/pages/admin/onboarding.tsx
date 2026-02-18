@@ -434,9 +434,9 @@ function StepTeamSetup({
 }) {
   const { toast } = useToast();
   const [newMember, setNewMember] = useState({
-    fullName: '',
+    firstName: '',
+    lastName: '',
     email: '',
-    password: '',
     role: 'processor',
   });
 
@@ -447,21 +447,22 @@ function StepTeamSetup({
     return false;
   });
 
-  const createMemberMutation = useMutation({
+  const inviteMemberMutation = useMutation({
     mutationFn: async (data: typeof newMember) => {
-      return await apiRequest('POST', '/api/admin/users', {
-        ...data,
-        userType: 'broker',
-      });
+      const res = await apiRequest('POST', '/api/admin/invite-member', data);
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
-      setNewMember({ fullName: '', email: '', password: '', role: 'processor' });
-      toast({ title: 'Team member added successfully' });
+      setNewMember({ firstName: '', lastName: '', email: '', role: 'processor' });
+      toast({ 
+        title: 'Invitation sent',
+        description: data.emailSent ? 'An email invitation has been sent.' : 'Member created but email could not be sent.',
+      });
     },
     onError: (error: any) => {
       toast({
-        title: 'Failed to add team member',
+        title: 'Failed to invite team member',
         description: error?.message || 'Please check the form and try again',
         variant: 'destructive',
       });
@@ -469,11 +470,11 @@ function StepTeamSetup({
   });
 
   const handleCreate = () => {
-    if (!newMember.email || !newMember.password || !newMember.fullName) {
-      toast({ title: 'Full name, email, and password are required', variant: 'destructive' });
+    if (!newMember.email || !newMember.firstName || !newMember.lastName) {
+      toast({ title: 'First name, last name, and email are required', variant: 'destructive' });
       return;
     }
-    createMemberMutation.mutate(newMember);
+    inviteMemberMutation.mutate(newMember);
   };
 
   return (
@@ -527,13 +528,23 @@ function StepTeamSetup({
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label htmlFor="team-add-name" className="text-xs">Full Name</Label>
+                <Label htmlFor="team-add-firstname" className="text-xs">First Name</Label>
                 <Input
-                  id="team-add-name"
-                  value={newMember.fullName}
-                  onChange={(e) => setNewMember({ ...newMember, fullName: e.target.value })}
-                  placeholder="Jane Smith"
-                  data-testid="input-team-add-name"
+                  id="team-add-firstname"
+                  value={newMember.firstName}
+                  onChange={(e) => setNewMember({ ...newMember, firstName: e.target.value })}
+                  placeholder="Jane"
+                  data-testid="input-team-add-firstname"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="team-add-lastname" className="text-xs">Last Name</Label>
+                <Input
+                  id="team-add-lastname"
+                  value={newMember.lastName}
+                  onChange={(e) => setNewMember({ ...newMember, lastName: e.target.value })}
+                  placeholder="Smith"
+                  data-testid="input-team-add-lastname"
                 />
               </div>
               <div className="space-y-1">
@@ -545,17 +556,6 @@ function StepTeamSetup({
                   onChange={(e) => setNewMember({ ...newMember, email: e.target.value })}
                   placeholder="jane@company.com"
                   data-testid="input-team-add-email"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="team-add-password" className="text-xs">Temporary Password</Label>
-                <Input
-                  id="team-add-password"
-                  type="password"
-                  value={newMember.password}
-                  onChange={(e) => setNewMember({ ...newMember, password: e.target.value })}
-                  placeholder="Enter password"
-                  data-testid="input-team-add-password"
                 />
               </div>
               <div className="space-y-1">
@@ -571,21 +571,24 @@ function StepTeamSetup({
                 </Select>
               </div>
             </div>
+            <p className="text-xs text-muted-foreground">
+              An email invitation will be sent for them to set up their own password.
+            </p>
             <Button
               size="sm"
               onClick={handleCreate}
-              disabled={createMemberMutation.isPending}
+              disabled={inviteMemberMutation.isPending}
               data-testid="button-add-team-member-inline"
             >
-              {createMemberMutation.isPending ? (
+              {inviteMemberMutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Adding...
+                  Sending Invite...
                 </>
               ) : (
                 <>
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Add Member
+                  <Mail className="h-4 w-4 mr-2" />
+                  Send Invite
                 </>
               )}
             </Button>

@@ -12,7 +12,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Search, MoreHorizontal, UserCog, Shield, User as UserIcon, Plus, Users, Briefcase, Pencil } from "lucide-react";
+import { Search, MoreHorizontal, UserCog, Shield, User as UserIcon, Plus, Users, Briefcase, Pencil, Mail, CheckCircle } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -31,6 +32,7 @@ interface AdminUser {
   lastLoginAt: string | null;
   emailVerified: boolean;
   isActive: boolean;
+  inviteStatus?: string;
 }
 
 const roleColors: Record<string, string> = {
@@ -340,12 +342,10 @@ function TeamTab() {
   const [editingMember, setEditingMember] = useState<AdminUser | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [newMember, setNewMember] = useState({
+    firstName: "",
+    lastName: "",
     email: "",
-    password: "",
-    fullName: "",
-    phone: "",
-    title: "",
-    roles: ["staff"] as string[],
+    role: "processor",
   });
   const { toast } = useToast();
 
@@ -353,23 +353,41 @@ function TeamTab() {
     queryKey: ["/api/admin/users"],
   });
 
-  const createMemberMutation = useMutation({
+  const inviteMemberMutation = useMutation({
     mutationFn: async (memberData: typeof newMember) => {
-      return await apiRequest("POST", "/api/admin/users", {
-        ...memberData,
-        userType: "broker",
-      });
+      const res = await apiRequest("POST", "/api/admin/invite-member", memberData);
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       refetch();
       setIsAddDialogOpen(false);
-      setNewMember({ email: "", password: "", fullName: "", phone: "", title: "", roles: ["staff"] });
-      toast({ title: "Team member added successfully" });
+      setNewMember({ firstName: "", lastName: "", email: "", role: "processor" });
+      toast({ 
+        title: "Invitation sent",
+        description: data.emailSent ? "An email invitation has been sent." : "Member created but email could not be sent.",
+      });
     },
     onError: (error: any) => {
       toast({
-        title: "Failed to add team member",
+        title: "Failed to invite team member",
         description: error?.message || "Please check the form and try again",
+        variant: "destructive"
+      });
+    },
+  });
+
+  const resendInviteMutation = useMutation({
+    mutationFn: async (userId: number) => {
+      const res = await apiRequest("POST", `/api/admin/resend-invite/${userId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Invitation resent successfully" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to resend invitation",
+        description: error?.message || "Please try again",
         variant: "destructive"
       });
     },
@@ -411,19 +429,11 @@ function TeamTab() {
   });
 
   const handleCreateMember = () => {
-    if (!newMember.email || !newMember.password) {
-      toast({ title: "Email and password are required", variant: "destructive" });
+    if (!newMember.email || !newMember.firstName || !newMember.lastName) {
+      toast({ title: "First name, last name, and email are required", variant: "destructive" });
       return;
     }
-    if (!newMember.fullName) {
-      toast({ title: "Full name is required for team members", variant: "destructive" });
-      return;
-    }
-    if (newMember.roles.length === 0) {
-      toast({ title: "At least one role is required", variant: "destructive" });
-      return;
-    }
-    createMemberMutation.mutate(newMember);
+    inviteMemberMutation.mutate(newMember);
   };
 
   const handleEditMember = () => {
@@ -472,103 +482,72 @@ function TeamTab() {
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
-              <DialogTitle>Add Team Member</DialogTitle>
+              <DialogTitle>Invite Team Member</DialogTitle>
               <DialogDescription>
-                Add a new staff member, admin, or super admin to your team.
+                Send an email invitation to join your team. They'll set up their own password.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="team-firstname">First Name *</Label>
+                  <Input
+                    id="team-firstname"
+                    placeholder="Jane"
+                    value={newMember.firstName}
+                    onChange={(e) => setNewMember({ ...newMember, firstName: e.target.value })}
+                    data-testid="input-team-firstname"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="team-lastname">Last Name *</Label>
+                  <Input
+                    id="team-lastname"
+                    placeholder="Smith"
+                    value={newMember.lastName}
+                    onChange={(e) => setNewMember({ ...newMember, lastName: e.target.value })}
+                    data-testid="input-team-lastname"
+                  />
+                </div>
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="team-email">Email *</Label>
                 <Input
                   id="team-email"
                   type="email"
-                  placeholder="team@lendry.ai"
+                  placeholder="team@company.com"
                   value={newMember.email}
                   onChange={(e) => setNewMember({ ...newMember, email: e.target.value })}
                   data-testid="input-team-email"
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="team-password">Password *</Label>
-                <Input
-                  id="team-password"
-                  type="password"
-                  placeholder="Enter password"
-                  value={newMember.password}
-                  onChange={(e) => setNewMember({ ...newMember, password: e.target.value })}
-                  data-testid="input-team-password"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="team-fullName">Full Name *</Label>
-                <Input
-                  id="team-fullName"
-                  placeholder="Jane Smith"
-                  value={newMember.fullName}
-                  onChange={(e) => setNewMember({ ...newMember, fullName: e.target.value })}
-                  data-testid="input-team-fullname"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="team-title">Title / Position</Label>
-                <Input
-                  id="team-title"
-                  placeholder="e.g. Loan Processor, Underwriter"
-                  value={newMember.title}
-                  onChange={(e) => setNewMember({ ...newMember, title: e.target.value })}
-                  data-testid="input-team-title"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="team-phone">Phone</Label>
-                <Input
-                  id="team-phone"
-                  placeholder="(555) 123-4567"
-                  value={newMember.phone}
-                  onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })}
-                  data-testid="input-team-phone"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label>Roles *</Label>
-                <p className="text-xs text-muted-foreground mb-1">
-                  Select one or more roles. Permissions are cumulative across all assigned roles.
-                </p>
-                <div className="space-y-2" data-testid="checkboxes-team-roles">
-                  {(["processor", "staff", "admin", "super_admin"] as const).map((r) => (
-                    <div key={r} className="flex items-start gap-3 p-2 border rounded-md">
-                      <Checkbox
-                        id={`new-role-${r}`}
-                        checked={newMember.roles.includes(r)}
-                        onCheckedChange={() => setNewMember({ ...newMember, roles: toggleRole(newMember.roles, r) })}
-                        data-testid={`checkbox-new-role-${r}`}
-                      />
-                      <div className="grid gap-0.5 leading-none">
-                        <label htmlFor={`new-role-${r}`} className="text-sm font-medium cursor-pointer">
-                          {roleLabels[r]}
-                        </label>
-                        <p className="text-xs text-muted-foreground">{roleDescriptions[r]}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <Label>Role *</Label>
+                <Select value={newMember.role} onValueChange={(val) => setNewMember({ ...newMember, role: val })}>
+                  <SelectTrigger data-testid="select-team-role">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="processor">Processor</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <DialogFooter>
               <Button
                 variant="outline"
                 onClick={() => setIsAddDialogOpen(false)}
-                data-testid="button-cancel-add-team"
+                data-testid="button-cancel-add-member"
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleCreateMember}
-                disabled={createMemberMutation.isPending}
-                data-testid="button-submit-add-team"
+                disabled={inviteMemberMutation.isPending}
+                data-testid="button-submit-add-member"
               >
-                {createMemberMutation.isPending ? "Adding..." : "Add Member"}
+                {inviteMemberMutation.isPending ? "Sending..." : "Send Invite"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -609,7 +588,7 @@ function TeamTab() {
                     <TableHead>Title</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead>Contact</TableHead>
-                    <TableHead>Last Login</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>Active</TableHead>
                     <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
@@ -617,6 +596,7 @@ function TeamTab() {
                 <TableBody>
                   {filteredMembers.map((member) => {
                     const memberRoles = member.roles?.length ? member.roles : [member.role];
+                    const inviteStatus = member.inviteStatus;
                     return (
                       <TableRow key={member.id} data-testid={`row-team-${member.id}`}>
                         <TableCell>
@@ -645,7 +625,21 @@ function TeamTab() {
                           <span className="text-sm">{member.phone || "-"}</span>
                         </TableCell>
                         <TableCell>
-                          {member.lastLoginAt ? format(new Date(member.lastLoginAt), "MMM d, yyyy") : "Never"}
+                          {inviteStatus === 'pending' ? (
+                            <Badge variant="outline" data-testid={`badge-invite-status-${member.id}`}>
+                              <Mail className="h-3 w-3 mr-1" />
+                              Invite Pending
+                            </Badge>
+                          ) : inviteStatus === 'accepted' ? (
+                            <Badge variant="secondary" data-testid={`badge-invite-status-${member.id}`}>
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Accepted
+                            </Badge>
+                          ) : member.lastLoginAt ? (
+                            <span className="text-sm text-muted-foreground">{format(new Date(member.lastLoginAt), "MMM d, yyyy")}</span>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">Active</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Switch
@@ -666,6 +660,15 @@ function TeamTab() {
                                 <Pencil className="h-4 w-4 mr-2" />
                                 Edit Details
                               </DropdownMenuItem>
+                              {inviteStatus === 'pending' && (
+                                <DropdownMenuItem
+                                  onClick={() => resendInviteMutation.mutate(member.id)}
+                                  data-testid={`button-resend-invite-${member.id}`}
+                                >
+                                  <Mail className="h-4 w-4 mr-2" />
+                                  Resend Invite
+                                </DropdownMenuItem>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>

@@ -100,6 +100,71 @@ export async function sendSigningInvitation(
   }
 }
 
+export async function sendTeamInviteEmail(
+  recipientEmail: string,
+  recipientName: string,
+  inviterName: string,
+  companyName: string,
+  role: string,
+  inviteLink: string
+) {
+  try {
+    const { client } = await getResendClient();
+    
+    const roleLabel = role === 'admin' ? 'Admin' : 'Processor';
+    
+    const result = await client.emails.send({
+      from: `${companyName} <onboarding@resend.dev>`,
+      to: recipientEmail,
+      subject: `You've been invited to join ${companyName}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background-color: #1e40af; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { background-color: #f8fafc; padding: 30px; border-radius: 0 0 8px 8px; }
+            .button { display: inline-block; background-color: #1e40af; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0; }
+            .footer { text-align: center; color: #64748b; font-size: 12px; margin-top: 20px; }
+            .info-box { background: white; padding: 15px; border-radius: 6px; border-left: 4px solid #1e40af; margin: 15px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>Team Invitation</h1>
+            </div>
+            <div class="content">
+              <p>Hello ${recipientName},</p>
+              <p><strong>${inviterName}</strong> has invited you to join <strong>${companyName}</strong> as a <strong>${roleLabel}</strong>.</p>
+              <div class="info-box">
+                <p style="margin: 0;"><strong>Role:</strong> ${roleLabel}</p>
+                <p style="margin: 5px 0 0 0;"><strong>Email:</strong> ${recipientEmail}</p>
+              </div>
+              <p>Click the button below to set up your password and get started:</p>
+              <div style="text-align: center;">
+                <a href="${inviteLink}" class="button">Accept Invitation</a>
+              </div>
+              <p style="color: #64748b; font-size: 14px;">This invitation link will expire in 7 days.</p>
+            </div>
+            <div class="footer">
+              <p>Powered by ${companyName}</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `
+    });
+    
+    return { success: true, result };
+  } catch (error: any) {
+    console.error('Failed to send team invite email:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 export async function sendVoidNotification(
   signerEmail: string,
   signerName: string,

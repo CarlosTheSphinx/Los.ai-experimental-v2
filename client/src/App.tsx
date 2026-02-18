@@ -21,6 +21,7 @@ import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
+import AcceptInvitePage from "@/pages/accept-invite";
 import AdminDashboard from "@/pages/admin/dashboard";
 import AdminUsers from "@/pages/admin/users";
 import AdminSettings from "@/pages/admin/settings";
@@ -259,6 +260,7 @@ function AppContent() {
   const [isRegisterPage] = useRoute("/register");
   const [isForgotPasswordPage] = useRoute("/forgot-password");
   const [isResetPasswordPage] = useRoute("/reset-password/:token");
+  const [isAcceptInvitePage] = useRoute("/accept-invite/:token");
   const [isOnboardingPage] = useRoute("/onboarding");
   const [isSelectRolePage] = useRoute("/select-role");
   const [isPublicPricingPage] = useRoute("/pricing");
@@ -268,7 +270,7 @@ function AppContent() {
 
   const { isAuthenticated, isLoading } = useAuth();
 
-  const isPublicAuthPage = isLoginPage || isRegisterPage || isForgotPasswordPage || isResetPasswordPage;
+  const isPublicAuthPage = isLoginPage || isRegisterPage || isForgotPasswordPage || isResetPasswordPage || isAcceptInvitePage;
   // Only show public marketing pages for NON-authenticated users
   // The "/" route must fall through to MainRoutes for authenticated users (their dashboard)
   const isPublicMarketingPage = !isLoading && !isAuthenticated && (isHomePage || isPublicPricingPage || isPublicUseCasesPage || isPublicContactPage);
@@ -304,6 +306,7 @@ function AppContent() {
         <Route path="/register" component={() => <AuthRoute component={RegisterPage} />} />
         <Route path="/forgot-password" component={() => <AuthRoute component={ForgotPasswordPage} />} />
         <Route path="/reset-password/:token" component={() => <AuthRoute component={ResetPasswordPage} />} />
+        <Route path="/accept-invite/:token" component={() => <AuthRoute component={AcceptInvitePage} />} />
       </Switch>
     );
   }

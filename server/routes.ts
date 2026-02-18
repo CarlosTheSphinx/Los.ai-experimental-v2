@@ -14,7 +14,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { z } from "zod";
 import { v4 as uuidv4 } from 'uuid';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import { sendCompletedDocument, sendVoidNotification, sendPasswordResetEmail } from './email';
+import { sendCompletedDocument, sendVoidNotification, sendPasswordResetEmail, sendTeamInviteEmail } from './email';
 import { sendCommercialNotification, checkExpiredSubmissions } from './services/commercialNotifications';
 import { 
   hashPassword, 
@@ -4134,7 +4134,8 @@ export async function registerRoutes(
         createdAt: u.createdAt,
         lastLoginAt: u.lastLoginAt,
         emailVerified: u.emailVerified,
-        isActive: u.isActive
+        isActive: u.isActive,
+        inviteStatus: u.inviteStatus || 'none',
       }));
       
       res.json({ users: safeUsers });
@@ -4179,12 +4180,6 @@ export async function registerRoutes(
         emailVerified: true,
       });
       
-      await storage.createAdminActivity({
-        userId: req.user!.id,
-        actionType: 'user_created',
-        actionDescription: `Created new user: ${email} with roles ${userRoles.join(', ')}`,
-      });
-      
       res.json({ 
         user: {
           id: newUser.id,
@@ -4202,6 +4197,216 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Admin create user error:', error);
       res.status(500).json({ error: 'Failed to create user' });
+    }
+  });
+
+  // Admin - Invite team member via email
+  app.post('/api/admin/invite-member', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { firstName, lastName, email, role } = req.body;
+      
+      if (!firstName || !lastName || !email) {
+        return res.status(400).json({ error: 'First name, last name, and email are required' });
+      }
+      
+      const validRoles = ['processor', 'admin'];
+      const assignedRole = validRoles.includes(role) ? role : 'processor';
+      
+      const existingUser = await storage.getUserByEmail(email.toLowerCase().trim());
+      if (existingUser) {
+        return res.status(400).json({ error: 'A user with this email already exists' });
+      }
+      
+      const inviteToken = generateRandomToken();
+      const inviteExpires = new Date(Date.now() + 7 * 24 * 3600000); // 7 days
+      
+      const { getPrimaryRole } = await import('@shared/schema');
+      const userRoles = [assignedRole];
+      const primaryRole = getPrimaryRole(userRoles);
+      const fullName = `${firstName.trim()} ${lastName.trim()}`;
+      
+      const newUser = await storage.createUser({
+        email: email.toLowerCase().trim(),
+        passwordHash: null,
+        fullName,
+        companyName: null,
+        phone: null,
+        title: null,
+        role: primaryRole,
+        roles: userRoles,
+        userType: 'broker',
+        isActive: true,
+        emailVerified: false,
+        inviteToken,
+        inviteTokenExpires: inviteExpires,
+        invitedBy: req.user!.id,
+        inviteStatus: 'pending',
+      });
+      
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+      const inviteLink = `${baseUrl}/accept-invite/${inviteToken}`;
+      
+      const inviterName = req.user!.fullName || req.user!.email;
+      
+      let companyName = 'Lendry.AI';
+      try {
+        const brandingSetting = await storage.getSystemSetting('tenant_branding');
+        if (brandingSetting?.value) {
+          const branding = typeof brandingSetting.value === 'string' ? JSON.parse(brandingSetting.value) : brandingSetting.value;
+          if (branding.companyName) companyName = branding.companyName;
+        }
+      } catch (e) {}
+      
+      const emailResult = await sendTeamInviteEmail(
+        newUser.email,
+        fullName,
+        inviterName,
+        companyName,
+        assignedRole,
+        inviteLink
+      );
+      
+      res.json({ 
+        success: true,
+        user: {
+          id: newUser.id,
+          email: newUser.email,
+          fullName: newUser.fullName,
+          role: newUser.role,
+          roles: newUser.roles,
+          inviteStatus: 'pending',
+        },
+        emailSent: emailResult.success,
+      });
+    } catch (error: any) {
+      console.error('Admin invite member error:', error);
+      res.status(500).json({ error: 'Failed to invite team member' });
+    }
+  });
+
+  // Public - Accept invite and set password
+  app.post('/api/auth/accept-invite', async (req: Request, res: Response) => {
+    try {
+      const { token, password } = req.body;
+      
+      if (!token || !password) {
+        return res.status(400).json({ error: 'Token and password are required' });
+      }
+      
+      if (password.length < 8) {
+        return res.status(400).json({ error: 'Password must be at least 8 characters' });
+      }
+      
+      const allUsers = await db.select().from(users).where(eq(users.inviteToken, token));
+      const user = allUsers[0];
+      
+      if (!user) {
+        return res.status(400).json({ error: 'Invalid invitation link' });
+      }
+      
+      if (user.inviteTokenExpires && new Date() > new Date(user.inviteTokenExpires)) {
+        return res.status(400).json({ error: 'This invitation has expired. Please ask your admin to send a new one.' });
+      }
+      
+      const passwordHash = await hashPassword(password);
+      
+      await storage.updateUser(user.id, {
+        passwordHash,
+        inviteToken: null,
+        inviteTokenExpires: null,
+        inviteStatus: 'accepted',
+        emailVerified: true,
+        onboardingCompleted: true,
+      });
+      
+      res.json({ success: true, message: 'Account setup complete. You can now sign in.' });
+    } catch (error) {
+      console.error('Accept invite error:', error);
+      res.status(500).json({ error: 'Failed to set up account' });
+    }
+  });
+
+  // Public - Validate invite token
+  app.get('/api/auth/validate-invite/:token', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const allUsers = await db.select({
+        id: users.id,
+        email: users.email,
+        fullName: users.fullName,
+        inviteTokenExpires: users.inviteTokenExpires,
+        inviteStatus: users.inviteStatus,
+      }).from(users).where(eq(users.inviteToken, token));
+      const user = allUsers[0];
+      
+      if (!user) {
+        return res.status(400).json({ valid: false, error: 'Invalid invitation link' });
+      }
+      
+      if (user.inviteTokenExpires && new Date() > new Date(user.inviteTokenExpires)) {
+        return res.status(400).json({ valid: false, error: 'This invitation has expired' });
+      }
+      
+      if (user.inviteStatus === 'accepted') {
+        return res.status(400).json({ valid: false, error: 'This invitation has already been accepted' });
+      }
+      
+      res.json({ valid: true, email: user.email, fullName: user.fullName });
+    } catch (error) {
+      console.error('Validate invite error:', error);
+      res.status(500).json({ valid: false, error: 'Failed to validate invitation' });
+    }
+  });
+
+  // Admin - Resend invite
+  app.post('/api/admin/resend-invite/:userId', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      const user = await storage.getUserById(userId);
+      
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      if (user.inviteStatus === 'accepted') {
+        return res.status(400).json({ error: 'This user has already accepted their invitation' });
+      }
+      
+      const inviteToken = generateRandomToken();
+      const inviteExpires = new Date(Date.now() + 7 * 24 * 3600000);
+      
+      await storage.updateUser(userId, {
+        inviteToken,
+        inviteTokenExpires: inviteExpires,
+        inviteStatus: 'pending',
+      });
+      
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+      const inviteLink = `${baseUrl}/accept-invite/${inviteToken}`;
+      const inviterName = req.user!.fullName || req.user!.email;
+      
+      let companyName = 'Lendry.AI';
+      try {
+        const brandingSetting = await storage.getSystemSetting('tenant_branding');
+        if (brandingSetting?.value) {
+          const branding = typeof brandingSetting.value === 'string' ? JSON.parse(brandingSetting.value) : brandingSetting.value;
+          if (branding.companyName) companyName = branding.companyName;
+        }
+      } catch (e) {}
+      
+      const emailResult = await sendTeamInviteEmail(
+        user.email,
+        user.fullName || 'Team Member',
+        inviterName,
+        companyName,
+        user.role,
+        inviteLink
+      );
+      
+      res.json({ success: true, emailSent: emailResult.success });
+    } catch (error) {
+      console.error('Resend invite error:', error);
+      res.status(500).json({ error: 'Failed to resend invitation' });
     }
   });
 
