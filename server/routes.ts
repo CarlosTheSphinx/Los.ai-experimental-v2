@@ -4498,18 +4498,75 @@ export async function registerRoutes(
         return res.status(403).json({ error: 'Cannot remove a super admin user' });
       }
 
-      await db.update(users).set({ isActive: false }).where(eq(users.id, userId));
+      const relatedTables = [
+        { table: 'user_onboarding_progress', col: 'user_id' },
+        { table: 'lender_training_progress', col: 'user_id' },
+        { table: 'notifications', col: 'user_id' },
+        { table: 'message_reads', col: 'user_id' },
+        { table: 'ai_assistant_conversations', col: 'user_id' },
+      ];
+      for (const { table, col } of relatedTables) {
+        await db.execute(sql.raw(`DELETE FROM "${table}" WHERE "${col}" = ${userId}`));
+      }
+
+      const nullableTables = [
+        { table: 'admin_tasks', col: 'assigned_to' },
+        { table: 'admin_tasks', col: 'completed_by' },
+        { table: 'deal_documents', col: 'reviewed_by' },
+        { table: 'deal_documents', col: 'uploaded_by' },
+        { table: 'deal_document_files', col: 'uploaded_by' },
+        { table: 'deal_tasks', col: 'assigned_to' },
+        { table: 'deal_tasks', col: 'completed_by' },
+        { table: 'deal_tasks', col: 'created_by' },
+        { table: 'project_documents', col: 'reviewed_by' },
+        { table: 'project_documents', col: 'uploaded_by' },
+        { table: 'project_activity', col: 'user_id' },
+        { table: 'commercial_submissions', col: 'assigned_to' },
+        { table: 'deal_memory_entries', col: 'source_user_id' },
+        { table: 'deal_processors', col: 'user_id' },
+        { table: 'deal_processors', col: 'assigned_by' },
+        { table: 'agent_communications', col: 'approved_by' },
+        { table: 'agent_pipeline_runs', col: 'triggered_by' },
+        { table: 'agent_runs', col: 'triggered_by' },
+        { table: 'document_review_results', col: 'reviewed_by' },
+        { table: 'email_thread_deal_links', col: 'linked_by' },
+        { table: 'esign_envelopes', col: 'created_by' },
+        { table: 'loan_digest_configs', col: 'created_by' },
+        { table: 'loan_updates', col: 'performed_by' },
+        { table: 'scheduled_digest_drafts', col: 'approved_by' },
+        { table: 'submission_notes', col: 'admin_user_id' },
+        { table: 'rule_proposals', col: 'reviewed_by' },
+        { table: 'processor_daily_queue', col: 'approved_by' },
+        { table: 'processor_daily_queue', col: 'processor_id' },
+      ];
+      for (const { table, col } of nullableTables) {
+        try {
+          await db.execute(sql.raw(`UPDATE "${table}" SET "${col}" = NULL WHERE "${col}" = ${userId}`));
+        } catch (_) {}
+      }
+
+      const ownedDeleteTables = [
+        'saved_quotes',
+        'deal_notes',
+        'messages',
+        'email_accounts',
+        'loan_digest_recipients',
+        'broker_contacts',
+        'broker_outreach_messages',
+        'team_permissions',
+      ];
+      for (const table of ownedDeleteTables) {
+        try {
+          await db.execute(sql.raw(`DELETE FROM "${table}" WHERE "user_id" = ${userId}`));
+        } catch (_) {}
+      }
 
       try {
-        await storage.createAdminActivity({
-          userId: req.user!.id,
-          actionType: 'user_removed',
-          actionDescription: `Removed team member ${targetUser.email}`,
-          metadata: { targetUserId: userId, targetEmail: targetUser.email }
-        });
-      } catch (activityErr) {
-        console.log('Could not log user removal activity (non-critical):', (activityErr as any)?.message);
-      }
+        await db.execute(sql.raw(`DELETE FROM "message_threads" WHERE "user_id" = ${userId}`));
+        await db.execute(sql.raw(`DELETE FROM "message_threads" WHERE "created_by" = ${userId}`));
+      } catch (_) {}
+
+      await db.delete(users).where(eq(users.id, userId));
 
       res.json({ success: true });
     } catch (error) {
