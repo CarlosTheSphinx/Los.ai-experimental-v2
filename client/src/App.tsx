@@ -87,6 +87,11 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     return <Redirect to="/select-role" />;
   }
 
+  const isAdmin = user?.role && ['admin', 'staff', 'super_admin'].includes(user.role);
+  if (isAdmin && !user?.onboardingCompleted) {
+    return <Redirect to="/admin/onboarding" />;
+  }
+
   return (
     <RouteErrorBoundary routeName={Component.displayName || Component.name || 'Route'}>
       <Component />
@@ -94,8 +99,9 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   );
 }
 
-function AdminProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+function AdminProtectedRoute({ component: Component, skipOnboardingRedirect }: { component: React.ComponentType, skipOnboardingRedirect?: boolean }) {
   const { isAuthenticated, isLoading, user } = useAuth();
+  const [location] = useLocation();
 
   if (isLoading) {
     return (
@@ -116,6 +122,10 @@ function AdminProtectedRoute({ component: Component }: { component: React.Compon
   const isAdmin = user?.role && ['admin', 'staff', 'super_admin'].includes(user.role);
   if (!isAdmin) {
     return <Redirect to="/" />;
+  }
+
+  if (!skipOnboardingRedirect && !user?.onboardingCompleted && location !== '/admin/onboarding') {
+    return <Redirect to="/admin/onboarding" />;
   }
 
   return (
@@ -220,7 +230,7 @@ function MainRoutes() {
           <Route path="/admin/projects" component={() => <Redirect to="/admin/deals" />} />
           <Route path="/admin/projects/:id">{(params) => <Redirect to={`/admin/deals/${params.id}`} />}</Route>
           <Route path="/admin/settings" component={() => <AdminProtectedRoute component={AdminSettings} />} />
-          <Route path="/admin/onboarding" component={() => <AdminProtectedRoute component={AdminOnboarding} />} />
+          <Route path="/admin/onboarding" component={() => <AdminProtectedRoute component={AdminOnboarding} skipOnboardingRedirect />} />
           <Route path="/admin/digests" component={() => <AdminProtectedRoute component={AdminDigests} />} />
           <Route path="/admin/document-templates" component={() => <AdminProtectedRoute component={AdminDocumentTemplates} />} />
           <Route path="/admin/document-templates/:id" component={() => <AdminProtectedRoute component={AdminTemplateEditor} />} />

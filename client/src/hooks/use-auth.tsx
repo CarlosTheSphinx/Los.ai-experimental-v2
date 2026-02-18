@@ -7,6 +7,7 @@ interface User {
   email: string;
   firstName: string;
   lastName: string;
+  fullName?: string;
   role?: string;
   userType?: 'broker' | 'borrower' | null;
   onboardingCompleted?: boolean;
@@ -26,7 +27,7 @@ interface RegisterData {
   password: string;
   firstName: string;
   lastName: string;
-  userType: 'broker' | 'borrower';
+  userType: 'broker' | 'borrower' | 'lender';
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);

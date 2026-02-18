@@ -397,6 +397,8 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
 
       if (!user.userType) {
         res.redirect('/select-role');
+      } else if (!user.onboardingCompleted && ['admin', 'staff', 'super_admin'].includes(user.role || '')) {
+        res.redirect('/admin/onboarding');
       } else {
         res.redirect('/');
       }
@@ -438,6 +440,23 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
     } catch (error) {
       console.error('Get user error:', error);
       res.status(500).json({ error: 'Failed to get user' });
+    }
+  });
+
+  app.post('/api/auth/complete-onboarding', deps.authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+      const user = await storage.getUserById(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      await storage.updateUser(user.id, { onboardingCompleted: true });
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Complete onboarding error:', error);
+      res.status(500).json({ error: 'Failed to complete onboarding' });
     }
   });
 

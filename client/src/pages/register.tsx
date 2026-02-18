@@ -60,8 +60,9 @@ export default function RegisterPage() {
         lastName: data.lastName,
         userType: data.userType,
       });
-      // Redirect based on user type - brokers and lenders go to onboarding, borrowers go straight to dashboard
-      if (data.userType === 'broker' || data.userType === 'lender') {
+      if (data.userType === 'lender') {
+        setLocation('/admin/onboarding');
+      } else if (data.userType === 'broker') {
         setLocation('/onboarding');
       } else {
         setLocation('/');

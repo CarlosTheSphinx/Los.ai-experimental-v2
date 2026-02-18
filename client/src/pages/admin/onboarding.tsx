@@ -102,6 +102,21 @@ export default function AdminOnboarding() {
   const emailConnected = !!accountData?.account;
   const hasPrograms = (programsData?.programs?.length || 0) > 0;
 
+  const completeOnboardingMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest('POST', '/api/auth/complete-onboarding', {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
+      toast({ title: 'Setup complete', description: 'Welcome to the platform!' });
+      setLocation('/admin/deals');
+    },
+    onError: () => {
+      toast({ title: 'Error', description: 'Could not complete setup. Please try again.', variant: 'destructive' });
+    },
+  });
+
   const handleNext = () => {
     if (currentStep < GUIDE_STEPS.length) {
       setCurrentStep(currentStep + 1);
@@ -205,8 +220,11 @@ export default function AdminOnboarding() {
               {currentStep === 3 && (
                 <StepCommunicationsAI
                   emailConnected={emailConnected}
+                  onboardingCompleted={!!user?.onboardingCompleted}
                   onBack={handleBack}
                   onNavigate={setLocation}
+                  onCompleteOnboarding={() => completeOnboardingMutation.mutate()}
+                  isCompleting={completeOnboardingMutation.isPending}
                 />
               )}
             </div>
@@ -497,12 +515,18 @@ function StepProgramsWorkflow({
 
 function StepCommunicationsAI({
   emailConnected,
+  onboardingCompleted,
   onBack,
   onNavigate,
+  onCompleteOnboarding,
+  isCompleting,
 }: {
   emailConnected: boolean;
+  onboardingCompleted: boolean;
   onBack: () => void;
   onNavigate: (path: string) => void;
+  onCompleteOnboarding: () => void;
+  isCompleting: boolean;
 }) {
   return (
     <div className="space-y-6">
@@ -637,7 +661,7 @@ function StepCommunicationsAI({
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold text-lg">You're all set!</h3>
               <p className="text-sm text-muted-foreground">
-                You can always come back to this guide from the Onboarding section in the sidebar. Now go ahead and start managing your deals.
+                You can always come back to this guide from the Getting Started section in the sidebar. Now go ahead and start managing your deals.
               </p>
             </div>
           </div>
@@ -649,10 +673,26 @@ function StepCommunicationsAI({
           <ChevronLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
-        <Button onClick={() => onNavigate('/admin/deals')} data-testid="button-go-to-dashboard">
-          Go to Deals
-          <ArrowRight className="ml-2 h-4 w-4" />
-        </Button>
+        {onboardingCompleted ? (
+          <Button onClick={() => onNavigate('/admin/deals')} data-testid="button-go-to-dashboard">
+            Go to Deals
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+        ) : (
+          <Button onClick={onCompleteOnboarding} disabled={isCompleting} data-testid="button-finish-setup">
+            {isCompleting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Finishing...
+              </>
+            ) : (
+              <>
+                Finish Setup & Go to Deals
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </>
+            )}
+          </Button>
+        )}
       </div>
     </div>
   );
