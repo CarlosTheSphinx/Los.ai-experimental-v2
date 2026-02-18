@@ -13720,6 +13720,58 @@ If the user provides specific criteria, extract as many rules as you can from th
     }
   });
 
+  // PandaDoc API key status - check if configured
+  app.get('/api/admin/pandadoc/status', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      // Check env var first, then system setting
+      let apiKey = process.env.PANDADOC_API_KEY;
+      if (!apiKey) {
+        const setting = await storage.getSettingByKey('pandadoc_api_key');
+        apiKey = setting?.settingValue || '';
+      }
+      if (apiKey) {
+        const masked = apiKey.length > 8
+          ? apiKey.substring(0, 4) + '****' + apiKey.substring(apiKey.length - 4)
+          : '****';
+        res.json({ connected: true, maskedKey: masked });
+      } else {
+        res.json({ connected: false });
+      }
+    } catch (error: any) {
+      res.status(500).json({ connected: false, error: error.message });
+    }
+  });
+
+  // PandaDoc API key test - verify the key works
+  app.get('/api/admin/pandadoc/test', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      let apiKey = process.env.PANDADOC_API_KEY;
+      if (!apiKey) {
+        const setting = await storage.getSettingByKey('pandadoc_api_key');
+        apiKey = setting?.settingValue || '';
+      }
+      if (!apiKey) {
+        return res.json({ connected: false, error: 'No API key configured' });
+      }
+      // Test the key by fetching current member info
+      const response = await fetch('https://api.pandadoc.com/public/v1/members/current/', {
+        headers: { 'Authorization': `API-Key ${apiKey}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        res.json({
+          connected: true,
+          workspace: data.workspace_name || data.company_name || 'PandaDoc',
+          email: data.email,
+        });
+      } else {
+        res.json({ connected: false, error: `API returned ${response.status}: ${response.statusText}` });
+      }
+    } catch (error: any) {
+      res.json({ connected: false, error: error.message });
+    }
+  });
+
   // Debug endpoint to test PandaDoc connection and list all templates
   app.get('/api/pandadoc/debug', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
