@@ -4499,7 +4499,7 @@ export async function registerRoutes(
       }
 
       // Soft-delete: deactivate the user
-      await storage.updateUser(userId, { isActive: false });
+      await db.update(users).set({ isActive: false }).where(eq(users.id, userId));
 
       await storage.createAdminActivity({
         userId: req.user!.id,
