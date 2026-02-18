@@ -1,7 +1,11 @@
-import { createRequire } from "module";
-const _require = createRequire(import.meta.url);
-const pdfParseModule = _require("pdf-parse");
-const PDFParse = pdfParseModule.PDFParse || pdfParseModule;
+let _PDFParse: any;
+async function loadPdfParse() {
+  if (!_PDFParse) {
+    const mod = await import("pdf-parse");
+    _PDFParse = (mod as any).PDFParse || (mod as any).default || mod;
+  }
+  return _PDFParse;
+}
 
 import { db } from "../db";
 import { dealDocuments } from "@shared/schema";
@@ -24,6 +28,7 @@ export interface ExtractedDocumentContent {
 
 export async function extractTextFromPdf(buffer: Buffer): Promise<{ text: string; pageCount: number }> {
   try {
+    const PDFParse = await loadPdfParse();
     const uint8 = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
     const parser = new PDFParse(uint8);
     await parser.load();
