@@ -110,8 +110,12 @@ export default function AdminOnboarding() {
   const [activeTab, setActiveTab] = useState<string>('guide');
   const [currentStep, setCurrentStep] = useState(1);
 
-  const { data: accountData, isLoading: accountLoading } = useQuery<{ account: any }>({
-    queryKey: ['/api/email/account'],
+  const { data: googleStatusData, isLoading: googleStatusLoading } = useQuery<{
+    connected: boolean;
+    gmail: { connected: boolean; emailAddress: string | null; lastSyncAt: string | null; syncStatus: string | null };
+    drive: { connected: boolean };
+  }>({
+    queryKey: ['/api/google/status'],
   });
 
   const { data: programsData, isLoading: programsLoading } = useQuery<{ programs: any[] }>({
@@ -136,7 +140,7 @@ export default function AdminOnboarding() {
     emailSenderName: "",
   });
 
-  const emailConnected = !!accountData?.account;
+  const emailConnected = googleStatusData?.gmail?.connected || false;
   const hasPrograms = (programsData?.programs?.length || 0) > 0;
 
   const completeOnboardingMutation = useMutation({
@@ -246,9 +250,6 @@ export default function AdminOnboarding() {
               )}
               {currentStep === 2 && (
                 <StepIntegrations
-                  emailConnected={emailConnected}
-                  emailAddress={accountData?.account?.emailAddress}
-                  isEmailLoading={accountLoading}
                   integrationsData={integrationsData?.integrations}
                   isIntegrationsLoading={integrationsLoading}
                   driveFolderId={driveFolderSetting?.settingValue || ''}
@@ -642,9 +643,6 @@ function StepTeamSetup({
 }
 
 function StepIntegrations({
-  emailConnected,
-  emailAddress,
-  isEmailLoading,
   integrationsData,
   isIntegrationsLoading,
   driveFolderId,
@@ -653,9 +651,6 @@ function StepIntegrations({
   onBack,
   onNavigate,
 }: {
-  emailConnected: boolean;
-  emailAddress?: string;
-  isEmailLoading: boolean;
   integrationsData: any;
   isIntegrationsLoading: boolean;
   driveFolderId: string;
@@ -670,6 +665,27 @@ function StepIntegrations({
   useEffect(() => {
     setLocalDriveFolderId(driveFolderId);
   }, [driveFolderId]);
+
+  // Unified Google status query
+  const { data: googleStatus, isLoading: isGoogleLoading } = useQuery<{
+    connected: boolean;
+    gmail: { connected: boolean; emailAddress: string | null; lastSyncAt: string | null; syncStatus: string | null };
+    drive: { connected: boolean };
+  }>({
+    queryKey: ['/api/google/status'],
+  });
+
+  const disconnectMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/google/disconnect"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/google/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/email/account"] });
+      toast({ title: "Google Disconnected", description: "Gmail and Drive have been disconnected." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to disconnect Google.", variant: "destructive" });
+    },
+  });
 
   const saveDriveMutation = useMutation({
     mutationFn: async (folderId: string) => {
@@ -696,109 +712,164 @@ function StepIntegrations({
     { key: 'pandadoc', label: 'PandaDoc', icon: FileText },
   ];
 
+  const isGoogleConnected = googleStatus?.connected || googleStatus?.gmail?.connected;
+
   return (
     <div className="space-y-6">
+      {/* Unified Google Connect Card */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Mail className="h-5 w-5" />
-            Gmail Connection
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+            </svg>
+            Google Integration
           </CardTitle>
           <CardDescription>
-            Link your Gmail account so you can view, manage, and link email conversations to deals.
+            Connect your Google account to sync emails, link conversations to deals, and store documents in Google Drive
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {isEmailLoading ? (
+          {isGoogleLoading ? (
             <div className="flex items-center gap-3 p-4">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Checking email connection status...</span>
+              <span className="text-sm text-muted-foreground">Checking Google connection...</span>
             </div>
-          ) : emailConnected ? (
-            <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-900/20 rounded-md border border-green-200 dark:border-green-800">
-              <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
-              <div>
-                <p className="font-medium text-green-800 dark:text-green-300">Gmail Connected</p>
-                <p className="text-sm text-green-700 dark:text-green-400">{emailAddress}</p>
+          ) : isGoogleConnected ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-5 w-5 text-primary" />
+                    <span className="font-medium">{googleStatus?.gmail?.emailAddress || 'Connected'}</span>
+                  </div>
+                  <Badge variant="default">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Connected
+                  </Badge>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => disconnectMutation.mutate()}
+                  disabled={disconnectMutation.isPending}
+                  data-testid="button-disconnect-google-onboarding"
+                >
+                  Disconnect
+                </Button>
+              </div>
+
+              {/* Gmail + Drive status tiles */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-md">
+                  <Mail className="h-4 w-4 text-primary" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">Gmail</p>
+                    <p className="text-xs text-muted-foreground truncate">Email sync ready</p>
+                  </div>
+                  {googleStatus?.gmail?.connected ? (
+                    <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                  ) : (
+                    <Badge variant="secondary" className="text-xs">Pending</Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-md">
+                  <FolderOpen className="h-4 w-4 text-primary" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">Google Drive</p>
+                    <p className="text-xs text-muted-foreground">Document storage</p>
+                  </div>
+                  {googleStatus?.drive?.connected ? (
+                    <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                  ) : (
+                    <Badge variant="secondary" className="text-xs">Pending</Badge>
+                  )}
+                </div>
               </div>
             </div>
           ) : (
-            <>
-              <div className="space-y-3 text-sm text-muted-foreground">
-                <p>Connecting your Gmail allows you to:</p>
-                <ul className="space-y-2 ml-4">
-                  <li className="flex items-start gap-2">
-                    <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-                    View your email inbox directly inside the platform
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-                    Link email threads to specific deals for full context
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-                    Get notified when new emails arrive on linked deals
-                  </li>
-                </ul>
+            <div className="text-center py-6 space-y-4">
+              <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
               </div>
-              <div className="flex items-center gap-3">
-                <Button
-                  onClick={() => window.location.href = '/api/email/connect'}
-                  data-testid="button-connect-gmail-onboarding"
-                >
-                  <Mail className="h-4 w-4 mr-2" />
-                  Connect Gmail
-                </Button>
-                <span className="text-sm text-muted-foreground">You can also do this later from Settings</span>
+              <div>
+                <p className="font-medium">Connect Google</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  One click connects both Gmail (email sync) and Google Drive (document storage)
+                </p>
               </div>
-            </>
+              <Button
+                onClick={() => window.location.href = '/api/google/connect?returnTo=' + encodeURIComponent('/admin/onboarding')}
+                data-testid="button-connect-google-onboarding"
+                className="gap-2"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#fff"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#fff"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#fff"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#fff"/>
+                </svg>
+                Connect Google
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FolderOpen className="h-5 w-5" />
-            Google Drive
-          </CardTitle>
-          <CardDescription>
-            Configure a parent folder in Google Drive where all deal document folders will be created automatically.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {isSettingsLoading ? (
-            <div className="flex items-center gap-3 p-4">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Loading settings...</span>
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              <Input
-                value={localDriveFolderId}
-                onChange={(e) => setLocalDriveFolderId(e.target.value)}
-                placeholder="Enter Google Drive Parent Folder ID"
-                data-testid="input-drive-folder-id"
-              />
-              <Button
-                size="sm"
-                onClick={() => saveDriveMutation.mutate(localDriveFolderId)}
-                disabled={saveDriveMutation.isPending || localDriveFolderId === driveFolderId}
-                data-testid="button-save-drive-folder"
-              >
-                {saveDriveMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-          )}
-          <p className="text-xs text-muted-foreground">
-            Find the folder ID in your Google Drive folder's URL after /folders/
-          </p>
-        </CardContent>
-      </Card>
+      {/* Drive Folder Config — only shown when Google is connected */}
+      {isGoogleConnected && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FolderOpen className="h-5 w-5" />
+              Google Drive Folder
+            </CardTitle>
+            <CardDescription>
+              Optionally set a parent folder ID where deal document folders will be created automatically.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {isSettingsLoading ? (
+              <div className="flex items-center gap-3 p-4">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Loading settings...</span>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Input
+                  value={localDriveFolderId}
+                  onChange={(e) => setLocalDriveFolderId(e.target.value)}
+                  placeholder="Enter Google Drive Parent Folder ID (optional)"
+                  data-testid="input-drive-folder-id"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => saveDriveMutation.mutate(localDriveFolderId)}
+                  disabled={saveDriveMutation.isPending || localDriveFolderId === driveFolderId}
+                  data-testid="button-save-drive-folder"
+                >
+                  {saveDriveMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Find the folder ID in your Google Drive folder's URL after /folders/
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

@@ -51,6 +51,7 @@ import { registerBrokerSdrRoutes } from './routes/broker-sdr';
 import { registerAiAssistantRoutes } from './routes/ai-assistant';
 import { registerAgentRoutes } from './routes/agents';
 import { registerEmailRoutes } from './routes/email';
+import { registerGoogleConnectRoutes } from './routes/googleConnect';
 
 
 /**
@@ -220,6 +221,9 @@ export async function registerRoutes(
 
   // Register auth routes (address autocomplete, registration, login, OAuth, password reset)
   registerAuthRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
+
+  // Register unified Google connect routes (Gmail + Drive in one OAuth flow)
+  registerGoogleConnectRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
 
   // Forgot password
   app.post('/api/auth/forgot-password', async (req: Request, res: Response) => {
