@@ -103,7 +103,12 @@ export default function AdminOnboarding() {
   const qc = useQueryClient();
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<string>('guide');
-  const [currentStep, setCurrentStep] = useState(1);
+  const initialStep = (() => {
+    const params = new URLSearchParams(window.location.search);
+    const s = parseInt(params.get('step') || '1', 10);
+    return s >= 1 && s <= 6 ? s : 1;
+  })();
+  const [currentStep, setCurrentStep] = useState(initialStep);
 
   const { data: googleStatusData, isLoading: googleStatusLoading } = useQuery<{
     connected: boolean;
@@ -814,7 +819,7 @@ function StepIntegrations({
             </div>
           ) : (
             <Button
-              onClick={() => window.location.href = '/api/google/connect?returnTo=' + encodeURIComponent('/admin/onboarding')}
+              onClick={() => window.location.href = '/api/google/connect?returnTo=' + encodeURIComponent('/admin/onboarding?step=2')}
               data-testid="button-connect-google-onboarding"
               className="gap-2 w-full"
               variant={isMicrosoftConnected ? 'outline' : 'default'}
@@ -879,7 +884,7 @@ function StepIntegrations({
             </div>
           ) : (
             <Button
-              onClick={() => window.location.href = '/api/microsoft/connect?returnTo=' + encodeURIComponent('/admin/onboarding')}
+              onClick={() => window.location.href = '/api/microsoft/connect?returnTo=' + encodeURIComponent('/admin/onboarding?step=2')}
               data-testid="button-connect-microsoft-onboarding"
               className="gap-2 w-full"
               variant={isGoogleConnected ? 'outline' : 'default'}
