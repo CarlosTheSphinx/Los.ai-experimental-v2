@@ -396,15 +396,6 @@ function StepCompanyProfile({
               data-testid="input-onboard-sender-name"
             />
           </div>
-          <Button
-            onClick={save}
-            disabled={!hasChanges || isPending}
-            size="sm"
-            data-testid="button-save-company-profile"
-          >
-            <Save className="h-4 w-4 mr-2" />
-            {isPending ? 'Saving...' : 'Save'}
-          </Button>
         </CardContent>
       </Card>
 
@@ -412,9 +403,16 @@ function StepCompanyProfile({
         <Button variant="ghost" onClick={onNext} className="text-muted-foreground" data-testid="button-skip-step-1">
           Skip for now
         </Button>
-        <Button onClick={onNext} data-testid="button-next-step-1">
-          Next: Team Setup
-          <ChevronRight className="ml-2 h-4 w-4" />
+        <Button
+          onClick={async () => {
+            if (hasChanges) await save();
+            onNext();
+          }}
+          disabled={isPending}
+          data-testid="button-next-step-1"
+        >
+          {isPending ? 'Saving...' : 'Next: Team Setup'}
+          {!isPending && <ChevronRight className="ml-2 h-4 w-4" />}
         </Button>
       </div>
     </div>
