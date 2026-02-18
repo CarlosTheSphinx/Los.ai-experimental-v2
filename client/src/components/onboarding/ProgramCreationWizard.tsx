@@ -1036,19 +1036,10 @@ function ProgramDetailsStep({
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Loan Type *</Label>
-            <Select value={loanType} onValueChange={onLoanTypeChange}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {loanTypeOptions.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <LoanTypeSelector value={loanType} onChange={onLoanTypeChange} />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">Term Options</Label>
+            <Label className="text-xs">Term Options (months)</Label>
             <Input
               placeholder="ex. 12, 24, 36, 60"
               value={termOptions}
@@ -1120,6 +1111,69 @@ function ProgramDetailsStep({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function LoanTypeSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [isCustom, setIsCustom] = useState(
+    !loanTypeOptions.some((o) => o.value === value) && value !== ''
+  );
+  const [customValue, setCustomValue] = useState(
+    !loanTypeOptions.some((o) => o.value === value) ? value : ''
+  );
+
+  if (isCustom) {
+    return (
+      <div className="flex items-center gap-2">
+        <Input
+          className="h-9 text-sm flex-1"
+          placeholder="ex. Bridge, Construction, SBA"
+          value={customValue}
+          onChange={(e) => {
+            setCustomValue(e.target.value);
+            onChange(e.target.value);
+          }}
+          data-testid="input-custom-loan-type"
+        />
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => {
+            setIsCustom(false);
+            setCustomValue('');
+            onChange('dscr');
+          }}
+          data-testid="button-cancel-custom-loan-type"
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <Select
+      value={value}
+      onValueChange={(v) => {
+        if (v === '__custom__') {
+          setIsCustom(true);
+          setCustomValue('');
+          onChange('');
+        } else {
+          onChange(v);
+        }
+      }}
+    >
+      <SelectTrigger data-testid="select-loan-type">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {loanTypeOptions.map((o) => (
+          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+        ))}
+        <SelectItem value="__custom__">Other (custom)...</SelectItem>
+      </SelectContent>
+    </Select>
   );
 }
 
