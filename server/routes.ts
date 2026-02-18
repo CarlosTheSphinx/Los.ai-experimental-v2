@@ -5326,6 +5326,10 @@ export async function registerRoutes(
     try {
       const { key } = req.params;
       const { value, description } = req.body;
+
+      if (key === 'pandadoc_api_key' && req.user?.role !== 'super_admin') {
+        return res.status(403).json({ error: 'Only super admins can manage PandaDoc API keys' });
+      }
       
       if (!value) {
         return res.status(400).json({ error: 'Value is required' });
@@ -5614,6 +5618,20 @@ export async function registerRoutes(
         connected: !!process.env.GEOAPIFY_API_KEY,
         status: process.env.GEOAPIFY_API_KEY ? 'Connected' : 'Not configured',
         details: process.env.GEOAPIFY_API_KEY ? { configured: true } : undefined
+      };
+
+      // Check PandaDoc integration (env var or system setting)
+      let pandadocKey = process.env.PANDADOC_API_KEY;
+      if (!pandadocKey) {
+        try {
+          const setting = await storage.getSettingByKey('pandadoc_api_key');
+          pandadocKey = setting?.settingValue || '';
+        } catch {}
+      }
+      integrations.pandadoc = {
+        connected: !!pandadocKey,
+        status: pandadocKey ? 'Connected' : 'Not configured',
+        details: pandadocKey ? { configured: true } : undefined
       };
       
       res.json({ integrations });
@@ -13717,6 +13735,62 @@ If the user provides specific criteria, extract as many rules as you can from th
     } catch (error: any) {
       console.error('PandaDoc get template details error:', error);
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // PandaDoc API key status - check if configured (super admin sees full details, regular admin sees connected/not)
+  app.get('/api/admin/pandadoc/status', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      // Check env var first, then system setting
+      let apiKey = process.env.PANDADOC_API_KEY;
+      if (!apiKey) {
+        const setting = await storage.getSettingByKey('pandadoc_api_key');
+        apiKey = setting?.settingValue || '';
+      }
+      const isSuperAdmin = req.user?.role === 'super_admin';
+      if (apiKey) {
+        const result: any = { connected: true };
+        if (isSuperAdmin) {
+          result.maskedKey = apiKey.length > 8
+            ? apiKey.substring(0, 4) + '****' + apiKey.substring(apiKey.length - 4)
+            : '****';
+        }
+        res.json(result);
+      } else {
+        res.json({ connected: false });
+      }
+    } catch (error: any) {
+      res.status(500).json({ connected: false, error: error.message });
+    }
+  });
+
+  // PandaDoc API key test - verify the key works (super admin only)
+  app.get('/api/admin/pandadoc/test', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      let apiKey = process.env.PANDADOC_API_KEY;
+      if (!apiKey) {
+        const setting = await storage.getSettingByKey('pandadoc_api_key');
+        apiKey = setting?.settingValue || '';
+      }
+      if (!apiKey) {
+        return res.json({ connected: false, error: 'No API key configured' });
+      }
+      // Test the key by fetching current member info
+      const response = await fetch('https://api.pandadoc.com/public/v1/members/current/', {
+        headers: { 'Authorization': `API-Key ${apiKey}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        res.json({
+          connected: true,
+          workspace: data.workspace_name || data.company_name || 'PandaDoc',
+          email: data.email,
+        });
+      } else {
+        res.json({ connected: false, error: `API returned ${response.status}: ${response.statusText}` });
+      }
+    } catch (error: any) {
+      res.json({ connected: false, error: error.message });
     }
   });
 

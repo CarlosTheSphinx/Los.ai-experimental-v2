@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import type { DragEvent, ChangeEvent } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,6 +28,13 @@ import {
   GripVertical,
   Link2,
   X,
+  Upload,
+  Brain,
+  Eye,
+  ClipboardCheck,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 // ─── Constants ──────────────────────────────────────────────────
@@ -307,17 +315,17 @@ export function ProgramCreationWizard({
   // Credit policy
   const [selectedCreditPolicyId, setSelectedCreditPolicyId] = useState<number | null>(null);
 
-  // Program basics — pre-populated with DSCR example
-  const [programName, setProgramName] = useState('DSCR Rental Program');
-  const [programDescription, setProgramDescription] = useState('Standard DSCR loan program for investment rental properties. Loan qualification based on property cash flow rather than borrower income.');
+  // Program basics — empty with placeholder examples
+  const [programName, setProgramName] = useState('');
+  const [programDescription, setProgramDescription] = useState('');
   const [loanType, setLoanType] = useState('dscr');
-  const [minLoanAmount, setMinLoanAmount] = useState('150000');
-  const [maxLoanAmount, setMaxLoanAmount] = useState('2000000');
-  const [minLtv, setMinLtv] = useState('50');
-  const [maxLtv, setMaxLtv] = useState('80');
-  const [minInterestRate, setMinInterestRate] = useState('7');
-  const [maxInterestRate, setMaxInterestRate] = useState('12');
-  const [termOptions, setTermOptions] = useState('12, 24, 36, 60');
+  const [minLoanAmount, setMinLoanAmount] = useState('');
+  const [maxLoanAmount, setMaxLoanAmount] = useState('');
+  const [minLtv, setMinLtv] = useState('');
+  const [maxLtv, setMaxLtv] = useState('');
+  const [minInterestRate, setMinInterestRate] = useState('');
+  const [maxInterestRate, setMaxInterestRate] = useState('');
+  const [termOptions, setTermOptions] = useState('');
   const [eligiblePropertyTypes, setEligiblePropertyTypes] = useState<string[]>([
     'single-family-residence', '2-4-unit', 'multifamily-5-plus', 'rental-portfolio', 'mixed-use',
   ]);
@@ -602,53 +610,344 @@ function CreditPolicyStep({
   selectedId: number | null;
   onSelect: (id: number | null) => void;
 }) {
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <ShieldCheck className="h-4 w-4" />
-          Credit Policy
-          <Badge variant="secondary" className="text-xs">Optional</Badge>
-        </CardTitle>
-        <CardDescription>
-          A credit policy defines your lending guidelines — minimum FICO scores, maximum LTV ratios, allowed property types, and other underwriting criteria. The AI agent uses this to automatically flag deals that fall outside your risk parameters.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {creditPolicies.length > 0 ? (
-          <div className="space-y-2">
-            <Label className="text-sm">Select a credit policy to attach to this program</Label>
-            <Select
-              value={selectedId?.toString() || 'none'}
-              onValueChange={(val) => onSelect(val === 'none' ? null : parseInt(val))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="No credit policy" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No credit policy</SelectItem>
-                {creditPolicies.map((p: any) => (
-                  <SelectItem key={p.id} value={p.id.toString()}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ) : (
-          <div className="bg-muted/50 rounded-md p-4 text-sm text-muted-foreground">
-            <p>No credit policies have been created yet. You can skip this for now and add one later from <span className="font-medium text-foreground">Loan Products → Credit Policies</span> in the sidebar.</p>
-          </div>
-        )}
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [uploadedFileName, setUploadedFileName] = useState('');
+  const [extractedRules, setExtractedRules] = useState<{ documentType: string; ruleTitle: string; ruleDescription: string; category?: string }[]>([]);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newPolicyName, setNewPolicyName] = useState('');
+  const [newPolicyDescription, setNewPolicyDescription] = useState('');
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
-        <div className="flex items-start gap-2 p-3 bg-blue-50/50 dark:bg-blue-950/20 rounded-md border border-blue-200 dark:border-blue-800">
-          <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-          <p className="text-xs text-blue-700 dark:text-blue-300">
-            Credit policies can be created or updated later. When attached, the AI document review agent references these guidelines to catch out-of-policy conditions on each deal.
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+  const createPolicyMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest('POST', '/api/admin/credit-policies', {
+        name: newPolicyName,
+        description: newPolicyDescription || null,
+        sourceFileName: uploadedFileName || null,
+        rules: extractedRules,
+      });
+    },
+    onSuccess: async (res) => {
+      const data = await res.json();
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/credit-policies'] });
+      onSelect(data.id);
+      setShowCreateForm(false);
+      setExtractedRules([]);
+      setUploadedFileName('');
+      setNewPolicyName('');
+      setNewPolicyDescription('');
+      toast({ title: 'Credit policy created and attached to this program' });
+    },
+    onError: () => {
+      toast({ title: 'Failed to create credit policy', variant: 'destructive' });
+    },
+  });
+
+  const handleFileUpload = useCallback(async (file: File) => {
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain',
+    ];
+    if (!allowedTypes.includes(file.type) && !file.name.match(/\.(pdf|doc|docx|txt)$/i)) {
+      toast({ title: 'Please upload a PDF, Word document, or text file', variant: 'destructive' });
+      return;
+    }
+
+    setIsExtracting(true);
+    setUploadedFileName(file.name);
+    setShowCreateForm(true);
+    if (!newPolicyName) {
+      const baseName = file.name.replace(/\.(pdf|docx?|txt)$/i, '').replace(/[_-]/g, ' ');
+      setNewPolicyName(baseName);
+    }
+
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(',')[1] || result);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const response = await apiRequest('POST', '/api/admin/credit-policies/extract-rules', {
+        fileContent: base64,
+        fileName: file.name,
+      });
+      const data = await response.json();
+      if (data.rules && Array.isArray(data.rules)) {
+        setExtractedRules(data.rules);
+        const groups: Record<string, boolean> = {};
+        data.rules.forEach((r: any) => { groups[r.documentType || 'General'] = true; });
+        setExpandedGroups(groups);
+        toast({ title: `Extracted ${data.rules.length} rules from ${file.name}` });
+      }
+    } catch (error: any) {
+      toast({ title: 'Failed to extract rules', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsExtracting(false);
+    }
+  }, [newPolicyName, toast]);
+
+  const handleDrop = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileUpload(file);
+  }, [handleFileUpload]);
+
+  const rulesByGroup = extractedRules.reduce<Record<string, typeof extractedRules>>((acc, rule) => {
+    const group = rule.documentType || 'General';
+    if (!acc[group]) acc[group] = [];
+    acc[group].push(rule);
+    return acc;
+  }, {});
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4" />
+            Credit Policy
+            <Badge variant="secondary" className="text-xs">Optional</Badge>
+          </CardTitle>
+          <CardDescription>
+            A credit policy defines your lending guidelines — minimum FICO scores, maximum LTV ratios, allowed property types, and other underwriting criteria. Upload your policy document and the AI will automatically extract the rules.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {creditPolicies.length > 0 && !showCreateForm && (
+            <div className="space-y-2">
+              <Label className="text-sm">Select an existing credit policy</Label>
+              <Select
+                value={selectedId?.toString() || 'none'}
+                onValueChange={(val) => onSelect(val === 'none' ? null : parseInt(val))}
+              >
+                <SelectTrigger data-testid="select-credit-policy">
+                  <SelectValue placeholder="No credit policy" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No credit policy</SelectItem>
+                  {creditPolicies.map((p: any) => (
+                    <SelectItem key={p.id} value={p.id.toString()}>
+                      {p.name} ({p.ruleCount || 0} rules)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="flex items-center gap-2 pt-1">
+                <Separator className="flex-1" />
+                <span className="text-xs text-muted-foreground">or</span>
+                <Separator className="flex-1" />
+              </div>
+            </div>
+          )}
+
+          {!showCreateForm ? (
+            <div
+              className={`relative border-2 border-dashed rounded-md p-8 text-center transition-colors cursor-pointer ${
+                isDragOver
+                  ? 'border-primary bg-primary/5'
+                  : 'border-muted-foreground/25 hover:border-muted-foreground/40'
+              }`}
+              onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+              onDragLeave={() => setIsDragOver(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              data-testid="dropzone-credit-policy"
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.txt"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFileUpload(file);
+                  e.target.value = '';
+                }}
+                data-testid="input-credit-policy-file"
+              />
+              <Upload className="h-8 w-8 mx-auto text-muted-foreground/60 mb-3" />
+              <p className="text-sm font-medium">Upload your credit policy document</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Drop a PDF, Word document, or text file here, or click to browse
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                The AI will read your document and extract individual lending rules automatically
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-md">
+                <FileText className="h-4 w-4 text-primary flex-shrink-0" />
+                <span className="text-sm font-medium flex-1 truncate">{uploadedFileName}</span>
+                {isExtracting && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                {!isExtracting && extractedRules.length > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    {extractedRules.length} rules extracted
+                  </Badge>
+                )}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => {
+                    setShowCreateForm(false);
+                    setExtractedRules([]);
+                    setUploadedFileName('');
+                    setNewPolicyName('');
+                    setNewPolicyDescription('');
+                  }}
+                  data-testid="button-remove-uploaded-file"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+
+              {isExtracting && (
+                <div className="flex items-center justify-center gap-3 py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  <div>
+                    <p className="text-sm font-medium">Analyzing your credit policy document...</p>
+                    <p className="text-xs text-muted-foreground">The AI is reading and extracting individual lending rules</p>
+                  </div>
+                </div>
+              )}
+
+              {!isExtracting && extractedRules.length > 0 && (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label className="text-sm">Policy Name</Label>
+                    <Input
+                      value={newPolicyName}
+                      onChange={(e) => setNewPolicyName(e.target.value)}
+                      placeholder="e.g. DSCR Credit Policy 2026"
+                      data-testid="input-policy-name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Description (optional)</Label>
+                    <Input
+                      value={newPolicyDescription}
+                      onChange={(e) => setNewPolicyDescription(e.target.value)}
+                      placeholder="Brief description of this policy"
+                      data-testid="input-policy-description"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm flex items-center gap-2">
+                      <Sparkles className="h-3.5 w-3.5 text-primary" />
+                      Extracted Rules
+                    </Label>
+                    <div className="border rounded-md divide-y max-h-64 overflow-y-auto">
+                      {Object.entries(rulesByGroup).map(([group, groupRules]) => (
+                        <div key={group}>
+                          <button
+                            type="button"
+                            className="flex items-center justify-between gap-2 w-full px-3 py-2 text-left hover-elevate"
+                            onClick={() => setExpandedGroups(prev => ({ ...prev, [group]: !prev[group] }))}
+                            data-testid={`toggle-rule-group-${group}`}
+                          >
+                            <span className="text-xs font-medium">{group}</span>
+                            <div className="flex items-center gap-1.5">
+                              <Badge variant="secondary" className="text-xs">{groupRules.length}</Badge>
+                              {expandedGroups[group] ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                            </div>
+                          </button>
+                          {expandedGroups[group] && (
+                            <div className="px-3 pb-2 space-y-1.5">
+                              {groupRules.map((rule, i) => (
+                                <div key={i} className="text-xs p-2 bg-muted/30 rounded">
+                                  <p className="font-medium">{rule.ruleTitle}</p>
+                                  <p className="text-muted-foreground mt-0.5">{rule.ruleDescription}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={() => createPolicyMutation.mutate()}
+                    disabled={!newPolicyName.trim() || createPolicyMutation.isPending}
+                    data-testid="button-save-credit-policy"
+                  >
+                    {createPolicyMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <ShieldCheck className="h-4 w-4 mr-2" />
+                    )}
+                    Save Credit Policy & Attach to Program
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="pt-5 space-y-4">
+          <div className="flex items-start gap-3">
+            <Brain className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium">How AI Uses Your Credit Policy</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                When you attach a credit policy, the AI continuously works in the background to protect your lending standards throughout the entire loan lifecycle.
+              </p>
+            </div>
+          </div>
+          <Separator />
+          <div className="grid gap-3">
+            <div className="flex items-start gap-3">
+              <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <Eye className="h-3.5 w-3.5 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs font-medium">Document Review</p>
+                <p className="text-xs text-muted-foreground">
+                  Every document uploaded to a deal is automatically checked against your credit policy rules. The AI flags issues like expired insurance, low FICO scores, or LTV violations before they reach underwriting.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <ClipboardCheck className="h-3.5 w-3.5 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs font-medium">Ongoing Compliance Monitoring</p>
+                <p className="text-xs text-muted-foreground">
+                  As deals progress through stages, the AI re-evaluates new information against your policy. If a borrower's credit report shows a score below your minimum, or a property appraisal reveals an issue, you'll be alerted immediately.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="h-3.5 w-3.5 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs font-medium">Risk Flagging & Exceptions</p>
+                <p className="text-xs text-muted-foreground">
+                  When the AI detects an out-of-policy condition, it creates a visible flag on the deal with a clear explanation. Your team can then decide whether to request updated documents, adjust terms, or approve an exception.
+                </p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -721,7 +1020,7 @@ function ProgramDetailsStep({
           <div className="space-y-1 sm:col-span-2">
             <Label className="text-xs">Program Name *</Label>
             <Input
-              placeholder="e.g., Fix & Flip Express"
+              placeholder="ex. DSCR Rental Program"
               value={programName}
               onChange={(e) => setProgramName(e.target.value)}
             />
@@ -729,7 +1028,7 @@ function ProgramDetailsStep({
           <div className="space-y-1 sm:col-span-2">
             <Label className="text-xs">Description</Label>
             <Textarea
-              placeholder="Brief description of this loan program..."
+              placeholder="ex. Standard DSCR loan program for investment rental properties"
               value={programDescription}
               onChange={(e) => setProgramDescription(e.target.value)}
               rows={2}
@@ -737,21 +1036,12 @@ function ProgramDetailsStep({
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Loan Type *</Label>
-            <Select value={loanType} onValueChange={onLoanTypeChange}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {loanTypeOptions.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <LoanTypeSelector value={loanType} onChange={onLoanTypeChange} />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">Term Options</Label>
+            <Label className="text-xs">Term Options (months)</Label>
             <Input
-              placeholder="6, 12, 18, 24"
+              placeholder="ex. 12, 24, 36, 60"
               value={termOptions}
               onChange={(e) => setTermOptions(e.target.value)}
             />
@@ -765,27 +1055,27 @@ function ProgramDetailsStep({
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-2">
             <div className="space-y-1">
               <Label className="text-[11px] text-muted-foreground">Min Loan ($)</Label>
-              <Input value={minLoanAmount} onChange={(e) => setMinLoanAmount(e.target.value)} />
+              <Input placeholder="ex. 150000" value={minLoanAmount} onChange={(e) => setMinLoanAmount(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-[11px] text-muted-foreground">Max Loan ($)</Label>
-              <Input value={maxLoanAmount} onChange={(e) => setMaxLoanAmount(e.target.value)} />
+              <Input placeholder="ex. 2000000" value={maxLoanAmount} onChange={(e) => setMaxLoanAmount(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-[11px] text-muted-foreground">Min LTV (%)</Label>
-              <Input value={minLtv} onChange={(e) => setMinLtv(e.target.value)} />
+              <Input placeholder="ex. 50%" value={minLtv} onChange={(e) => setMinLtv(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-[11px] text-muted-foreground">Max LTV (%)</Label>
-              <Input value={maxLtv} onChange={(e) => setMaxLtv(e.target.value)} />
+              <Input placeholder="ex. 80%" value={maxLtv} onChange={(e) => setMaxLtv(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-[11px] text-muted-foreground">Min Rate (%)</Label>
-              <Input value={minInterestRate} onChange={(e) => setMinInterestRate(e.target.value)} />
+              <Input placeholder="ex. 7%" value={minInterestRate} onChange={(e) => setMinInterestRate(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-[11px] text-muted-foreground">Max Rate (%)</Label>
-              <Input value={maxInterestRate} onChange={(e) => setMaxInterestRate(e.target.value)} />
+              <Input placeholder="ex. 12%" value={maxInterestRate} onChange={(e) => setMaxInterestRate(e.target.value)} />
             </div>
           </div>
         </div>
@@ -817,43 +1107,176 @@ function ProgramDetailsStep({
               These are the input fields borrowers fill out when requesting a quote for this program.
             </p>
           </div>
-          <div className="space-y-1.5 max-h-52 overflow-y-auto">
-            {quoteFormFields.map((field, i) => (
-              <div key={field.fieldKey} className="flex items-center justify-between gap-3 py-1 px-2 bg-muted/40 rounded">
-                <span className="text-xs flex-1">{field.label}</span>
-                <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-1 text-[11px]">
-                    <Switch
-                      checked={field.visible}
-                      onCheckedChange={() => {
-                        const updated = [...quoteFormFields];
-                        updated[i] = { ...field, visible: !field.visible, required: field.visible ? false : field.required };
-                        setQuoteFormFields(updated);
-                      }}
-                      className="scale-75"
-                    />
-                    Visible
-                  </label>
-                  <label className="flex items-center gap-1 text-[11px]">
-                    <Switch
-                      checked={field.required}
-                      disabled={!field.visible}
-                      onCheckedChange={() => {
-                        const updated = [...quoteFormFields];
-                        updated[i] = { ...field, required: !field.required };
-                        setQuoteFormFields(updated);
-                      }}
-                      className="scale-75"
-                    />
-                    Required
-                  </label>
-                </div>
-              </div>
-            ))}
-          </div>
+          <QuoteFormFieldsList quoteFormFields={quoteFormFields} setQuoteFormFields={setQuoteFormFields} />
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function LoanTypeSelector({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [isCustom, setIsCustom] = useState(
+    !loanTypeOptions.some((o) => o.value === value) && value !== ''
+  );
+  const [customValue, setCustomValue] = useState(
+    !loanTypeOptions.some((o) => o.value === value) ? value : ''
+  );
+
+  if (isCustom) {
+    return (
+      <div className="flex items-center gap-2">
+        <Input
+          className="h-9 text-sm flex-1"
+          placeholder="ex. Bridge, Construction, SBA"
+          value={customValue}
+          onChange={(e) => {
+            setCustomValue(e.target.value);
+            onChange(e.target.value);
+          }}
+          data-testid="input-custom-loan-type"
+        />
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => {
+            setIsCustom(false);
+            setCustomValue('');
+            onChange('dscr');
+          }}
+          data-testid="button-cancel-custom-loan-type"
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <Select
+      value={value}
+      onValueChange={(v) => {
+        if (v === '__custom__') {
+          setIsCustom(true);
+          setCustomValue('');
+          onChange('');
+        } else {
+          onChange(v);
+        }
+      }}
+    >
+      <SelectTrigger data-testid="select-loan-type">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {loanTypeOptions.map((o) => (
+          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+        ))}
+        <SelectItem value="__custom__">Other (custom)...</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
+const ALL_DEFAULT_FIELD_KEYS = new Set([
+  ...DSCR_QUOTE_FIELDS.map((f) => f.fieldKey),
+  ...RTL_QUOTE_FIELDS.map((f) => f.fieldKey),
+]);
+
+function QuoteFormFieldsList({
+  quoteFormFields,
+  setQuoteFormFields,
+}: {
+  quoteFormFields: { fieldKey: string; label: string; visible: boolean; required: boolean }[];
+  setQuoteFormFields: (v: any[]) => void;
+}) {
+  const [newFieldName, setNewFieldName] = useState('');
+
+  const addCustomField = () => {
+    const name = newFieldName.trim();
+    if (!name) return;
+    const fieldKey = `custom_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${Date.now()}`;
+    setQuoteFormFields([
+      ...quoteFormFields,
+      { fieldKey, label: name, visible: true, required: false },
+    ]);
+    setNewFieldName('');
+  };
+
+  const removeField = (i: number) => {
+    setQuoteFormFields(quoteFormFields.filter((_, idx) => idx !== i));
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="space-y-1.5 max-h-52 overflow-y-auto">
+        {quoteFormFields.map((field, i) => {
+          const isCustom = !ALL_DEFAULT_FIELD_KEYS.has(field.fieldKey);
+          return (
+            <div key={field.fieldKey} className="flex items-center justify-between gap-3 py-1 px-2 bg-muted/40 rounded">
+              <span className="text-xs flex-1">{field.label}</span>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1 text-[11px]">
+                  <Switch
+                    checked={field.visible}
+                    onCheckedChange={() => {
+                      const updated = [...quoteFormFields];
+                      updated[i] = { ...field, visible: !field.visible, required: field.visible ? false : field.required };
+                      setQuoteFormFields(updated);
+                    }}
+                    className="scale-75"
+                  />
+                  Visible
+                </label>
+                <label className="flex items-center gap-1 text-[11px]">
+                  <Switch
+                    checked={field.required}
+                    disabled={!field.visible}
+                    onCheckedChange={() => {
+                      const updated = [...quoteFormFields];
+                      updated[i] = { ...field, required: !field.required };
+                      setQuoteFormFields(updated);
+                    }}
+                    className="scale-75"
+                  />
+                  Required
+                </label>
+                {isCustom && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-muted-foreground"
+                    onClick={() => removeField(i)}
+                    data-testid={`button-remove-field-${field.fieldKey}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex items-center gap-2">
+        <Input
+          className="h-8 text-sm flex-1"
+          placeholder="New field name..."
+          value={newFieldName}
+          onChange={(e) => setNewFieldName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomField(); } }}
+          data-testid="input-new-quote-field"
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={addCustomField}
+          disabled={!newFieldName.trim()}
+          data-testid="button-add-quote-field"
+        >
+          <Plus className="h-3.5 w-3.5 mr-1" />
+          Add Field
+        </Button>
+      </div>
+    </div>
   );
 }
 
