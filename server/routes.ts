@@ -52,6 +52,7 @@ import { registerAiAssistantRoutes } from './routes/ai-assistant';
 import { registerAgentRoutes } from './routes/agents';
 import { registerEmailRoutes } from './routes/email';
 import { registerGoogleConnectRoutes } from './routes/googleConnect';
+import { registerMicrosoftConnectRoutes } from './routes/microsoftConnect';
 
 
 /**
@@ -224,6 +225,9 @@ export async function registerRoutes(
 
   // Register unified Google connect routes (Gmail + Drive in one OAuth flow)
   registerGoogleConnectRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
+
+  // Register unified Microsoft connect routes (Outlook + OneDrive in one OAuth flow)
+  registerMicrosoftConnectRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
 
   // Forgot password
   app.post('/api/auth/forgot-password', async (req: Request, res: Response) => {

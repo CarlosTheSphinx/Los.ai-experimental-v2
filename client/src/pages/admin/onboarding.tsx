@@ -45,16 +45,11 @@ import {
   Check,
   Building2,
   Plug,
-  Phone,
-  Brain,
-  MapPin,
-  XCircle,
   AlertCircle,
   HardDrive,
   FolderOpen,
   UserPlus,
   Save,
-  RefreshCw,
   AlertTriangle,
 } from 'lucide-react';
 import { PERMISSION_CATEGORIES, SCOPABLE_PERMISSIONS, type PermissionKey } from '@shared/schema';
@@ -250,13 +245,10 @@ export default function AdminOnboarding() {
               )}
               {currentStep === 2 && (
                 <StepIntegrations
-                  integrationsData={integrationsData?.integrations}
-                  isIntegrationsLoading={integrationsLoading}
                   driveFolderId={driveFolderSetting?.settingValue || ''}
                   isSettingsLoading={settingsLoading}
                   onNext={handleNext}
                   onBack={handleBack}
-                  onNavigate={setLocation}
                 />
               )}
               {currentStep === 3 && (
@@ -643,21 +635,15 @@ function StepTeamSetup({
 }
 
 function StepIntegrations({
-  integrationsData,
-  isIntegrationsLoading,
   driveFolderId,
   isSettingsLoading,
   onNext,
   onBack,
-  onNavigate,
 }: {
-  integrationsData: any;
-  isIntegrationsLoading: boolean;
   driveFolderId: string;
   isSettingsLoading: boolean;
   onNext: () => void;
   onBack: () => void;
-  onNavigate: (path: string) => void;
 }) {
   const { toast } = useToast();
   const [localDriveFolderId, setLocalDriveFolderId] = useState(driveFolderId);
@@ -666,7 +652,7 @@ function StepIntegrations({
     setLocalDriveFolderId(driveFolderId);
   }, [driveFolderId]);
 
-  // Unified Google status query
+  // Google status
   const { data: googleStatus, isLoading: isGoogleLoading } = useQuery<{
     connected: boolean;
     gmail: { connected: boolean; emailAddress: string | null; lastSyncAt: string | null; syncStatus: string | null };
@@ -675,7 +661,16 @@ function StepIntegrations({
     queryKey: ['/api/google/status'],
   });
 
-  const disconnectMutation = useMutation({
+  // Microsoft status
+  const { data: msStatus, isLoading: isMsLoading } = useQuery<{
+    connected: boolean;
+    outlook: { connected: boolean; emailAddress: string | null; lastSyncAt: string | null; syncStatus: string | null };
+    oneDrive: { connected: boolean };
+  }>({
+    queryKey: ['/api/microsoft/status'],
+  });
+
+  const disconnectGoogleMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/google/disconnect"),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/google/status"] });
@@ -684,6 +679,17 @@ function StepIntegrations({
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to disconnect Google.", variant: "destructive" });
+    },
+  });
+
+  const disconnectMicrosoftMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/microsoft/disconnect"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/microsoft/status"] });
+      toast({ title: "Microsoft Disconnected", description: "Outlook and OneDrive have been disconnected." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to disconnect Microsoft.", variant: "destructive" });
     },
   });
 
@@ -703,78 +709,70 @@ function StepIntegrations({
     },
   });
 
-  const externalIntegrations = [
-    { key: 'twilio', label: 'Twilio SMS', icon: Phone },
-    { key: 'resend', label: 'Resend Email', icon: Mail },
-    { key: 'openai', label: 'OpenAI', icon: Brain },
-    { key: 'apify', label: 'Apify', icon: RefreshCw },
-    { key: 'geoapify', label: 'Geoapify', icon: MapPin },
-    { key: 'pandadoc', label: 'PandaDoc', icon: FileText },
-  ];
-
   const isGoogleConnected = googleStatus?.connected || googleStatus?.gmail?.connected;
+  const isMicrosoftConnected = msStatus?.connected || msStatus?.outlook?.connected;
+  const hasAnyConnection = isGoogleConnected || isMicrosoftConnected;
+
+  // Microsoft logo SVG paths
+  const MicrosoftLogo = ({ className }: { className?: string }) => (
+    <svg className={className} viewBox="0 0 23 23" fill="none">
+      <rect x="1" y="1" width="10" height="10" fill="#F25022"/>
+      <rect x="12" y="1" width="10" height="10" fill="#7FBA00"/>
+      <rect x="1" y="12" width="10" height="10" fill="#00A4EF"/>
+      <rect x="12" y="12" width="10" height="10" fill="#FFB900"/>
+    </svg>
+  );
+
+  // Google logo SVG paths
+  const GoogleLogo = ({ className, fillColor }: { className?: string; fillColor?: string }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none">
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill={fillColor || "#4285F4"}/>
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill={fillColor || "#34A853"}/>
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill={fillColor || "#FBBC05"}/>
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill={fillColor || "#EA4335"}/>
+    </svg>
+  );
 
   return (
     <div className="space-y-6">
-      {/* Unified Google Connect Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none">
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-            </svg>
-            Google Integration
+      <div>
+        <h3 className="text-lg font-semibold">Connect Your Accounts</h3>
+        <p className="text-sm text-muted-foreground mt-1">
+          Choose your provider to connect email and document storage in one click. You only need one.
+        </p>
+      </div>
+
+      {/* ===== Google Card ===== */}
+      <Card className={isGoogleConnected ? 'border-green-200 dark:border-green-800' : ''}>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <GoogleLogo className="h-5 w-5" />
+            Google
+            {isGoogleConnected && (
+              <Badge variant="default" className="ml-auto">
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                Connected
+              </Badge>
+            )}
           </CardTitle>
-          <CardDescription>
-            Connect your Google account to sync emails, link conversations to deals, and store documents in Google Drive
-          </CardDescription>
+          <CardDescription>Gmail + Google Drive</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3">
           {isGoogleLoading ? (
-            <div className="flex items-center gap-3 p-4">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Checking Google connection...</span>
+            <div className="flex items-center gap-3 p-3">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Checking...</span>
             </div>
           ) : isGoogleConnected ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <Mail className="h-5 w-5 text-primary" />
-                    <span className="font-medium">{googleStatus?.gmail?.emailAddress || 'Connected'}</span>
-                  </div>
-                  <Badge variant="default">
-                    <CheckCircle2 className="h-3 w-3 mr-1" />
-                    Connected
-                  </Badge>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => disconnectMutation.mutate()}
-                  disabled={disconnectMutation.isPending}
-                  data-testid="button-disconnect-google-onboarding"
-                >
-                  Disconnect
-                </Button>
-              </div>
-
-              {/* Gmail + Drive status tiles */}
+            <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-md">
                   <Mail className="h-4 w-4 text-primary" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium">Gmail</p>
-                    <p className="text-xs text-muted-foreground truncate">Email sync ready</p>
+                    <p className="text-xs text-muted-foreground truncate">{googleStatus?.gmail?.emailAddress || 'Connected'}</p>
                   </div>
-                  {googleStatus?.gmail?.connected ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  ) : (
-                    <Badge variant="secondary" className="text-xs">Pending</Badge>
-                  )}
+                  <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
                 </div>
                 <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-md">
                   <FolderOpen className="h-4 w-4 text-primary" />
@@ -782,44 +780,94 @@ function StepIntegrations({
                     <p className="text-sm font-medium">Google Drive</p>
                     <p className="text-xs text-muted-foreground">Document storage</p>
                   </div>
-                  {googleStatus?.drive?.connected ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  ) : (
-                    <Badge variant="secondary" className="text-xs">Pending</Badge>
-                  )}
+                  <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
                 </div>
               </div>
-            </div>
-          ) : (
-            <div className="text-center py-6 space-y-4">
-              <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                </svg>
-              </div>
-              <div>
-                <p className="font-medium">Connect Google</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  One click connects both Gmail (email sync) and Google Drive (document storage)
-                </p>
-              </div>
               <Button
-                onClick={() => window.location.href = '/api/google/connect?returnTo=' + encodeURIComponent('/admin/onboarding')}
-                data-testid="button-connect-google-onboarding"
-                className="gap-2"
+                variant="ghost"
+                size="sm"
+                onClick={() => disconnectGoogleMutation.mutate()}
+                disabled={disconnectGoogleMutation.isPending}
+                className="text-muted-foreground"
               >
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#fff"/>
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#fff"/>
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#fff"/>
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#fff"/>
-                </svg>
-                Connect Google
+                Disconnect Google
               </Button>
             </div>
+          ) : (
+            <Button
+              onClick={() => window.location.href = '/api/google/connect?returnTo=' + encodeURIComponent('/admin/onboarding')}
+              data-testid="button-connect-google-onboarding"
+              className="gap-2 w-full"
+              variant={isMicrosoftConnected ? 'outline' : 'default'}
+            >
+              <GoogleLogo className="h-4 w-4" fillColor="#fff" />
+              Connect Google
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ===== Microsoft Card ===== */}
+      <Card className={isMicrosoftConnected ? 'border-green-200 dark:border-green-800' : ''}>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <MicrosoftLogo className="h-5 w-5" />
+            Microsoft
+            {isMicrosoftConnected && (
+              <Badge variant="default" className="ml-auto">
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                Connected
+              </Badge>
+            )}
+          </CardTitle>
+          <CardDescription>Outlook + OneDrive</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {isMsLoading ? (
+            <div className="flex items-center gap-3 p-3">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Checking...</span>
+            </div>
+          ) : isMicrosoftConnected ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-md">
+                  <Mail className="h-4 w-4 text-blue-600" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">Outlook</p>
+                    <p className="text-xs text-muted-foreground truncate">{msStatus?.outlook?.emailAddress || 'Connected'}</p>
+                  </div>
+                  <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                </div>
+                <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-md">
+                  <FolderOpen className="h-4 w-4 text-blue-600" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">OneDrive</p>
+                    <p className="text-xs text-muted-foreground">Document storage</p>
+                  </div>
+                  <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => disconnectMicrosoftMutation.mutate()}
+                disabled={disconnectMicrosoftMutation.isPending}
+                className="text-muted-foreground"
+              >
+                Disconnect Microsoft
+              </Button>
+            </div>
+          ) : (
+            <Button
+              onClick={() => window.location.href = '/api/microsoft/connect?returnTo=' + encodeURIComponent('/admin/onboarding')}
+              data-testid="button-connect-microsoft-onboarding"
+              className="gap-2 w-full"
+              variant={isGoogleConnected ? 'outline' : 'default'}
+            >
+              <MicrosoftLogo className="h-4 w-4" />
+              Connect Microsoft
+            </Button>
           )}
         </CardContent>
       </Card>
@@ -827,19 +875,19 @@ function StepIntegrations({
       {/* Drive Folder Config — only shown when Google is connected */}
       {isGoogleConnected && (
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
               <FolderOpen className="h-5 w-5" />
               Google Drive Folder
             </CardTitle>
             <CardDescription>
-              Optionally set a parent folder ID where deal document folders will be created automatically.
+              Optionally set a parent folder where deal documents are stored.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3">
             {isSettingsLoading ? (
-              <div className="flex items-center gap-3 p-4">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <div className="flex items-center gap-3 p-3">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">Loading settings...</span>
               </div>
             ) : (
@@ -847,7 +895,7 @@ function StepIntegrations({
                 <Input
                   value={localDriveFolderId}
                   onChange={(e) => setLocalDriveFolderId(e.target.value)}
-                  placeholder="Enter Google Drive Parent Folder ID (optional)"
+                  placeholder="Google Drive Parent Folder ID (optional)"
                   data-testid="input-drive-folder-id"
                 />
                 <Button
@@ -871,75 +919,17 @@ function StepIntegrations({
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Plug className="h-5 w-5" />
-            External Integrations
-          </CardTitle>
-          <CardDescription>
-            Status of your connected third-party services. Configure API keys and credentials in Settings.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {isIntegrationsLoading ? (
-            <div className="flex items-center gap-3 p-4">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Checking integration status...</span>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {externalIntegrations.map((integration) => {
-                const IntIcon = integration.icon;
-                const status = integrationsData?.[integration.key];
-                const isConnected = status?.connected === true;
-                return (
-                  <div
-                    key={integration.key}
-                    className="flex items-center gap-3 p-3 bg-muted/50 rounded-md"
-                    data-testid={`integration-status-${integration.key}`}
-                  >
-                    <IntIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <span className="text-sm flex-1 min-w-0 truncate">{integration.label}</span>
-                    {isConnected ? (
-                      <Badge variant="default" data-testid={`badge-connected-${integration.key}`}>
-                        <CheckCircle2 className="h-3 w-3 mr-1" />
-                        Connected
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary" data-testid={`badge-not-connected-${integration.key}`}>
-                        <XCircle className="h-3 w-3 mr-1" />
-                        Not Connected
-                      </Badge>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onNavigate('/admin/settings')}
-            data-testid="button-manage-settings"
-          >
-            <Settings className="h-4 w-4 mr-2" />
-            Manage in Settings
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
-        </CardContent>
-      </Card>
-
       <div className="flex items-center justify-between gap-4">
         <Button variant="outline" onClick={onBack} data-testid="button-back-step-2">
           <ChevronLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
         <div className="flex items-center gap-3">
-          <Button variant="ghost" onClick={onNext} className="text-muted-foreground" data-testid="button-skip-step-2">
-            Skip for now
-          </Button>
+          {!hasAnyConnection && (
+            <Button variant="ghost" onClick={onNext} className="text-muted-foreground" data-testid="button-skip-step-2">
+              Skip for now
+            </Button>
+          )}
           <Button onClick={onNext} data-testid="button-next-step-2">
             Next: Loan Programs
             <ChevronRight className="ml-2 h-4 w-4" />

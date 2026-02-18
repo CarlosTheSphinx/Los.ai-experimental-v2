@@ -23,6 +23,14 @@ import {
   FileText,
   Sparkles,
   Target,
+  Phone,
+  Mail,
+  Brain,
+  RefreshCw,
+  MapPin,
+  Plug,
+  XCircle,
+  Loader2,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import {
@@ -314,6 +322,77 @@ function FeatureFlagsCard({
   );
 }
 
+function PlatformIntegrationsCard() {
+  const { data: integrationsData, isLoading } = useQuery<{ integrations: Record<string, any> }>({
+    queryKey: ['/api/admin/integrations/status'],
+  });
+
+  const integrations = [
+    { key: 'twilio', label: 'Twilio SMS', icon: Phone, description: 'SMS notifications and communication' },
+    { key: 'resend', label: 'Resend Email', icon: Mail, description: 'Transactional email delivery' },
+    { key: 'openai', label: 'OpenAI', icon: Brain, description: 'AI-powered document review and agents' },
+    { key: 'apify', label: 'Apify', icon: RefreshCw, description: 'Web scraping and data enrichment' },
+    { key: 'geoapify', label: 'Geoapify', icon: MapPin, description: 'Property location and geocoding' },
+    { key: 'pandadoc', label: 'PandaDoc', icon: FileText, description: 'Document signing and templates' },
+  ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Plug className="h-5 w-5" />
+          Platform Integrations
+        </CardTitle>
+        <CardDescription>
+          External services powering the platform. These are configured at the platform level — lenders do not manage these.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="flex items-center gap-3 p-4">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Checking integration status...</span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {integrations.map((integration) => {
+              const IntIcon = integration.icon;
+              const status = integrationsData?.integrations?.[integration.key];
+              const isConnected = status?.connected === true;
+              return (
+                <div
+                  key={integration.key}
+                  className="flex items-center gap-3 p-3 bg-muted/50 rounded-md"
+                >
+                  <IntIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{integration.label}</p>
+                    <p className="text-xs text-muted-foreground truncate">{integration.description}</p>
+                  </div>
+                  {isConnected ? (
+                    <Badge variant="default">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Connected
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">
+                      <XCircle className="h-3 w-3 mr-1" />
+                      Not Set
+                    </Badge>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground mt-4">
+          Configure API keys via environment variables or Replit Connectors.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 function RecentActivityFeed({ signups }: { signups: RecentSignup[] }) {
   return (
     <Card>
@@ -495,6 +574,9 @@ export default function SuperAdminDashboard() {
           <RecentActivityFeed signups={data.recentSignups} />
         )}
       </div>
+
+      {/* Platform Integrations — super admin only */}
+      <PlatformIntegrationsCard />
     </div>
   );
 }
