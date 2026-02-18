@@ -22,6 +22,9 @@ import {
   Phone,
   FileText,
   MoreHorizontal,
+  Mail,
+  Link2,
+  Paperclip,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useBranding } from "@/hooks/use-branding";
@@ -97,6 +100,7 @@ export default function MessagesPage() {
   const searchParams = new URLSearchParams(searchString);
   const urlDealId = searchParams.get('dealId');
   const openNew = searchParams.get('new') === 'true';
+  const urlTab = searchParams.get('tab');
 
   const [activeThreadId, setActiveThreadId] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
@@ -107,6 +111,8 @@ export default function MessagesPage() {
   const [initialMessage, setInitialMessage] = useState("");
   const [starredThreadIds, setStarredThreadIds] = useState<Set<number>>(new Set());
   const [isTemplatePopoverOpen, setIsTemplatePopoverOpen] = useState(false);
+  const [inboxTab, setInboxTab] = useState<'messages' | 'email'>(urlTab === 'email' ? 'email' : 'messages');
+  const [activeEmailThreadId, setActiveEmailThreadId] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const isAdmin = user?.role && ['admin', 'staff', 'super_admin'].includes(user.role);
@@ -156,6 +162,26 @@ export default function MessagesPage() {
   const { data: quotesData } = useQuery<{ quotes: any[] }>({
     queryKey: ["/api/quotes"],
   });
+
+  const { data: emailThreadsData, isLoading: emailThreadsLoading } = useQuery<{ threads: any[]; total: number }>({
+    queryKey: ["/api/email/threads", "linked"],
+    queryFn: async () => {
+      const res = await fetch('/api/email/threads?linked=true', { credentials: 'include' });
+      return res.json();
+    },
+    enabled: !!isAdmin && inboxTab === 'email',
+  });
+
+  const { data: emailThreadDetail } = useQuery<{ thread: any; messages: any[]; dealLinks: any[] }>({
+    queryKey: ["/api/email/threads", activeEmailThreadId, "detail"],
+    queryFn: async () => {
+      const res = await fetch(`/api/email/threads/${activeEmailThreadId}`, { credentials: 'include' });
+      return res.json();
+    },
+    enabled: !!activeEmailThreadId && inboxTab === 'email',
+  });
+
+  const emailThreads = emailThreadsData?.threads || [];
   
   // Handle URL params for opening new thread with pre-selected deal
   // Wait for quotes data to be loaded before opening dialog
@@ -353,10 +379,100 @@ export default function MessagesPage() {
               <MessageCircle className="h-5 w-5" />
               Inbox
             </CardTitle>
+            {isAdmin && (
+              <div className="flex items-center gap-1 mt-2 p-1 rounded-md bg-muted">
+                <Button
+                  variant={inboxTab === 'messages' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="flex-1 text-xs"
+                  onClick={() => { setInboxTab('messages'); setActiveEmailThreadId(null); }}
+                  data-testid="tab-messages"
+                >
+                  <MessageSquare className="h-3 w-3 mr-1" />
+                  In-App
+                </Button>
+                <Button
+                  variant={inboxTab === 'email' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="flex-1 text-xs"
+                  onClick={() => { setInboxTab('email'); setActiveThreadId(null); }}
+                  data-testid="tab-email"
+                >
+                  <Mail className="h-3 w-3 mr-1" />
+                  Email
+                </Button>
+              </div>
+            )}
           </CardHeader>
           <Separator />
           <ScrollArea className="flex-1">
-            {threadsLoading ? (
+            {inboxTab === 'email' && isAdmin ? (
+              emailThreadsLoading ? (
+                <div className="p-4 text-center text-muted-foreground">Loading emails...</div>
+              ) : emailThreads.length === 0 ? (
+                <div className="p-4 text-center text-muted-foreground">
+                  <Mail className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>No linked email threads</p>
+                  <p className="text-xs mt-1">Link emails to deals in the Email Inbox page</p>
+                </div>
+              ) : (
+                <div className="p-2">
+                  {emailThreads.map((thread: any) => (
+                    <button
+                      key={thread.id}
+                      className={`group w-full text-left p-3 rounded-lg mb-1 transition-colors cursor-pointer hover-elevate ${
+                        thread.id === activeEmailThreadId
+                          ? "bg-primary/10 border border-primary/20"
+                          : ""
+                      }`}
+                      onClick={() => setActiveEmailThreadId(thread.id)}
+                      data-testid={`email-thread-msg-${thread.id}`}
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <div className="flex items-center justify-center h-8 w-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-xs font-semibold shrink-0">
+                            <Mail className="h-3.5 w-3.5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`text-sm truncate ${thread.isUnread ? 'font-bold' : 'font-semibold'}`}>
+                                {thread.fromName || thread.fromAddress || "Unknown"}
+                              </span>
+                              <Badge variant="outline" className="text-[10px] h-4 px-1.5 shrink-0 border-indigo-300 text-indigo-600 dark:border-indigo-700 dark:text-indigo-400">
+                                Email
+                              </Badge>
+                            </div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              {thread.subject || "(No Subject)"}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          {thread.hasAttachments && <Paperclip className="h-3 w-3 text-muted-foreground" />}
+                          {thread.isUnread && (
+                            <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
+                          )}
+                          <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                            {thread.lastMessageAt ? format(new Date(thread.lastMessageAt), "MMM d") : ""}
+                          </span>
+                        </div>
+                      </div>
+                      {thread.linkedDealIds?.length > 0 && (
+                        <div className="flex items-center gap-1.5 ml-10 mb-1">
+                          <Badge variant="default" className="text-[10px] h-4 px-1.5">
+                            <Link2 className="h-2.5 w-2.5 mr-0.5" />
+                            DEAL-{thread.linkedDealIds[0]}
+                          </Badge>
+                        </div>
+                      )}
+                      <div className="text-xs text-muted-foreground line-clamp-1 ml-10">
+                        {thread.snippet || ""}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )
+            ) : threadsLoading ? (
               <div className="p-4 text-center text-muted-foreground">Loading...</div>
             ) : threads.length === 0 ? (
               <div className="p-4 text-center text-muted-foreground">
@@ -462,7 +578,86 @@ export default function MessagesPage() {
         </Card>
 
         <Card className="flex-1 flex flex-col">
-          {activeThread ? (
+          {inboxTab === 'email' && activeEmailThreadId && emailThreadDetail ? (
+            <>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="flex items-center justify-center h-10 w-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 shrink-0">
+                      <Mail className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <CardTitle className="text-lg truncate">
+                        {emailThreadDetail.thread.subject || "(No Subject)"}
+                      </CardTitle>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-xs text-muted-foreground">
+                          {emailThreadDetail.messages.length} message{emailThreadDetail.messages.length !== 1 ? "s" : ""}
+                        </p>
+                        {emailThreadDetail.dealLinks.map((link: any) => (
+                          <Badge key={link.dealId} variant="default" className="text-[10px] h-4 px-1.5 gap-0.5">
+                            <Link2 className="h-2.5 w-2.5" />
+                            DEAL-{link.dealId}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setLocation('/admin/email?threadId=' + activeEmailThreadId)}
+                    data-testid="button-open-in-inbox"
+                  >
+                    Open in Inbox
+                  </Button>
+                </div>
+              </CardHeader>
+              <Separator />
+              <ScrollArea className="flex-1 p-4">
+                <div className="space-y-3 max-w-2xl mx-auto">
+                  {emailThreadDetail.messages.map((msg: any) => (
+                    <div key={msg.id} className="border rounded-lg p-3" data-testid={`email-msg-detail-${msg.id}`}>
+                      <div className="flex items-start justify-between gap-2 mb-2 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-xs font-medium flex-shrink-0">
+                            {(msg.fromName || msg.fromAddress || "?").charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">{msg.fromName || msg.fromAddress}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              to {(msg.toAddresses || []).join(", ")}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground flex-shrink-0">
+                          {msg.internalDate ? format(new Date(msg.internalDate), "MMM d, h:mm a") : ""}
+                        </span>
+                      </div>
+                      {msg.bodyHtml ? (
+                        <div
+                          className="text-sm prose prose-sm dark:prose-invert max-w-none"
+                          dangerouslySetInnerHTML={{ __html: msg.bodyHtml }}
+                        />
+                      ) : (
+                        <pre className="text-sm whitespace-pre-wrap font-sans">{msg.bodyText || msg.snippet || ""}</pre>
+                      )}
+                      {msg.attachments && (msg.attachments as any[]).length > 0 && (
+                        <div className="mt-2 pt-2 border-t flex items-center gap-2 flex-wrap">
+                          <Paperclip className="h-3 w-3 text-muted-foreground" />
+                          {(msg.attachments as any[]).map((att: any, idx: number) => (
+                            <Badge key={idx} variant="outline" className="text-[10px]">
+                              {att.filename} ({Math.round(att.size / 1024)}KB)
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </>
+          ) : activeThread ? (
             <>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between gap-4">

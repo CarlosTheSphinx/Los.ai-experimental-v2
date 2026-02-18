@@ -82,6 +82,7 @@ import { cn } from "@/lib/utils";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { DigestConfigPanel } from "@/components/DigestConfigPanel";
+import { LinkedEmailsSection } from "@/components/admin/LinkedEmailsSection";
 import { AIInsightsPanel } from "@/components/admin/AIInsightsPanel";
 import { DealMemoryPanel } from "@/components/admin/DealMemoryPanel";
 
@@ -2552,6 +2553,7 @@ export default function AdminDealDetail() {
       {activeFilter === 'digests' && (
         <div data-testid="digest-config-container">
           <DigestConfigPanel dealId={deal.id} />
+          <LinkedEmailsSection dealId={deal.id} />
         </div>
       )}
 

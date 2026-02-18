@@ -34,6 +34,7 @@ import {
   Globe,
 
   ShieldCheck,
+  Mail,
 } from "lucide-react";
 import {
   Select,
@@ -120,6 +121,7 @@ const adminNavItems: NavItem[] = [
 
   { href: "/admin/users", label: "Users", icon: Users, requiredPermission: "users.view", shortcut: "⌘2" },
   { href: "/admin/team-permissions", label: "Permissions", icon: Shield, requiredPermission: "users.manage" },
+  { href: "/admin/email", label: "Email Inbox", icon: Mail, requiredPermission: "messages.view" },
   { href: "/messages", label: "Messages", icon: MessageSquare, showBadge: true, requiredPermission: "messages.view" },
   { href: "/admin/settings", label: "Settings", icon: Settings, requiredPermission: "settings.view" },
 ];

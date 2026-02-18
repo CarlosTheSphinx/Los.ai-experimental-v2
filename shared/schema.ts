@@ -2573,3 +2573,78 @@ export const notifications = pgTable("notifications", {
 export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+
+// ==================== EMAIL INTEGRATION ====================
+export const emailAccounts = pgTable("email_accounts", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  emailAddress: varchar("email_address", { length: 255 }).notNull(),
+  provider: varchar("provider", { length: 50 }).notNull().default('gmail'),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  tokenExpiresAt: timestamp("token_expires_at"),
+  isActive: boolean("is_active").default(true).notNull(),
+  lastSyncAt: timestamp("last_sync_at"),
+  syncStatus: varchar("sync_status", { length: 50 }).default('idle'),
+  historyId: varchar("history_id", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertEmailAccountSchema = createInsertSchema(emailAccounts).omit({ id: true, createdAt: true });
+export type EmailAccount = typeof emailAccounts.$inferSelect;
+export type InsertEmailAccount = z.infer<typeof insertEmailAccountSchema>;
+
+export const emailThreads = pgTable("email_threads", {
+  id: serial("id").primaryKey(),
+  accountId: integer("account_id").references(() => emailAccounts.id, { onDelete: 'cascade' }).notNull(),
+  gmailThreadId: varchar("gmail_thread_id", { length: 255 }).notNull(),
+  subject: varchar("subject", { length: 500 }),
+  snippet: text("snippet"),
+  fromAddress: varchar("from_address", { length: 255 }),
+  fromName: varchar("from_name", { length: 255 }),
+  participants: text("participants").array(),
+  messageCount: integer("message_count").default(0),
+  hasAttachments: boolean("has_attachments").default(false),
+  isUnread: boolean("is_unread").default(true),
+  lastMessageAt: timestamp("last_message_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertEmailThreadSchema = createInsertSchema(emailThreads).omit({ id: true, createdAt: true });
+export type EmailThread = typeof emailThreads.$inferSelect;
+export type InsertEmailThread = z.infer<typeof insertEmailThreadSchema>;
+
+export const emailMessages = pgTable("email_messages", {
+  id: serial("id").primaryKey(),
+  threadId: integer("thread_id").references(() => emailThreads.id, { onDelete: 'cascade' }).notNull(),
+  gmailMessageId: varchar("gmail_message_id", { length: 255 }).notNull(),
+  fromAddress: varchar("from_address", { length: 255 }),
+  fromName: varchar("from_name", { length: 255 }),
+  toAddresses: text("to_addresses").array(),
+  ccAddresses: text("cc_addresses").array(),
+  subject: varchar("subject", { length: 500 }),
+  bodyText: text("body_text"),
+  bodyHtml: text("body_html"),
+  snippet: text("snippet"),
+  attachments: jsonb("attachments"),
+  internalDate: timestamp("internal_date"),
+  isUnread: boolean("is_unread").default(true),
+  labelIds: text("label_ids").array(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertEmailMessageSchema = createInsertSchema(emailMessages).omit({ id: true, createdAt: true });
+export type EmailMessage = typeof emailMessages.$inferSelect;
+export type InsertEmailMessage = z.infer<typeof insertEmailMessageSchema>;
+
+export const emailThreadDealLinks = pgTable("email_thread_deal_links", {
+  id: serial("id").primaryKey(),
+  emailThreadId: integer("email_thread_id").references(() => emailThreads.id, { onDelete: 'cascade' }).notNull(),
+  dealId: integer("deal_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  linkedBy: integer("linked_by").references(() => users.id, { onDelete: 'set null' }),
+  linkedAt: timestamp("linked_at").defaultNow().notNull(),
+});
+
+export const insertEmailThreadDealLinkSchema = createInsertSchema(emailThreadDealLinks).omit({ id: true, linkedAt: true });
+export type EmailThreadDealLink = typeof emailThreadDealLinks.$inferSelect;
+export type InsertEmailThreadDealLink = z.infer<typeof insertEmailThreadDealLinkSchema>;

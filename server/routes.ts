@@ -50,6 +50,7 @@ import { registerProcessorRoutes } from './routes/processor';
 import { registerBrokerSdrRoutes } from './routes/broker-sdr';
 import { registerAiAssistantRoutes } from './routes/ai-assistant';
 import { registerAgentRoutes } from './routes/agents';
+import { registerEmailRoutes } from './routes/email';
 
 
 /**
@@ -3651,6 +3652,9 @@ export async function registerRoutes(
 
   // ==================== AI AGENT SYSTEM ROUTES ====================
   registerAgentRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
+
+  // ==================== EMAIL INTEGRATION ROUTES ====================
+  registerEmailRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
 
 
   // ==================== ADMIN ROUTES ====================

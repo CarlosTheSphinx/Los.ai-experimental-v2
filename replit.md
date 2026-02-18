@@ -66,6 +66,17 @@ A persistent right sidebar on the deal detail page that serves as the AI communi
 -   **AI Context Injection**: The communication agent orchestrator (`server/agents/orchestrator.ts`) injects deal memory entries, admin notes, AI instructions, past agent communications, and past digest history into the AI context, preventing repeated communications.
 -   **Replaces**: The old "Deal Story" tab has been removed in favor of this more comprehensive Deal Memory sidebar.
 
+**Gmail Integration**:
+Opt-in email integration allowing lenders to connect their Gmail account via separate OAuth flow (gmail.readonly + gmail.modify scopes). Key components:
+-   **Database Tables**: `email_accounts` (OAuth tokens, sync status), `email_threads` (synced threads with subject/snippet/participants), `email_messages` (individual messages with body/attachments), `email_thread_deal_links` (many-to-many thread-to-deal linking).
+-   **Gmail Service** (`server/services/gmail.ts`): OAuth flow, token refresh, email sync (up to 50 threads), attachment download, new email notification checks.
+-   **Email Routes** (`server/routes/email.ts`): 13 endpoints for account management, thread listing/detail, deal linking/unlinking, sync, attachment download, deal-specific threads, and deal suggestion.
+-   **Email Inbox Page** (`client/src/pages/admin/email-inbox.tsx`): Full inbox with thread list sidebar (search, filter by linked/unlinked), thread detail with messages, deal linking dialog with AI-suggested deals.
+-   **Messages Integration**: In-App/Email tab toggle in messages sidebar showing deal-linked email threads with inline detail viewing.
+-   **Deal Detail Integration**: LinkedEmailsSection component in Communications tab showing email threads linked to that deal.
+-   **Settings Integration**: EmailIntegrationConfig component for Gmail connect/disconnect and sync controls.
+-   **Notifications**: `new_email` notification type triggers when new emails arrive on deal-linked threads.
+
 **Terminology Note**:
 The database still uses `projects` as the table name, but the entire UI refers to these entities as "Deals" or "Loans" (used interchangeably). Frontend routes use `/deals/*` and `/api/deals/*` with URL rewriting middleware on the backend mapping to the underlying `/api/projects/*` handlers. Internal TypeScript variable names may still reference `project` but all user-facing text says "Deal" or "Loan". User-facing identifiers use `DEAL-{id}` format (e.g., `DEAL-27`) instead of the old `PRJ-YYYY-NNNN` project number format. All views (admin, broker, borrower portal) now display consistent deal identifiers, loan program names, and numbered-stage progress with document/task counts.
 

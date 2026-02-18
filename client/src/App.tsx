@@ -56,6 +56,7 @@ import AIAgentsPage from "@/pages/admin/ai-agents";
 
 import SuperAdminDashboard from "@/pages/admin/super-admin-dashboard";
 import AdminCreditPolicies from "@/pages/admin/credit-policies";
+import EmailInboxPage from "@/pages/admin/email-inbox";
 
 import BrokerContactsPage from "@/pages/broker-contacts";
 import BrokerOutreachPage from "@/pages/broker-outreach";
@@ -230,6 +231,7 @@ function MainRoutes() {
           <Route path="/admin/processor" component={() => <AdminProtectedRoute component={ProcessorDashboard} />} />
           <Route path="/admin/ai-agents" component={() => <AdminProtectedRoute component={AIAgentsPage} />} />
           <Route path="/admin/credit-policies" component={() => <AdminProtectedRoute component={AdminCreditPolicies} />} />
+          <Route path="/admin/email" component={() => <AdminProtectedRoute component={EmailInboxPage} />} />
 
 
           <Route component={NotFound} />

@@ -64,6 +64,7 @@ import DocumentsEsignConfig from "@/components/admin/config/DocumentsEsignConfig
 import NotificationsConfig from "@/components/admin/config/NotificationsConfig";
 import CustomFieldsConfig from "@/components/admin/config/CustomFieldsConfig";
 import BillingPlansConfig from "@/components/admin/config/BillingPlansConfig";
+import EmailIntegrationConfig from "@/components/admin/config/EmailIntegrationConfig";
 
 interface DealStage {
   id: number;
@@ -1003,6 +1004,8 @@ export default function AdminSettings() {
                   </div>
                 </CardContent>
               </Card>
+
+              <EmailIntegrationConfig />
             </>
           )}
 
