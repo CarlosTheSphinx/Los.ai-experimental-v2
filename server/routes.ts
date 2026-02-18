@@ -2815,7 +2815,7 @@ export async function registerRoutes(
     try {
       const userId = req.user!.id;
       const {
-        projectName,
+        projectName: reqProjectName,
         loanAmount,
         interestRate,
         loanTermMonths,
@@ -2830,8 +2830,24 @@ export async function registerRoutes(
         notes
       } = req.body;
       
-      if (!projectName || !borrowerName || !borrowerEmail) {
-        return res.status(400).json({ error: 'Project name, borrower name, and email are required' });
+      if (!borrowerName || !borrowerEmail) {
+        return res.status(400).json({ error: 'Borrower name and email are required' });
+      }
+
+      let projectName = reqProjectName;
+      if (!projectName) {
+        const randomNum = Math.floor(100 + Math.random() * 900);
+        if (propertyAddress && typeof propertyAddress === 'string') {
+          const addressParts = propertyAddress.trim().split(/[,\n]/)[0].trim();
+          const words = addressParts.split(/\s+/);
+          const streetNum = words[0] || '';
+          const streetName = words.slice(1, 4).join(' ') || '';
+          projectName = streetNum && streetName 
+            ? `${streetNum} ${streetName} - ${randomNum}` 
+            : `Deal - ${randomNum}`;
+        } else {
+          projectName = `Deal - ${randomNum}`;
+        }
       }
       
       const projectNumber = await storage.generateProjectNumber();

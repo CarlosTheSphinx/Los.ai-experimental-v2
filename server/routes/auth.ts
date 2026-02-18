@@ -30,8 +30,7 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
 
       const apiKey = process.env.GEOAPIFY_API_KEY;
       if (!apiKey) {
-        console.error('GEOAPIFY_API_KEY not configured');
-        return res.status(500).json({ error: 'Address service not configured' });
+        return res.json({ features: [] });
       }
 
       const response = await fetch(
