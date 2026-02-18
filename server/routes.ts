@@ -4498,15 +4498,18 @@ export async function registerRoutes(
         return res.status(403).json({ error: 'Cannot remove a super admin user' });
       }
 
-      // Soft-delete: deactivate the user
       await db.update(users).set({ isActive: false }).where(eq(users.id, userId));
 
-      await storage.createAdminActivity({
-        userId: req.user!.id,
-        actionType: 'user_removed',
-        actionDescription: `Removed team member ${targetUser.email}`,
-        metadata: { targetUserId: userId, targetEmail: targetUser.email }
-      });
+      try {
+        await storage.createAdminActivity({
+          userId: req.user!.id,
+          actionType: 'user_removed',
+          actionDescription: `Removed team member ${targetUser.email}`,
+          metadata: { targetUserId: userId, targetEmail: targetUser.email }
+        });
+      } catch (activityErr) {
+        console.log('Could not log user removal activity (non-critical):', (activityErr as any)?.message);
+      }
 
       res.json({ success: true });
     } catch (error) {
