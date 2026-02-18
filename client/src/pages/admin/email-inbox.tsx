@@ -94,6 +94,23 @@ export default function EmailInboxPage() {
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [selectedDealId, setSelectedDealId] = useState<string>("");
 
+  useEffect(() => {
+    const success = searchParams.get('success');
+    const error = searchParams.get('error');
+    if (success === 'email_connected') {
+      toast({ title: "Gmail Connected", description: "Your Gmail account has been connected successfully. Syncing your emails now." });
+      window.history.replaceState({}, '', '/admin/email');
+    }
+    if (error === 'email_connect_failed') {
+      toast({ title: "Connection Failed", description: "Could not initiate Gmail connection. Please check that Google OAuth is configured.", variant: "destructive" });
+      window.history.replaceState({}, '', '/admin/email');
+    }
+    if (error === 'email_auth_failed') {
+      toast({ title: "Authentication Failed", description: "Gmail authentication failed. Please try again.", variant: "destructive" });
+      window.history.replaceState({}, '', '/admin/email');
+    }
+  }, []);
+
   const { data: accountData } = useQuery<{ account: any }>({
     queryKey: ["/api/email/account"],
   });

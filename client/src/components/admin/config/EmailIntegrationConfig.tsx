@@ -157,7 +157,7 @@ export default function EmailIntegrationConfig() {
               </p>
             </div>
             <Button
-              onClick={() => window.location.href = '/api/email/connect'}
+              onClick={() => window.location.href = '/api/email/connect?returnTo=' + encodeURIComponent('/admin/settings?tab=integrations')}
               data-testid="button-connect-email"
             >
               <Mail className="h-4 w-4 mr-2" />

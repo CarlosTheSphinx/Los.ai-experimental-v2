@@ -38,30 +38,35 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
   // GET /api/email/connect - Initiate Gmail OAuth flow for email
   app.get('/api/email/connect', authenticateUser, async (req: AuthRequest, res: Response) => {
     try {
+      const returnTo = (req.query.returnTo as string) || '/admin/email';
       const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
       const host = req.headers['x-forwarded-host'] || req.headers['host'] || '';
       const baseUrl = `${protocol}://${host}`;
       const redirectUri = `${baseUrl}/api/email/callback`;
-      const state = Buffer.from(JSON.stringify({ userId: req.user!.id })).toString('base64url');
+      const state = Buffer.from(JSON.stringify({ userId: req.user!.id, returnTo })).toString('base64url');
       
       const authUrl = getGmailAuthUrl(redirectUri, state);
       res.redirect(authUrl);
     } catch (error: any) {
       console.error('Error initiating email connect:', error);
-      res.redirect('/admin/settings?tab=integrations&error=email_connect_failed');
+      const returnTo = (req.query.returnTo as string) || '/admin/email';
+      const separator = returnTo.includes('?') ? '&' : '?';
+      res.redirect(`${returnTo}${separator}error=email_connect_failed`);
     }
   });
 
   // GET /api/email/callback - Gmail OAuth callback
   app.get('/api/email/callback', async (req: AuthRequest, res: Response) => {
+    let returnTo = '/admin/email';
     try {
       const { code, state } = req.query;
       if (!code || !state) {
-        return res.redirect('/admin/settings?tab=integrations&error=email_auth_failed');
+        return res.redirect('/admin/email?error=email_auth_failed');
       }
 
       const stateData = JSON.parse(Buffer.from(state as string, 'base64url').toString());
       const userId = stateData.userId;
+      returnTo = stateData.returnTo || '/admin/email';
       
       const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
       const host = req.headers['x-forwarded-host'] || req.headers['host'] || '';
@@ -92,10 +97,12 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
         syncStatus: 'idle',
       });
 
-      res.redirect('/admin/settings?tab=integrations&success=email_connected');
+      const separator = returnTo.includes('?') ? '&' : '?';
+      res.redirect(`${returnTo}${separator}success=email_connected`);
     } catch (error: any) {
       console.error('Email OAuth callback error:', error);
-      res.redirect('/admin/settings?tab=integrations&error=email_auth_failed');
+      const separator = returnTo.includes('?') ? '&' : '?';
+      res.redirect(`${returnTo}${separator}error=email_auth_failed`);
     }
   });
 
