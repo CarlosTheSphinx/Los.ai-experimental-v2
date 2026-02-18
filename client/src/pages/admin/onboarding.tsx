@@ -55,7 +55,10 @@ import {
   UserPlus,
   Save,
   RefreshCw,
+  AlertTriangle,
 } from 'lucide-react';
+import { PERMISSION_CATEGORIES, SCOPABLE_PERMISSIONS, type PermissionKey } from '@shared/schema';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface OnboardingDocument {
   id: number;
@@ -92,10 +95,11 @@ const documentTypeLabels: Record<string, { label: string; icon: typeof FileText 
 
 const GUIDE_STEPS = [
   { id: 1, label: 'Company Profile', icon: Building2 },
-  { id: 2, label: 'Team Setup', icon: Users },
-  { id: 3, label: 'Integrations', icon: Plug },
-  { id: 4, label: 'Loan Programs', icon: Layers },
-  { id: 5, label: 'Communications & AI', icon: MessageSquare },
+  { id: 2, label: 'Integrations', icon: Plug },
+  { id: 3, label: 'Loan Programs', icon: Layers },
+  { id: 4, label: 'Communications & AI', icon: MessageSquare },
+  { id: 5, label: 'Team Setup', icon: Users },
+  { id: 6, label: 'Role Permissions', icon: Shield },
 ];
 
 export default function AdminOnboarding() {
@@ -241,15 +245,6 @@ export default function AdminOnboarding() {
                 />
               )}
               {currentStep === 2 && (
-                <StepTeamSetup
-                  teamData={teamData?.users || []}
-                  isLoading={teamLoading}
-                  onNext={handleNext}
-                  onBack={handleBack}
-                  onNavigate={setLocation}
-                />
-              )}
-              {currentStep === 3 && (
                 <StepIntegrations
                   emailConnected={emailConnected}
                   emailAddress={accountData?.account?.emailAddress}
@@ -263,7 +258,7 @@ export default function AdminOnboarding() {
                   onNavigate={setLocation}
                 />
               )}
-              {currentStep === 4 && (
+              {currentStep === 3 && (
                 <StepProgramsWorkflow
                   hasPrograms={hasPrograms}
                   programCount={programsData?.programs?.length || 0}
@@ -273,9 +268,26 @@ export default function AdminOnboarding() {
                   onNavigate={setLocation}
                 />
               )}
-              {currentStep === 5 && (
+              {currentStep === 4 && (
                 <StepCommunicationsAI
                   emailConnected={emailConnected}
+                  onNext={handleNext}
+                  onBack={handleBack}
+                  onNavigate={setLocation}
+                />
+              )}
+              {currentStep === 5 && (
+                <StepTeamSetup
+                  teamData={teamData?.users || []}
+                  isLoading={teamLoading}
+                  emailConnected={emailConnected}
+                  onNext={handleNext}
+                  onBack={handleBack}
+                  onNavigate={setLocation}
+                />
+              )}
+              {currentStep === 6 && (
+                <StepRolePermissions
                   onboardingCompleted={!!user?.onboardingCompleted}
                   onBack={handleBack}
                   onNavigate={setLocation}
@@ -411,7 +423,7 @@ function StepCompanyProfile({
           disabled={isPending}
           data-testid="button-next-step-1"
         >
-          {isPending ? 'Saving...' : 'Next: Team Setup'}
+          {isPending ? 'Saving...' : 'Next: Integrations'}
           {!isPending && <ChevronRight className="ml-2 h-4 w-4" />}
         </Button>
       </div>
@@ -422,12 +434,14 @@ function StepCompanyProfile({
 function StepTeamSetup({
   teamData,
   isLoading,
+  emailConnected,
   onNext,
   onBack,
   onNavigate,
 }: {
   teamData: any[];
   isLoading: boolean;
+  emailConnected: boolean;
   onNext: () => void;
   onBack: () => void;
   onNavigate: (path: string) => void;
@@ -486,10 +500,21 @@ function StepTeamSetup({
             Your Team
           </CardTitle>
           <CardDescription>
-            Team members with admin or processor access. Add members here or manage permissions in detail later.
+            Invite team members to join your platform. They'll receive an email to set up their own password.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {!emailConnected && (
+            <div className="flex items-start gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md" data-testid="warning-email-not-configured">
+              <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Email not configured</p>
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                  Team invitations require an email service (Resend) to be connected first. Go back to the Integrations step to set it up, or invitations will be saved but emails won't be sent.
+                </p>
+              </div>
+            </div>
+          )}
           {isLoading ? (
             <div className="flex items-center gap-3 p-4">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -594,32 +619,20 @@ function StepTeamSetup({
             </Button>
           </div>
 
-          <Separator />
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onNavigate('/admin/team-permissions')}
-            data-testid="button-go-to-permissions"
-          >
-            <Shield className="h-4 w-4 mr-2" />
-            Manage Permissions
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
         </CardContent>
       </Card>
 
       <div className="flex items-center justify-between gap-4">
-        <Button variant="outline" onClick={onBack} data-testid="button-back-step-2">
+        <Button variant="outline" onClick={onBack} data-testid="button-back-step-5">
           <ChevronLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
         <div className="flex items-center gap-3">
-          <Button variant="ghost" onClick={onNext} className="text-muted-foreground" data-testid="button-skip-step-2">
+          <Button variant="ghost" onClick={onNext} className="text-muted-foreground" data-testid="button-skip-step-5">
             Skip for now
           </Button>
-          <Button onClick={onNext} data-testid="button-next-step-2">
-            Next: Integrations
+          <Button onClick={onNext} data-testid="button-next-step-5">
+            Next: Role Permissions
             <ChevronRight className="ml-2 h-4 w-4" />
           </Button>
         </div>
@@ -848,15 +861,15 @@ function StepIntegrations({
       </Card>
 
       <div className="flex items-center justify-between gap-4">
-        <Button variant="outline" onClick={onBack} data-testid="button-back-step-3">
+        <Button variant="outline" onClick={onBack} data-testid="button-back-step-2">
           <ChevronLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
         <div className="flex items-center gap-3">
-          <Button variant="ghost" onClick={onNext} className="text-muted-foreground" data-testid="button-skip-step-3">
+          <Button variant="ghost" onClick={onNext} className="text-muted-foreground" data-testid="button-skip-step-2">
             Skip for now
           </Button>
-          <Button onClick={onNext} data-testid="button-next-step-3">
+          <Button onClick={onNext} data-testid="button-next-step-2">
             Next: Loan Programs
             <ChevronRight className="ml-2 h-4 w-4" />
           </Button>
@@ -996,15 +1009,15 @@ function StepProgramsWorkflow({
       </Card>
 
       <div className="flex items-center justify-between gap-4">
-        <Button variant="outline" onClick={onBack} data-testid="button-back-step-4">
+        <Button variant="outline" onClick={onBack} data-testid="button-back-step-3">
           <ChevronLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
         <div className="flex items-center gap-3">
-          <Button variant="ghost" onClick={onNext} className="text-muted-foreground" data-testid="button-skip-step-4">
+          <Button variant="ghost" onClick={onNext} className="text-muted-foreground" data-testid="button-skip-step-3">
             Skip for now
           </Button>
-          <Button onClick={onNext} data-testid="button-next-step-4">
+          <Button onClick={onNext} data-testid="button-next-step-3">
             Next: Communications & AI
             <ChevronRight className="ml-2 h-4 w-4" />
           </Button>
@@ -1016,18 +1029,14 @@ function StepProgramsWorkflow({
 
 function StepCommunicationsAI({
   emailConnected,
-  onboardingCompleted,
+  onNext,
   onBack,
   onNavigate,
-  onCompleteOnboarding,
-  isCompleting,
 }: {
   emailConnected: boolean;
-  onboardingCompleted: boolean;
+  onNext: () => void;
   onBack: () => void;
   onNavigate: (path: string) => void;
-  onCompleteOnboarding: () => void;
-  isCompleting: boolean;
 }) {
   return (
     <div className="space-y-6">
@@ -1153,7 +1162,223 @@ function StepCommunicationsAI({
         </CardContent>
       </Card>
 
+      <div className="flex items-center justify-between gap-4">
+        <Button variant="outline" onClick={onBack} data-testid="button-back-step-4">
+          <ChevronLeft className="mr-2 h-4 w-4" />
+          Back
+        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" onClick={onNext} className="text-muted-foreground" data-testid="button-skip-step-4">
+            Skip for now
+          </Button>
+          <Button onClick={onNext} data-testid="button-next-step-4">
+            Next: Team Setup
+            <ChevronRight className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface PermissionValue {
+  enabled: boolean;
+  scope: string;
+}
+
+interface PermissionState {
+  [role: string]: {
+    [key: string]: PermissionValue;
+  };
+}
+
+function StepRolePermissions({
+  onboardingCompleted,
+  onBack,
+  onNavigate,
+  onCompleteOnboarding,
+  isCompleting,
+}: {
+  onboardingCompleted: boolean;
+  onBack: () => void;
+  onNavigate: (path: string) => void;
+  onCompleteOnboarding: () => void;
+  isCompleting: boolean;
+}) {
+  const { toast } = useToast();
+  const [selectedRole, setSelectedRole] = useState<string>("processor");
+
+  const { data, isLoading, refetch } = useQuery<PermissionState>({
+    queryKey: ["team-permissions"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/admin/team-permissions");
+      return response.json();
+    },
+  });
+
+  const updatePermissionMutation = useMutation({
+    mutationFn: async (payload: {
+      role: string;
+      permissionKey: string;
+      enabled: boolean;
+      scope?: string;
+    }) => {
+      return await apiRequest("PUT", "/api/admin/team-permissions", payload);
+    },
+    onSuccess: () => {
+      toast({ title: "Permission updated" });
+      queryClient.invalidateQueries({ queryKey: ["team-permissions"] });
+      refetch();
+    },
+    onError: () => {
+      toast({ title: "Failed to update permission", variant: "destructive" });
+    },
+  });
+
+  const handleToggle = (role: string, permissionKey: string, currentValue: boolean) => {
+    updatePermissionMutation.mutate({ role, permissionKey, enabled: !currentValue });
+  };
+
+  const handleScopeChange = (role: string, permissionKey: string, scope: string) => {
+    const currentEnabled = data?.[role]?.[permissionKey]?.enabled ?? false;
+    updatePermissionMutation.mutate({ role, permissionKey, enabled: currentEnabled, scope });
+  };
+
+  const isEditableRole = (role: string) => role === "processor";
+
+  const isScopable = (key: string) => SCOPABLE_PERMISSIONS.includes(key as PermissionKey);
+
+  const roleOptions = [
+    { value: "processor", label: "Processor" },
+    { value: "admin", label: "Admin" },
+  ];
+
+  return (
+    <div className="space-y-6">
       <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="h-5 w-5" />
+            Role Permissions
+          </CardTitle>
+          <CardDescription>
+            Configure what each role can access. Admin has full access. Processor permissions are customizable below.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-20" />
+              ))}
+            </div>
+          ) : (
+            <Tabs defaultValue="processor" value={selectedRole} onValueChange={setSelectedRole}>
+              <TabsList className="grid w-full grid-cols-2">
+                {roleOptions.map((role) => (
+                  <TabsTrigger key={role.value} value={role.value} data-testid={`tab-onboarding-role-${role.value}`}>
+                    <div className="flex items-center gap-2">
+                      {role.label}
+                      {role.value === "admin" && (
+                        <Badge variant="secondary" className="ml-1">Full</Badge>
+                      )}
+                    </div>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+
+              {roleOptions.map((role) => (
+                <TabsContent key={role.value} value={role.value} className="space-y-6">
+                  {!isEditableRole(role.value) && (
+                    <div className="bg-muted p-4 rounded-lg border border-border">
+                      <p className="text-sm text-muted-foreground">
+                        Admin users have full access to all permissions.
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="space-y-6">
+                    {Object.entries(PERMISSION_CATEGORIES).map(([categoryKey, category]) => (
+                      <div key={categoryKey} className="border rounded-lg p-4 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-semibold text-base">{category.label}</h3>
+                          <Badge variant="outline">
+                            {category.permissions.filter((p) => data?.[role.value]?.[p.key]?.enabled).length} / {category.permissions.length}
+                          </Badge>
+                        </div>
+
+                        <div className="space-y-3">
+                          {category.permissions.map((permission) => {
+                            const permValue = data?.[role.value]?.[permission.key];
+                            const isEnabled = permValue?.enabled || false;
+                            const scope = permValue?.scope || "all";
+                            const isEditable = isEditableRole(role.value);
+                            const showScope = isEditable && isScopable(permission.key) && isEnabled;
+
+                            return (
+                              <div key={permission.key} className="p-3 bg-muted/50 rounded">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3 flex-1">
+                                    <Label
+                                      htmlFor={`onboard-${role.value}-${permission.key}`}
+                                      className="cursor-pointer flex-1 font-normal"
+                                    >
+                                      {permission.label}
+                                    </Label>
+                                  </div>
+                                  {isEditable ? (
+                                    <Switch
+                                      id={`onboard-${role.value}-${permission.key}`}
+                                      checked={isEnabled}
+                                      onCheckedChange={() => handleToggle(role.value, permission.key, isEnabled)}
+                                      disabled={updatePermissionMutation.isPending}
+                                      data-testid={`switch-onboard-${role.value}-${permission.key}`}
+                                    />
+                                  ) : (
+                                    <Badge variant={isEnabled ? "default" : "secondary"}>
+                                      {isEnabled ? "Enabled" : "Disabled"}
+                                    </Badge>
+                                  )}
+                                </div>
+
+                                {showScope && (
+                                  <div className="mt-3 flex items-center gap-3 pl-1">
+                                    <span className="text-xs text-muted-foreground">Scope:</span>
+                                    <Select
+                                      value={scope}
+                                      onValueChange={(val) => handleScopeChange(role.value, permission.key, val)}
+                                      disabled={updatePermissionMutation.isPending}
+                                    >
+                                      <SelectTrigger className="w-[180px] h-8 text-xs" data-testid={`select-onboard-scope-${permission.key}`}>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="all">All</SelectItem>
+                                        <SelectItem value="assigned_only">Assigned Only</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    {scope === "assigned_only" && (
+                                      <span className="text-xs text-muted-foreground">
+                                        Only sees items on deals they are assigned to
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </TabsContent>
+              ))}
+            </Tabs>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="bg-muted/50 border-muted">
         <CardContent className="p-6">
           <div className="flex items-center gap-4">
             <div className="h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
@@ -1170,13 +1395,13 @@ function StepCommunicationsAI({
       </Card>
 
       <div className="flex items-center justify-between gap-4">
-        <Button variant="outline" onClick={onBack} data-testid="button-back-step-5">
+        <Button variant="outline" onClick={onBack} data-testid="button-back-step-6">
           <ChevronLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
         <div className="flex items-center gap-3">
           {!onboardingCompleted && (
-            <Button variant="ghost" onClick={onCompleteOnboarding} disabled={isCompleting} className="text-muted-foreground" data-testid="button-skip-step-5">
+            <Button variant="ghost" onClick={onCompleteOnboarding} disabled={isCompleting} className="text-muted-foreground" data-testid="button-skip-step-6">
               Skip for now
             </Button>
           )}
