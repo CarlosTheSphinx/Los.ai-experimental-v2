@@ -437,7 +437,7 @@ function StepTeamSetup({
     fullName: '',
     email: '',
     password: '',
-    role: 'staff',
+    role: 'processor',
   });
 
   const teamRoles = new Set(['processor', 'staff', 'admin', 'super_admin']);
@@ -456,7 +456,7 @@ function StepTeamSetup({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
-      setNewMember({ fullName: '', email: '', password: '', role: 'staff' });
+      setNewMember({ fullName: '', email: '', password: '', role: 'processor' });
       toast({ title: 'Team member added successfully' });
     },
     onError: (error: any) => {
@@ -485,7 +485,7 @@ function StepTeamSetup({
             Your Team
           </CardTitle>
           <CardDescription>
-            Team members with admin, staff, or processor access. Add members here or manage permissions in detail later.
+            Team members with admin or processor access. Add members here or manage permissions in detail later.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -565,7 +565,7 @@ function StepTeamSetup({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="staff">Staff</SelectItem>
+                    <SelectItem value="processor">Processor</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
                   </SelectContent>
                 </Select>
