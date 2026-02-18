@@ -819,7 +819,7 @@ function StepIntegrations({
             </div>
           ) : (
             <Button
-              onClick={() => window.location.href = '/api/google/connect?returnTo=' + encodeURIComponent('/admin/onboarding?step=2')}
+              onClick={() => window.open('/api/google/connect?returnTo=' + encodeURIComponent('/admin/onboarding?step=2'), '_blank')}
               data-testid="button-connect-google-onboarding"
               className="gap-2 w-full"
               variant={isMicrosoftConnected ? 'outline' : 'default'}
@@ -884,7 +884,7 @@ function StepIntegrations({
             </div>
           ) : (
             <Button
-              onClick={() => window.location.href = '/api/microsoft/connect?returnTo=' + encodeURIComponent('/admin/onboarding?step=2')}
+              onClick={() => window.open('/api/microsoft/connect?returnTo=' + encodeURIComponent('/admin/onboarding?step=2'), '_blank')}
               data-testid="button-connect-microsoft-onboarding"
               className="gap-2 w-full"
               variant={isGoogleConnected ? 'outline' : 'default'}
