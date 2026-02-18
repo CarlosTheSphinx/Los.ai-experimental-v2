@@ -4,7 +4,7 @@ import type { RouteDeps } from './types';
 import { OAuth2Client } from 'google-auth-library';
 import { google } from 'googleapis';
 import { eq, and } from 'drizzle-orm';
-import { emailAccounts, users } from '@shared/schema';
+import { emailAccounts, users, systemSettings } from '@shared/schema';
 import { encryptToken } from '../utils/encryption';
 
 /**
@@ -67,7 +67,15 @@ export function registerGoogleConnectRoutes(app: Express, deps: RouteDeps) {
         googleTokenExpiresAt: users.googleTokenExpiresAt,
       }).from(users).where(eq(users.id, userId));
 
-      const driveConnected = !!user?.googleRefreshToken;
+      const hasOAuthTokens = !!user?.googleRefreshToken;
+
+      // Check if a Drive folder ID has been configured
+      const [folderSetting] = await db.select({
+        settingValue: systemSettings.settingValue,
+      }).from(systemSettings).where(eq(systemSettings.settingKey, 'google_drive_parent_folder_id'));
+      const hasDriveFolderId = !!folderSetting?.settingValue;
+
+      const driveConnected = hasOAuthTokens || hasDriveFolderId;
 
       // Check Gmail connection (emailAccounts table)
       const [emailAccount] = await db.select({
@@ -95,6 +103,7 @@ export function registerGoogleConnectRoutes(app: Express, deps: RouteDeps) {
         },
         drive: {
           connected: driveConnected,
+          folderId: folderSetting?.settingValue || null,
         },
       });
     } catch (error: any) {

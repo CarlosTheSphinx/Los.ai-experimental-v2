@@ -670,7 +670,7 @@ function StepIntegrations({
   const { data: googleStatus, isLoading: isGoogleLoading } = useQuery<{
     connected: boolean;
     gmail: { connected: boolean; emailAddress: string | null; lastSyncAt: string | null; syncStatus: string | null };
-    drive: { connected: boolean };
+    drive: { connected: boolean; folderId: string | null };
   }>({
     queryKey: ['/api/google/status'],
   });
@@ -696,12 +696,31 @@ function StepIntegrations({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/google/status"] });
       toast({ title: 'Google Drive folder ID saved' });
     },
     onError: () => {
       toast({ title: 'Failed to save folder ID', variant: 'destructive' });
     },
   });
+
+  const removeDriveMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("DELETE", "/api/admin/settings/google_drive_parent_folder_id");
+    },
+    onSuccess: () => {
+      setLocalDriveFolderId('');
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/google/status"] });
+      toast({ title: 'Google Drive folder ID removed' });
+    },
+    onError: () => {
+      toast({ title: 'Failed to remove folder ID', variant: 'destructive' });
+    },
+  });
+
+  const [isEditingFolderId, setIsEditingFolderId] = useState(false);
+  const savedFolderId = driveFolderId || googleStatus?.drive?.folderId || '';
 
   const externalIntegrations = [
     { key: 'twilio', label: 'Twilio SMS', icon: Phone },
@@ -842,31 +861,77 @@ function StepIntegrations({
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">Loading settings...</span>
               </div>
+            ) : savedFolderId && !isEditingFolderId ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap p-3 bg-muted/50 rounded-md">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                    <code className="text-sm truncate" data-testid="text-saved-drive-folder">{savedFolderId}</code>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setLocalDriveFolderId(savedFolderId);
+                        setIsEditingFolderId(true);
+                      }}
+                      data-testid="button-edit-drive-folder"
+                    >
+                      Replace
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeDriveMutation.mutate()}
+                      disabled={removeDriveMutation.isPending}
+                      data-testid="button-remove-drive-folder"
+                      className="text-destructive"
+                    >
+                      {removeDriveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Remove'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
             ) : (
-              <div className="flex gap-2">
-                <Input
-                  value={localDriveFolderId}
-                  onChange={(e) => setLocalDriveFolderId(e.target.value)}
-                  placeholder="Enter Google Drive Parent Folder ID (optional)"
-                  data-testid="input-drive-folder-id"
-                />
-                <Button
-                  size="sm"
-                  onClick={() => saveDriveMutation.mutate(localDriveFolderId)}
-                  disabled={saveDriveMutation.isPending || localDriveFolderId === driveFolderId}
-                  data-testid="button-save-drive-folder"
-                >
-                  {saveDriveMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Save className="h-4 w-4" />
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <Input
+                    value={localDriveFolderId}
+                    onChange={(e) => setLocalDriveFolderId(e.target.value)}
+                    placeholder="Enter Google Drive Parent Folder ID (optional)"
+                    data-testid="input-drive-folder-id"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      saveDriveMutation.mutate(localDriveFolderId);
+                      setIsEditingFolderId(false);
+                    }}
+                    disabled={saveDriveMutation.isPending || !localDriveFolderId.trim()}
+                    data-testid="button-save-drive-folder"
+                  >
+                    {saveDriveMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                  </Button>
+                  {isEditingFolderId && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsEditingFolderId(false)}
+                    >
+                      Cancel
+                    </Button>
                   )}
-                </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Find the folder ID in your Google Drive folder's URL after /folders/
+                </p>
               </div>
             )}
-            <p className="text-xs text-muted-foreground">
-              Find the folder ID in your Google Drive folder's URL after /folders/
-            </p>
           </CardContent>
         </Card>
       )}
