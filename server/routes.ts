@@ -1895,10 +1895,23 @@ export async function registerRoutes(
         ipAddress: req.ip,
       });
 
+      // Find the project/deal linked to this quote (if any)
+      let linkedProjectId: number | null = null;
+      if (doc.quoteId) {
+        const [linkedProject] = await db.select({ id: projects.id })
+          .from(projects)
+          .where(eq(projects.quoteId, doc.quoteId))
+          .limit(1);
+        if (linkedProject) {
+          linkedProjectId = linkedProject.id;
+        }
+      }
+
       // Create esign envelope record for tracking
       await db.insert(esignEnvelopes).values({
         vendor: 'pandadoc',
         quoteId: doc.quoteId,
+        projectId: linkedProjectId,
         externalDocumentId: pandaDoc.id,
         documentName: doc.name,
         status: apiSendSucceeded ? 'sent' : 'draft',
@@ -14527,6 +14540,97 @@ If the user provides specific criteria, extract as many rules as you can from th
               console.error('[PandaDoc Webhook] Error creating project from signed term sheet:', projectError);
             }
           }
+
+          // Insert signed PDF into existing deal's stage 1 documents
+          if (envelope.projectId && signedPdfPath && signedPdfSize > 0) {
+            try {
+              const existingSignedDoc = await db.select({ id: dealDocuments.id })
+                .from(dealDocuments)
+                .where(and(
+                  eq(dealDocuments.dealId, envelope.projectId),
+                  eq(dealDocuments.documentDescription, `Signed PandaDoc document (${documentId}): ${envelope.documentName}`),
+                ))
+                .limit(1);
+
+              if (existingSignedDoc.length === 0) {
+                const [stage1] = await db.select()
+                  .from(projectStages)
+                  .where(eq(projectStages.projectId, envelope.projectId))
+                  .orderBy(asc(projectStages.stageOrder))
+                  .limit(1);
+
+                // Upload to object storage instead of just filesystem
+                const objectStorageService = new ObjectStorageService();
+                const pdfBuf = await (await import('fs')).promises.readFile(signedPdfPath);
+                const { objectPath } = await objectStorageService.uploadFile(
+                  pdfBuf,
+                  `${(envelope.documentName || 'signed-document').replace(/[^a-zA-Z0-9._-]/g, '_')}-signed.pdf`,
+                  'application/pdf'
+                );
+
+                const signedFileName = `${envelope.documentName || 'Signed Document'} (Signed).pdf`;
+                const [insertedDoc] = await db.insert(dealDocuments).values({
+                  dealId: envelope.projectId,
+                  stageId: stage1?.id || null,
+                  documentName: signedFileName,
+                  documentCategory: 'closing_docs',
+                  documentDescription: `Signed PandaDoc document (${documentId}): ${envelope.documentName}`,
+                  status: 'approved',
+                  isRequired: false,
+                  assignedTo: 'admin',
+                  visibility: 'all',
+                  filePath: objectPath,
+                  fileName: signedFileName,
+                  fileSize: signedPdfSize,
+                  mimeType: 'application/pdf',
+                  uploadedAt: new Date(),
+                  uploadedBy: envelope.createdBy,
+                  sortOrder: 0,
+                }).returning();
+
+                console.log(`[PandaDoc Webhook] Signed document "${signedFileName}" auto-inserted into deal ${envelope.projectId} at stage ${stage1?.stageName || 'first'} (doc ID: ${insertedDoc?.id})`);
+
+                // Log activity on the deal
+                await storage.createProjectActivity({
+                  projectId: envelope.projectId,
+                  userId: envelope.createdBy!,
+                  activityType: 'document_uploaded',
+                  activityDescription: `Signed document "${envelope.documentName}" received from PandaDoc and added to ${stage1?.stageName || 'Stage 1'}`,
+                  visibleToBorrower: true,
+                });
+
+                // Sync to Google Drive if enabled
+                try {
+                  const { isDriveIntegrationEnabled, ensureProjectFolder, uploadFileToProjectFolder } = await import('./services/googleDrive');
+                  const driveEnabled = await isDriveIntegrationEnabled();
+                  if (driveEnabled && insertedDoc) {
+                    await ensureProjectFolder(envelope.projectId);
+                    const fileStream = (await import('fs')).createReadStream(signedPdfPath);
+                    const driveResult = await uploadFileToProjectFolder({
+                      projectId: envelope.projectId,
+                      fileStream,
+                      originalName: signedFileName,
+                      mimeType: 'application/pdf',
+                    });
+                    await db.update(dealDocuments)
+                      .set({
+                        googleDriveFileId: driveResult.fileId,
+                        googleDriveFileUrl: driveResult.webViewLink,
+                        driveUploadStatus: 'SYNCED',
+                      })
+                      .where(eq(dealDocuments.id, insertedDoc.id));
+                    console.log(`[PandaDoc Webhook] Signed PDF synced to Drive for existing deal ${envelope.projectId}`);
+                  }
+                } catch (driveErr: any) {
+                  console.error('[PandaDoc Webhook] Drive sync for existing deal signed PDF:', driveErr.message);
+                }
+              } else {
+                console.log(`[PandaDoc Webhook] Signed document already exists for deal ${envelope.projectId}, skipping duplicate insert`);
+              }
+            } catch (existingDealErr: any) {
+              console.error(`[PandaDoc Webhook] Error inserting signed doc into existing deal ${envelope.projectId}:`, existingDealErr.message);
+            }
+          }
         }
         
           if (event === 'document.viewed') {
@@ -15467,6 +15571,7 @@ Return JSON only:
       console.error('Initial expiration check failed:', err);
     });
   }, 10000);
+
 
   // Branding endpoints
   app.get('/api/settings/branding', async (req: AuthRequest, res: Response) => {

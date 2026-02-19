@@ -85,7 +85,7 @@ The database still uses `projects` as the table name, but the entire UI refers t
 
 -   **Apify**: Cloud-based web scraping for external pricing providers.
 -   **PostgreSQL**: Primary relational database.
--   **PandaDoc**: E-signing service for agreement management, including a comprehensive status synchronization system. Critical coordinate conversion (72 DPI to 96 DPI) is handled.
+-   **PandaDoc**: E-signing service for agreement management, including a comprehensive status synchronization system. Critical coordinate conversion (72 DPI to 96 DPI) is handled. Signed documents automatically return to the system: webhook handler and polling backstop detect completed documents, download the signed PDF, upload to object storage, and auto-insert into the deal's stage 1 document section with activity logging and optional Drive sync. The `esignEnvelopes` table tracks `projectId` to link documents to deals.
 -   **Resend**: Email sending service.
 -   **Twilio**: SMS messaging service.
 -   **Google OAuth 2.0**: For user authentication and Google Drive integration.
