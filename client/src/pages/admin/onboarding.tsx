@@ -62,9 +62,6 @@ import {
   MousePointerClick,
   StickyNote,
   Inbox,
-  Link2,
-  Copy,
-  Eye,
 } from 'lucide-react';
 import { PERMISSION_CATEGORIES, SCOPABLE_PERMISSIONS, type PermissionKey } from '@shared/schema';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -1484,141 +1481,6 @@ function StepAIAgent({
   );
 }
 
-function TestPortalLinks() {
-  const { toast } = useToast();
-  const [email, setEmail] = useState('');
-  const [selectedDealId, setSelectedDealId] = useState('');
-  const [portalType, setPortalType] = useState<'borrower' | 'broker'>('borrower');
-  const [generatedLink, setGeneratedLink] = useState('');
-
-  const { data: deals, isLoading: dealsLoading } = useQuery<any[]>({
-    queryKey: ['/api/projects'],
-  });
-
-  const sendTestLink = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest('POST', '/api/admin/send-test-portal-link', {
-        email,
-        dealId: parseInt(selectedDealId),
-        portalType,
-      });
-      return res.json();
-    },
-    onSuccess: (data: any) => {
-      setGeneratedLink(data.portalUrl || '');
-      toast({
-        title: data.emailFailed ? 'Link Generated' : 'Test Link Sent',
-        description: data.message,
-        variant: data.emailFailed ? 'default' : 'default',
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Failed to send test link',
-        description: error.message || 'Something went wrong',
-        variant: 'destructive',
-      });
-    },
-  });
-
-  const copyLink = () => {
-    navigator.clipboard.writeText(generatedLink);
-    toast({ title: 'Copied', description: 'Portal link copied to clipboard' });
-  };
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="font-medium flex items-center gap-2">
-          <Eye className="h-4 w-4" />
-          Preview Portal Experience
-        </h3>
-        <p className="text-sm text-muted-foreground mt-1">
-          Send a test link to preview how borrowers or brokers will see their portal. Pick a deal, enter an email, and we'll send a preview link.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="test-portal-deal">Deal</Label>
-          <Select value={selectedDealId} onValueChange={setSelectedDealId}>
-            <SelectTrigger data-testid="select-test-portal-deal">
-              <SelectValue placeholder="Select a deal..." />
-            </SelectTrigger>
-            <SelectContent>
-              {dealsLoading ? (
-                <SelectItem value="_loading" disabled>Loading deals...</SelectItem>
-              ) : deals && deals.length > 0 ? (
-                deals.map((deal: any) => (
-                  <SelectItem key={deal.id} value={String(deal.id)}>
-                    DEAL-{deal.id} — {deal.propertyAddress || deal.borrowerName || 'Untitled'}
-                  </SelectItem>
-                ))
-              ) : (
-                <SelectItem value="_none" disabled>No deals found</SelectItem>
-              )}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="test-portal-type">Portal Type</Label>
-          <Select value={portalType} onValueChange={(v) => setPortalType(v as 'borrower' | 'broker')}>
-            <SelectTrigger data-testid="select-test-portal-type">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="borrower">Borrower Portal</SelectItem>
-              <SelectItem value="broker">Broker Portal</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="test-portal-email">Email Address</Label>
-        <div className="flex gap-2">
-          <Input
-            id="test-portal-email"
-            type="email"
-            placeholder="Enter email to send preview link..."
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            data-testid="input-test-portal-email"
-          />
-          <Button
-            onClick={() => sendTestLink.mutate()}
-            disabled={!email || !selectedDealId || sendTestLink.isPending}
-            data-testid="button-send-test-portal-link"
-          >
-            {sendTestLink.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            ) : (
-              <Send className="h-4 w-4 mr-2" />
-            )}
-            Send Test Link
-          </Button>
-        </div>
-      </div>
-
-      {generatedLink && (
-        <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-md border">
-          <Link2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-          <code className="text-xs flex-1 truncate">{generatedLink}</code>
-          <Button variant="ghost" size="sm" onClick={copyLink} data-testid="button-copy-portal-link">
-            <Copy className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="sm" asChild data-testid="button-open-portal-link">
-            <a href={generatedLink} target="_blank" rel="noopener noreferrer">
-              <ExternalLink className="h-4 w-4" />
-            </a>
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function StepCommunications({
   emailConnected,
   onNext,
@@ -1683,10 +1545,6 @@ function StepCommunications({
               </p>
             </div>
           </div>
-
-          <Separator />
-
-          <TestPortalLinks />
 
           <Separator />
 
