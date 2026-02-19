@@ -122,7 +122,7 @@ const adminNavItems: NavItem[] = [
   { href: "/admin/team-permissions", label: "Permissions", icon: Shield, requiredPermission: "users.manage" },
   { href: "/admin/commercial/config", label: "Commercial Config", icon: ClipboardEdit, requiredPermission: "commercial.manage" },
   { href: "/admin/settings", label: "Settings", icon: Settings, requiredPermission: "settings.view" },
-  { href: "/admin/onboarding", label: "Getting Started", icon: BookOpen, requiredPermission: "onboarding.view" },
+  { href: "/admin/onboarding", label: "Onboarding", icon: BookOpen, requiredPermission: "onboarding.view" },
 ];
 
 // Super admin items — only visible to super_admin role (Lendry platform team)

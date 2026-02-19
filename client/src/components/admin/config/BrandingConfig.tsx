@@ -25,7 +25,7 @@ const defaults = {
   licensingText: "",
 };
 
-function LogoUploadField({
+export function LogoUploadField({
   label,
   value,
   onChange,

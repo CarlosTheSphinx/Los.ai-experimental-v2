@@ -40,6 +40,8 @@ import {
   Pencil,
   ShieldCheck,
   X,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 
 type Rule = {
@@ -48,6 +50,7 @@ type Rule = {
   ruleDescription: string;
   category?: string;
   isActive?: boolean;
+  confidence?: "high" | "medium" | "low";
 };
 
 type CreditPolicy = {
@@ -277,6 +280,32 @@ export default function AdminCreditPolicies() {
             }}
           />
 
+          {sourceFileName && !isExtracting && (
+            <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-md">
+              <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate" data-testid="text-uploaded-file">{sourceFileName}</p>
+                <p className="text-xs text-muted-foreground">{rules.length} rules extracted</p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                data-testid="button-reupload-file"
+              >
+                <Upload className="h-3 w-3 mr-1" />
+                Re-upload
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => { setSourceFileName(""); setRules([]); }}
+                data-testid="button-clear-file"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
           {isExtracting ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-8 gap-3">
@@ -286,7 +315,7 @@ export default function AdminCreditPolicies() {
                 </p>
               </CardContent>
             </Card>
-          ) : (
+          ) : !sourceFileName ? (
             <div
               className={`border-2 border-dashed rounded-md p-6 text-center cursor-pointer transition-colors ${
                 isDragOver
@@ -308,21 +337,23 @@ export default function AdminCreditPolicies() {
               <Upload className="h-6 w-6 mx-auto mb-2 text-muted-foreground" />
               <p className="text-sm font-medium">Drop file here or click to upload</p>
               <p className="text-xs text-muted-foreground mt-1">PDF, Excel (.xlsx, .xls)</p>
-              {sourceFileName && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Last uploaded: {sourceFileName}
-                </p>
-              )}
             </div>
-          )}
+          ) : null}
 
           {rules.length > 0 && (
             <div className="space-y-3 mt-2">
               <div className="flex items-center justify-between gap-2 flex-wrap">
-                <p className="text-sm font-medium">{rules.length} rules</p>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <p className="text-sm font-medium" data-testid="text-rule-count">{rules.length} rules</p>
+                  {rules.some(r => r.confidence === "low" || r.confidence === "medium") && (
+                    <span className="flex items-center gap-1 text-xs text-warning" data-testid="text-rules-need-review">
+                      <AlertTriangle className="h-3 w-3" />
+                      {rules.filter(r => r.confidence === "low" || r.confidence === "medium").length} need review
+                    </span>
+                  )}
+                </div>
                 <Button
                   variant="outline"
-                  size="sm"
                   onClick={() =>
                     setRules((prev) => [
                       ...prev,
@@ -331,7 +362,7 @@ export default function AdminCreditPolicies() {
                   }
                   data-testid="button-add-rule-general"
                 >
-                  <Plus className="h-3 w-3 mr-1" />
+                  <Plus className="h-4 w-4 mr-1" />
                   Add Rule
                 </Button>
               </div>
@@ -361,9 +392,26 @@ export default function AdminCreditPolicies() {
                       <CardContent className="pt-0 space-y-3">
                         {docRules.map((rule, rIdx) => {
                           const globalIdx = indices[rIdx];
+                          const isUncertain = rule.confidence === "low" || rule.confidence === "medium";
                           return (
-                            <div key={globalIdx} className="border rounded-md p-3 space-y-2">
+                            <div
+                              key={globalIdx}
+                              className={`border rounded-md p-3 space-y-2 ${
+                                rule.confidence === "low"
+                                  ? "border-destructive/40 bg-destructive/5"
+                                  : rule.confidence === "medium"
+                                    ? "border-warning/40 bg-warning/5"
+                                    : ""
+                              }`}
+                            >
                               <div className="flex items-center gap-2">
+                                {isUncertain && (
+                                  <AlertTriangle
+                                    className={`h-4 w-4 flex-shrink-0 ${
+                                      rule.confidence === "low" ? "text-destructive" : "text-warning"
+                                    }`}
+                                  />
+                                )}
                                 <Input
                                   value={rule.ruleTitle}
                                   onChange={(e) => updateRule(globalIdx, "ruleTitle", e.target.value)}
@@ -376,6 +424,20 @@ export default function AdminCreditPolicies() {
                                     {rule.category}
                                   </Badge>
                                 )}
+                                {rule.confidence && (
+                                  <Badge
+                                    variant={rule.confidence === "high" ? "secondary" : "outline"}
+                                    className={`text-xs shrink-0 ${
+                                      rule.confidence === "low"
+                                        ? "border-destructive/50 text-destructive"
+                                        : rule.confidence === "medium"
+                                          ? "border-warning/50 text-warning"
+                                          : ""
+                                    }`}
+                                  >
+                                    {rule.confidence}
+                                  </Badge>
+                                )}
                                 <Button
                                   size="icon"
                                   variant="ghost"
@@ -385,6 +447,13 @@ export default function AdminCreditPolicies() {
                                   <Trash2 className="h-4 w-4 text-destructive" />
                                 </Button>
                               </div>
+                              {isUncertain && (
+                                <p className="text-xs text-muted-foreground">
+                                  {rule.confidence === "low"
+                                    ? "Low confidence — AI was uncertain about this rule. Please review carefully."
+                                    : "Medium confidence — This rule was implied but not explicitly stated. Please verify."}
+                                </p>
+                              )}
                               <Textarea
                                 value={rule.ruleDescription}
                                 onChange={(e) =>
@@ -399,11 +468,10 @@ export default function AdminCreditPolicies() {
                         })}
                         <Button
                           variant="outline"
-                          size="sm"
                           onClick={() => addRuleToGroup(docType)}
                           data-testid={`button-add-rule-${docType}`}
                         >
-                          <Plus className="h-3 w-3 mr-1" />
+                          <Plus className="h-4 w-4 mr-1" />
                           Add Rule
                         </Button>
                       </CardContent>

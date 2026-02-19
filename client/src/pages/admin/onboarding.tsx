@@ -19,6 +19,7 @@ import { ProgramCreationWizard } from '@/components/onboarding/ProgramCreationWi
 import { PricingConfiguration } from '@/components/onboarding/PricingConfiguration';
 import { useAuth } from '@/hooks/use-auth';
 import { useTenantConfig } from '@/hooks/use-tenant-config';
+import { LogoUploadField } from '@/components/admin/config/BrandingConfig';
 import {
   Plus,
   Pencil,
@@ -143,6 +144,8 @@ export default function AdminOnboarding() {
     companyName: "",
     supportEmail: "",
     emailSenderName: "",
+    logoLightUrl: "",
+    logoDarkUrl: "",
   });
 
   const emailConnected = googleStatusData?.gmail?.connected || false;
@@ -177,12 +180,13 @@ export default function AdminOnboarding() {
   };
 
   const driveFolderSetting = settingsData?.settings?.find((s: any) => s.settingKey === 'google_drive_parent_folder_id');
+  const oneDriveFolderSetting = settingsData?.settings?.find((s: any) => s.settingKey === 'onedrive_parent_folder_path');
 
   return (
     <div className="container max-w-6xl mx-auto py-6 px-4">
       <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-onboarding-title">Getting Started</h1>
+          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-onboarding-title">Onboarding</h1>
           <p className="text-muted-foreground">
             Your step-by-step guide to setting up and using the platform
           </p>
@@ -257,6 +261,7 @@ export default function AdminOnboarding() {
               {currentStep === 2 && (
                 <StepIntegrations
                   driveFolderId={driveFolderSetting?.settingValue || ''}
+                  oneDriveFolderPath={oneDriveFolderSetting?.settingValue || ''}
                   isSettingsLoading={settingsLoading}
                   onNext={handleNext}
                   onBack={handleBack}
@@ -327,7 +332,7 @@ function StepCompanyProfile({
   onNext,
 }: {
   userName: string;
-  tenantConfig: ReturnType<typeof useTenantConfig<{ companyName: string; supportEmail: string; emailSenderName: string }>>;
+  tenantConfig: ReturnType<typeof useTenantConfig<{ companyName: string; supportEmail: string; emailSenderName: string; logoLightUrl: string; logoDarkUrl: string }>>;
   onNext: () => void;
 }) {
   const { config, updateField, save, isPending, hasChanges } = tenantConfig;
@@ -416,6 +421,22 @@ function StepCompanyProfile({
               onChange={(e) => updateField("emailSenderName", e.target.value)}
               placeholder="Your Company"
               data-testid="input-onboard-sender-name"
+            />
+          </div>
+
+          <div className="border-t pt-4 space-y-4">
+            <Label className="text-sm font-medium">Company Logo</Label>
+            <LogoUploadField
+              label="Logo (Light Mode)"
+              value={config.logoLightUrl}
+              onChange={(url) => updateField("logoLightUrl", url)}
+              testId="input-onboard-logo-light"
+            />
+            <LogoUploadField
+              label="Logo (Dark Mode)"
+              value={config.logoDarkUrl}
+              onChange={(url) => updateField("logoDarkUrl", url)}
+              testId="input-onboard-logo-dark"
             />
           </div>
         </CardContent>
@@ -693,11 +714,13 @@ function StepTeamSetup({
 
 function StepIntegrations({
   driveFolderId,
+  oneDriveFolderPath,
   isSettingsLoading,
   onNext,
   onBack,
 }: {
   driveFolderId: string;
+  oneDriveFolderPath: string;
   isSettingsLoading: boolean;
   onNext: () => void;
   onBack: () => void;
@@ -779,6 +802,46 @@ function StepIntegrations({
     },
     onError: () => {
       toast({ title: 'Failed to remove folder ID', variant: 'destructive' });
+    },
+  });
+
+  // OneDrive folder state & mutations
+  const [localOneDriveFolderPath, setLocalOneDriveFolderPath] = useState(oneDriveFolderPath);
+  const [isEditingOneDrivePath, setIsEditingOneDrivePath] = useState(false);
+
+  useEffect(() => {
+    setLocalOneDriveFolderPath(oneDriveFolderPath);
+  }, [oneDriveFolderPath]);
+
+  const savedOneDriveFolderPath = oneDriveFolderPath;
+
+  const saveOneDriveMutation = useMutation({
+    mutationFn: async (folderPath: string) => {
+      return await apiRequest("PUT", "/api/admin/settings/onedrive_parent_folder_path", {
+        value: folderPath,
+        description: "OneDrive parent folder path for deal documents",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+      toast({ title: 'OneDrive folder path saved' });
+    },
+    onError: () => {
+      toast({ title: 'Failed to save folder path', variant: 'destructive' });
+    },
+  });
+
+  const removeOneDriveMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("DELETE", "/api/admin/settings/onedrive_parent_folder_path");
+    },
+    onSuccess: () => {
+      setLocalOneDriveFolderPath('');
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+      toast({ title: 'OneDrive folder path removed' });
+    },
+    onError: () => {
+      toast({ title: 'Failed to remove folder path', variant: 'destructive' });
     },
   });
 
@@ -1034,6 +1097,92 @@ function StepIntegrations({
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Find the folder ID in your Google Drive folder's URL after /folders/
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* OneDrive Folder Config — only shown when Microsoft is connected */}
+      {isMicrosoftConnected && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <FolderOpen className="h-5 w-5" />
+              OneDrive Folder
+            </CardTitle>
+            <CardDescription>
+              Optionally set a parent folder path where deal documents are stored in OneDrive.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {savedOneDriveFolderPath && !isEditingOneDrivePath ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap p-3 bg-muted/50 rounded-md">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                    <code className="text-sm truncate" data-testid="text-saved-onedrive-folder">{savedOneDriveFolderPath}</code>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        setLocalOneDriveFolderPath(savedOneDriveFolderPath);
+                        setIsEditingOneDrivePath(true);
+                      }}
+                      data-testid="button-edit-onedrive-folder"
+                    >
+                      Replace
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => removeOneDriveMutation.mutate()}
+                      disabled={removeOneDriveMutation.isPending}
+                      data-testid="button-remove-onedrive-folder"
+                      className="text-destructive"
+                    >
+                      {removeOneDriveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Remove'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <Input
+                    value={localOneDriveFolderPath}
+                    onChange={(e) => setLocalOneDriveFolderPath(e.target.value)}
+                    placeholder="Enter OneDrive folder path (e.g. /Deals/Documents)"
+                    data-testid="input-onedrive-folder-path"
+                  />
+                  <Button
+                    size="icon"
+                    onClick={() => {
+                      saveOneDriveMutation.mutate(localOneDriveFolderPath);
+                      setIsEditingOneDrivePath(false);
+                    }}
+                    disabled={saveOneDriveMutation.isPending || !localOneDriveFolderPath.trim()}
+                    data-testid="button-save-onedrive-folder"
+                  >
+                    {saveOneDriveMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                  </Button>
+                  {isEditingOneDrivePath && (
+                    <Button
+                      variant="ghost"
+                      onClick={() => setIsEditingOneDrivePath(false)}
+                      data-testid="button-cancel-onedrive-folder"
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Enter the folder path in your OneDrive where deal documents should be stored.
                 </p>
               </div>
             )}
@@ -1556,7 +1705,7 @@ function StepRolePermissions({
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold text-lg">You're all set!</h3>
               <p className="text-sm text-muted-foreground">
-                You can always come back to this guide from the Getting Started section in the sidebar. Now go ahead and start managing your deals.
+                You can always come back to this guide from the Onboarding section in the sidebar. Now go ahead and start managing your deals.
               </p>
             </div>
           </div>

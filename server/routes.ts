@@ -9407,6 +9407,7 @@ For each rule, provide:
 - ruleTitle: a short, clear title
 - ruleDescription: detailed description of what to check
 - category: a category like "Credit", "Income", "Property", "Compliance", "LTV", "DSCR", "Eligibility", etc.
+- confidence: "high" if the rule is clearly stated in the document, "medium" if it's implied or partially stated, "low" if you're uncertain about this rule's accuracy or interpretation
 
 Respond ONLY with valid JSON in this format:
 {
@@ -9415,7 +9416,8 @@ Respond ONLY with valid JSON in this format:
       "documentType": "Credit Report",
       "ruleTitle": "Minimum credit score",
       "ruleDescription": "Borrower must have a minimum FICO score of 680. If below 680, the loan is ineligible.",
-      "category": "Credit"
+      "category": "Credit",
+      "confidence": "high"
     }
   ]
 }`
@@ -9661,6 +9663,7 @@ For each rule, provide:
 - ruleTitle: a short, clear title
 - ruleDescription: detailed description of what to check
 - category: a category like "Credit", "Income", "Property", "Compliance", "LTV", "DSCR", "Eligibility", etc.
+- confidence: "high" if the rule is clearly stated in the document, "medium" if it's implied or partially stated, "low" if you're uncertain about this rule's accuracy or interpretation
 
 Respond ONLY with valid JSON in this format:
 {
@@ -9669,7 +9672,8 @@ Respond ONLY with valid JSON in this format:
       "documentType": "Credit Report",
       "ruleTitle": "Minimum credit score",
       "ruleDescription": "Borrower must have a minimum FICO score of 680. If below 680, the loan is ineligible.",
-      "category": "Credit"
+      "category": "Credit",
+      "confidence": "high"
     }
   ]
 }`
