@@ -16668,5 +16668,70 @@ Return JSON only:
     }
   });
 
+  app.post('/api/admin/send-test-portal-link', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { email, dealId, portalType } = req.body;
+      if (!email || !dealId || !portalType) {
+        return res.status(400).json({ error: 'Email, dealId, and portalType are required' });
+      }
+      if (!['borrower', 'broker'].includes(portalType)) {
+        return res.status(400).json({ error: 'portalType must be borrower or broker' });
+      }
+
+      const project = await storage.getProjectByIdInternal(dealId);
+      if (!project) {
+        return res.status(404).json({ error: 'Deal not found' });
+      }
+
+      const { v4: uuidv4Gen } = await import('uuid');
+      const token = uuidv4Gen();
+      const tokenField = portalType === 'borrower' ? 'borrowerPortalToken' : 'brokerPortalToken';
+      await db.update(projects)
+        .set({ [tokenField]: token, lastUpdated: new Date() })
+        .where(eq(projects.id, dealId));
+
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const portalPath = portalType === 'borrower' ? 'portal' : 'broker-portal';
+      const portalUrl = `${baseUrl}/${portalPath}/${token}`;
+      const portalLabel = portalType === 'borrower' ? 'Borrower Portal' : 'Broker Portal';
+
+      const brandingSettings = await storage.getSystemSettings();
+      const companyName = brandingSettings.find(s => s.key === 'company_name')?.value || 'Lendry.AI';
+
+      try {
+        const { Resend } = await import('resend');
+        const resend = new Resend(process.env.RESEND_API_KEY);
+        await resend.emails.send({
+          from: `${companyName} <no-reply@lendry.ai>`,
+          to: email,
+          subject: `[TEST] ${portalLabel} Preview - DEAL-${dealId}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <h2 style="color: #1e40af;">Test ${portalLabel} Link</h2>
+              <p>This is a test email from ${companyName} to preview the ${portalLabel.toLowerCase()} experience.</p>
+              <p><strong>Deal:</strong> DEAL-${dealId}</p>
+              <p><strong>Property:</strong> ${project.propertyAddress || 'N/A'}</p>
+              <div style="margin: 24px 0;">
+                <a href="${portalUrl}" style="background-color: #1e40af; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                  Open ${portalLabel}
+                </a>
+              </div>
+              <p style="color: #6b7280; font-size: 14px;">Or copy this link: <a href="${portalUrl}">${portalUrl}</a></p>
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
+              <p style="color: #9ca3af; font-size: 12px;">This is a test email. The link above provides access to the ${portalLabel.toLowerCase()} for this deal.</p>
+            </div>
+          `,
+        });
+        res.json({ success: true, portalUrl, message: `Test ${portalLabel.toLowerCase()} link sent to ${email}` });
+      } catch (emailError: any) {
+        console.error('Failed to send test email:', emailError);
+        res.json({ success: true, portalUrl, emailFailed: true, message: `Link generated but email failed to send. You can copy the link directly.` });
+      }
+    } catch (error) {
+      console.error('Send test portal link error:', error);
+      res.status(500).json({ error: 'Failed to send test portal link' });
+    }
+  });
+
   return httpServer;
 }
