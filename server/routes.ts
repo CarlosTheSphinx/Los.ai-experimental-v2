@@ -6158,7 +6158,14 @@ export async function registerRoutes(
       const meta = project.metadata as Record<string, any> | null;
       if (meta?.applicationData) {
         applicationData = meta.applicationData;
-      } else if (project.quoteId) {
+      } else if (meta && Object.keys(meta).length > 0) {
+        const metaSkipKeys = ['source', 'pandadocDocumentId', 'pandadocEnvelopeId'];
+        const metaEntries = Object.entries(meta).filter(([k]) => !metaSkipKeys.includes(k));
+        if (metaEntries.length > 0) {
+          applicationData = Object.fromEntries(metaEntries);
+        }
+      }
+      if (!applicationData && project.quoteId) {
         const qId = project.quoteId;
         const [linkedQuoteForApp] = await db.select({ loanData: savedQuotes.loanData })
           .from(savedQuotes)

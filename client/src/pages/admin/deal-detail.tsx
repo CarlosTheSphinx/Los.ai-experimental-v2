@@ -1656,7 +1656,7 @@ export default function AdminDealDetail() {
             </CardContent>
           </Card>
 
-          {deal.applicationData && Object.keys(deal.applicationData).length > 0 && (() => {
+          {(() => {
             const FIELD_LABELS: Record<string, string> = {
               loanAmount: 'Loan Amount', propertyValue: 'Property Value', loanType: 'Loan Type',
               loanPurpose: 'Loan Purpose', propertyType: 'Property Type', interestOnly: 'Interest Only',
@@ -1668,20 +1668,43 @@ export default function AdminDealDetail() {
               occupancy: 'Occupancy', units: 'Units', annualTaxes: 'Annual Taxes',
               annualInsurance: 'Annual Insurance', monthlyRent: 'Monthly Rent', monthlyHOA: 'Monthly HOA',
               appraisalValue: 'Appraisal Value', cashOut: 'Cash Out Amount', citizenshipStatus: 'Citizenship',
+              grossMonthlyRent: 'Gross Monthly Rent', calculatedDscr: 'Calculated DSCR',
+              monthlyPITIA: 'Monthly PITIA', downPayment: 'Down Payment', reserveMonths: 'Reserve Months',
+              squareFootage: 'Square Footage', yearBuilt: 'Year Built', occupancyStatus: 'Occupancy Status',
+              borrowerExperience: 'Borrower Experience', numberOfUnits: 'Number of Units',
+              estimatedPropertyValue: 'Estimated Property Value', purchasePrice: 'Purchase Price',
             };
             const SKIP_KEYS = ['additionalProperties', 'propertyAddress', 'firstName', 'lastName', 'email', 'phone', 'address'];
+            const CURRENCY_KEYS = ['loanAmount', 'propertyValue', 'asIsValue', 'arv', 'rehabBudget', 'constructionBudget', 'cashOut', 'annualTaxes', 'annualInsurance', 'monthlyRent', 'monthlyHOA', 'appraisalValue', 'grossMonthlyRent', 'monthlyPITIA', 'downPayment', 'estimatedPropertyValue', 'purchasePrice', 'annualPropertyTax'];
             const formatValue = (key: string, val: any): string => {
               if (val === null || val === undefined || val === '') return '\u2014';
               if (typeof val === 'boolean') return val ? 'Yes' : 'No';
-              if (['loanAmount', 'propertyValue', 'asIsValue', 'arv', 'rehabBudget', 'constructionBudget', 'cashOut', 'annualTaxes', 'annualInsurance', 'monthlyRent', 'monthlyHOA', 'appraisalValue'].includes(key)) {
+              if (CURRENCY_KEYS.includes(key)) {
                 const n = typeof val === 'string' ? parseFloat(val) : val;
                 if (!isNaN(n)) return formatCurrency(n);
               }
               return String(val);
             };
-            const entries = Object.entries(deal.applicationData)
+
+            let sourceData: Record<string, any> = {};
+            if (deal.applicationData && Object.keys(deal.applicationData).length > 0) {
+              sourceData = { ...deal.applicationData };
+            } else {
+              if (deal.loanData?.loanAmount) sourceData.loanAmount = deal.loanData.loanAmount;
+              if (deal.loanData?.propertyValue) sourceData.propertyValue = deal.loanData.propertyValue;
+              if (deal.loanData?.loanType && deal.loanData.loanType !== 'unknown') sourceData.loanType = deal.loanData.loanType;
+              if (deal.loanData?.loanPurpose) sourceData.loanPurpose = deal.loanData.loanPurpose;
+              if (deal.loanData?.propertyType && deal.loanData.propertyType !== 'unknown') sourceData.propertyType = deal.loanData.propertyType;
+              if (deal.loanData?.loanTerm) sourceData.loanTerm = deal.loanData.loanTerm;
+              if (deal.loanData?.ltv) sourceData.ltv = deal.loanData.ltv;
+              if (deal.interestRate && deal.interestRate !== '—') sourceData.interestRate = deal.interestRate;
+            }
+
+            const entries = Object.entries(sourceData)
               .filter(([key]) => !SKIP_KEYS.includes(key))
               .map(([key, val]) => ({ label: FIELD_LABELS[key] || key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim(), value: formatValue(key, val) }));
+
+            if (entries.length === 0) return null;
 
             return (
               <Card className="mt-4" data-testid="card-application-details">
