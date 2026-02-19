@@ -1318,8 +1318,8 @@ function StepProgramsWorkflow({
             <ProgramCreationWizard
               onComplete={() => {
                 setShowWizard(false);
-                // Re-fetch programs so the count updates
                 queryClient.invalidateQueries({ queryKey: ['/api/admin/programs'] });
+                onNext();
               }}
             />
           )}

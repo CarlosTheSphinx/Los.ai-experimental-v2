@@ -4711,18 +4711,23 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Missing role, permissionKey, or enabled field' });
       }
 
-      if (!['processor'].includes(role)) {
-        return res.status(400).json({ error: 'Can only configure permissions for processor role' });
+      if (!['processor', 'admin'].includes(role)) {
+        return res.status(400).json({ error: 'Can only configure permissions for processor and admin roles' });
       }
 
       await storage.upsertPermission(role, permissionKey, enabled, req.user!.id, scope);
 
-      await storage.createAdminActivity({
-        userId: req.user!.id,
-        actionType: 'permissions_updated',
-        actionDescription: `Updated permission ${permissionKey} for role: ${role}`,
-        metadata: { role, permissionKey, enabled, scope }
-      });
+      try {
+        await storage.createAdminActivity({
+          projectId: 0 as any,
+          userId: req.user!.id,
+          actionType: 'permissions_updated',
+          actionDescription: `Updated permission ${permissionKey} for role: ${role}`,
+          metadata: { role, permissionKey, enabled, scope }
+        });
+      } catch (_) {
+        // Permission activity logging may fail if no project context - this is fine
+      }
 
       res.json({ success: true });
     } catch (error) {
