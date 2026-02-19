@@ -1309,49 +1309,6 @@ export default function AdminDealDetail() {
                 {deal.stage || 'No Stage'}
               </Badge>
             )}
-            <Select
-              value={deal.projectStatus || 'active'}
-              onValueChange={(value) => updateStatusMutation.mutate(value)}
-              disabled={updateStatusMutation.isPending}
-            >
-              <SelectTrigger
-                className="w-auto h-6 text-xs font-semibold px-2 rounded-md border-0"
-                style={{
-                  backgroundColor: {
-                    active: 'rgba(34, 197, 94, 0.15)',
-                    closed: 'rgba(59, 130, 246, 0.15)',
-                    on_hold: 'rgba(245, 158, 11, 0.15)',
-                    archived: 'rgba(107, 114, 128, 0.15)',
-                  }[deal.projectStatus || 'active'] || 'rgba(107, 114, 128, 0.15)',
-                  color: {
-                    active: '#16a34a',
-                    closed: '#2563eb',
-                    on_hold: '#d97706',
-                    archived: '#6b7280',
-                  }[deal.projectStatus || 'active'] || '#6b7280',
-                }}
-                data-testid="select-deal-status"
-              >
-                <SelectValue>
-                  {{ active: 'Active', closed: 'Closed', on_hold: 'On Hold', archived: 'Archive' }[deal.projectStatus || 'active'] || deal.projectStatus}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {[
-                  { value: 'active', label: 'Active', color: '#16a34a' },
-                  { value: 'closed', label: 'Closed', color: '#2563eb' },
-                  { value: 'on_hold', label: 'On Hold', color: '#d97706' },
-                  { value: 'archived', label: 'Archive', color: '#6b7280' },
-                ].map((s) => (
-                  <SelectItem key={s.value} value={s.value}>
-                    <span className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
-                      {s.label}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-semibold" data-testid="text-borrower-name">{borrowerName}</h1>
@@ -1532,6 +1489,75 @@ export default function AdminDealDetail() {
                 </Button>
               </div>
             </div>
+          </Card>
+          <Card className="mt-4" data-testid="card-deal-status">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="h-3 w-3 rounded-full flex-shrink-0"
+                    style={{
+                      backgroundColor: {
+                        active: '#16a34a',
+                        closed: '#2563eb',
+                        on_hold: '#d97706',
+                        archived: '#6b7280',
+                      }[deal.projectStatus || 'active'] || '#6b7280',
+                    }}
+                  />
+                  <span className="text-sm font-medium text-muted-foreground">Deal Status</span>
+                </div>
+                <Select
+                  value={deal.projectStatus || 'active'}
+                  onValueChange={(value) => updateStatusMutation.mutate(value)}
+                  disabled={updateStatusMutation.isPending}
+                >
+                  <SelectTrigger
+                    className="w-[140px] font-semibold"
+                    style={{
+                      backgroundColor: {
+                        active: 'rgba(34, 197, 94, 0.1)',
+                        closed: 'rgba(59, 130, 246, 0.1)',
+                        on_hold: 'rgba(245, 158, 11, 0.1)',
+                        archived: 'rgba(107, 114, 128, 0.1)',
+                      }[deal.projectStatus || 'active'] || 'rgba(107, 114, 128, 0.1)',
+                      borderColor: {
+                        active: 'rgba(34, 197, 94, 0.3)',
+                        closed: 'rgba(59, 130, 246, 0.3)',
+                        on_hold: 'rgba(245, 158, 11, 0.3)',
+                        archived: 'rgba(107, 114, 128, 0.3)',
+                      }[deal.projectStatus || 'active'] || 'rgba(107, 114, 128, 0.3)',
+                      color: {
+                        active: '#16a34a',
+                        closed: '#2563eb',
+                        on_hold: '#d97706',
+                        archived: '#6b7280',
+                      }[deal.projectStatus || 'active'] || '#6b7280',
+                    }}
+                    data-testid="select-deal-status"
+                  >
+                    <SelectValue>
+                      {{ active: 'Active', closed: 'Closed', on_hold: 'On Hold', archived: 'Archive' }[deal.projectStatus || 'active'] || deal.projectStatus}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[
+                      { value: 'active', label: 'Active', color: '#16a34a' },
+                      { value: 'closed', label: 'Closed', color: '#2563eb' },
+                      { value: 'on_hold', label: 'On Hold', color: '#d97706' },
+                      { value: 'archived', label: 'Archive', color: '#6b7280' },
+                    ].map((s) => (
+                      <SelectItem key={s.value} value={s.value}>
+                        <span className="flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                          {s.label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
           </Card>
           <Card className="mt-4">
             <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2 flex-wrap">
