@@ -121,9 +121,10 @@ function TestPortalLinks({ portalType }: { portalType: "borrower" | "broker" }) 
   const [selectedDealId, setSelectedDealId] = useState('');
   const [generatedLink, setGeneratedLink] = useState('');
 
-  const { data: deals, isLoading: dealsLoading } = useQuery<any[]>({
+  const { data: dealsData, isLoading: dealsLoading } = useQuery<{ projects: any[] }>({
     queryKey: ['/api/projects'],
   });
+  const deals = dealsData?.projects;
 
   const sendTestLink = useMutation({
     mutationFn: async () => {
