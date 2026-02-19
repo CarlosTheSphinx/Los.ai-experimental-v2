@@ -1881,6 +1881,14 @@ function TasksStep({
           </div>
         ) : (
           <div className="space-y-1 max-h-80 overflow-y-auto">
+            <div className="flex items-center gap-3 px-3 pb-1">
+              <span className="flex-1" />
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className="text-xs font-medium text-muted-foreground w-44">Assigned To</span>
+                <span className="text-xs font-medium text-muted-foreground w-36">Stage Assigned</span>
+                <span className="w-5" />
+              </div>
+            </div>
             {tasks.map((task, i) => (
               <div key={i} className="flex items-center gap-3 py-2 px-3 rounded-md hover:bg-muted/30 group" data-testid={`task-row-${i}`}>
                 <span className="text-sm flex-1 min-w-0 truncate" title={task.taskName}>{task.taskName}</span>
