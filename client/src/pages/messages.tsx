@@ -25,6 +25,7 @@ import {
   Mail,
   Link2,
   Paperclip,
+  Inbox,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useBranding } from "@/hooks/use-branding";
@@ -190,7 +191,7 @@ export default function MessagesPage() {
       setSelectedDealId(urlDealId);
       setIsNewThreadDialogOpen(true);
       // Clear URL params after handling
-      setLocation('/messages', { replace: true });
+      setLocation('/inbox', { replace: true });
     }
   }, [urlDealId, openNew, setLocation, quotesData]);
 
@@ -269,9 +270,9 @@ export default function MessagesPage() {
     <div className="p-6 h-full" data-testid="messages-page">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <MessageSquare className="h-8 w-8 text-primary" />
+          <Inbox className="h-8 w-8 text-primary" />
           <div>
-            <h1 className="text-2xl font-bold">Messages</h1>
+            <h1 className="text-2xl font-bold">Inbox</h1>
             <p className="text-sm text-muted-foreground">
               {isAdmin ? "Communicate with borrowers and partners" : `Messages from ${branding.companyName}`}
             </p>

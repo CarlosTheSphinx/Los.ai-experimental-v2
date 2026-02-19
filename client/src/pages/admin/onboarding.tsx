@@ -61,6 +61,7 @@ import {
   Zap,
   MousePointerClick,
   StickyNote,
+  Inbox,
 } from 'lucide-react';
 import { PERMISSION_CATEGORIES, SCOPABLE_PERMISSIONS, type PermissionKey } from '@shared/schema';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -1521,7 +1522,7 @@ function StepCommunications({
               <h4 className="font-medium text-sm">Email Integration</h4>
               <p className="text-sm text-muted-foreground">
                 {emailConnected
-                  ? 'Your Gmail is connected. View, search, and link email threads to deals directly from your Email Inbox.'
+                  ? 'Your email is connected. View, search, and link email threads to deals directly from your Inbox.'
                   : 'Connect your email to view and link email conversations to deals without leaving the platform.'}
               </p>
             </div>
@@ -1551,22 +1552,12 @@ function StepCommunications({
             <h3 className="font-medium">Where to Find Everything</h3>
             <div className="space-y-2">
               <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-md">
-                <MessageSquare className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <Inbox className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">Messages</p>
-                  <p className="text-xs text-muted-foreground">In-app conversations and deal-linked email threads</p>
+                  <p className="text-sm font-medium">Inbox</p>
+                  <p className="text-xs text-muted-foreground">All your communications in one place — filter between emails, in-app messages, and SMS</p>
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => onNavigate('/messages')} data-testid="button-go-to-messages">
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-md">
-                <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">Email Inbox</p>
-                  <p className="text-xs text-muted-foreground">Full email management with search, sync, and deal linking</p>
-                </div>
-                <Button variant="ghost" size="sm" onClick={() => onNavigate('/admin/email')} data-testid="button-go-to-email">
+                <Button variant="ghost" size="sm" onClick={() => onNavigate('/inbox')} data-testid="button-go-to-inbox">
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </div>
@@ -1574,11 +1565,8 @@ function StepCommunications({
                 <Bell className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium">Notifications</p>
-                  <p className="text-xs text-muted-foreground">Configure notification preferences in Settings</p>
+                  <p className="text-xs text-muted-foreground">Accessible from the bell icon in the top right of your screen</p>
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => onNavigate('/admin/settings')} data-testid="button-go-to-settings">
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
               </div>
             </div>
           </div>
