@@ -1524,6 +1524,7 @@ export const esignEnvelopes = pgTable("esign_envelopes", {
   vendor: varchar("vendor", { length: 50 }).notNull(), // "pandadoc", "docusign", etc.
   quoteId: integer("quote_id").references(() => savedQuotes.id, { onDelete: 'set null' }),
   templateId: integer("template_id").references(() => documentTemplates.id, { onDelete: 'set null' }),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: 'set null' }),
   
   // External document reference
   externalDocumentId: varchar("external_document_id", { length: 255 }).notNull(),
