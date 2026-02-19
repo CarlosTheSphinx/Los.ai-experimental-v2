@@ -170,7 +170,7 @@ export default function MessagesPage() {
       const res = await fetch('/api/email/threads?linked=true', { credentials: 'include' });
       return res.json();
     },
-    enabled: !!isAdmin && inboxTab === 'email',
+    enabled: !!isAdmin,
   });
 
   const { data: emailThreadDetail } = useQuery<{ thread: any; messages: any[]; dealLinks: any[] }>({
@@ -391,6 +391,9 @@ export default function MessagesPage() {
                 >
                   <MessageSquare className="h-3 w-3 mr-1" />
                   In-App
+                  {threads.length > 0 && (
+                    <Badge variant={inboxTab === 'messages' ? 'secondary' : 'outline'} className="ml-1 h-4 min-w-[16px] px-1 text-[10px] leading-none">{threads.length}</Badge>
+                  )}
                 </Button>
                 <Button
                   variant={inboxTab === 'email' ? 'default' : 'ghost'}
@@ -401,6 +404,9 @@ export default function MessagesPage() {
                 >
                   <Mail className="h-3 w-3 mr-1" />
                   Email
+                  {emailThreads.length > 0 && (
+                    <Badge variant={inboxTab === 'email' ? 'secondary' : 'outline'} className="ml-1 h-4 min-w-[16px] px-1 text-[10px] leading-none">{emailThreads.length}</Badge>
+                  )}
                 </Button>
               </div>
             )}
