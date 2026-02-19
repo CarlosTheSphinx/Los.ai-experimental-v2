@@ -3,7 +3,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, documentReviewResults, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema, projectActivity, projectTasks, platformSettings, dealMemoryEntries, dealNotes, insertDealMemoryEntrySchema, insertDealNoteSchema, notifications } from "@shared/schema";
+import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, documentReviewResults, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema, projectActivity, projectTasks, platformSettings, dealMemoryEntries, dealNotes, insertDealMemoryEntrySchema, insertDealNoteSchema, notifications, dealStatuses, insertDealStatusSchema, insertMessageTemplateSchema } from "@shared/schema";
 import { priceQuote, validateRuleset, SAMPLE_RTL_RULESET, SAMPLE_DSCR_RULESET, type PricingInputs, analyzeGuidelines, refineProposal } from "./pricing";
 import { getDocumentTemplatesForLoanType } from "./document-templates";
 import { eq, desc, asc, inArray, and, gt, gte, lte, sql, isNull, or } from "drizzle-orm";
@@ -1082,7 +1082,7 @@ export async function registerRoutes(
       // Prevent duplicate accepts — check if a project already exists for this quote
       const existingProjects = await db.select({ id: projects.id })
         .from(projects)
-        .where(eq(projects.sourceDocumentId, quoteId))
+        .where(eq(projects.quoteId, quoteId))
         .limit(1);
       if (existingProjects.length > 0) {
         res.status(409).json({ success: false, error: 'This quote has already been accepted' });
@@ -1126,8 +1126,9 @@ export async function registerRoutes(
           targetCloseDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
           borrowerPortalToken: borrowerToken,
           borrowerPortalEnabled: true,
-          sourceDocumentId: quoteId,
+          quoteId: quoteId,
           notes: `Accepted from borrower quote #${quoteId}`,
+          metadata: { applicationData: loanData },
         }).returning();
 
         if (quote.propertyAddress) {
@@ -1895,10 +1896,23 @@ export async function registerRoutes(
         ipAddress: req.ip,
       });
 
+      // Find the project/deal linked to this quote (if any)
+      let linkedProjectId: number | null = null;
+      if (doc.quoteId) {
+        const [linkedProject] = await db.select({ id: projects.id })
+          .from(projects)
+          .where(eq(projects.quoteId, doc.quoteId))
+          .limit(1);
+        if (linkedProject) {
+          linkedProjectId = linkedProject.id;
+        }
+      }
+
       // Create esign envelope record for tracking
       await db.insert(esignEnvelopes).values({
         vendor: 'pandadoc',
         quoteId: doc.quoteId,
+        projectId: linkedProjectId,
         externalDocumentId: pandaDoc.id,
         documentName: doc.name,
         status: apiSendSucceeded ? 'sent' : 'draft',
@@ -4697,18 +4711,23 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Missing role, permissionKey, or enabled field' });
       }
 
-      if (!['processor'].includes(role)) {
-        return res.status(400).json({ error: 'Can only configure permissions for processor role' });
+      if (!['processor', 'admin'].includes(role)) {
+        return res.status(400).json({ error: 'Can only configure permissions for processor and admin roles' });
       }
 
       await storage.upsertPermission(role, permissionKey, enabled, req.user!.id, scope);
 
-      await storage.createAdminActivity({
-        userId: req.user!.id,
-        actionType: 'permissions_updated',
-        actionDescription: `Updated permission ${permissionKey} for role: ${role}`,
-        metadata: { role, permissionKey, enabled, scope }
-      });
+      try {
+        await storage.createAdminActivity({
+          projectId: 0 as any,
+          userId: req.user!.id,
+          actionType: 'permissions_updated',
+          actionDescription: `Updated permission ${permissionKey} for role: ${role}`,
+          metadata: { role, permissionKey, enabled, scope }
+        });
+      } catch (_) {
+        // Permission activity logging may fail if no project context - this is fine
+      }
 
       res.json({ success: true });
     } catch (error) {
@@ -5331,8 +5350,8 @@ export async function registerRoutes(
       const { key } = req.params;
       const { value, description } = req.body;
 
-      if (key === 'pandadoc_api_key' && req.user?.role !== 'super_admin') {
-        return res.status(403).json({ error: 'Only super admins can manage PandaDoc API keys' });
+      if ((key === 'pandadoc_api_key' || key === 'openai_api_key') && req.user?.role !== 'super_admin') {
+        return res.status(403).json({ error: 'Only super admins can manage API keys' });
       }
       
       if (!value) {
@@ -6070,6 +6089,7 @@ export async function registerRoutes(
         borrowerPortalEnabled: projects.borrowerPortalEnabled,
         brokerPortalToken: projects.brokerPortalToken,
         brokerPortalEnabled: projects.brokerPortalEnabled,
+        metadata: projects.metadata,
         userName: users.fullName,
         userEmail: users.email,
       })
@@ -6139,6 +6159,28 @@ export async function registerRoutes(
         }
       }
 
+      let applicationData: Record<string, any> | null = null;
+      const meta = project.metadata as Record<string, any> | null;
+      if (meta?.applicationData) {
+        applicationData = meta.applicationData;
+      } else if (meta && Object.keys(meta).length > 0) {
+        const metaSkipKeys = ['source', 'pandadocDocumentId', 'pandadocEnvelopeId'];
+        const metaEntries = Object.entries(meta).filter(([k]) => !metaSkipKeys.includes(k));
+        if (metaEntries.length > 0) {
+          applicationData = Object.fromEntries(metaEntries);
+        }
+      }
+      if (!applicationData && project.quoteId) {
+        const qId = project.quoteId;
+        const [linkedQuoteForApp] = await db.select({ loanData: savedQuotes.loanData })
+          .from(savedQuotes)
+          .where(eq(savedQuotes.id, qId!))
+          .limit(1);
+        if (linkedQuoteForApp?.loanData) {
+          applicationData = linkedQuoteForApp.loanData as Record<string, any>;
+        }
+      }
+
       const deal = {
         id: project.id,
         projectId: project.id,
@@ -6156,6 +6198,7 @@ export async function registerRoutes(
           propertyType: project.propertyType || 'unknown',
           loanTerm: project.loanTermMonths ? `${project.loanTermMonths} months` : '12 months',
         },
+        applicationData,
         interestRate: project.interestRate ? `${project.interestRate}%` : '—',
         stage: currentWorkflowStepKey || project.currentStage || 'application',
         projectStatus: project.status || 'active',
@@ -7297,15 +7340,58 @@ export async function registerRoutes(
   });
 
   // Admin - Update deal stage
+  // Update deal status (independent of stage)
+  app.patch('/api/admin/deals/:id/status', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.id);
+      const { status } = req.body;
+
+      const validStatuses = ['active', 'closed', 'on_hold', 'archived'];
+      if (!status || !validStatuses.includes(status)) {
+        return res.status(400).json({ error: `Status must be one of: ${validStatuses.join(', ')}` });
+      }
+
+      const [project] = await db.select({ id: projects.id, status: projects.status, projectName: projects.projectName })
+        .from(projects)
+        .where(eq(projects.id, dealId))
+        .limit(1);
+
+      if (!project) {
+        return res.status(404).json({ error: 'Deal not found' });
+      }
+
+      const oldStatus = project.status;
+
+      await db.update(projects)
+        .set({ status, lastUpdated: new Date() })
+        .where(eq(projects.id, dealId));
+
+      // Log activity
+      await db.insert(projectActivity).values({
+        projectId: dealId,
+        activityType: 'status_change',
+        title: `Status changed from ${oldStatus} to ${status}`,
+        description: `Deal status updated to ${status}`,
+        performedBy: req.user!.id,
+        visibleToBorrower: true,
+      });
+
+      res.json({ success: true, status });
+    } catch (error) {
+      console.error('Update deal status error:', error);
+      res.status(500).json({ error: 'Failed to update deal status' });
+    }
+  });
+
   app.patch('/api/admin/deals/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const dealId = parseInt(req.params.id);
       const { stage } = req.body;
-      
+
       if (!stage) {
         return res.status(400).json({ error: 'Stage is required' });
       }
-      
+
       // Deal is a project - get the project and its program
       const [project] = await db.select({
         id: projects.id,
@@ -9351,6 +9437,7 @@ For each rule, provide:
 - ruleTitle: a short, clear title
 - ruleDescription: detailed description of what to check
 - category: a category like "Credit", "Income", "Property", "Compliance", "LTV", "DSCR", "Eligibility", etc.
+- confidence: "high" if the rule is clearly stated in the document, "medium" if it's implied or partially stated, "low" if you're uncertain about this rule's accuracy or interpretation
 
 Respond ONLY with valid JSON in this format:
 {
@@ -9359,7 +9446,8 @@ Respond ONLY with valid JSON in this format:
       "documentType": "Credit Report",
       "ruleTitle": "Minimum credit score",
       "ruleDescription": "Borrower must have a minimum FICO score of 680. If below 680, the loan is ineligible.",
-      "category": "Credit"
+      "category": "Credit",
+      "confidence": "high"
     }
   ]
 }`
@@ -9605,6 +9693,7 @@ For each rule, provide:
 - ruleTitle: a short, clear title
 - ruleDescription: detailed description of what to check
 - category: a category like "Credit", "Income", "Property", "Compliance", "LTV", "DSCR", "Eligibility", etc.
+- confidence: "high" if the rule is clearly stated in the document, "medium" if it's implied or partially stated, "low" if you're uncertain about this rule's accuracy or interpretation
 
 Respond ONLY with valid JSON in this format:
 {
@@ -9613,7 +9702,8 @@ Respond ONLY with valid JSON in this format:
       "documentType": "Credit Report",
       "ruleTitle": "Minimum credit score",
       "ruleDescription": "Borrower must have a minimum FICO score of 680. If below 680, the loan is ineligible.",
-      "category": "Credit"
+      "category": "Credit",
+      "confidence": "high"
     }
   ]
 }`
@@ -13798,6 +13888,57 @@ If the user provides specific criteria, extract as many rules as you can from th
     }
   });
 
+  // OpenAI API key status
+  app.get('/api/admin/openai/status', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      let apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+      if (!apiKey) {
+        const setting = await storage.getSettingByKey('openai_api_key');
+        apiKey = setting?.settingValue || '';
+      }
+      const isSuperAdmin = req.user?.role === 'super_admin';
+      if (apiKey) {
+        const result: any = { connected: true };
+        if (isSuperAdmin) {
+          result.maskedKey = apiKey.substring(0, 7) + '...' + apiKey.substring(apiKey.length - 4);
+          result.source = process.env.AI_INTEGRATIONS_OPENAI_API_KEY ? 'integration' : 'manual';
+        }
+        return res.json(result);
+      }
+      res.json({ connected: false });
+    } catch (error) {
+      console.error('OpenAI status check error:', error);
+      res.json({ connected: false });
+    }
+  });
+
+  // OpenAI API key test
+  app.get('/api/admin/openai/test', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      let apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+      if (!apiKey) {
+        const setting = await storage.getSettingByKey('openai_api_key');
+        apiKey = setting?.settingValue || '';
+      }
+      if (!apiKey) {
+        return res.json({ connected: false, error: 'No API key configured' });
+      }
+      const OpenAI = (await import('openai')).default;
+      const openai = new OpenAI({
+        apiKey,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+      const models = await openai.models.list();
+      const modelCount = models.data?.length || 0;
+      res.json({
+        connected: true,
+        message: `Connected successfully. ${modelCount} models available.`,
+      });
+    } catch (error: any) {
+      res.json({ connected: false, error: error.message || 'Connection failed' });
+    }
+  });
+
   // Debug endpoint to test PandaDoc connection and list all templates
   app.get('/api/pandadoc/debug', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
@@ -14229,14 +14370,33 @@ If the user provides specific criteria, extract as many rules as you can from th
           
           if (event === 'document.completed') {
             updates.completedAt = new Date();
-            
+
+            // Download and persist signed PDF
+            let signedPdfPath: string | null = null;
+            let signedPdfSize: number = 0;
             try {
               const pdfBuffer = await pandadoc.downloadSignedPdf(documentId);
-              console.log(`Downloaded signed PDF for document ${documentId}, size: ${pdfBuffer.byteLength} bytes`);
+              signedPdfSize = pdfBuffer.byteLength;
+              console.log(`Downloaded signed PDF for document ${documentId}, size: ${signedPdfSize} bytes`);
+
+              // Save to filesystem
+              const fs = await import('fs');
+              const path = await import('path');
+              const uploadsDir = path.join(process.cwd(), 'uploads', 'signed', String(envelope.id));
+              await fs.promises.mkdir(uploadsDir, { recursive: true });
+              const safeName = (envelope.documentName || 'signed-document').replace(/[^a-zA-Z0-9._-]/g, '_');
+              signedPdfPath = path.join(uploadsDir, `${safeName}.pdf`);
+              await fs.promises.writeFile(signedPdfPath, Buffer.from(pdfBuffer));
+              console.log(`Saved signed PDF to ${signedPdfPath}`);
+
+              // Update envelope with signed PDF path
+              await db.update(esignEnvelopes)
+                .set({ signedPdfUrl: signedPdfPath })
+                .where(eq(esignEnvelopes.id, envelope.id));
             } catch (downloadError) {
-              console.error('Failed to download signed PDF:', downloadError);
+              console.error('Failed to download/save signed PDF:', downloadError);
             }
-          
+
           // Auto-create project/deal from signed term sheet
           if (envelope.quoteId) {
             try {
@@ -14371,16 +14531,91 @@ If the user provides specific criteria, extract as many rules as you can from th
                   
                   console.log(`[PandaDoc Webhook] Project ${projectNumber} auto-created from signed term sheet (envelope ${envelope.id}, quote ${quote.id})`);
                   
-                  try {
-                    const { isDriveIntegrationEnabled, ensureProjectFolder } = await import('./services/googleDrive');
-                    const driveEnabled = await isDriveIntegrationEnabled();
-                    if (driveEnabled) {
-                      ensureProjectFolder(project.id).catch((err: any) => {
-                        console.error(`Drive folder creation failed for deal ${project.id}:`, err.message);
-                      });
+                  // Store signed PDF as deal document and sync to cloud
+                  if (signedPdfPath && signedPdfSize > 0) {
+                    try {
+                      const [signedDoc] = await db.insert(dealDocuments).values({
+                        dealId: project.id,
+                        documentName: 'Signed Term Sheet',
+                        documentCategory: 'closing_docs',
+                        documentDescription: `Signed PandaDoc term sheet: ${envelope.documentName}`,
+                        status: 'approved',
+                        isRequired: true,
+                        filePath: signedPdfPath,
+                        fileName: `${(envelope.documentName || 'signed-term-sheet').replace(/[^a-zA-Z0-9._-]/g, '_')}.pdf`,
+                        fileSize: signedPdfSize,
+                        mimeType: 'application/pdf',
+                        uploadedAt: new Date(),
+                        visibility: 'all',
+                        assignedTo: 'admin',
+                        sortOrder: 0,
+                      }).returning();
+
+                      console.log(`[PandaDoc Webhook] Created deal document ${signedDoc.id} for signed term sheet`);
+
+                      // Sync to cloud storage (Google Drive or OneDrive)
+                      try {
+                        const { isDriveIntegrationEnabled, ensureProjectFolder, uploadFileToProjectFolder } = await import('./services/googleDrive');
+                        const driveEnabled = await isDriveIntegrationEnabled();
+                        if (driveEnabled) {
+                          await ensureProjectFolder(project.id);
+                          const fs = await import('fs');
+                          const fileStream = fs.createReadStream(signedPdfPath);
+                          const result = await uploadFileToProjectFolder({
+                            projectId: project.id,
+                            fileStream,
+                            originalName: signedDoc.fileName || 'Signed_Term_Sheet.pdf',
+                            mimeType: 'application/pdf',
+                          });
+                          // Update deal document with Drive link
+                          await db.update(dealDocuments)
+                            .set({
+                              googleDriveFileId: result.fileId,
+                              googleDriveFileUrl: result.webViewLink,
+                              driveUploadStatus: 'SYNCED',
+                            })
+                            .where(eq(dealDocuments.id, signedDoc.id));
+                          console.log(`[PandaDoc Webhook] Signed PDF synced to Google Drive for deal ${project.id}`);
+                        }
+                      } catch (driveErr: any) {
+                        console.error('Drive sync for signed PDF error:', driveErr.message);
+                      }
+
+                      // OneDrive upload
+                      try {
+                        const { isOneDriveEnabled, ensureOneDriveDealFolder, uploadFileToOneDrive } = await import('./services/oneDrive');
+                        const onedriveEnabled = await isOneDriveEnabled();
+                        if (onedriveEnabled) {
+                          const fs = await import('fs');
+                          const pdfBuf = await fs.promises.readFile(signedPdfPath);
+                          const folderInfo = await ensureOneDriveDealFolder(project.id);
+                          await uploadFileToOneDrive(
+                            folderInfo.folderId,
+                            signedDoc.fileName || 'Signed_Term_Sheet.pdf',
+                            pdfBuf,
+                            'application/pdf',
+                          );
+                          console.log(`[PandaDoc Webhook] Signed PDF synced to OneDrive for deal ${project.id}`);
+                        }
+                      } catch (onedriveErr: any) {
+                        console.error('OneDrive sync for signed PDF error:', onedriveErr.message);
+                      }
+                    } catch (docErr: any) {
+                      console.error('Failed to create deal document for signed PDF:', docErr.message);
                     }
-                  } catch (driveErr: any) {
-                    console.error('Drive integration check error:', driveErr.message);
+                  } else {
+                    // Still try to create Drive folder even without signed PDF
+                    try {
+                      const { isDriveIntegrationEnabled, ensureProjectFolder } = await import('./services/googleDrive');
+                      const driveEnabled = await isDriveIntegrationEnabled();
+                      if (driveEnabled) {
+                        ensureProjectFolder(project.id).catch((err: any) => {
+                          console.error(`Drive folder creation failed for deal ${project.id}:`, err.message);
+                        });
+                      }
+                    } catch (driveErr: any) {
+                      console.error('Drive integration check error:', driveErr.message);
+                    }
                   }
                 } else {
                   console.log(`[PandaDoc Webhook] Project already exists for quote ${quote.id} (envelope ${envelope.id}), skipping auto-creation`);
@@ -14388,6 +14623,97 @@ If the user provides specific criteria, extract as many rules as you can from th
               }
             } catch (projectError) {
               console.error('[PandaDoc Webhook] Error creating project from signed term sheet:', projectError);
+            }
+          }
+
+          // Insert signed PDF into existing deal's stage 1 documents
+          if (envelope.projectId && signedPdfPath && signedPdfSize > 0) {
+            try {
+              const existingSignedDoc = await db.select({ id: dealDocuments.id })
+                .from(dealDocuments)
+                .where(and(
+                  eq(dealDocuments.dealId, envelope.projectId),
+                  eq(dealDocuments.documentDescription, `Signed PandaDoc document (${documentId}): ${envelope.documentName}`),
+                ))
+                .limit(1);
+
+              if (existingSignedDoc.length === 0) {
+                const [stage1] = await db.select()
+                  .from(projectStages)
+                  .where(eq(projectStages.projectId, envelope.projectId))
+                  .orderBy(asc(projectStages.stageOrder))
+                  .limit(1);
+
+                // Upload to object storage instead of just filesystem
+                const objectStorageService = new ObjectStorageService();
+                const pdfBuf = await (await import('fs')).promises.readFile(signedPdfPath);
+                const { objectPath } = await objectStorageService.uploadFile(
+                  pdfBuf,
+                  `${(envelope.documentName || 'signed-document').replace(/[^a-zA-Z0-9._-]/g, '_')}-signed.pdf`,
+                  'application/pdf'
+                );
+
+                const signedFileName = `${envelope.documentName || 'Signed Document'} (Signed).pdf`;
+                const [insertedDoc] = await db.insert(dealDocuments).values({
+                  dealId: envelope.projectId,
+                  stageId: stage1?.id || null,
+                  documentName: signedFileName,
+                  documentCategory: 'closing_docs',
+                  documentDescription: `Signed PandaDoc document (${documentId}): ${envelope.documentName}`,
+                  status: 'approved',
+                  isRequired: false,
+                  assignedTo: 'admin',
+                  visibility: 'all',
+                  filePath: objectPath,
+                  fileName: signedFileName,
+                  fileSize: signedPdfSize,
+                  mimeType: 'application/pdf',
+                  uploadedAt: new Date(),
+                  uploadedBy: envelope.createdBy,
+                  sortOrder: 0,
+                }).returning();
+
+                console.log(`[PandaDoc Webhook] Signed document "${signedFileName}" auto-inserted into deal ${envelope.projectId} at stage ${stage1?.stageName || 'first'} (doc ID: ${insertedDoc?.id})`);
+
+                // Log activity on the deal
+                await storage.createProjectActivity({
+                  projectId: envelope.projectId,
+                  userId: envelope.createdBy!,
+                  activityType: 'document_uploaded',
+                  activityDescription: `Signed document "${envelope.documentName}" received from PandaDoc and added to ${stage1?.stageName || 'Stage 1'}`,
+                  visibleToBorrower: true,
+                });
+
+                // Sync to Google Drive if enabled
+                try {
+                  const { isDriveIntegrationEnabled, ensureProjectFolder, uploadFileToProjectFolder } = await import('./services/googleDrive');
+                  const driveEnabled = await isDriveIntegrationEnabled();
+                  if (driveEnabled && insertedDoc) {
+                    await ensureProjectFolder(envelope.projectId);
+                    const fileStream = (await import('fs')).createReadStream(signedPdfPath);
+                    const driveResult = await uploadFileToProjectFolder({
+                      projectId: envelope.projectId,
+                      fileStream,
+                      originalName: signedFileName,
+                      mimeType: 'application/pdf',
+                    });
+                    await db.update(dealDocuments)
+                      .set({
+                        googleDriveFileId: driveResult.fileId,
+                        googleDriveFileUrl: driveResult.webViewLink,
+                        driveUploadStatus: 'SYNCED',
+                      })
+                      .where(eq(dealDocuments.id, insertedDoc.id));
+                    console.log(`[PandaDoc Webhook] Signed PDF synced to Drive for existing deal ${envelope.projectId}`);
+                  }
+                } catch (driveErr: any) {
+                  console.error('[PandaDoc Webhook] Drive sync for existing deal signed PDF:', driveErr.message);
+                }
+              } else {
+                console.log(`[PandaDoc Webhook] Signed document already exists for deal ${envelope.projectId}, skipping duplicate insert`);
+              }
+            } catch (existingDealErr: any) {
+              console.error(`[PandaDoc Webhook] Error inserting signed doc into existing deal ${envelope.projectId}:`, existingDealErr.message);
             }
           }
         }
@@ -15331,6 +15657,7 @@ Return JSON only:
     });
   }, 10000);
 
+
   // Branding endpoints
   app.get('/api/settings/branding', async (req: AuthRequest, res: Response) => {
     try {
@@ -15382,6 +15709,130 @@ Return JSON only:
     } catch (error) {
       console.error('Error updating branding settings:', error);
       res.status(500).json({ error: 'Failed to update branding settings' });
+    }
+  });
+
+  // Settings image upload (for logos, etc.)
+  const settingsImageUpload = multer({
+    dest: path.join(process.cwd(), 'uploads', 'temp'),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      if (file.mimetype.startsWith('image/')) cb(null, true);
+      else cb(new Error('Only image files are allowed'));
+    },
+  });
+
+  app.post('/api/admin/settings/upload-image', authenticateUser, requireAdmin, settingsImageUpload.single('file'), async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file provided' });
+      }
+      const fs = await import('fs');
+      const fileBuffer = await fs.promises.readFile(req.file.path);
+      const objectStorageService = new ObjectStorageService();
+      const { objectPath } = await objectStorageService.uploadFile(
+        fileBuffer,
+        req.file.originalname || 'logo.png',
+        req.file.mimetype || 'image/png'
+      );
+      await fs.promises.unlink(req.file.path).catch(() => {});
+      const publicUrl = `/api/storage/file?path=${encodeURIComponent(objectPath)}`;
+      res.json({ url: publicUrl, objectPath });
+    } catch (error) {
+      console.error('Settings image upload error:', error);
+      res.status(500).json({ error: 'Failed to upload image' });
+    }
+  });
+
+  // Serve storage files publicly (for logos etc.) - restricted to settings uploads only
+  app.get('/api/storage/file', async (req: Request, res: Response) => {
+    try {
+      const objectPath = req.query.path as string;
+      if (!objectPath) return res.status(400).json({ error: 'path query parameter is required' });
+      const ALLOWED_PREFIXES = ['/objects/uploads/', 'uploads/'];
+      const isAllowed = ALLOWED_PREFIXES.some(prefix => objectPath.startsWith(prefix));
+      if (!isAllowed) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      const svc = new ObjectStorageService();
+      const file = await svc.getObjectEntityFile(objectPath);
+      await svc.downloadObject(file, res, 86400);
+    } catch (error: any) {
+      console.error('Storage file serve error:', error?.message);
+      if (!res.headersSent) {
+        res.status(404).json({ error: 'File not found' });
+      }
+    }
+  });
+
+  // ===================== DEAL STATUS ENDPOINTS =====================
+
+  app.get('/api/admin/deal-statuses', authenticateUser, requireAdmin, async (_req: AuthRequest, res: Response) => {
+    try {
+      const statuses = await db.select().from(dealStatuses).orderBy(asc(dealStatuses.sortOrder));
+      res.json(statuses);
+    } catch (error) {
+      console.error('Error fetching deal statuses:', error);
+      res.status(500).json({ error: 'Failed to fetch deal statuses' });
+    }
+  });
+
+  app.post('/api/admin/deal-statuses', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const data = insertDealStatusSchema.parse(req.body);
+      const [status] = await db.insert(dealStatuses).values(data).returning();
+      res.json(status);
+    } catch (error: any) {
+      if (error?.code === '23505') {
+        return res.status(409).json({ error: 'A status with that key already exists' });
+      }
+      console.error('Error creating deal status:', error);
+      res.status(500).json({ error: 'Failed to create deal status' });
+    }
+  });
+
+  app.put('/api/admin/deal-statuses/reorder', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { order } = req.body;
+      if (!Array.isArray(order)) return res.status(400).json({ error: 'order must be an array of ids' });
+      for (let i = 0; i < order.length; i++) {
+        await db.update(dealStatuses).set({ sortOrder: i }).where(eq(dealStatuses.id, order[i]));
+      }
+      const allStatuses = await db.select().from(dealStatuses).orderBy(asc(dealStatuses.sortOrder));
+      res.json(allStatuses);
+    } catch (error) {
+      console.error('Error reordering deal statuses:', error);
+      res.status(500).json({ error: 'Failed to reorder deal statuses' });
+    }
+  });
+
+  app.put('/api/admin/deal-statuses/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { label, color, description, isActive, sortOrder } = req.body;
+      const [updated] = await db.update(dealStatuses)
+        .set({ label, color, description, isActive, sortOrder })
+        .where(eq(dealStatuses.id, id))
+        .returning();
+      if (!updated) return res.status(404).json({ error: 'Status not found' });
+      res.json(updated);
+    } catch (error) {
+      console.error('Error updating deal status:', error);
+      res.status(500).json({ error: 'Failed to update deal status' });
+    }
+  });
+
+  app.delete('/api/admin/deal-statuses/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const [status] = await db.select().from(dealStatuses).where(eq(dealStatuses.id, id));
+      if (!status) return res.status(404).json({ error: 'Status not found' });
+      if (status.isDefault) return res.status(400).json({ error: 'Cannot delete a default status' });
+      await db.delete(dealStatuses).where(eq(dealStatuses.id, id));
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error deleting deal status:', error);
+      res.status(500).json({ error: 'Failed to delete deal status' });
     }
   });
 
@@ -15662,6 +16113,29 @@ Return JSON only:
     } catch (error) {
       console.error('Super admin settings error:', error);
       res.status(500).json({ error: 'Failed to update settings' });
+    }
+  });
+
+  // Migrate legacy status values to new standard (one-time)
+  app.post('/api/admin/migrate-deal-statuses', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const completedResult = await db.update(projects)
+        .set({ status: 'closed' })
+        .where(or(eq(projects.status, 'completed'), eq(projects.status, 'funded')));
+
+      const cancelledResult = await db.update(projects)
+        .set({ status: 'archived' })
+        .where(eq(projects.status, 'cancelled'));
+
+      res.json({
+        success: true,
+        message: 'Status migration complete',
+        migratedToClosedFrom: ['completed', 'funded'],
+        migratedToArchivedFrom: ['cancelled'],
+      });
+    } catch (error) {
+      console.error('Status migration error:', error);
+      res.status(500).json({ error: 'Failed to migrate statuses' });
     }
   });
 
@@ -16125,6 +16599,72 @@ Return JSON only:
     } catch (error) {
       console.error('Mark all read error:', error);
       res.status(500).json({ error: 'Failed to mark all notifications as read' });
+    }
+  });
+
+  // Message Templates CRUD
+  app.get('/api/message-templates', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const templates = await storage.getMessageTemplates(req.user!.id);
+      res.json({ templates });
+    } catch (error) {
+      console.error('Get templates error:', error);
+      res.status(500).json({ error: 'Failed to get templates' });
+    }
+  });
+
+  app.post('/api/message-templates', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const parsed = insertMessageTemplateSchema.safeParse({
+        ...req.body,
+        createdBy: req.user!.id,
+      });
+      if (!parsed.success) {
+        return res.status(400).json({ error: 'Invalid template data', details: parsed.error.flatten().fieldErrors });
+      }
+      const template = await storage.createMessageTemplate(parsed.data);
+      res.json({ template });
+    } catch (error) {
+      console.error('Create template error:', error);
+      res.status(500).json({ error: 'Failed to create template' });
+    }
+  });
+
+  app.put('/api/message-templates/:id', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: 'Invalid template ID' });
+      }
+      const partial = insertMessageTemplateSchema.partial().safeParse(req.body);
+      if (!partial.success) {
+        return res.status(400).json({ error: 'Invalid template data', details: partial.error.flatten().fieldErrors });
+      }
+      const template = await storage.updateMessageTemplate(id, req.user!.id, partial.data);
+      if (!template) {
+        return res.status(404).json({ error: 'Template not found' });
+      }
+      res.json({ template });
+    } catch (error) {
+      console.error('Update template error:', error);
+      res.status(500).json({ error: 'Failed to update template' });
+    }
+  });
+
+  app.delete('/api/message-templates/:id', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: 'Invalid template ID' });
+      }
+      const deleted = await storage.deleteMessageTemplate(id, req.user!.id);
+      if (!deleted) {
+        return res.status(404).json({ error: 'Template not found' });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Delete template error:', error);
+      res.status(500).json({ error: 'Failed to delete template' });
     }
   });
 
