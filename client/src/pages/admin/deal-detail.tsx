@@ -103,6 +103,7 @@ interface Deal {
     propertyType: string;
     loanTerm?: string;
   };
+  applicationData?: Record<string, any> | null;
   interestRate: string;
   pointsCharged: number;
   pointsAmount: number;
@@ -1654,6 +1655,55 @@ export default function AdminDealDetail() {
               )}
             </CardContent>
           </Card>
+
+          {deal.applicationData && Object.keys(deal.applicationData).length > 0 && (() => {
+            const FIELD_LABELS: Record<string, string> = {
+              loanAmount: 'Loan Amount', propertyValue: 'Property Value', loanType: 'Loan Type',
+              loanPurpose: 'Loan Purpose', propertyType: 'Property Type', interestOnly: 'Interest Only',
+              ltv: 'LTV', dscr: 'Est. DSCR', ficoScore: 'Credit Score', creditScore: 'Credit Score',
+              prepaymentPenalty: 'Prepayment Penalty', tpoPremium: 'TPO Premium', loanTerm: 'Loan Term',
+              loanTermMonths: 'Loan Term (Months)', asIsValue: 'As-Is Value', arv: 'ARV',
+              rehabBudget: 'Rehab Budget', exitStrategy: 'Exit Strategy', experience: 'Experience',
+              constructionBudget: 'Construction Budget', entityType: 'Entity Type', entityName: 'Entity Name',
+              occupancy: 'Occupancy', units: 'Units', annualTaxes: 'Annual Taxes',
+              annualInsurance: 'Annual Insurance', monthlyRent: 'Monthly Rent', monthlyHOA: 'Monthly HOA',
+              appraisalValue: 'Appraisal Value', cashOut: 'Cash Out Amount', citizenshipStatus: 'Citizenship',
+            };
+            const SKIP_KEYS = ['additionalProperties', 'propertyAddress', 'firstName', 'lastName', 'email', 'phone', 'address'];
+            const formatValue = (key: string, val: any): string => {
+              if (val === null || val === undefined || val === '') return '\u2014';
+              if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+              if (['loanAmount', 'propertyValue', 'asIsValue', 'arv', 'rehabBudget', 'constructionBudget', 'cashOut', 'annualTaxes', 'annualInsurance', 'monthlyRent', 'monthlyHOA', 'appraisalValue'].includes(key)) {
+                const n = typeof val === 'string' ? parseFloat(val) : val;
+                if (!isNaN(n)) return formatCurrency(n);
+              }
+              return String(val);
+            };
+            const entries = Object.entries(deal.applicationData)
+              .filter(([key]) => !SKIP_KEYS.includes(key))
+              .map(([key, val]) => ({ label: FIELD_LABELS[key] || key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim(), value: formatValue(key, val) }));
+
+            return (
+              <Card className="mt-4" data-testid="card-application-details">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Application Details
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                    {entries.map(({ label, value }) => (
+                      <div key={label} className="flex items-center justify-between gap-2 py-1 border-b border-border/50 last:border-0">
+                        <span className="text-xs text-muted-foreground">{label}</span>
+                        <span className="text-sm font-medium text-right" data-testid={`text-app-${label.toLowerCase().replace(/\s+/g, '-')}`}>{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           {/* Share Deal Links Card */}
           <Card>

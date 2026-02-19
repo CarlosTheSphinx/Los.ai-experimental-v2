@@ -215,17 +215,16 @@ function getDefaultQuoteFields(loanType: string): QuoteFormField[] {
 // ─── Default stages ────────────────────────────────────────────
 
 const defaultStages = [
-  { stepName: 'Application', estimatedDays: 3, isRequired: true },
-  { stepName: 'Processing', estimatedDays: 5, isRequired: true },
-  { stepName: 'Underwriting', estimatedDays: 7, isRequired: true },
-  { stepName: 'Closing', estimatedDays: 5, isRequired: true },
+  { stepName: 'Application', isRequired: true },
+  { stepName: 'Processing', isRequired: true },
+  { stepName: 'Underwriting', isRequired: true },
+  { stepName: 'Closing', isRequired: true },
 ];
 
 // ─── Types ──────────────────────────────────────────────────────
 
 interface StageEntry {
   stepName: string;
-  estimatedDays: number;
   isRequired: boolean;
 }
 
@@ -269,11 +268,11 @@ const wizardSteps: { key: WizardStep; label: string; number: number }[] = [
 // ─── DSCR Example Defaults ───────────────────────────────────────
 
 const dscrDefaultStages: StageEntry[] = [
-  { stepName: 'Application', estimatedDays: 3, isRequired: true },
-  { stepName: 'Processing', estimatedDays: 5, isRequired: true },
-  { stepName: 'Underwriting', estimatedDays: 7, isRequired: true },
-  { stepName: 'Appraisal & Title', estimatedDays: 10, isRequired: true },
-  { stepName: 'Closing', estimatedDays: 5, isRequired: true },
+  { stepName: 'Application', isRequired: true },
+  { stepName: 'Processing', isRequired: true },
+  { stepName: 'Underwriting', isRequired: true },
+  { stepName: 'Appraisal & Title', isRequired: true },
+  { stepName: 'Closing', isRequired: true },
 ];
 
 const dscrDefaultDocuments: DocEntry[] = [
@@ -384,6 +383,11 @@ export function ProgramCreationWizard({
     queryKey: ['/api/admin/credit-policies'],
   });
 
+  const { data: teamData } = useQuery<{ teamMembers: { id: number; fullName: string; role: string }[] }>({
+    queryKey: ['/api/admin/team-members'],
+  });
+  const teamMembers = teamData?.teamMembers || [];
+
   // Create program mutation
   const createProgramMutation = useMutation({
     mutationFn: async (payload: any) => {
@@ -474,7 +478,6 @@ export function ProgramCreationWizard({
       isActive: true,
       steps: stages.map((s) => ({
         stepName: s.stepName,
-        estimatedDays: s.estimatedDays,
         isRequired: s.isRequired,
       })),
       documents: documents.map((d) => ({
@@ -580,6 +583,7 @@ export function ProgramCreationWizard({
           tasks={tasks}
           setTasks={setTasks}
           stages={stages}
+          teamMembers={teamMembers}
         />
       )}
 
@@ -1621,8 +1625,10 @@ function StagesStep({
   stages: StageEntry[];
   setStages: (s: StageEntry[]) => void;
 }) {
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+
   const addStage = () => {
-    setStages([...stages, { stepName: '', estimatedDays: 5, isRequired: true }]);
+    setStages([...stages, { stepName: '', isRequired: true }]);
   };
 
   const removeStage = (i: number) => {
@@ -1635,6 +1641,14 @@ function StagesStep({
     setStages(updated);
   };
 
+  const moveStage = (from: number, to: number) => {
+    if (from === to) return;
+    const updated = [...stages];
+    const [moved] = updated.splice(from, 1);
+    updated.splice(to, 0, moved);
+    setStages(updated);
+  };
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -1643,13 +1657,25 @@ function StagesStep({
           Workflow Stages
         </CardTitle>
         <CardDescription>
-          Define the stages each deal goes through from application to closing. The order below is the order deals will progress through your pipeline. Documents and tasks will be linked to these stages in the next steps.
+          Define the stages each deal goes through from application to closing. Drag to reorder. Documents and tasks will be linked to these stages in the next steps.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-2">
         {stages.map((stage, i) => (
-          <div key={i} className="flex items-center gap-2 p-2 bg-muted/40 rounded-md">
-            <GripVertical className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+          <div
+            key={i}
+            className={cn(
+              "flex items-center gap-2 p-2 rounded-md border transition-colors",
+              dragIdx === i ? "border-primary bg-primary/5" : "border-transparent bg-muted/40"
+            )}
+            draggable
+            onDragStart={() => setDragIdx(i)}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={() => { if (dragIdx !== null) { moveStage(dragIdx, i); setDragIdx(null); } }}
+            onDragEnd={() => setDragIdx(null)}
+            data-testid={`stage-row-${i}`}
+          >
+            <GripVertical className="h-4 w-4 text-muted-foreground flex-shrink-0 cursor-grab active:cursor-grabbing" />
             <Badge variant="outline" className="text-xs w-6 h-6 flex items-center justify-center p-0 flex-shrink-0">
               {i + 1}
             </Badge>
@@ -1658,27 +1684,20 @@ function StagesStep({
               placeholder="Stage name"
               value={stage.stepName}
               onChange={(e) => updateStage(i, 'stepName', e.target.value)}
+              data-testid={`input-stage-name-${i}`}
             />
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <Input
-                className="h-8 text-sm w-16"
-                type="number"
-                value={stage.estimatedDays}
-                onChange={(e) => updateStage(i, 'estimatedDays', parseInt(e.target.value) || 0)}
-              />
-              <span className="text-xs text-muted-foreground">days</span>
-            </div>
             <Button
               variant="ghost"
               size="icon"
               className="h-7 w-7 text-muted-foreground hover:text-destructive flex-shrink-0"
               onClick={() => removeStage(i)}
+              data-testid={`button-remove-stage-${i}`}
             >
               <X className="h-3.5 w-3.5" />
             </Button>
           </div>
         ))}
-        <Button variant="outline" size="sm" onClick={addStage}>
+        <Button variant="outline" size="sm" onClick={addStage} data-testid="button-add-stage">
           <Plus className="h-3.5 w-3.5 mr-1" />
           Add Stage
         </Button>
@@ -1698,8 +1717,13 @@ function DocumentsStep({
   setDocuments: (d: DocEntry[]) => void;
   stages: StageEntry[];
 }) {
-  const addDocument = () => {
-    setDocuments([...documents, { documentName: '', documentCategory: 'borrower_docs', isRequired: true, stepIndex: null }]);
+  const [newDocName, setNewDocName] = useState('');
+
+  const addDocument = (name?: string) => {
+    const docName = name || newDocName.trim();
+    if (!docName) return;
+    setDocuments([...documents, { documentName: docName, documentCategory: 'borrower_docs', isRequired: true, stepIndex: null }]);
+    setNewDocName('');
   };
 
   const removeDocument = (i: number) => {
@@ -1737,7 +1761,7 @@ function DocumentsStep({
           Required Documents
         </CardTitle>
         <CardDescription>
-          Specify which documents borrowers need to upload. You can link each document to a specific stage so it shows up at the right time in the pipeline.
+          Configure which documents are required for this program. Toggle each document on/off and assign the stage it belongs to.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -1745,7 +1769,7 @@ function DocumentsStep({
           <Label className="text-xs text-muted-foreground mb-1 block">Quick add standard documents:</Label>
           <div className="flex flex-wrap gap-1.5">
             {standardDocuments.map((cat) => (
-              <Button key={cat.category} variant="outline" size="sm" className="text-xs h-7" onClick={() => addStandardDocs(cat.category)}>
+              <Button key={cat.category} variant="outline" size="sm" className="text-xs h-7" onClick={() => addStandardDocs(cat.category)} data-testid={`button-add-docs-${cat.category}`}>
                 <Plus className="h-3 w-3 mr-1" />
                 {cat.categoryLabel}
               </Button>
@@ -1757,63 +1781,65 @@ function DocumentsStep({
 
         {documents.length === 0 ? (
           <div className="bg-muted/50 rounded-md p-4 text-sm text-muted-foreground text-center">
-            No documents added yet. Use the quick-add buttons above or add documents manually below.
+            No documents added yet. Use the quick-add buttons above or add one manually below.
           </div>
         ) : (
-          <div className="space-y-2 max-h-72 overflow-y-auto">
+          <div className="space-y-1 max-h-80 overflow-y-auto">
             {documents.map((doc, i) => (
-              <div key={i} className="flex items-start gap-2 p-2 bg-muted/40 rounded-md">
-                <div className="flex-1 space-y-1.5">
-                  <Input
-                    className="h-7 text-xs"
-                    placeholder="Document name"
-                    value={doc.documentName}
-                    onChange={(e) => updateDocument(i, 'documentName', e.target.value)}
-                  />
-                  <div className="flex gap-2">
-                    <Select value={doc.documentCategory} onValueChange={(v) => updateDocument(i, 'documentCategory', v)}>
-                      <SelectTrigger className="h-7 text-xs flex-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {documentCategories.map((c) => (
-                          <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select
-                      value={doc.stepIndex !== null ? doc.stepIndex.toString() : 'none'}
-                      onValueChange={(v) => updateDocument(i, 'stepIndex', v === 'none' ? null : parseInt(v))}
-                    >
-                      <SelectTrigger className="h-7 text-xs flex-1">
-                        <SelectValue placeholder="Link to stage..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No stage</SelectItem>
-                        {stages.map((s, si) => (
-                          <SelectItem key={si} value={si.toString()}>{s.stepName || `Stage ${si + 1}`}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+              <div key={i} className="flex items-center gap-3 py-2 px-3 rounded-md hover:bg-muted/30 group" data-testid={`doc-row-${i}`}>
+                <span className="text-sm flex-1 min-w-0 truncate" title={doc.documentName}>{doc.documentName}</span>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-1.5">
+                    <Switch
+                      checked={doc.isRequired}
+                      onCheckedChange={(v) => updateDocument(i, 'isRequired', v)}
+                      data-testid={`switch-doc-required-${i}`}
+                    />
+                    <span className="text-xs text-muted-foreground w-16">{doc.isRequired ? 'Required' : 'Optional'}</span>
                   </div>
+                  <Select
+                    value={doc.stepIndex !== null ? doc.stepIndex.toString() : 'none'}
+                    onValueChange={(v) => updateDocument(i, 'stepIndex', v === 'none' ? null : parseInt(v))}
+                  >
+                    <SelectTrigger className="h-7 text-xs w-36" data-testid={`select-doc-stage-${i}`}>
+                      <SelectValue placeholder="Select stage..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No stage</SelectItem>
+                      {stages.map((s, si) => (
+                        <SelectItem key={si} value={si.toString()}>{s.stepName || `Stage ${si + 1}`}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                    onClick={() => removeDocument(i)}
+                    data-testid={`button-remove-doc-${i}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:text-destructive flex-shrink-0"
-                  onClick={() => removeDocument(i)}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
               </div>
             ))}
           </div>
         )}
 
-        <Button variant="outline" size="sm" onClick={addDocument}>
-          <Plus className="h-3.5 w-3.5 mr-1" />
-          Add Document Manually
-        </Button>
+        <div className="flex gap-2">
+          <Input
+            className="h-8 text-sm flex-1"
+            placeholder="Add a document..."
+            value={newDocName}
+            onChange={(e) => setNewDocName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addDocument(); } }}
+            data-testid="input-new-document"
+          />
+          <Button variant="outline" size="sm" onClick={() => addDocument()} disabled={!newDocName.trim()} data-testid="button-add-document">
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            Add
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -1825,13 +1851,19 @@ function TasksStep({
   tasks,
   setTasks,
   stages,
+  teamMembers,
 }: {
   tasks: TaskEntry[];
   setTasks: (t: TaskEntry[]) => void;
   stages: StageEntry[];
+  teamMembers: { id: number; fullName: string; role: string }[];
 }) {
+  const [newTaskName, setNewTaskName] = useState('');
+
   const addTask = () => {
-    setTasks([...tasks, { taskName: '', taskCategory: 'other', priority: 'medium', assignToRole: 'admin', stepIndex: null }]);
+    if (!newTaskName.trim()) return;
+    setTasks([...tasks, { taskName: newTaskName.trim(), taskCategory: 'other', priority: 'medium', assignToRole: 'admin', stepIndex: null }]);
+    setNewTaskName('');
   };
 
   const removeTask = (i: number) => {
@@ -1852,79 +1884,78 @@ function TasksStep({
           Tasks
         </CardTitle>
         <CardDescription>
-          Define the action items that need to be completed at each stage. Tasks can be assigned to admins, processors, or borrowers.
+          Define the action items that need to be completed at each stage. Assign a team member and the stage each task belongs to.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {tasks.length === 0 ? (
           <div className="bg-muted/50 rounded-md p-4 text-sm text-muted-foreground text-center">
-            No tasks added yet. You can add them now or configure them later from the program settings.
+            No tasks added yet. Add tasks below or configure them later from the program settings.
           </div>
         ) : (
-          <div className="space-y-2 max-h-72 overflow-y-auto">
+          <div className="space-y-1 max-h-80 overflow-y-auto">
             {tasks.map((task, i) => (
-              <div key={i} className="flex items-start gap-2 p-2 bg-muted/40 rounded-md">
-                <div className="flex-1 space-y-1.5">
-                  <Input
-                    className="h-7 text-xs"
-                    placeholder="Task name"
-                    value={task.taskName}
-                    onChange={(e) => updateTask(i, 'taskName', e.target.value)}
-                  />
-                  <div className="flex gap-2">
-                    <Select value={task.taskCategory} onValueChange={(v) => updateTask(i, 'taskCategory', v)}>
-                      <SelectTrigger className="h-7 text-xs flex-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {taskCategories.map((c) => (
-                          <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={task.assignToRole} onValueChange={(v) => updateTask(i, 'assignToRole', v)}>
-                      <SelectTrigger className="h-7 text-xs w-28">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="processor">Processor</SelectItem>
-                        <SelectItem value="user">Borrower</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Select
-                      value={task.stepIndex !== null ? task.stepIndex.toString() : 'none'}
-                      onValueChange={(v) => updateTask(i, 'stepIndex', v === 'none' ? null : parseInt(v))}
-                    >
-                      <SelectTrigger className="h-7 text-xs flex-1">
-                        <SelectValue placeholder="Link to stage..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No stage</SelectItem>
-                        {stages.map((s, si) => (
-                          <SelectItem key={si} value={si.toString()}>{s.stepName || `Stage ${si + 1}`}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+              <div key={i} className="flex items-center gap-3 py-2 px-3 rounded-md hover:bg-muted/30 group" data-testid={`task-row-${i}`}>
+                <span className="text-sm flex-1 min-w-0 truncate" title={task.taskName}>{task.taskName}</span>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Select value={task.assignToRole} onValueChange={(v) => updateTask(i, 'assignToRole', v)}>
+                    <SelectTrigger className="h-7 text-xs w-32" data-testid={`select-task-assignee-${i}`}>
+                      <SelectValue placeholder="Assign to..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teamMembers.length > 0 ? (
+                        teamMembers.map((m) => (
+                          <SelectItem key={m.id} value={`user_${m.id}`}>{m.fullName}</SelectItem>
+                        ))
+                      ) : null}
+                      <SelectItem value="admin">Admin (role)</SelectItem>
+                      <SelectItem value="processor">Processor (role)</SelectItem>
+                      <SelectItem value="user">Borrower</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={task.stepIndex !== null ? task.stepIndex.toString() : 'none'}
+                    onValueChange={(v) => updateTask(i, 'stepIndex', v === 'none' ? null : parseInt(v))}
+                  >
+                    <SelectTrigger className="h-7 text-xs w-36" data-testid={`select-task-stage-${i}`}>
+                      <SelectValue placeholder="Select stage..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No stage</SelectItem>
+                      {stages.map((s, si) => (
+                        <SelectItem key={si} value={si.toString()}>{s.stepName || `Stage ${si + 1}`}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                    onClick={() => removeTask(i)}
+                    data-testid={`button-remove-task-${i}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:text-destructive flex-shrink-0"
-                  onClick={() => removeTask(i)}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
               </div>
             ))}
           </div>
         )}
 
-        <Button variant="outline" size="sm" onClick={addTask}>
-          <Plus className="h-3.5 w-3.5 mr-1" />
-          Add Task
-        </Button>
+        <div className="flex gap-2">
+          <Input
+            className="h-8 text-sm flex-1"
+            placeholder="Add a task..."
+            value={newTaskName}
+            onChange={(e) => setNewTaskName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTask(); } }}
+            data-testid="input-new-task"
+          />
+          <Button variant="outline" size="sm" onClick={addTask} disabled={!newTaskName.trim()} data-testid="button-add-task">
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            Add
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

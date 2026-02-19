@@ -1082,7 +1082,7 @@ export async function registerRoutes(
       // Prevent duplicate accepts — check if a project already exists for this quote
       const existingProjects = await db.select({ id: projects.id })
         .from(projects)
-        .where(eq(projects.sourceDocumentId, quoteId))
+        .where(eq(projects.quoteId, quoteId))
         .limit(1);
       if (existingProjects.length > 0) {
         res.status(409).json({ success: false, error: 'This quote has already been accepted' });
@@ -1126,8 +1126,9 @@ export async function registerRoutes(
           targetCloseDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
           borrowerPortalToken: borrowerToken,
           borrowerPortalEnabled: true,
-          sourceDocumentId: quoteId,
+          quoteId: quoteId,
           notes: `Accepted from borrower quote #${quoteId}`,
+          metadata: { applicationData: loanData },
         }).returning();
 
         if (quote.propertyAddress) {
@@ -6083,6 +6084,7 @@ export async function registerRoutes(
         borrowerPortalEnabled: projects.borrowerPortalEnabled,
         brokerPortalToken: projects.brokerPortalToken,
         brokerPortalEnabled: projects.brokerPortalEnabled,
+        metadata: projects.metadata,
         userName: users.fullName,
         userEmail: users.email,
       })
@@ -6152,6 +6154,21 @@ export async function registerRoutes(
         }
       }
 
+      let applicationData: Record<string, any> | null = null;
+      const meta = project.metadata as Record<string, any> | null;
+      if (meta?.applicationData) {
+        applicationData = meta.applicationData;
+      } else if (project.quoteId) {
+        const qId = project.quoteId;
+        const [linkedQuoteForApp] = await db.select({ loanData: savedQuotes.loanData })
+          .from(savedQuotes)
+          .where(eq(savedQuotes.id, qId!))
+          .limit(1);
+        if (linkedQuoteForApp?.loanData) {
+          applicationData = linkedQuoteForApp.loanData as Record<string, any>;
+        }
+      }
+
       const deal = {
         id: project.id,
         projectId: project.id,
@@ -6169,6 +6186,7 @@ export async function registerRoutes(
           propertyType: project.propertyType || 'unknown',
           loanTerm: project.loanTermMonths ? `${project.loanTermMonths} months` : '12 months',
         },
+        applicationData,
         interestRate: project.interestRate ? `${project.interestRate}%` : '—',
         stage: currentWorkflowStepKey || project.currentStage || 'application',
         projectStatus: project.status || 'active',
