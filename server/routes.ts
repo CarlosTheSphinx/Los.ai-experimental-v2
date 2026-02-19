@@ -16699,10 +16699,10 @@ Return JSON only:
       const companyName = brandingSettings.find(s => s.settingKey === 'branding_company_name')?.settingValue || 'Lendry.AI';
 
       try {
-        const { Resend } = await import('resend');
-        const resend = new Resend(process.env.RESEND_API_KEY);
-        await resend.emails.send({
-          from: `${companyName} <no-reply@lendry.ai>`,
+        const { getResendClient } = await import('./email');
+        const { client, fromEmail } = await getResendClient();
+        await client.emails.send({
+          from: fromEmail || `${companyName} <info@lendry.ai>`,
           to: email,
           subject: `[TEST] ${portalLabel} Preview - DEAL-${dealId}`,
           html: `
