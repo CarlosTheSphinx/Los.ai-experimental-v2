@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
+import { useTenantConfig } from '@/hooks/use-tenant-config';
+import { BROKER_CONFIG_DEFAULTS, type BrokerOnboardingConfigType } from '@/components/admin/config/BrokerOnboardingConfig';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FileText,
@@ -23,7 +25,23 @@ import {
   Zap,
   Check,
   Volume2,
+  Target,
+  FolderKanban,
 } from 'lucide-react';
+
+// Icon mapping for dynamic tour cards
+const TOUR_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  BarChart3, FolderKanban, Zap, MessageSquare, Target, BookOpen, Shield, FileText, Volume2, CheckCircle2,
+};
+
+const TOUR_COLORS = ['blue', 'purple', 'green', 'orange', 'pink', 'indigo', 'teal', 'rose'];
+const getColorClasses = (idx: number) => {
+  const color = TOUR_COLORS[idx % TOUR_COLORS.length];
+  return {
+    bg: `bg-${color}-100 dark:bg-${color}-900/30`,
+    text: `text-${color}-600 dark:text-${color}-400`,
+  };
+};
 
 interface OnboardingDocument {
   id: number;
@@ -78,6 +96,22 @@ export default function OnboardingPage() {
   const queryClient = useQueryClient();
   const [currentStep, setCurrentStep] = useState(1);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+
+  // Load configurable onboarding steps from admin settings
+  const { config: brokerConfig } = useTenantConfig<BrokerOnboardingConfigType>(
+    "onboarding_broker_config",
+    BROKER_CONFIG_DEFAULTS
+  );
+
+  // Build dynamic steps list from config (only enabled steps, sorted by order)
+  const configuredSteps = brokerConfig.steps
+    .filter(s => s.enabled)
+    .sort((a, b) => a.order - b.order);
+
+  // Map step position (1-based) to step name for rendering
+  const currentStepConfig = configuredSteps[currentStep - 1];
+  const currentStepName = currentStepConfig?.name || 'welcome';
+  const totalSteps = configuredSteps.length;
 
   const { data: status, isLoading } = useQuery<OnboardingStatus>({
     queryKey: ['/api/onboarding/status'],
@@ -157,7 +191,7 @@ export default function OnboardingPage() {
   };
 
   const handleNext = () => {
-    if (currentStep < STEPS.length) {
+    if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
     }
   };
@@ -177,31 +211,34 @@ export default function OnboardingPage() {
       <div className="border-b border-border bg-card/50 backdrop-blur-sm">
         <div className="container max-w-6xl mx-auto px-4 py-8">
           <div className="flex items-center justify-center gap-2">
-            {STEPS.map((step, idx) => (
+            {configuredSteps.map((step, idx) => {
+              const stepNum = idx + 1;
+              return (
               <div key={step.id} className="flex items-center gap-2">
                 <div className="flex flex-col items-center">
                   <div className={`h-10 w-10 rounded-full flex items-center justify-center font-medium transition-all ${
-                    currentStep > step.id
+                    currentStep > stepNum
                       ? 'bg-green-500 text-white'
-                      : currentStep === step.id
+                      : currentStep === stepNum
                       ? 'bg-primary text-primary-foreground ring-2 ring-primary ring-offset-2'
                       : 'bg-muted text-muted-foreground'
                   }`}>
-                    {currentStep > step.id ? (
+                    {currentStep > stepNum ? (
                       <Check className="h-5 w-5" />
                     ) : (
-                      step.id
+                      stepNum
                     )}
                   </div>
                   <span className="text-xs font-medium text-muted-foreground mt-2">{step.label}</span>
                 </div>
-                {idx < STEPS.length - 1 && (
+                {idx < configuredSteps.length - 1 && (
                   <div className={`h-1 w-12 mx-2 rounded-full transition-colors ${
-                    currentStep > step.id ? 'bg-green-500' : 'bg-muted'
+                    currentStep > stepNum ? 'bg-green-500' : 'bg-muted'
                   }`} />
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -218,17 +255,17 @@ export default function OnboardingPage() {
               transition={{ duration: 0.3 }}
               className="w-full"
             >
-              {/* Step 1: Welcome */}
-              {currentStep === 1 && (
+              {/* Step: Welcome */}
+              {currentStepName === 'welcome' && (
                 <div className="text-center space-y-8">
                   <div>
-                    <h1 className="text-5xl font-bold mb-4">Welcome to Lendry.AI</h1>
-                    <p className="text-xl text-muted-foreground">Let's get you set up in minutes</p>
+                    <h1 className="text-5xl font-bold mb-4">{currentStepConfig?.content?.title || 'Welcome to Lendry.AI'}</h1>
+                    <p className="text-xl text-muted-foreground">{currentStepConfig?.content?.subtitle || "Let's get you set up in minutes"}</p>
                   </div>
 
                   <div className="bg-card border border-border rounded-lg p-8 space-y-4">
                     <h2 className="text-2xl font-semibold">{user?.userType?.charAt(0).toUpperCase() + user?.userType?.slice(1) || 'User'}</h2>
-                    <p className="text-lg text-muted-foreground">{accountTypeDesc}</p>
+                    <p className="text-lg text-muted-foreground">{currentStepConfig?.content?.description || accountTypeDesc}</p>
                   </div>
 
                   <Button
@@ -242,37 +279,44 @@ export default function OnboardingPage() {
                 </div>
               )}
 
-              {/* Step 2: Training Video */}
-              {currentStep === 2 && (
+              {/* Step: Training Video */}
+              {currentStepName === 'video' && (
                 <div className="space-y-8">
                   <div className="text-center space-y-2">
-                    <h2 className="text-4xl font-bold">Platform Overview</h2>
-                    <p className="text-muted-foreground">Watch a brief overview of how Lendry.AI works</p>
+                    <h2 className="text-4xl font-bold">{currentStepConfig?.content?.title || 'Platform Overview'}</h2>
+                    <p className="text-muted-foreground">{currentStepConfig?.content?.description || 'Watch a brief overview of how Lendry.AI works'}</p>
                   </div>
 
                   <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-xl overflow-hidden aspect-video flex items-center justify-center relative">
-                    <div className="absolute inset-0 bg-black/20" />
-                    <div className="relative z-10 flex flex-col items-center gap-6">
-                      <div className="h-24 w-24 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center border-2 border-white/20 hover:border-white/40 transition-colors cursor-pointer hover:bg-white/20">
-                        <Play className="h-10 w-10 text-white fill-white" />
-                      </div>
-                      <p className="text-white text-sm font-medium">Click to play</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <p className="text-center text-sm text-muted-foreground">
-                      This video covers the essentials to get you started with our platform
-                    </p>
+                    {currentStepConfig?.content?.url ? (
+                      <iframe
+                        src={currentStepConfig.content.url}
+                        className="w-full h-full"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      />
+                    ) : (
+                      <>
+                        <div className="absolute inset-0 bg-black/20" />
+                        <div className="relative z-10 flex flex-col items-center gap-6">
+                          <div className="h-24 w-24 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center border-2 border-white/20 hover:border-white/40 transition-colors cursor-pointer hover:bg-white/20">
+                            <Play className="h-10 w-10 text-white fill-white" />
+                          </div>
+                          <p className="text-white text-sm font-medium">Click to play</p>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   <div className="flex gap-4 justify-center">
-                    <Button
-                      variant="outline"
-                      onClick={handleNext}
-                    >
-                      Skip
-                    </Button>
+                    {(currentStepConfig?.content?.skipEnabled !== false) && (
+                      <Button
+                        variant="outline"
+                        onClick={handleNext}
+                      >
+                        Skip
+                      </Button>
+                    )}
                     <Button
                       onClick={handleNext}
                     >
@@ -283,12 +327,12 @@ export default function OnboardingPage() {
                 </div>
               )}
 
-              {/* Step 3: Agreement */}
-              {currentStep === 3 && (
+              {/* Step: Agreement */}
+              {currentStepName === 'agreement' && (
                 <div className="space-y-6">
                   <div className="text-center space-y-2">
-                    <h2 className="text-4xl font-bold">Partnership Agreement</h2>
-                    <p className="text-muted-foreground">Please review and sign our partnership agreement</p>
+                    <h2 className="text-4xl font-bold">{currentStepConfig?.content?.title || 'Partnership Agreement'}</h2>
+                    <p className="text-muted-foreground">{currentStepConfig?.content?.description || 'Please review and sign our partnership agreement'}</p>
                   </div>
 
                   {status.agreementSigned ? (
@@ -305,16 +349,22 @@ export default function OnboardingPage() {
                     <>
                       <div className="bg-card border border-border rounded-lg p-6 max-h-[400px] overflow-y-auto">
                         <div className="space-y-4 text-sm">
-                          <p>
-                            <strong>Partnership Agreement Summary</strong>
-                          </p>
-                          <ul className="space-y-2 text-muted-foreground list-disc list-inside">
-                            <li>By signing, you agree to the terms and conditions outlined herein</li>
-                            <li>Commission rates and payment terms are clearly defined</li>
-                            <li>You represent that all information provided is accurate and complete</li>
-                            <li>This agreement can be terminated by either party with written notice</li>
-                            <li>Please review the full agreement document before proceeding</li>
-                          </ul>
+                          {currentStepConfig?.content?.body ? (
+                            <p className="whitespace-pre-wrap">{currentStepConfig.content.body}</p>
+                          ) : (
+                            <>
+                              <p>
+                                <strong>Partnership Agreement Summary</strong>
+                              </p>
+                              <ul className="space-y-2 text-muted-foreground list-disc list-inside">
+                                <li>By signing, you agree to the terms and conditions outlined herein</li>
+                                <li>Commission rates and payment terms are clearly defined</li>
+                                <li>You represent that all information provided is accurate and complete</li>
+                                <li>This agreement can be terminated by either party with written notice</li>
+                                <li>Please review the full agreement document before proceeding</li>
+                              </ul>
+                            </>
+                          )}
                         </div>
                       </div>
 
@@ -343,7 +393,7 @@ export default function OnboardingPage() {
                           onCheckedChange={(checked) => setAgreedToTerms(checked as boolean)}
                         />
                         <label htmlFor="agree-terms" className="text-sm cursor-pointer flex-1">
-                          I have read and agree to the Partnership Agreement terms and conditions. I understand that by clicking "Sign Agreement" below, I am electronically signing this agreement.
+                          {currentStepConfig?.content?.checkboxLabel || 'I have read and agree to the Partnership Agreement terms and conditions. I understand that by clicking "Sign Agreement" below, I am electronically signing this agreement.'}
                         </label>
                       </div>
                     </>
@@ -387,70 +437,28 @@ export default function OnboardingPage() {
                 </div>
               )}
 
-              {/* Step 4: Platform Tour */}
-              {currentStep === 4 && (
+              {/* Step: Platform Tour */}
+              {currentStepName === 'tour' && (
                 <div className="space-y-8">
                   <div className="text-center space-y-2">
-                    <h2 className="text-4xl font-bold">Platform Features</h2>
-                    <p className="text-muted-foreground">Here's what you'll have access to</p>
+                    <h2 className="text-4xl font-bold">{currentStepConfig?.content?.title || 'Platform Features'}</h2>
+                    <p className="text-muted-foreground">{currentStepConfig?.content?.description || "Here's what you'll have access to"}</p>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Dashboard */}
-                    <div className="bg-card border border-border rounded-lg p-6 space-y-3 hover:border-primary/50 transition-colors">
-                      <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                        <BarChart3 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <h3 className="font-semibold text-lg">Dashboard</h3>
-                      <p className="text-sm text-muted-foreground">Your command center for pipeline overview and key metrics</p>
-                    </div>
-
-                    {/* Deals Pipeline */}
-                    <div className="bg-card border border-border rounded-lg p-6 space-y-3 hover:border-primary/50 transition-colors">
-                      <div className="h-10 w-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                        <CheckCircle2 className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                      </div>
-                      <h3 className="font-semibold text-lg">Deals Pipeline</h3>
-                      <p className="text-sm text-muted-foreground">Track every loan through stages and manage progress</p>
-                    </div>
-
-                    {/* Document Review */}
-                    <div className="bg-card border border-border rounded-lg p-6 space-y-3 hover:border-primary/50 transition-colors">
-                      <div className="h-10 w-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                        <FileText className="h-5 w-5 text-green-600 dark:text-green-400" />
-                      </div>
-                      <h3 className="font-semibold text-lg">AI Document Review</h3>
-                      <p className="text-sm text-muted-foreground">AI reads and verifies documents for accuracy</p>
-                    </div>
-
-                    {/* AI Assistant */}
-                    <div className="bg-card border border-border rounded-lg p-6 space-y-3 hover:border-primary/50 transition-colors">
-                      <div className="h-10 w-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
-                        <Volume2 className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-                      </div>
-                      <h3 className="font-semibold text-lg">Your Assistant</h3>
-                      <p className="text-sm text-muted-foreground">Voice + text AI helper, always available to support you</p>
-                    </div>
-
-                    {/* Messages */}
-                    <div className="bg-card border border-border rounded-lg p-6 space-y-3 hover:border-primary/50 transition-colors">
-                      <div className="h-10 w-10 rounded-lg bg-pink-100 dark:bg-pink-900/30 flex items-center justify-center">
-                        <MessageSquare className="h-5 w-5 text-pink-600 dark:text-pink-400" />
-                      </div>
-                      <h3 className="font-semibold text-lg">Messages</h3>
-                      <p className="text-sm text-muted-foreground">Communicate with borrowers and team members</p>
-                    </div>
-
-                    {/* Smart Prospect - Broker Only */}
-                    {isBroker && (
-                      <div className="bg-card border border-border rounded-lg p-6 space-y-3 hover:border-primary/50 transition-colors">
-                        <div className="h-10 w-10 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
-                          <Zap className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                    {(currentStepConfig?.content?.cards || []).filter(c => c.enabled).map((card, idx) => {
+                      const Icon = TOUR_ICON_MAP[card.icon] || BarChart3;
+                      const colors = getColorClasses(idx);
+                      return (
+                        <div key={card.id} className="bg-card border border-border rounded-lg p-6 space-y-3 hover:border-primary/50 transition-colors">
+                          <div className={`h-10 w-10 rounded-lg ${colors.bg} flex items-center justify-center`}>
+                            <Icon className={`h-5 w-5 ${colors.text}`} />
+                          </div>
+                          <h3 className="font-semibold text-lg">{card.title}</h3>
+                          <p className="text-sm text-muted-foreground">{card.description}</p>
                         </div>
-                        <h3 className="font-semibold text-lg">Smart Prospect</h3>
-                        <p className="text-sm text-muted-foreground">AI-powered outreach to grow your business</p>
-                      </div>
-                    )}
+                      );
+                    })}
                   </div>
 
                   <div className="flex gap-4">
@@ -472,8 +480,8 @@ export default function OnboardingPage() {
                 </div>
               )}
 
-              {/* Step 5: Get Started */}
-              {currentStep === 5 && (
+              {/* Step: Get Started */}
+              {currentStepName === 'start' && (
                 <div className="space-y-8 text-center">
                   <div className="flex justify-center">
                     <div className="relative">
@@ -485,9 +493,9 @@ export default function OnboardingPage() {
                   </div>
 
                   <div className="space-y-4">
-                    <h2 className="text-4xl font-bold">You're all set!</h2>
+                    <h2 className="text-4xl font-bold">{currentStepConfig?.content?.title || "You're all set!"}</h2>
                     <p className="text-lg text-muted-foreground">
-                      Your account is ready to go. You now have access to all platform features including the dashboard, pipeline management, AI document review, and more.
+                      {currentStepConfig?.content?.message || 'Your account is ready to go. You now have access to all platform features including the dashboard, pipeline management, AI document review, and more.'}
                     </p>
                   </div>
 

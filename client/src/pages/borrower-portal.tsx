@@ -100,6 +100,42 @@ interface PortalStage {
   stageOrder: number;
 }
 
+interface PortalConfig {
+  welcomeMessage?: string;
+  headerTitle?: string;
+  headerSubtitle?: string;
+  sections?: {
+    dealOverview?: boolean;
+    stageProgress?: boolean;
+    documents?: boolean;
+    activityFeed?: boolean;
+    loanChecklist?: boolean;
+  };
+  fieldVisibility?: {
+    propertyAddress?: boolean;
+    loanAmount?: boolean;
+    interestRate?: boolean;
+    loanTerm?: boolean;
+    targetCloseDate?: boolean;
+  };
+}
+
+const DEFAULT_SECTIONS = {
+  dealOverview: true,
+  stageProgress: true,
+  documents: true,
+  activityFeed: true,
+  loanChecklist: true,
+};
+
+const DEFAULT_FIELD_VISIBILITY = {
+  propertyAddress: true,
+  loanAmount: true,
+  interestRate: true,
+  loanTerm: true,
+  targetCloseDate: true,
+};
+
 export default function BorrowerPortal() {
   const [, params] = useRoute("/portal/:token");
   const token = params?.token;
@@ -109,10 +145,11 @@ export default function BorrowerPortal() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
 
-  const { data, isLoading, error } = useQuery<{ 
-    project: Project; 
-    stages: Stage[]; 
+  const { data, isLoading, error } = useQuery<{
+    project: Project;
+    stages: Stage[];
     activity: ActivityItem[];
+    portalConfig?: PortalConfig | null;
   }>({
     queryKey: ['/api/portal', token],
     queryFn: async () => {
@@ -217,7 +254,11 @@ export default function BorrowerPortal() {
     );
   }
 
-  const { project, stages, activity } = data;
+  const { project, stages, activity, portalConfig } = data;
+
+  // Merge portal config with defaults
+  const sections = { ...DEFAULT_SECTIONS, ...portalConfig?.sections };
+  const fieldVisibility = { ...DEFAULT_FIELD_VISIBILITY, ...portalConfig?.fieldVisibility };
 
   const formatCurrency = (amount: number | null) => {
     if (!amount) return '—';
@@ -269,7 +310,13 @@ export default function BorrowerPortal() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 md:px-6 py-4 md:py-8 space-y-4 md:space-y-6">
-        {stages.length > 0 && (
+        {portalConfig?.welcomeMessage && (
+          <Card className="p-4 bg-primary/5 border-primary/20">
+            <p className="text-sm text-muted-foreground">{portalConfig.welcomeMessage}</p>
+          </Card>
+        )}
+
+        {sections.stageProgress && stages.length > 0 && (
           <Card data-testid="card-loan-progress">
             <CardContent className="p-4 md:p-6">
               <div className="flex items-center justify-between mb-4 gap-2">
@@ -349,7 +396,9 @@ export default function BorrowerPortal() {
           </Card>
         )}
 
+        {sections.dealOverview && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 md:gap-4">
+          {fieldVisibility.loanAmount && (
           <Card className="p-3 md:p-4">
             <div className="flex items-center gap-2 md:gap-3">
               <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg bg-success/10 flex items-center justify-center shrink-0">
@@ -361,6 +410,8 @@ export default function BorrowerPortal() {
               </div>
             </div>
           </Card>
+          )}
+          {fieldVisibility.interestRate && (
           <Card className="p-3 md:p-4">
             <div className="flex items-center gap-2 md:gap-3">
               <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg bg-info/10 flex items-center justify-center shrink-0">
@@ -372,6 +423,8 @@ export default function BorrowerPortal() {
               </div>
             </div>
           </Card>
+          )}
+          {fieldVisibility.targetCloseDate && (
           <Card className="p-3 md:p-4 col-span-2 sm:col-span-1">
             <div className="flex items-center gap-2 md:gap-3">
               <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
@@ -383,9 +436,11 @@ export default function BorrowerPortal() {
               </div>
             </div>
           </Card>
+          )}
         </div>
+        )}
 
-        {project.propertyAddress && (
+        {fieldVisibility.propertyAddress && project.propertyAddress && (
           <Card className="p-4">
             <div className="flex items-center gap-2">
               <Building2 className="h-4 w-4 text-muted-foreground" />
@@ -395,18 +450,24 @@ export default function BorrowerPortal() {
           </Card>
         )}
 
-        <Tabs defaultValue="checklist" className="space-y-4">
+        {(sections.loanChecklist || sections.activityFeed) && (
+        <Tabs defaultValue={sections.loanChecklist ? "checklist" : "updates"} className="space-y-4">
           <TabsList>
+            {sections.loanChecklist && (
             <TabsTrigger value="checklist" data-testid="tab-checklist">
               <CheckSquare className="h-4 w-4 mr-2" />
               Checklist
             </TabsTrigger>
+            )}
+            {sections.activityFeed && (
             <TabsTrigger value="updates" data-testid="tab-updates">
               <Activity className="h-4 w-4 mr-2" />
               Updates
             </TabsTrigger>
+            )}
           </TabsList>
 
+          {sections.loanChecklist && (
           <TabsContent value="checklist" className="space-y-4">
             <LoanChecklist
               dealId={project.id}
@@ -417,7 +478,9 @@ export default function BorrowerPortal() {
               showTasks={true}
             />
           </TabsContent>
+          )}
 
+          {sections.activityFeed && (
           <TabsContent value="updates">
             <Card>
               <CardContent className="pt-6">
@@ -446,7 +509,9 @@ export default function BorrowerPortal() {
               </CardContent>
             </Card>
           </TabsContent>
+          )}
         </Tabs>
+        )}
 
         {project.notes && (
           <Card>

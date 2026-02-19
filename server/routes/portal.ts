@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from 'express';
 import type { RouteDeps } from './types';
 import { eq, asc, and } from 'drizzle-orm';
-import { dealDocuments, dealDocumentFiles, projectStages, loanPrograms, projectActivity, platformSettings } from '@shared/schema';
+import { dealDocuments, dealDocumentFiles, projectStages, loanPrograms, projectActivity, platformSettings, systemSettings } from '@shared/schema';
 import multer from 'multer';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -46,6 +46,19 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
         tasks: tasks.filter(t => t.stageId === stage.id && t.visibleToBorrower),
       }));
 
+      // Fetch borrower portal config (if super admin has configured it)
+      let portalConfig: any = null;
+      try {
+        const [configSetting] = await db.select()
+          .from(systemSettings)
+          .where(eq(systemSettings.settingKey, 'onboarding_borrower_config'));
+        if (configSetting?.settingValue) {
+          portalConfig = JSON.parse(configSetting.settingValue);
+        }
+      } catch {
+        // Ignore config parse errors — defaults will be used on frontend
+      }
+
       // Return limited project data
       res.json({
         project: {
@@ -67,6 +80,7 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
         },
         stages: visibleStages,
         activity,
+        portalConfig,
       });
     } catch (error) {
       console.error('Borrower portal error:', error);

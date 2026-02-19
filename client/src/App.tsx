@@ -59,6 +59,7 @@ import SuperAdminDashboard from "@/pages/admin/super-admin-dashboard";
 import AdminCreditPolicies from "@/pages/admin/credit-policies";
 import EmailInboxPage from "@/pages/admin/email-inbox";
 import IntegrationsPage from "@/pages/admin/integrations";
+import OnboardingConfigPage from "@/pages/admin/onboarding-config";
 
 import BrokerContactsPage from "@/pages/broker-contacts";
 import BrokerOutreachPage from "@/pages/broker-outreach";
@@ -245,6 +246,7 @@ function MainRoutes() {
           <Route path="/admin/credit-policies" component={() => <AdminProtectedRoute component={AdminCreditPolicies} />} />
           <Route path="/admin/email" component={() => <AdminProtectedRoute component={EmailInboxPage} />} />
           <Route path="/admin/integrations" component={() => <SuperAdminProtectedRoute component={IntegrationsPage} />} />
+          <Route path="/admin/onboarding-config" component={() => <SuperAdminProtectedRoute component={OnboardingConfigPage} />} />
 
 
           <Route component={NotFound} />
