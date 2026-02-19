@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
   DialogContent,
@@ -51,7 +52,14 @@ type Rule = {
   category?: string;
   isActive?: boolean;
   confidence?: "high" | "medium" | "low";
+  _localId?: string;
 };
+
+let ruleIdCounter = 0;
+function assignLocalId(rule: Rule): Rule {
+  if (!rule._localId) return { ...rule, _localId: `rule_${++ruleIdCounter}` };
+  return rule;
+}
 
 type CreditPolicy = {
   id: number;
@@ -79,9 +87,20 @@ export default function AdminCreditPolicies() {
   const [sourceFileName, setSourceFileName] = useState("");
 
   const [isExtracting, setIsExtracting] = useState(false);
+  const [extractProgress, setExtractProgress] = useState(0);
   const [isDragOver, setIsDragOver] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const [editingRuleIds, setEditingRuleIds] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const progressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+      if (progressTimeoutRef.current) clearTimeout(progressTimeoutRef.current);
+    };
+  }, []);
 
   const { data: policies, isLoading } = useQuery<CreditPolicy[]>({
     queryKey: ["/api/admin/credit-policies"],
@@ -149,12 +168,47 @@ export default function AdminCreditPolicies() {
     setRules([]);
     setSourceFileName("");
     setCollapsedSections({});
+    setEditingRuleIds(new Set());
     setIsDragOver(false);
+    setExtractProgress(0);
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+    if (progressTimeoutRef.current) {
+      clearTimeout(progressTimeoutRef.current);
+      progressTimeoutRef.current = null;
+    }
+  }
+
+  function startProgressSimulation() {
+    setExtractProgress(0);
+    let progress = 0;
+    progressIntervalRef.current = setInterval(() => {
+      progress += Math.random() * 8 + 2;
+      if (progress > 90) progress = 90 + Math.random() * 2;
+      if (progress > 95) progress = 95;
+      setExtractProgress(Math.min(Math.round(progress), 95));
+    }, 600);
+  }
+
+  function stopProgressSimulation() {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+    setExtractProgress(100);
+    progressTimeoutRef.current = setTimeout(() => {
+      setExtractProgress(0);
+      progressTimeoutRef.current = null;
+    }, 500);
   }
 
   async function handleFileUpload(file: File) {
     setIsExtracting(true);
     setSourceFileName(file.name);
+    setEditingRuleIds(new Set());
+    startProgressSimulation();
     try {
       const reader = new FileReader();
       const base64 = await new Promise<string>((resolve, reject) => {
@@ -169,11 +223,13 @@ export default function AdminCreditPolicies() {
       const response = await apiRequest("POST", "/api/admin/credit-policies/extract-rules", { fileContent: base64, fileName: file.name });
 
       const data = await response.json();
+      stopProgressSimulation();
       if (data.rules && Array.isArray(data.rules)) {
-        setRules(data.rules);
+        setRules(data.rules.map(assignLocalId));
         toast({ title: `Extracted ${data.rules.length} rules from ${file.name}` });
       }
     } catch (error: any) {
+      stopProgressSimulation();
       toast({ title: "Failed to extract rules", description: error.message, variant: "destructive" });
     } finally {
       setIsExtracting(false);
@@ -196,14 +252,30 @@ export default function AdminCreditPolicies() {
   }
 
   function deleteRule(index: number) {
+    const ruleId = rules[index]?._localId;
     setRules((prev) => prev.filter((_, i) => i !== index));
+    if (ruleId) {
+      setEditingRuleIds((prev) => {
+        const next = new Set(prev);
+        next.delete(ruleId);
+        return next;
+      });
+    }
+  }
+
+  function toggleEditRule(ruleId: string) {
+    setEditingRuleIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(ruleId)) next.delete(ruleId);
+      else next.add(ruleId);
+      return next;
+    });
   }
 
   function addRuleToGroup(docType: string) {
-    setRules((prev) => [
-      ...prev,
-      { documentType: docType, ruleTitle: "", ruleDescription: "", category: "" },
-    ]);
+    const newRule = assignLocalId({ documentType: docType, ruleTitle: "", ruleDescription: "", category: "" });
+    setRules((prev) => [...prev, newRule]);
+    if (newRule._localId) setEditingRuleIds((prev) => new Set(prev).add(newRule._localId!));
   }
 
   const groupedRules = rules.reduce(
@@ -224,8 +296,9 @@ export default function AdminCreditPolicies() {
       setPolicyName(data.name);
       setPolicyDescription(data.description || "");
       setSourceFileName(data.sourceFileName || "");
-      setRules(data.rules || []);
+      setRules((data.rules || []).map(assignLocalId));
       setCollapsedSections({});
+      setEditingRuleIds(new Set());
       setEditingPolicy(data);
     } catch {
       toast({ title: "Failed to load policy details", variant: "destructive" });
@@ -308,11 +381,17 @@ export default function AdminCreditPolicies() {
 
           {isExtracting ? (
             <Card>
-              <CardContent className="flex flex-col items-center justify-center py-8 gap-3">
+              <CardContent className="flex flex-col items-center justify-center py-8 gap-4">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 <p className="text-sm text-muted-foreground" data-testid="text-extracting-rules">
                   AI is extracting rules from your document...
                 </p>
+                <div className="w-full max-w-xs space-y-1">
+                  <Progress value={extractProgress} className="h-2" />
+                  <p className="text-xs text-muted-foreground text-center" data-testid="text-extract-progress">
+                    {extractProgress}% complete
+                  </p>
+                </div>
               </CardContent>
             </Card>
           ) : !sourceFileName ? (
@@ -354,12 +433,7 @@ export default function AdminCreditPolicies() {
                 </div>
                 <Button
                   variant="outline"
-                  onClick={() =>
-                    setRules((prev) => [
-                      ...prev,
-                      { documentType: "General", ruleTitle: "", ruleDescription: "", category: "" },
-                    ])
-                  }
+                  onClick={() => addRuleToGroup("General")}
                   data-testid="button-add-rule-general"
                 >
                   <Plus className="h-4 w-4 mr-1" />
@@ -393,6 +467,8 @@ export default function AdminCreditPolicies() {
                         {docRules.map((rule, rIdx) => {
                           const globalIdx = indices[rIdx];
                           const isUncertain = rule.confidence === "low" || rule.confidence === "medium";
+                          const ruleLocalId = rule._localId || `fallback_${globalIdx}`;
+                          const isEditing = editingRuleIds.has(ruleLocalId);
                           return (
                             <div
                               key={globalIdx}
@@ -404,65 +480,106 @@ export default function AdminCreditPolicies() {
                                     : ""
                               }`}
                             >
-                              <div className="flex items-center gap-2">
-                                {isUncertain && (
-                                  <AlertTriangle
-                                    className={`h-4 w-4 flex-shrink-0 ${
-                                      rule.confidence === "low" ? "text-destructive" : "text-warning"
-                                    }`}
+                              {isEditing ? (
+                                <>
+                                  <div className="flex items-center gap-2">
+                                    <Input
+                                      value={rule.ruleTitle}
+                                      onChange={(e) => updateRule(globalIdx, "ruleTitle", e.target.value)}
+                                      placeholder="Rule title"
+                                      className="text-sm flex-1"
+                                      data-testid={`input-rule-title-${globalIdx}`}
+                                    />
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      onClick={() => toggleEditRule(ruleLocalId)}
+                                      data-testid={`button-done-edit-rule-${globalIdx}`}
+                                    >
+                                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                    </Button>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      onClick={() => deleteRule(globalIdx)}
+                                      data-testid={`button-delete-rule-${globalIdx}`}
+                                    >
+                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  </div>
+                                  <Textarea
+                                    value={rule.ruleDescription}
+                                    onChange={(e) =>
+                                      updateRule(globalIdx, "ruleDescription", e.target.value)
+                                    }
+                                    placeholder="Rule description"
+                                    className="text-sm min-h-[60px]"
+                                    data-testid={`input-rule-description-${globalIdx}`}
                                   />
-                                )}
-                                <Input
-                                  value={rule.ruleTitle}
-                                  onChange={(e) => updateRule(globalIdx, "ruleTitle", e.target.value)}
-                                  placeholder="Rule title"
-                                  className="text-sm flex-1"
-                                  data-testid={`input-rule-title-${globalIdx}`}
-                                />
-                                {rule.category && (
-                                  <Badge variant="outline" className="text-xs shrink-0">
-                                    {rule.category}
-                                  </Badge>
-                                )}
-                                {rule.confidence && (
-                                  <Badge
-                                    variant={rule.confidence === "high" ? "secondary" : "outline"}
-                                    className={`text-xs shrink-0 ${
-                                      rule.confidence === "low"
-                                        ? "border-destructive/50 text-destructive"
-                                        : rule.confidence === "medium"
-                                          ? "border-warning/50 text-warning"
-                                          : ""
-                                    }`}
-                                  >
-                                    {rule.confidence}
-                                  </Badge>
-                                )}
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => deleteRule(globalIdx)}
-                                  data-testid={`button-delete-rule-${globalIdx}`}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </div>
-                              {isUncertain && (
-                                <p className="text-xs text-muted-foreground">
-                                  {rule.confidence === "low"
-                                    ? "Low confidence — AI was uncertain about this rule. Please review carefully."
-                                    : "Medium confidence — This rule was implied but not explicitly stated. Please verify."}
-                                </p>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="flex items-center gap-2">
+                                    {isUncertain && (
+                                      <AlertTriangle
+                                        className={`h-4 w-4 flex-shrink-0 ${
+                                          rule.confidence === "low" ? "text-destructive" : "text-warning"
+                                        }`}
+                                      />
+                                    )}
+                                    <span className="text-sm font-medium flex-1" data-testid={`text-rule-title-${globalIdx}`}>
+                                      {rule.ruleTitle || "(untitled rule)"}
+                                    </span>
+                                    {rule.category && (
+                                      <Badge variant="outline" className="text-xs shrink-0">
+                                        {rule.category}
+                                      </Badge>
+                                    )}
+                                    {rule.confidence && (
+                                      <Badge
+                                        variant={rule.confidence === "high" ? "secondary" : "outline"}
+                                        className={`text-xs shrink-0 ${
+                                          rule.confidence === "low"
+                                            ? "border-destructive/50 text-destructive"
+                                            : rule.confidence === "medium"
+                                              ? "border-warning/50 text-warning"
+                                              : ""
+                                        }`}
+                                      >
+                                        {rule.confidence}
+                                      </Badge>
+                                    )}
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      onClick={() => toggleEditRule(ruleLocalId)}
+                                      data-testid={`button-edit-rule-${globalIdx}`}
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      onClick={() => deleteRule(globalIdx)}
+                                      data-testid={`button-delete-rule-${globalIdx}`}
+                                    >
+                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  </div>
+                                  {rule.ruleDescription && (
+                                    <p className="text-xs text-muted-foreground" data-testid={`text-rule-description-${globalIdx}`}>
+                                      {rule.ruleDescription}
+                                    </p>
+                                  )}
+                                  {isUncertain && (
+                                    <p className="text-xs text-warning">
+                                      {rule.confidence === "low"
+                                        ? "Low confidence — please review carefully."
+                                        : "Medium confidence — implied but not explicitly stated."}
+                                    </p>
+                                  )}
+                                </>
                               )}
-                              <Textarea
-                                value={rule.ruleDescription}
-                                onChange={(e) =>
-                                  updateRule(globalIdx, "ruleDescription", e.target.value)
-                                }
-                                placeholder="Rule description"
-                                className="text-sm min-h-[60px]"
-                                data-testid={`input-rule-description-${globalIdx}`}
-                              />
                             </div>
                           );
                         })}

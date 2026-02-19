@@ -1018,21 +1018,29 @@ function ProgramDetailsStep({
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1 sm:col-span-2">
-            <Label className="text-xs">Program Name *</Label>
+            <Label className="text-xs">Program Name (borrowers will see this) *</Label>
             <Input
-              placeholder="ex. DSCR Rental Program"
+              placeholder="ex. 30-Year Rental Loan"
               value={programName}
               onChange={(e) => setProgramName(e.target.value)}
+              data-testid="input-program-name"
             />
+            <p className="text-xs text-muted-foreground">
+              This name appears on quotes and borrower-facing pages. Choose something clear and professional.
+            </p>
           </div>
           <div className="space-y-1 sm:col-span-2">
-            <Label className="text-xs">Description</Label>
+            <Label className="text-xs">Internal Description</Label>
             <Textarea
-              placeholder="ex. Standard DSCR loan program for investment rental properties"
+              placeholder="ex. Standard DSCR program for investment rentals — internal team reference"
               value={programDescription}
               onChange={(e) => setProgramDescription(e.target.value)}
               rows={2}
+              data-testid="input-program-description"
             />
+            <p className="text-xs text-muted-foreground">
+              For your team only. Use this to note internal naming or guidelines.
+            </p>
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Loan Type *</Label>

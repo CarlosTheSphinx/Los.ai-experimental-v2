@@ -1257,7 +1257,7 @@ function StepProgramsWorkflow({
                 </p>
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={() => setShowWizard(true)}>
+            <Button variant="outline" onClick={() => setShowWizard(true)} data-testid="button-create-another-program">
               <Plus className="h-4 w-4 mr-2" />
               Create Another Program
             </Button>
@@ -1326,21 +1326,23 @@ function StepProgramsWorkflow({
         </>
       )}
 
-      <div className="flex items-center justify-between gap-4">
-        <Button variant="outline" onClick={onBack} data-testid="button-back-step-3">
-          <ChevronLeft className="mr-2 h-4 w-4" />
-          Back
-        </Button>
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" onClick={onNext} className="text-muted-foreground" data-testid="button-skip-step-3">
-            {hasPrograms ? 'Continue' : 'Skip for now'}
+      {!showWizard && (
+        <div className="flex items-center justify-between gap-4">
+          <Button variant="outline" onClick={onBack} data-testid="button-back-step-3">
+            <ChevronLeft className="mr-2 h-4 w-4" />
+            Back
           </Button>
-          <Button onClick={onNext} data-testid="button-next-step-3">
-            Next: Communications & AI
-            <ChevronRight className="ml-2 h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" onClick={onNext} className="text-muted-foreground" data-testid="button-skip-step-3">
+              {hasPrograms ? 'Continue' : 'Skip for now'}
+            </Button>
+            <Button onClick={onNext} data-testid="button-next-step-3">
+              Next: Communications & AI
+              <ChevronRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
