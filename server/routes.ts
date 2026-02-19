@@ -16695,8 +16695,8 @@ Return JSON only:
       const portalUrl = `${baseUrl}/${portalPath}/${token}`;
       const portalLabel = portalType === 'borrower' ? 'Borrower Portal' : 'Broker Portal';
 
-      const brandingSettings = await storage.getSystemSettings();
-      const companyName = brandingSettings.find(s => s.key === 'company_name')?.value || 'Lendry.AI';
+      const brandingSettings = await storage.getAllSettings();
+      const companyName = brandingSettings.find(s => s.settingKey === 'branding_company_name')?.settingValue || 'Lendry.AI';
 
       try {
         const { Resend } = await import('resend');
