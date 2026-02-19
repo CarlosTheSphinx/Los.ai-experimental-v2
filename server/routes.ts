@@ -7293,15 +7293,58 @@ export async function registerRoutes(
   });
 
   // Admin - Update deal stage
+  // Update deal status (independent of stage)
+  app.patch('/api/admin/deals/:id/status', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.id);
+      const { status } = req.body;
+
+      const validStatuses = ['active', 'closed', 'on_hold', 'archived'];
+      if (!status || !validStatuses.includes(status)) {
+        return res.status(400).json({ error: `Status must be one of: ${validStatuses.join(', ')}` });
+      }
+
+      const [project] = await db.select({ id: projects.id, status: projects.status, projectName: projects.projectName })
+        .from(projects)
+        .where(eq(projects.id, dealId))
+        .limit(1);
+
+      if (!project) {
+        return res.status(404).json({ error: 'Deal not found' });
+      }
+
+      const oldStatus = project.status;
+
+      await db.update(projects)
+        .set({ status, lastUpdated: new Date() })
+        .where(eq(projects.id, dealId));
+
+      // Log activity
+      await db.insert(projectActivity).values({
+        projectId: dealId,
+        activityType: 'status_change',
+        title: `Status changed from ${oldStatus} to ${status}`,
+        description: `Deal status updated to ${status}`,
+        performedBy: req.user!.id,
+        visibleToBorrower: true,
+      });
+
+      res.json({ success: true, status });
+    } catch (error) {
+      console.error('Update deal status error:', error);
+      res.status(500).json({ error: 'Failed to update deal status' });
+    }
+  });
+
   app.patch('/api/admin/deals/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const dealId = parseInt(req.params.id);
       const { stage } = req.body;
-      
+
       if (!stage) {
         return res.status(400).json({ error: 'Stage is required' });
       }
-      
+
       // Deal is a project - get the project and its program
       const [project] = await db.select({
         id: projects.id,
@@ -14225,14 +14268,33 @@ If the user provides specific criteria, extract as many rules as you can from th
           
           if (event === 'document.completed') {
             updates.completedAt = new Date();
-            
+
+            // Download and persist signed PDF
+            let signedPdfPath: string | null = null;
+            let signedPdfSize: number = 0;
             try {
               const pdfBuffer = await pandadoc.downloadSignedPdf(documentId);
-              console.log(`Downloaded signed PDF for document ${documentId}, size: ${pdfBuffer.byteLength} bytes`);
+              signedPdfSize = pdfBuffer.byteLength;
+              console.log(`Downloaded signed PDF for document ${documentId}, size: ${signedPdfSize} bytes`);
+
+              // Save to filesystem
+              const fs = await import('fs');
+              const path = await import('path');
+              const uploadsDir = path.join(process.cwd(), 'uploads', 'signed', String(envelope.id));
+              await fs.promises.mkdir(uploadsDir, { recursive: true });
+              const safeName = (envelope.documentName || 'signed-document').replace(/[^a-zA-Z0-9._-]/g, '_');
+              signedPdfPath = path.join(uploadsDir, `${safeName}.pdf`);
+              await fs.promises.writeFile(signedPdfPath, Buffer.from(pdfBuffer));
+              console.log(`Saved signed PDF to ${signedPdfPath}`);
+
+              // Update envelope with signed PDF path
+              await db.update(esignEnvelopes)
+                .set({ signedPdfUrl: signedPdfPath })
+                .where(eq(esignEnvelopes.id, envelope.id));
             } catch (downloadError) {
-              console.error('Failed to download signed PDF:', downloadError);
+              console.error('Failed to download/save signed PDF:', downloadError);
             }
-          
+
           // Auto-create project/deal from signed term sheet
           if (envelope.quoteId) {
             try {
@@ -14367,16 +14429,91 @@ If the user provides specific criteria, extract as many rules as you can from th
                   
                   console.log(`[PandaDoc Webhook] Project ${projectNumber} auto-created from signed term sheet (envelope ${envelope.id}, quote ${quote.id})`);
                   
-                  try {
-                    const { isDriveIntegrationEnabled, ensureProjectFolder } = await import('./services/googleDrive');
-                    const driveEnabled = await isDriveIntegrationEnabled();
-                    if (driveEnabled) {
-                      ensureProjectFolder(project.id).catch((err: any) => {
-                        console.error(`Drive folder creation failed for deal ${project.id}:`, err.message);
-                      });
+                  // Store signed PDF as deal document and sync to cloud
+                  if (signedPdfPath && signedPdfSize > 0) {
+                    try {
+                      const [signedDoc] = await db.insert(dealDocuments).values({
+                        dealId: project.id,
+                        documentName: 'Signed Term Sheet',
+                        documentCategory: 'closing_docs',
+                        documentDescription: `Signed PandaDoc term sheet: ${envelope.documentName}`,
+                        status: 'approved',
+                        isRequired: true,
+                        filePath: signedPdfPath,
+                        fileName: `${(envelope.documentName || 'signed-term-sheet').replace(/[^a-zA-Z0-9._-]/g, '_')}.pdf`,
+                        fileSize: signedPdfSize,
+                        mimeType: 'application/pdf',
+                        uploadedAt: new Date(),
+                        visibility: 'all',
+                        assignedTo: 'admin',
+                        sortOrder: 0,
+                      }).returning();
+
+                      console.log(`[PandaDoc Webhook] Created deal document ${signedDoc.id} for signed term sheet`);
+
+                      // Sync to cloud storage (Google Drive or OneDrive)
+                      try {
+                        const { isDriveIntegrationEnabled, ensureProjectFolder, uploadFileToProjectFolder } = await import('./services/googleDrive');
+                        const driveEnabled = await isDriveIntegrationEnabled();
+                        if (driveEnabled) {
+                          await ensureProjectFolder(project.id);
+                          const fs = await import('fs');
+                          const fileStream = fs.createReadStream(signedPdfPath);
+                          const result = await uploadFileToProjectFolder({
+                            projectId: project.id,
+                            fileStream,
+                            originalName: signedDoc.fileName || 'Signed_Term_Sheet.pdf',
+                            mimeType: 'application/pdf',
+                          });
+                          // Update deal document with Drive link
+                          await db.update(dealDocuments)
+                            .set({
+                              googleDriveFileId: result.fileId,
+                              googleDriveFileUrl: result.webViewLink,
+                              driveUploadStatus: 'SYNCED',
+                            })
+                            .where(eq(dealDocuments.id, signedDoc.id));
+                          console.log(`[PandaDoc Webhook] Signed PDF synced to Google Drive for deal ${project.id}`);
+                        }
+                      } catch (driveErr: any) {
+                        console.error('Drive sync for signed PDF error:', driveErr.message);
+                      }
+
+                      // OneDrive upload
+                      try {
+                        const { isOneDriveEnabled, ensureOneDriveDealFolder, uploadFileToOneDrive } = await import('./services/oneDrive');
+                        const onedriveEnabled = await isOneDriveEnabled();
+                        if (onedriveEnabled) {
+                          const fs = await import('fs');
+                          const pdfBuf = await fs.promises.readFile(signedPdfPath);
+                          const folderInfo = await ensureOneDriveDealFolder(project.id);
+                          await uploadFileToOneDrive(
+                            folderInfo.folderId,
+                            signedDoc.fileName || 'Signed_Term_Sheet.pdf',
+                            pdfBuf,
+                            'application/pdf',
+                          );
+                          console.log(`[PandaDoc Webhook] Signed PDF synced to OneDrive for deal ${project.id}`);
+                        }
+                      } catch (onedriveErr: any) {
+                        console.error('OneDrive sync for signed PDF error:', onedriveErr.message);
+                      }
+                    } catch (docErr: any) {
+                      console.error('Failed to create deal document for signed PDF:', docErr.message);
                     }
-                  } catch (driveErr: any) {
-                    console.error('Drive integration check error:', driveErr.message);
+                  } else {
+                    // Still try to create Drive folder even without signed PDF
+                    try {
+                      const { isDriveIntegrationEnabled, ensureProjectFolder } = await import('./services/googleDrive');
+                      const driveEnabled = await isDriveIntegrationEnabled();
+                      if (driveEnabled) {
+                        ensureProjectFolder(project.id).catch((err: any) => {
+                          console.error(`Drive folder creation failed for deal ${project.id}:`, err.message);
+                        });
+                      }
+                    } catch (driveErr: any) {
+                      console.error('Drive integration check error:', driveErr.message);
+                    }
                   }
                 } else {
                   console.log(`[PandaDoc Webhook] Project already exists for quote ${quote.id} (envelope ${envelope.id}), skipping auto-creation`);
@@ -15658,6 +15795,29 @@ Return JSON only:
     } catch (error) {
       console.error('Super admin settings error:', error);
       res.status(500).json({ error: 'Failed to update settings' });
+    }
+  });
+
+  // Migrate legacy status values to new standard (one-time)
+  app.post('/api/admin/migrate-deal-statuses', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const completedResult = await db.update(projects)
+        .set({ status: 'closed' })
+        .where(or(eq(projects.status, 'completed'), eq(projects.status, 'funded')));
+
+      const cancelledResult = await db.update(projects)
+        .set({ status: 'archived' })
+        .where(eq(projects.status, 'cancelled'));
+
+      res.json({
+        success: true,
+        message: 'Status migration complete',
+        migratedToClosedFrom: ['completed', 'funded'],
+        migratedToArchivedFrom: ['cancelled'],
+      });
+    } catch (error) {
+      console.error('Status migration error:', error);
+      res.status(500).json({ error: 'Failed to migrate statuses' });
     }
   });
 

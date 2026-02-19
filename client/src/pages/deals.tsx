@@ -97,18 +97,18 @@ function StatsCard({
   );
 }
 
-function PipelineByStage({ stageStats }: { stageStats: StageInfo[] }) {
-  const stageColors: Record<string, string> = {
+function PipelineByStatus({ stageStats }: { stageStats: StageInfo[] }) {
+  const statusColors: Record<string, string> = {
     "active": "bg-success",
     "on_hold": "bg-warning",
-    "cancelled": "bg-destructive",
-    "completed": "bg-info",
+    "archived": "bg-muted-foreground",
+    "closed": "bg-info",
   };
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-lg">Pipeline by Stage</CardTitle>
+        <CardTitle className="text-lg">Pipeline by Status</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex items-center justify-between gap-1 overflow-x-auto pb-2">
@@ -122,7 +122,7 @@ function PipelineByStage({ stageStats }: { stageStats: StageInfo[] }) {
                 <div
                   className={cn(
                     "h-2 flex-1 rounded-full",
-                    stageColors[stageInfo.stage] || "bg-muted"
+                    statusColors[stageInfo.stage] || "bg-muted"
                   )}
                   style={{ opacity: stageInfo.count > 0 ? 1 : 0.3 }}
                 />
@@ -157,14 +157,20 @@ function formatDate(dateStr: string | null) {
 
 function getStatusBadge(status: string) {
   switch (status) {
-    case 'completed':
-      return <Badge variant="secondary" className="bg-success/10 text-success">Completed</Badge>;
     case 'active':
-      return <Badge variant="secondary" className="bg-info/10 text-info">Active</Badge>;
+      return <Badge variant="secondary" className="bg-success/10 text-success">Active</Badge>;
+    case 'closed':
+      return <Badge variant="secondary" className="bg-info/10 text-info">Closed</Badge>;
     case 'on_hold':
       return <Badge variant="secondary" className="bg-warning/10 text-warning">On Hold</Badge>;
+    case 'archived':
+      return <Badge variant="secondary" className="bg-muted text-muted-foreground">Archive</Badge>;
+    // Legacy status values (backward compat)
+    case 'completed':
+    case 'funded':
+      return <Badge variant="secondary" className="bg-info/10 text-info">Closed</Badge>;
     case 'cancelled':
-      return <Badge variant="secondary" className="bg-destructive/10 text-destructive">Cancelled</Badge>;
+      return <Badge variant="secondary" className="bg-muted text-muted-foreground">Archive</Badge>;
     default:
       return <Badge variant="secondary">{status}</Badge>;
   }
@@ -174,8 +180,12 @@ function getStatusColor(status: string): string {
   const colors: Record<string, string> = {
     "active": "bg-success/10 text-success",
     "on_hold": "bg-warning/10 text-warning",
-    "cancelled": "bg-destructive/10 text-destructive",
+    "closed": "bg-info/10 text-info",
+    "archived": "bg-muted text-muted-foreground",
+    // Legacy backward compat
     "completed": "bg-info/10 text-info",
+    "funded": "bg-info/10 text-info",
+    "cancelled": "bg-muted text-muted-foreground",
   };
   return colors[status] || "bg-muted text-muted-foreground";
 }
@@ -219,24 +229,27 @@ export default function Projects() {
     const totalLoans = projects.length;
     const totalLoanVolume = projects.reduce((sum, p) => sum + (p.loanAmount || 0), 0);
     
-    // Stage stats
-    const stageCounts: Record<string, number> = {
+    // Status stats (normalize legacy values)
+    const statusCounts: Record<string, number> = {
       active: 0,
       on_hold: 0,
-      cancelled: 0,
-      completed: 0,
+      closed: 0,
+      archived: 0,
     };
     projects.forEach(p => {
-      if (stageCounts[p.status] !== undefined) {
-        stageCounts[p.status]++;
+      const normalized = p.status === 'completed' || p.status === 'funded' ? 'closed'
+        : p.status === 'cancelled' ? 'archived'
+        : p.status;
+      if (statusCounts[normalized] !== undefined) {
+        statusCounts[normalized]++;
       }
     });
 
     const stageStats: StageInfo[] = [
-      { stage: 'active', label: 'Active', count: stageCounts.active },
-      { stage: 'on_hold', label: 'On Hold', count: stageCounts.on_hold },
-      { stage: 'cancelled', label: 'Cancelled', count: stageCounts.cancelled },
-      { stage: 'completed', label: 'Completed', count: stageCounts.completed },
+      { stage: 'active', label: 'Active', count: statusCounts.active },
+      { stage: 'on_hold', label: 'On Hold', count: statusCounts.on_hold },
+      { stage: 'closed', label: 'Closed', count: statusCounts.closed },
+      { stage: 'archived', label: 'Archive', count: statusCounts.archived },
     ];
 
     return { totalLoans, totalLoanVolume, stageStats };
@@ -288,8 +301,8 @@ export default function Projects() {
         />
       </div>
 
-      {/* Pipeline by Stage */}
-      <PipelineByStage stageStats={stats.stageStats} />
+      {/* Pipeline by Status */}
+      <PipelineByStatus stageStats={stats.stageStats} />
 
       {/* All Loans Section */}
       <div className="space-y-4">
