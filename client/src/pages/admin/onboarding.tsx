@@ -56,6 +56,11 @@ import {
   AlertTriangle,
   X,
   DollarSign,
+  Sparkles,
+  FileSearch,
+  Zap,
+  MousePointerClick,
+  StickyNote,
 } from 'lucide-react';
 import { PERMISSION_CATEGORIES, SCOPABLE_PERMISSIONS, type PermissionKey } from '@shared/schema';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -98,9 +103,10 @@ const GUIDE_STEPS = [
   { id: 2, label: 'Integrations', icon: Plug },
   { id: 3, label: 'Loan Programs', icon: Layers },
   { id: 4, label: 'Pricing', icon: DollarSign },
-  { id: 5, label: 'Communications & AI', icon: MessageSquare },
-  { id: 6, label: 'Team Setup', icon: Users },
-  { id: 7, label: 'Role Permissions', icon: Shield },
+  { id: 5, label: 'AI Agent', icon: Bot },
+  { id: 6, label: 'Communications', icon: MessageSquare },
+  { id: 7, label: 'Team Setup', icon: Users },
+  { id: 8, label: 'Role Permissions', icon: Shield },
 ];
 
 export default function AdminOnboarding() {
@@ -112,7 +118,7 @@ export default function AdminOnboarding() {
   const initialStep = (() => {
     const params = new URLSearchParams(window.location.search);
     const s = parseInt(params.get('step') || '1', 10);
-    return s >= 1 && s <= 7 ? s : 1;
+    return s >= 1 && s <= GUIDE_STEPS.length ? s : 1;
   })();
   const [currentStep, setCurrentStep] = useState(initialStep);
 
@@ -284,14 +290,20 @@ export default function AdminOnboarding() {
                 />
               )}
               {currentStep === 5 && (
-                <StepCommunicationsAI
+                <StepAIAgent
+                  onNext={handleNext}
+                  onBack={handleBack}
+                />
+              )}
+              {currentStep === 6 && (
+                <StepCommunications
                   emailConnected={emailConnected}
                   onNext={handleNext}
                   onBack={handleBack}
                   onNavigate={setLocation}
                 />
               )}
-              {currentStep === 6 && (
+              {currentStep === 7 && (
                 <StepTeamSetup
                   teamData={teamData?.users || []}
                   isLoading={teamLoading}
@@ -301,7 +313,7 @@ export default function AdminOnboarding() {
                   onNavigate={setLocation}
                 />
               )}
-              {currentStep === 7 && (
+              {currentStep === 8 && (
                 <StepRolePermissions
                   onboardingCompleted={!!user?.onboardingCompleted}
                   onBack={handleBack}
@@ -694,15 +706,15 @@ function StepTeamSetup({
       </Card>
 
       <div className="flex items-center justify-between gap-4">
-        <Button variant="outline" onClick={onBack} data-testid="button-back-step-5">
+        <Button variant="outline" onClick={onBack} data-testid="button-back-step-7">
           <ChevronLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
         <div className="flex items-center gap-3">
-          <Button variant="ghost" onClick={onNext} className="text-muted-foreground" data-testid="button-skip-step-5">
+          <Button variant="ghost" onClick={onNext} className="text-muted-foreground" data-testid="button-skip-step-7">
             Skip for now
           </Button>
-          <Button onClick={onNext} data-testid="button-next-step-5">
+          <Button onClick={onNext} data-testid="button-next-step-7">
             Next: Role Permissions
             <ChevronRight className="ml-2 h-4 w-4" />
           </Button>
@@ -1347,7 +1359,128 @@ function StepProgramsWorkflow({
   );
 }
 
-function StepCommunicationsAI({
+function StepAIAgent({
+  onNext,
+  onBack,
+}: {
+  onNext: () => void;
+  onBack: () => void;
+}) {
+  const capabilities = [
+    {
+      icon: FileSearch,
+      title: 'Document Review & Intelligence',
+      description: 'Automatically reviews uploaded documents against your loan program\'s AI rules — checking for missing info, expired IDs, mismatched names, and more.',
+      color: 'bg-blue-100 dark:bg-blue-900/30',
+      iconColor: 'text-blue-600 dark:text-blue-400',
+    },
+    {
+      icon: Send,
+      title: 'Borrower Communication',
+      description: 'Drafts personalized emails and in-app messages to borrowers based on the full deal context — outstanding documents, stage progress, and past conversations.',
+      color: 'bg-green-100 dark:bg-green-900/30',
+      iconColor: 'text-green-600 dark:text-green-400',
+    },
+    {
+      icon: Zap,
+      title: 'Loan Digest Automation',
+      description: 'Generates and sends loan digest updates via email and SMS. Summarizes deal status, next steps, and outstanding items — automatically, on your schedule.',
+      color: 'bg-purple-100 dark:bg-purple-900/30',
+      iconColor: 'text-purple-600 dark:text-purple-400',
+    },
+    {
+      icon: StickyNote,
+      title: 'Deal Memory & Context',
+      description: 'Maintains a timeline of every event on a deal — documents received, stage changes, digests sent, admin notes. Uses this history so it never repeats itself or asks for something already provided.',
+      color: 'bg-orange-100 dark:bg-orange-900/30',
+      iconColor: 'text-orange-600 dark:text-orange-400',
+    },
+    {
+      icon: Settings,
+      title: 'Admin Notes & AI Instructions',
+      description: 'Add notes to any deal and prefix them with /ai to give the agent specific instructions — like "don\'t contact borrower until Friday" or "emphasize the rate lock deadline".',
+      color: 'bg-indigo-100 dark:bg-indigo-900/30',
+      iconColor: 'text-indigo-600 dark:text-indigo-400',
+    },
+    {
+      icon: Sparkles,
+      title: 'Commercial Deal Pre-Screening',
+      description: 'Evaluates commercial loan submissions against your configurable rules, providing AI-powered insights and recommendations before human review.',
+      color: 'bg-pink-100 dark:bg-pink-900/30',
+      iconColor: 'text-pink-600 dark:text-pink-400',
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bot className="h-5 w-5" />
+            AI Agent
+          </CardTitle>
+          <CardDescription>
+            Your AI assistant is built into every deal. It handles document review, borrower communication, and digest automation — all powered by your loan program rules and deal context.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {capabilities.map((cap) => (
+              <div key={cap.title} className="bg-card border border-border rounded-md p-4 space-y-2">
+                <div className={`h-9 w-9 rounded-md ${cap.color} flex items-center justify-center`}>
+                  <cap.icon className={`h-4 w-4 ${cap.iconColor}`} />
+                </div>
+                <h4 className="font-medium text-sm">{cap.title}</h4>
+                <p className="text-sm text-muted-foreground">{cap.description}</p>
+              </div>
+            ))}
+          </div>
+
+          <Separator />
+
+          <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-4 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                <MousePointerClick className="h-5 w-5 text-primary-foreground" />
+              </div>
+              <div>
+                <h4 className="font-medium text-sm">How to Access the AI Agent</h4>
+                <p className="text-sm text-muted-foreground">
+                  Look for the <strong>AI button</strong> in the <strong>bottom-right corner</strong> of any deal page. Click it to open the agent panel where you can draft messages, send digests, and review documents.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 ml-[52px]">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-full text-xs font-medium shadow-md">
+                <Bot className="h-3.5 w-3.5" />
+                AI Agent
+              </div>
+              <span className="text-xs text-muted-foreground">← This button appears on every deal page</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="flex items-center justify-between gap-4">
+        <Button variant="outline" onClick={onBack} data-testid="button-back-step-5">
+          <ChevronLeft className="mr-2 h-4 w-4" />
+          Back
+        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" onClick={onNext} className="text-muted-foreground" data-testid="button-skip-step-5">
+            Skip for now
+          </Button>
+          <Button onClick={onNext} data-testid="button-next-step-5">
+            Next: Communications
+            <ChevronRight className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StepCommunications({
   emailConnected,
   onNext,
   onBack,
@@ -1415,36 +1548,6 @@ function StepCommunicationsAI({
           <Separator />
 
           <div className="space-y-3">
-            <h3 className="font-medium flex items-center gap-2">
-              <Bot className="h-4 w-4 text-primary" />
-              AI Communication Agent
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              The AI button on each deal page gives you a powerful communication assistant. It can:
-            </p>
-            <ul className="space-y-2 ml-4 text-sm text-muted-foreground">
-              <li className="flex items-start gap-2">
-                <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-                Draft personalized emails and messages to borrowers based on deal context
-              </li>
-              <li className="flex items-start gap-2">
-                <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-                Send loan digest updates via email and SMS automatically
-              </li>
-              <li className="flex items-start gap-2">
-                <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-                Use Deal Memory to understand the full history — documents received, stage changes, past communications — so it never repeats itself
-              </li>
-              <li className="flex items-start gap-2">
-                <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-                Follow admin notes and instructions (prefix with /ai) to customize its behavior per deal
-              </li>
-            </ul>
-          </div>
-
-          <Separator />
-
-          <div className="space-y-3">
             <h3 className="font-medium">Where to Find Everything</h3>
             <div className="space-y-2">
               <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-md">
@@ -1483,15 +1586,15 @@ function StepCommunicationsAI({
       </Card>
 
       <div className="flex items-center justify-between gap-4">
-        <Button variant="outline" onClick={onBack} data-testid="button-back-step-4">
+        <Button variant="outline" onClick={onBack} data-testid="button-back-step-6">
           <ChevronLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
         <div className="flex items-center gap-3">
-          <Button variant="ghost" onClick={onNext} className="text-muted-foreground" data-testid="button-skip-step-4">
+          <Button variant="ghost" onClick={onNext} className="text-muted-foreground" data-testid="button-skip-step-6">
             Skip for now
           </Button>
-          <Button onClick={onNext} data-testid="button-next-step-4">
+          <Button onClick={onNext} data-testid="button-next-step-6">
             Next: Team Setup
             <ChevronRight className="ml-2 h-4 w-4" />
           </Button>
@@ -1715,13 +1818,13 @@ function StepRolePermissions({
       </Card>
 
       <div className="flex items-center justify-between gap-4">
-        <Button variant="outline" onClick={onBack} data-testid="button-back-step-6">
+        <Button variant="outline" onClick={onBack} data-testid="button-back-step-8">
           <ChevronLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
         <div className="flex items-center gap-3">
           {!onboardingCompleted && (
-            <Button variant="ghost" onClick={onCompleteOnboarding} disabled={isCompleting} className="text-muted-foreground" data-testid="button-skip-step-6">
+            <Button variant="ghost" onClick={onCompleteOnboarding} disabled={isCompleting} className="text-muted-foreground" data-testid="button-skip-step-8">
               Skip for now
             </Button>
           )}
