@@ -62,6 +62,9 @@ import {
   MousePointerClick,
   StickyNote,
   Inbox,
+  Link,
+  Copy,
+  Eye,
 } from 'lucide-react';
 import { PERMISSION_CATEGORIES, SCOPABLE_PERMISSIONS, type PermissionKey } from '@shared/schema';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -97,6 +100,7 @@ const GUIDE_STEPS = [
   { id: 6, label: 'Communications', icon: MessageSquare },
   { id: 7, label: 'Team Setup', icon: Users },
   { id: 8, label: 'Role Permissions', icon: Shield },
+  { id: 9, label: 'Magic Links', icon: Link },
 ];
 
 export default function AdminOnboarding() {
@@ -302,6 +306,12 @@ export default function AdminOnboarding() {
               )}
               {currentStep === 8 && (
                 <StepRolePermissions
+                  onNext={handleNext}
+                  onBack={handleBack}
+                />
+              )}
+              {currentStep === 9 && (
+                <StepMagicLinks
                   onboardingCompleted={!!user?.onboardingCompleted}
                   onBack={handleBack}
                   onNavigate={setLocation}
@@ -1587,17 +1597,11 @@ interface PermissionState {
 }
 
 function StepRolePermissions({
-  onboardingCompleted,
+  onNext,
   onBack,
-  onNavigate,
-  onCompleteOnboarding,
-  isCompleting,
 }: {
-  onboardingCompleted: boolean;
+  onNext: () => void;
   onBack: () => void;
-  onNavigate: (path: string) => void;
-  onCompleteOnboarding: () => void;
-  isCompleting: boolean;
 }) {
   const { toast } = useToast();
   const [selectedRole, setSelectedRole] = useState<string>("processor");
@@ -1772,6 +1776,123 @@ function StepRolePermissions({
         </CardContent>
       </Card>
 
+      <div className="flex items-center justify-between gap-4">
+        <Button variant="outline" onClick={onBack} data-testid="button-back-step-8">
+          <ChevronLeft className="mr-2 h-4 w-4" />
+          Back
+        </Button>
+        <Button onClick={onNext} data-testid="button-next-step-8">
+          Next
+          <ChevronRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function StepMagicLinks({
+  onboardingCompleted,
+  onBack,
+  onNavigate,
+  onCompleteOnboarding,
+  isCompleting,
+}: {
+  onboardingCompleted: boolean;
+  onBack: () => void;
+  onNavigate: (path: string) => void;
+  onCompleteOnboarding: () => void;
+  isCompleting: boolean;
+}) {
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Link className="h-5 w-5" />
+            Magic Links
+          </CardTitle>
+          <CardDescription>
+            Magic links let you share a single URL that brokers or borrowers can use to instantly join your platform — no manual account creation needed.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-4">
+            <div className="flex items-start gap-4 p-4 bg-muted/50 rounded-lg border border-border">
+              <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Zap className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-sm mb-1">What are Magic Links?</h4>
+                <p className="text-sm text-muted-foreground">
+                  Magic links are unique, shareable URLs that you can send to brokers or borrowers. When someone clicks the link, they're taken directly to a signup page pre-configured for your platform — no invite codes or manual setup required.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4 p-4 bg-muted/50 rounded-lg border border-border">
+              <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <MousePointerClick className="h-5 w-5 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-sm mb-1">How to Use Them</h4>
+                <ul className="text-sm text-muted-foreground space-y-2 mt-1">
+                  <li className="flex items-start gap-2">
+                    <span className="font-medium text-foreground min-w-[20px]">1.</span>
+                    Go to <strong>Settings</strong> and find the <strong>Magic Links</strong> section.
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="font-medium text-foreground min-w-[20px]">2.</span>
+                    Enable the magic link for <strong>Brokers</strong>, <strong>Borrowers</strong>, or both.
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="font-medium text-foreground min-w-[20px]">3.</span>
+                    Copy the generated link and share it via email, text, or your website.
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="font-medium text-foreground min-w-[20px]">4.</span>
+                    Anyone who clicks the link can create an account and get started immediately.
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4 p-4 bg-muted/50 rounded-lg border border-border">
+              <div className="h-10 w-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Settings className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-sm mb-1">Where to Find Them</h4>
+                <p className="text-sm text-muted-foreground">
+                  You can manage your magic links anytime from the <strong>Settings</strong> page. Look for the <strong>Magic Links</strong> configuration card where you can enable/disable links, copy URLs, and regenerate links if needed.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => onNavigate('/admin/settings')}
+                  data-testid="button-go-to-magic-links-settings"
+                >
+                  <Settings className="mr-2 h-4 w-4" />
+                  Go to Settings
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+              <div className="h-10 w-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Eye className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-sm mb-1">Tip</h4>
+                <p className="text-sm text-muted-foreground">
+                  You can embed your magic link on your website's "Apply Now" or "Partner With Us" page to automatically funnel new brokers and borrowers into your platform.
+                </p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="bg-muted/50 border-muted">
         <CardContent className="p-6">
           <div className="flex items-center gap-4">
@@ -1789,13 +1910,13 @@ function StepRolePermissions({
       </Card>
 
       <div className="flex items-center justify-between gap-4">
-        <Button variant="outline" onClick={onBack} data-testid="button-back-step-8">
+        <Button variant="outline" onClick={onBack} data-testid="button-back-step-9">
           <ChevronLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
         <div className="flex items-center gap-3">
           {!onboardingCompleted && (
-            <Button variant="ghost" onClick={onCompleteOnboarding} disabled={isCompleting} className="text-muted-foreground" data-testid="button-skip-step-8">
+            <Button variant="ghost" onClick={onCompleteOnboarding} disabled={isCompleting} className="text-muted-foreground" data-testid="button-skip-step-9">
               Skip for now
             </Button>
           )}
