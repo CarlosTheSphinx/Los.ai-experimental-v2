@@ -241,7 +241,7 @@ export default function EmailInboxPage() {
               </p>
             </div>
             {isSuperAdmin && (
-              <Button onClick={() => window.location.href = '/api/email/connect'} data-testid="button-connect-email-inbox">
+              <Button onClick={() => window.location.href = '/api/google/connect?returnTo=' + encodeURIComponent('/admin/email')} data-testid="button-connect-email-inbox">
                 <Mail className="h-4 w-4 mr-2" />
                 Connect Gmail
               </Button>
