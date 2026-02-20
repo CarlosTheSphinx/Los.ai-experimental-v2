@@ -489,7 +489,7 @@ function BrokerPortalContent({ token }: { token: string }) {
                         {displayDeals.map((rd) => (
                           <SelectItem key={rd.portalToken} value={rd.portalToken} data-testid={`select-loan-${rd.id}`}>
                             <span className="truncate">
-                              DEAL-{rd.id} — {rd.propertyAddress || rd.dealName}
+                              {rd.loanNumber || `DEAL-${rd.id}`} — {rd.propertyAddress || rd.dealName}
                               {rd.loanAmount ? ` ($${rd.loanAmount.toLocaleString()})` : ""}
                             </span>
                           </SelectItem>

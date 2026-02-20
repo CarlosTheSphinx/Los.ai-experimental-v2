@@ -336,6 +336,7 @@ export const projects = pgTable("projects", {
   
   projectName: varchar("project_name", { length: 255 }).notNull(),
   projectNumber: varchar("project_number", { length: 50 }).unique(),
+  loanNumber: varchar("loan_number", { length: 10 }).unique(),
   
   loanAmount: real("loan_amount"),
   interestRate: real("interest_rate"),

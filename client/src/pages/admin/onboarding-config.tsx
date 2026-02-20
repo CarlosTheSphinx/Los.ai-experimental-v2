@@ -183,7 +183,7 @@ function TestPortalLinks({ portalType }: { portalType: "borrower" | "broker" }) 
                 ) : deals && deals.length > 0 ? (
                   deals.map((deal: any) => (
                     <SelectItem key={deal.id} value={String(deal.id)}>
-                      DEAL-{deal.id} — {deal.propertyAddress || deal.borrowerName || 'Untitled'}
+                      {deal.loanNumber || `DEAL-${deal.id}`} — {deal.propertyAddress || deal.borrowerName || 'Untitled'}
                     </SelectItem>
                   ))
                 ) : (

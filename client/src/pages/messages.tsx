@@ -1492,7 +1492,7 @@ export default function MessagesPage() {
               <SelectContent>
                 {(dealsListData?.quotes || []).map((deal: any) => (
                   <SelectItem key={deal.projectId || deal.id} value={String(deal.projectId || deal.id)}>
-                    DEAL-{deal.projectId || deal.id} - {deal.borrowerName || deal.propertyAddress || "Unknown"}
+                    {deal.loanNumber || `DEAL-${deal.projectId || deal.id}`} - {deal.borrowerName || deal.propertyAddress || "Unknown"}
                   </SelectItem>
                 ))}
               </SelectContent>

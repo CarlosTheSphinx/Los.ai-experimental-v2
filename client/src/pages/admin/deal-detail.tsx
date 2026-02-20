@@ -1374,7 +1374,7 @@ export default function AdminDealDetail() {
         </Link>
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-sm text-muted-foreground font-mono">DEAL-{deal.id}</span>
+            <span className="text-sm text-muted-foreground font-mono">{deal.loanNumber || `DEAL-${deal.id}`}</span>
           </div>
           <h1 className="text-xl font-semibold" data-testid="text-deal-address">
             {deal.propertyAddress || 'No Address'}

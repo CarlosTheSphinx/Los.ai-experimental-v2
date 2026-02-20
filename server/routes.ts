@@ -3355,11 +3355,13 @@ export async function registerRoutes(
 
       const uploaderInfo = await db.select({ firstName: users.firstName, lastName: users.lastName }).from(users).where(eq(users.id, userId)).limit(1);
       const uploaderName = uploaderInfo[0] ? `${uploaderInfo[0].firstName || ''} ${uploaderInfo[0].lastName || ''}`.trim() || 'A borrower' : 'A borrower';
+      const projForLabel = await db.select({ loanNumber: projects.loanNumber }).from(projects).where(eq(projects.id, projectId)).limit(1);
+      const dealLabel = projForLabel[0]?.loanNumber || `DEAL-${projectId}`;
       notifyDealAdmins(
         projectId,
         'document_uploaded',
         'New Document Uploaded',
-        `${uploaderName} uploaded "${fileName || 'a document'}" to DEAL-${projectId}`,
+        `${uploaderName} uploaded "${fileName || 'a document'}" to ${dealLabel}`,
         userId
       ).catch(err => console.error('Notification error:', err));
 
@@ -3490,11 +3492,13 @@ export async function registerRoutes(
 
       const brokerInfo = await db.select({ firstName: users.firstName, lastName: users.lastName }).from(users).where(eq(users.id, userId)).limit(1);
       const brokerName = brokerInfo[0] ? `${brokerInfo[0].firstName || ''} ${brokerInfo[0].lastName || ''}`.trim() || 'A broker' : 'A broker';
+      const projForBrokerLabel = await db.select({ loanNumber: projects.loanNumber }).from(projects).where(eq(projects.id, projectId)).limit(1);
+      const brokerDealLabel = projForBrokerLabel[0]?.loanNumber || `DEAL-${projectId}`;
       notifyDealAdmins(
         projectId,
         'document_uploaded',
         'New Document Uploaded',
-        `${brokerName} uploaded "${updated?.documentName || fileName || 'a document'}" to DEAL-${projectId}`,
+        `${brokerName} uploaded "${updated?.documentName || fileName || 'a document'}" to ${brokerDealLabel}`,
         userId
       ).catch(err => console.error('Notification error:', err));
 
@@ -3927,13 +3931,15 @@ export async function registerRoutes(
         const senderName = senderInfo[0] ? `${senderInfo[0].firstName || ''} ${senderInfo[0].lastName || ''}`.trim() || 'Someone' : 'Someone';
         const preview = body.length > 80 ? body.substring(0, 80) + '...' : body;
         const dealId = thread[0].dealId;
+        const msgProj = await db.select({ loanNumber: projects.loanNumber }).from(projects).where(eq(projects.id, dealId)).limit(1);
+        const msgDealLabel = msgProj[0]?.loanNumber || `DEAL-${dealId}`;
 
         if (senderRole === 'user') {
           notifyDealAdmins(
             dealId,
             'new_message',
             'New Message Received',
-            `${senderName} sent a message on DEAL-${dealId}: "${preview}"`,
+            `${senderName} sent a message on ${msgDealLabel}: "${preview}"`,
             userId
           ).catch(err => console.error('Message notification error:', err));
         } else {
@@ -3942,7 +3948,7 @@ export async function registerRoutes(
               userId: thread[0].userId,
               type: 'new_message',
               title: 'New Message From Your Lender',
-              message: `You have a new message on DEAL-${dealId}: "${preview}"`,
+              message: `You have a new message on ${msgDealLabel}: "${preview}"`,
               dealId,
               link: `/messages`,
             }).catch(err => console.error('Message notification error:', err));
@@ -7063,7 +7069,7 @@ export async function registerRoutes(
                         <div class="header"><h1>Document Rejected</h1></div>
                         <div class="content">
                           <p>Hello ${borrowerName},</p>
-                          <p>The following document for your loan (DEAL-${dealId}) has been reviewed and needs to be resubmitted:</p>
+                          <p>The following document for your loan (${project.loanNumber || `DEAL-${dealId}`}) has been reviewed and needs to be resubmitted:</p>
                           <p><strong>${updated.documentName}</strong></p>
                           ${reviewNotes ? `<div class="reason"><strong>Reason:</strong> ${reviewNotes}</div>` : ''}
                           <p>Please upload a corrected version through your borrower portal at your earliest convenience.</p>
@@ -7498,7 +7504,7 @@ export async function registerRoutes(
                           <div class="header"><h1>Document Rejected</h1></div>
                           <div class="content">
                             <p>Hello ${borrowerName},</p>
-                            <p>The following document for your loan (DEAL-${review.projectId}) has been reviewed and needs to be resubmitted:</p>
+                            <p>The following document for your loan (${project.loanNumber || `DEAL-${review.projectId}`}) has been reviewed and needs to be resubmitted:</p>
                             <p><strong>${doc.documentName}</strong></p>
                             <div class="reason"><strong>Reason:</strong> ${reason}</div>
                             <p>Please upload a corrected version through your borrower portal at your earliest convenience.</p>
@@ -8048,11 +8054,13 @@ export async function registerRoutes(
         if (!isNaN(assigneeId) && assigneeId !== req.user!.id && assigneeId !== existingTask?.assignedTo) {
           const assignerName = req.user!.fullName || req.user!.email || 'Someone';
           const taskLabel = updated.taskName || 'a task';
+          const taskProj = await db.select({ loanNumber: projects.loanNumber }).from(projects).where(eq(projects.id, dealId)).limit(1);
+          const taskDealLabel = taskProj[0]?.loanNumber || `DEAL-${dealId}`;
           await createNotification({
             userId: assigneeId,
             type: 'task_assigned',
             title: 'Task Assigned',
-            message: `${assignerName} assigned you "${taskLabel}" on DEAL-${dealId}`,
+            message: `${assignerName} assigned you "${taskLabel}" on ${taskDealLabel}`,
             dealId,
             link: `/admin/deals/${dealId}`,
           });
@@ -15886,7 +15894,7 @@ Return JSON only:
         success: true,
         message: 'Application submitted successfully',
         applicationId: newProject.id,
-        dealIdentifier: `DEAL-${newProject.id}`,
+        dealIdentifier: newProject.loanNumber || `DEAL-${newProject.id}`,
       });
     } catch (error) {
       console.error('Public apply error:', error);
@@ -16516,13 +16524,15 @@ Return JSON only:
 
       if (parsedMentions.length > 0) {
         const snippet = content.length > 80 ? content.substring(0, 80) + '...' : content;
+        const mentionProj = await db.select({ loanNumber: projects.loanNumber }).from(projects).where(eq(projects.id, dealId)).limit(1);
+        const mentionDealLabel = mentionProj[0]?.loanNumber || `DEAL-${dealId}`;
         for (const mention of parsedMentions) {
           if (mention.userId && mention.userId !== req.user!.id) {
             await createNotification({
               userId: mention.userId,
               type: 'mention_in_note',
               title: 'Mentioned in Note',
-              message: `${userName} mentioned you in a note on DEAL-${dealId}: "${snippet}"`,
+              message: `${userName} mentioned you in a note on ${mentionDealLabel}: "${snippet}"`,
               dealId,
               link: `/admin/deals/${dealId}`,
             });
@@ -16947,12 +16957,12 @@ Return JSON only:
         await client.emails.send({
           from: fromEmail || `${companyName} <info@lendry.ai>`,
           to: email,
-          subject: `[TEST] ${portalLabel} Preview - DEAL-${dealId}`,
+          subject: `[TEST] ${portalLabel} Preview - ${project.loanNumber || `DEAL-${dealId}`}`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
               <h2 style="color: #1e40af;">Test ${portalLabel} Link</h2>
               <p>This is a test email from ${companyName} to preview the ${portalLabel.toLowerCase()} experience.</p>
-              <p><strong>Deal:</strong> DEAL-${dealId}</p>
+              <p><strong>Deal:</strong> ${project.loanNumber || `DEAL-${dealId}`}</p>
               <p><strong>Property:</strong> ${project.propertyAddress || 'N/A'}</p>
               <div style="margin: 24px 0;">
                 <a href="${portalUrl}" style="background-color: #1e40af; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">

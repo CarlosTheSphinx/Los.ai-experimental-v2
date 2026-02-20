@@ -432,7 +432,7 @@ export default function Projects() {
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs text-muted-foreground font-mono" data-testid={`text-deal-number-${project.id}`}>
-                          DEAL-{project.id}
+                          {project.loanNumber || `DEAL-${project.id}`}
                         </span>
                         {getStatusBadge(project.status)}
                       </div>
@@ -534,7 +534,7 @@ export default function Projects() {
                     <TableCell>
                       <Link href={`/deals/${project.id}`}>
                         <span className="font-mono text-sm text-primary hover:underline" data-testid={`link-deal-row-${project.id}`}>
-                          DEAL-{project.id}
+                          {project.loanNumber || `DEAL-${project.id}`}
                         </span>
                       </Link>
                     </TableCell>

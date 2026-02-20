@@ -78,7 +78,7 @@ interface DealLink {
   dealId: number;
   linkedBy: number | null;
   linkedAt: string;
-  deal: { id: number; borrowerName: string | null; propertyAddress: string | null };
+  deal: { id: number; borrowerName: string | null; propertyAddress: string | null; loanNumber: string | null };
 }
 
 export default function EmailInboxPage() {
@@ -392,7 +392,7 @@ export default function EmailInboxPage() {
                       {threadDetail.dealLinks.map((link) => (
                         <Badge key={link.dealId} variant="default" className="gap-1">
                           <Link2 className="h-3 w-3" />
-                          DEAL-{link.dealId}
+                          {link.deal.loanNumber || `DEAL-${link.dealId}`}
                           {link.deal.borrowerName && <span>({link.deal.borrowerName})</span>}
                           <button
                             onClick={() => unlinkMutation.mutate({ threadId: activeThreadId, dealId: link.dealId })}
@@ -524,7 +524,7 @@ export default function EmailInboxPage() {
                     data-testid={`suggested-deal-${deal.id}`}
                   >
                     <div>
-                      <p className="text-sm font-medium">DEAL-{deal.id}</p>
+                      <p className="text-sm font-medium">{deal.loanNumber || `DEAL-${deal.id}`}</p>
                       <p className="text-xs text-muted-foreground">
                         {deal.borrowerName} - {deal.propertyAddress}
                       </p>
@@ -559,7 +559,7 @@ export default function EmailInboxPage() {
               <SelectContent>
                 {dealsData?.quotes?.map((deal: any) => (
                   <SelectItem key={deal.projectId || deal.id} value={String(deal.projectId || deal.id)}>
-                    DEAL-{deal.projectId || deal.id} - {deal.borrowerName || "Unknown Borrower"}
+                    {deal.loanNumber || `DEAL-${deal.projectId || deal.id}`} - {deal.borrowerName || "Unknown Borrower"}
                   </SelectItem>
                 ))}
               </SelectContent>

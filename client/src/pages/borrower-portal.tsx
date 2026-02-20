@@ -322,7 +322,7 @@ export default function BorrowerPortal() {
           <div className="px-4 md:px-6 py-3 md:py-4">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <div className="text-xs md:text-sm text-muted-foreground font-mono truncate">DEAL-{project.id}</div>
+                <div className="text-xs md:text-sm text-muted-foreground font-mono truncate">{project.loanNumber || `DEAL-${project.id}`}</div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h1 className="text-lg md:text-xl font-semibold truncate">{project.projectName}</h1>
                   {project.programName && (
@@ -507,7 +507,7 @@ export default function BorrowerPortal() {
                           {displayDeals.map((rd) => (
                             <SelectItem key={rd.portalToken} value={rd.portalToken} data-testid={`select-loan-${rd.id}`}>
                               <span className="truncate">
-                                DEAL-{rd.id} — {rd.propertyAddress || rd.dealName}
+                                {rd.loanNumber || `DEAL-${rd.id}`} — {rd.propertyAddress || rd.dealName}
                                 {rd.loanAmount ? ` ($${rd.loanAmount.toLocaleString()})` : ""}
                               </span>
                             </SelectItem>

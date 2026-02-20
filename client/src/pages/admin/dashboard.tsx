@@ -62,6 +62,7 @@ interface TaskBoardItem {
   borrowerName: string;
   propertyAddress: string;
   projectNumber: string;
+  loanNumber: string | null;
 }
 
 interface TaskBoardResponse {
@@ -528,7 +529,7 @@ function TaskRow({ task, onComplete, onEdit, priorityColor, isCompleting, showDe
   isCompleting: boolean;
   showDealContext?: boolean;
 }) {
-  const dealId = `DEAL-${task.projectId}`;
+  const dealId = task.loanNumber || `DEAL-${task.projectId}`;
   return (
     <div 
       className={cn(

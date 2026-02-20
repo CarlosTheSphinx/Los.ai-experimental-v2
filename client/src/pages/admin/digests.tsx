@@ -897,7 +897,7 @@ export default function AdminDigests() {
                           )}
                         </div>
                         <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
-                          <span>Deal: {comm.projectName || `DEAL-${comm.projectId}`}</span>
+                          <span>Deal: {comm.projectName || (comm as any).loanNumber || `DEAL-${comm.projectId}`}</span>
                           <span>To: {comm.recipientType || 'borrower'}</span>
                           {comm.approvedAt && (
                             <span>Approved {format(new Date(comm.approvedAt), "MMM d, h:mm a")}</span>

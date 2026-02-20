@@ -54,10 +54,11 @@ export function registerMessagingRoutes(app: Express, deps: RouteDeps) {
           const deal = await db.select({
             projectName: projects.projectName,
             propertyAddress: projects.propertyAddress,
+            loanNumber: projects.loanNumber,
           }).from(projects).where(eq(projects.id, thread.dealId)).limit(1);
           if (deal[0]) {
             dealName = deal[0].projectName;
-            dealIdentifier = `DEAL-${thread.dealId}`;
+            dealIdentifier = deal[0].loanNumber || `DEAL-${thread.dealId}`;
             propertyAddress = deal[0].propertyAddress;
           }
         }

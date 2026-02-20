@@ -285,6 +285,7 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
           id: projects.id,
           borrowerName: projects.borrowerName,
           propertyAddress: projects.propertyAddress,
+          loanNumber: projects.loanNumber,
         }).from(projects).where(eq(projects.id, link.dealId));
         if (deal) {
           dealInfos.push({ ...link, deal });
@@ -566,6 +567,7 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
         borrowerName: projects.borrowerName,
         propertyAddress: projects.propertyAddress,
         status: projects.status,
+        loanNumber: projects.loanNumber,
       }).from(projects)
         .where(sql`${projects.userId} = ANY(${userIds})`)
         .orderBy(desc(projects.createdAt))

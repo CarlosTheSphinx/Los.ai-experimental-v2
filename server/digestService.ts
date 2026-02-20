@@ -395,7 +395,7 @@ function applyTemplateVariables(template: string, content: DigestContent, portal
   const currentStage = content.project.currentStage
     ? content.project.currentStage.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
     : 'N/A';
-  const dealId = `DEAL-${content.project.id}`;
+  const dealId = content.project.loanNumber || `DEAL-${content.project.id}`;
   const targetCloseDate = content.project.targetCloseDate
     ? new Date(content.project.targetCloseDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
     : 'TBD';
