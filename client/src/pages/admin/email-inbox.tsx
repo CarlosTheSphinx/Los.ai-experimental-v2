@@ -20,7 +20,6 @@ import {
   Download,
   Inbox,
   Filter,
-  Settings,
 } from "lucide-react";
 import {
   Dialog,
@@ -108,6 +107,10 @@ export default function EmailInboxPage() {
     }
     if (error === 'email_auth_failed') {
       toast({ title: "Authentication Failed", description: "Gmail authentication failed. Please try again.", variant: "destructive" });
+      window.history.replaceState({}, '', '/admin/email');
+    }
+    if (error === 'email_not_configured') {
+      toast({ title: "Gmail Not Configured", description: "Google OAuth credentials are not set up. Please configure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET first.", variant: "destructive" });
       window.history.replaceState({}, '', '/admin/email');
     }
   }, []);
@@ -219,6 +222,8 @@ export default function EmailInboxPage() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const isSuperAdmin = user?.role === 'super_admin';
+
   if (!accountData?.account) {
     return (
       <div className="flex items-center justify-center h-full p-8">
@@ -230,13 +235,17 @@ export default function EmailInboxPage() {
             <div>
               <h3 className="font-semibold text-lg">Connect Your Email</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                Set up your Gmail integration in Settings to sync emails and link them to deals
+                {isSuperAdmin
+                  ? "Connect your Gmail account to sync emails and link them to deals"
+                  : "Email integration has not been set up yet. Please contact your administrator to enable Gmail sync."}
               </p>
             </div>
-            <Button onClick={() => window.location.href = '/admin/settings?tab=integrations'} data-testid="button-connect-email-inbox">
-              <Settings className="h-4 w-4 mr-2" />
-              Go to Settings
-            </Button>
+            {isSuperAdmin && (
+              <Button onClick={() => window.location.href = '/api/email/connect'} data-testid="button-connect-email-inbox">
+                <Mail className="h-4 w-4 mr-2" />
+                Connect Gmail
+              </Button>
+            )}
           </CardContent>
         </Card>
       </div>

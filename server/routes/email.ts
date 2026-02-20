@@ -35,9 +35,31 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
     }
   });
 
+  // GET /api/email/connect/check - Pre-check if Gmail OAuth is properly configured
+  app.get('/api/email/connect/check', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const clientId = process.env.GOOGLE_CLIENT_ID;
+      const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+      if (!clientId || !clientSecret) {
+        return res.json({ ready: false, reason: 'Google OAuth credentials (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET) are not configured.' });
+      }
+      res.json({ ready: true });
+    } catch (error: any) {
+      res.json({ ready: false, reason: error.message });
+    }
+  });
+
   // GET /api/email/connect - Initiate Gmail OAuth flow for email
   app.get('/api/email/connect', authenticateUser, async (req: AuthRequest, res: Response) => {
     try {
+      const clientId = process.env.GOOGLE_CLIENT_ID;
+      const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+      if (!clientId || !clientSecret) {
+        const returnTo = (req.query.returnTo as string) || '/admin/email';
+        const separator = returnTo.includes('?') ? '&' : '?';
+        return res.redirect(`${returnTo}${separator}error=email_not_configured`);
+      }
+
       const returnTo = (req.query.returnTo as string) || '/admin/email';
       const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
       const host = req.headers['x-forwarded-host'] || req.headers['host'] || '';

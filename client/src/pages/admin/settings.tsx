@@ -354,7 +354,24 @@ export default function AdminSettings() {
   const { user } = useAuth();
   const [editedSettings, setEditedSettings] = useState<Record<string, string>>({});
   const isSuperAdmin = user?.role === 'super_admin';
-  const [activeTab, setActiveTab] = useState("general");
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const requestedTab = urlParams.get('tab') || 'general';
+  const initialTab = (requestedTab === 'integrations' && !isSuperAdmin) ? 'general' : requestedTab;
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get('error');
+    if (error === 'google_not_configured') {
+      toast({ title: "Google Not Configured", description: "Google OAuth credentials (Client ID and Secret) need to be set up before connecting.", variant: "destructive" });
+      window.history.replaceState({}, '', '/admin/settings?tab=integrations');
+    }
+    if (error === 'google_connect_failed') {
+      toast({ title: "Connection Failed", description: "Could not connect to Google. Please try again.", variant: "destructive" });
+      window.history.replaceState({}, '', '/admin/settings?tab=integrations');
+    }
+  }, []);
 
   const { data, isLoading } = useQuery<{ settings: SystemSetting[] }>({
     queryKey: ["/api/admin/settings"],
@@ -587,7 +604,7 @@ export default function AdminSettings() {
 
       <div className="flex gap-6">
         <nav className="w-52 shrink-0 space-y-1 sticky top-4 self-start" data-testid="nav-settings-tabs">
-          {CONFIG_TABS.map(tab => (
+          {CONFIG_TABS.filter(tab => tab.id !== 'integrations' || isSuperAdmin).map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -803,7 +820,7 @@ export default function AdminSettings() {
 
           {activeTab === "notifications" && <NotificationsConfig />}
 
-          {activeTab === "integrations" && (
+          {activeTab === "integrations" && isSuperAdmin && (
             <>
               <Card>
                 <CardHeader>
