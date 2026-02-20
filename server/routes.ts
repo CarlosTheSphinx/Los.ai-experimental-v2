@@ -3620,7 +3620,10 @@ export async function registerRoutes(
 
       const docs = await db.select()
         .from(dealDocuments)
-        .where(eq(dealDocuments.dealId, dealId));
+        .where(and(
+          eq(dealDocuments.dealId, dealId),
+          eq(dealDocuments.status, 'approved')
+        ));
 
       let synced = 0;
       let skipped = 0;

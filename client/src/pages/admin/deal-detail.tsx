@@ -2498,7 +2498,7 @@ export default function AdminDealDetail() {
                     data-testid="button-sync-all-drive"
                   >
                     {driveSyncing ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <CloudUpload className="h-5 w-5 mr-2" />}
-                    {driveSyncing ? 'SYNCING...' : 'SYNC ALL TO DRIVE'}
+                    {driveSyncing ? 'Syncing...' : 'Sync all Approved Documents to Drive'}
                   </Button>
                   <Button
                     onClick={(e) => { e.stopPropagation(); triggerPipeline.mutate(); }}
@@ -2774,6 +2774,9 @@ export default function AdminDealDetail() {
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-1.5 flex-shrink-0">
+                                  {doc.status === 'approved' && (doc.filePath || doc.files?.length > 0) && (
+                                    <CheckCircle2 className="h-5 w-5 text-success" data-testid={`doc-approved-check-${doc.id}`} />
+                                  )}
                                   {getDocumentStatusBadge(doc.status)}
                                   {uploadingDocId === doc.id && (
                                     <div className="flex items-center gap-1">
@@ -2981,6 +2984,9 @@ export default function AdminDealDetail() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
+                        {doc.status === 'approved' && (doc.filePath || doc.files?.length > 0) && (
+                          <CheckCircle2 className="h-5 w-5 text-success" data-testid={`doc-approved-check-${doc.id}`} />
+                        )}
                         {getDocumentStatusBadge(doc.status)}
                       </div>
                     </div>
