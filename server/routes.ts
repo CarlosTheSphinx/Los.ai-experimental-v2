@@ -3591,6 +3591,78 @@ export async function registerRoutes(
     }
   });
 
+  // Sync all deal documents to Google Drive
+  app.post('/api/admin/deals/:dealId/sync-all-drive', authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      if (isNaN(dealId)) {
+        return res.status(400).json({ error: 'Invalid deal ID' });
+      }
+
+      const { isDriveIntegrationEnabled, ensureProjectFolder, ensureDealFolder, syncDealDocumentToDrive } = await import('./services/googleDrive');
+      const driveEnabled = await isDriveIntegrationEnabled();
+      if (!driveEnabled) {
+        return res.status(400).json({ error: 'Google Drive integration is not configured.' });
+      }
+
+      const [project] = await db.select().from(projects).where(eq(projects.id, dealId)).limit(1);
+      if (project) {
+        await ensureProjectFolder(dealId);
+      } else {
+        await ensureDealFolder(dealId);
+      }
+
+      const docs = await db.select()
+        .from(dealDocuments)
+        .where(eq(dealDocuments.dealId, dealId));
+
+      let synced = 0;
+      let skipped = 0;
+      let errors = 0;
+
+      for (const doc of docs) {
+        if (doc.filePath && !doc.googleDriveFileId) {
+          try {
+            await syncDealDocumentToDrive(doc.id);
+            synced++;
+          } catch (err: any) {
+            console.error(`[Drive Sync All] Error syncing doc ${doc.id}:`, err.message);
+            errors++;
+          }
+        } else if (doc.filePath && doc.googleDriveFileId) {
+          skipped++;
+        }
+      }
+
+      if (docs.length > 0) {
+        const docIds = docs.map(d => d.id);
+        const files = await db.select()
+          .from(dealDocumentFiles)
+          .where(inArray(dealDocumentFiles.documentId, docIds));
+
+        for (const file of files) {
+          if (file.filePath && !file.googleDriveFileId) {
+            try {
+              await syncDealDocumentToDrive(file.documentId, file.id);
+              synced++;
+            } catch (err: any) {
+              console.error(`[Drive Sync All] Error syncing file ${file.id}:`, err.message);
+              errors++;
+            }
+          } else if (file.filePath && file.googleDriveFileId) {
+            skipped++;
+          }
+        }
+      }
+
+      console.log(`[Drive Sync All] Deal ${dealId}: synced=${synced}, skipped=${skipped}, errors=${errors}`);
+      res.json({ success: true, synced, skipped, errors });
+    } catch (error: any) {
+      console.error(`[Drive Sync All] Failed for deal ${req.params.dealId}:`, error.message);
+      res.status(500).json({ error: error.message || 'Failed to sync documents to Drive' });
+    }
+  });
+
   // Get Drive integration status
   app.get('/api/admin/drive/status', authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
     try {

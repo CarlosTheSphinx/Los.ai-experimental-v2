@@ -896,6 +896,25 @@ export default function AdminDealDetail() {
 
   const [pushingDocId, setPushingDocId] = useState<number | null>(null);
 
+  const [driveSyncing, setDriveSyncing] = useState(false);
+  const syncAllDriveMutation = useMutation({
+    mutationFn: async () => {
+      setDriveSyncing(true);
+      return apiRequest('POST', `/api/admin/deals/${dealId}/sync-all-drive`);
+    },
+    onSuccess: async (response) => {
+      const result = await response.json();
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/projects', linkedProjectId] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
+      toast({ title: "Drive sync complete", description: `${result.synced} synced, ${result.skipped} already synced${result.errors ? `, ${result.errors} errors` : ''}` });
+      setDriveSyncing(false);
+    },
+    onError: (error: any) => {
+      toast({ title: "Drive sync failed", description: error.message || "Could not sync documents to Google Drive", variant: "destructive" });
+      setDriveSyncing(false);
+    },
+  });
+
   const pushToDriveMutation = useMutation({
     mutationFn: async ({ docId }: { docId: number }) => {
       setPushingDocId(docId);
@@ -2190,15 +2209,27 @@ export default function AdminDealDetail() {
                 </SelectContent>
               </Select>
               {linkedProjectId && (
-                <Button
-                  onClick={(e) => { e.stopPropagation(); triggerPipeline.mutate(); }}
-                  disabled={pipelineRunning}
-                  className="bg-success hover:bg-success/90 text-white text-base px-6 py-3 h-auto font-semibold"
-                  data-testid="button-trigger-pipeline"
-                >
-                  {pipelineRunning ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <Zap className="h-5 w-5 mr-2" />}
-                  {pipelineRunning ? 'PROCESSING...' : 'AUTOMATIC PROCESSING'}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={(e) => { e.stopPropagation(); syncAllDriveMutation.mutate(); }}
+                    disabled={driveSyncing}
+                    variant="outline"
+                    className="text-base px-5 py-3 h-auto font-semibold"
+                    data-testid="button-sync-all-drive"
+                  >
+                    {driveSyncing ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <CloudUpload className="h-5 w-5 mr-2" />}
+                    {driveSyncing ? 'SYNCING...' : 'SYNC ALL TO DRIVE'}
+                  </Button>
+                  <Button
+                    onClick={(e) => { e.stopPropagation(); triggerPipeline.mutate(); }}
+                    disabled={pipelineRunning}
+                    className="bg-success hover:bg-success/90 text-white text-base px-6 py-3 h-auto font-semibold"
+                    data-testid="button-trigger-pipeline"
+                  >
+                    {pipelineRunning ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <Zap className="h-5 w-5 mr-2" />}
+                    {pipelineRunning ? 'PROCESSING...' : 'AUTOMATIC PROCESSING'}
+                  </Button>
+                </div>
               )}
             </div>
           )}
