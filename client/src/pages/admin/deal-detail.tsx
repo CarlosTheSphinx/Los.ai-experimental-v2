@@ -1407,33 +1407,6 @@ export default function AdminDealDetail() {
           </h1>
           <p className="text-sm text-muted-foreground" data-testid="text-borrower-name">{borrowerName}</p>
         </div>
-        <div className="flex gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" data-testid="button-more-actions">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={openEditDialog}>
-                <Pencil className="h-4 w-4 mr-2" />
-                Edit Loan Details
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleContactBorrower}>
-                <Mail className="h-4 w-4 mr-2" />
-                Contact Borrower
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <ExternalLink className="h-4 w-4 mr-2" />
-                View Borrower Portal
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setSyncDialogOpen(true)} data-testid="button-sync-pipeline">
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Sync Pipeline from Program
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
       </div>
 
       {/* Enhanced Progress Bar */}
