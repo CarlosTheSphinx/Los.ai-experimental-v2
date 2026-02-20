@@ -58,7 +58,7 @@ export default function OnboardingConfigPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Broker/Borrower Links</h1>
           <p className="text-muted-foreground mt-1">
-            Configure the onboarding flow (Welcome, Video, Agreement, Tour, Start) shown to brokers and borrowers when they first open their portal.
+            Configure the onboarding flow (Welcome, Account, Agreement, Tour, Start) shown to brokers and borrowers when they first open their portal.
           </p>
         </div>
         <div className="flex items-center gap-2">

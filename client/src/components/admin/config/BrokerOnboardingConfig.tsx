@@ -14,10 +14,9 @@ import {
   ChevronLeft,
   GripVertical,
   Eye,
-  Play,
   FileText,
   Shield,
-  Video,
+  UserPlus,
   CheckCircle2,
   Rocket,
   BarChart3,
@@ -36,7 +35,6 @@ interface StepContent {
   title: string;
   subtitle?: string;
   description?: string;
-  // Video-specific
   url?: string;
   skipEnabled?: boolean;
   // Agreement-specific
@@ -90,12 +88,10 @@ export const BROKER_CONFIG_DEFAULTS: BrokerOnboardingConfigType = {
       },
     },
     {
-      id: 2, name: "video", label: "Video", enabled: true, order: 2,
+      id: 2, name: "account", label: "Account", enabled: true, order: 2,
       content: {
-        title: "Platform Overview",
-        description: "Watch a quick walkthrough of the platform features.",
-        url: "",
-        skipEnabled: true,
+        title: "Create Your Account",
+        description: "Sign in or create an account to save your progress and receive updates.",
       },
     },
     {
@@ -137,7 +133,7 @@ function getIcon(iconName: string) {
 // ---- Step name icons ----
 const STEP_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   welcome: CheckCircle2,
-  video: Video,
+  account: UserPlus,
   agreement: Shield,
   tour: BookOpen,
   start: Rocket,
@@ -319,26 +315,13 @@ export function BrokerOnboardingConfig({ config, updateConfig, updateField }: Pr
                         )}
                       </div>
 
-                      {/* Video-specific */}
-                      {step.name === "video" && (
+                      {/* Account-specific */}
+                      {step.name === "account" && (
                         <div className="space-y-2">
                           <Separator />
-                          <div>
-                            <Label className="text-xs">Video URL</Label>
-                            <Input
-                              value={step.content.url || ""}
-                              onChange={(e) => updateStepContent(step.id, { url: e.target.value })}
-                              placeholder="https://youtube.com/embed/..."
-                              className="h-8 text-sm"
-                            />
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Switch
-                              checked={step.content.skipEnabled ?? true}
-                              onCheckedChange={(checked) => updateStepContent(step.id, { skipEnabled: checked })}
-                            />
-                            <Label className="text-xs">Allow users to skip video</Label>
-                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            This step shows a sign-in / registration form with Google sign-in option. Users must create an account or log in before proceeding.
+                          </p>
                         </div>
                       )}
 
@@ -511,28 +494,32 @@ export function BrokerOnboardingConfig({ config, updateConfig, updateField }: Pr
                   </div>
                 )}
 
-                {/* Video preview */}
-                {currentPreviewStep.name === "video" && (
+                {/* Account preview */}
+                {currentPreviewStep.name === "account" && (
                   <div className="text-center space-y-4 py-4">
                     <h2 className="text-xl font-bold">{currentPreviewStep.content.title}</h2>
                     {currentPreviewStep.content.description && (
                       <p className="text-sm text-muted-foreground">{currentPreviewStep.content.description}</p>
                     )}
-                    <div className="bg-muted rounded-lg aspect-video flex items-center justify-center max-w-lg mx-auto">
-                      {currentPreviewStep.content.url ? (
-                        <div className="text-xs text-muted-foreground">
-                          Video: {currentPreviewStep.content.url}
+                    <div className="max-w-sm mx-auto space-y-3">
+                      <Button variant="outline" className="w-full" disabled>
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        Continue with Google
+                      </Button>
+                      <div className="relative">
+                        <Separator />
+                        <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">or</span>
+                      </div>
+                      <div className="space-y-2 text-left">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="h-8 bg-muted rounded border text-xs flex items-center px-2 text-muted-foreground">First Name</div>
+                          <div className="h-8 bg-muted rounded border text-xs flex items-center px-2 text-muted-foreground">Last Name</div>
                         </div>
-                      ) : (
-                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                          <Play className="h-12 w-12" />
-                          <span className="text-sm">No video URL configured</span>
-                        </div>
-                      )}
+                        <div className="h-8 bg-muted rounded border text-xs flex items-center px-2 text-muted-foreground">Email</div>
+                        <div className="h-8 bg-muted rounded border text-xs flex items-center px-2 text-muted-foreground">Password</div>
+                      </div>
+                      <Button className="w-full" disabled>Create Account</Button>
                     </div>
-                    {currentPreviewStep.content.skipEnabled && (
-                      <Button variant="ghost" size="sm" disabled>Skip Video</Button>
-                    )}
                   </div>
                 )}
 
