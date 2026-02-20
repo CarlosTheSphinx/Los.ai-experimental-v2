@@ -2470,6 +2470,16 @@ export default function AdminDealDetail() {
                                       <span className="text-xs text-muted-foreground">{uploadProgress}%</span>
                                     </div>
                                   )}
+                                  {doc.filePath && (!doc.files || doc.files.length === 0) && (
+                                    <>
+                                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); handleViewDocument(doc.id); }} data-testid={`button-view-doc-${doc.id}`} title="View">
+                                        <Eye className="h-3.5 w-3.5" />
+                                      </Button>
+                                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); handleDownloadDocument(doc.id, doc.fileName); }} data-testid={`button-download-doc-${doc.id}`} title="Download">
+                                        <Download className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </>
+                                  )}
                                   {doc.filePath && (
                                     <>
                                       {doc.googleDriveFileUrl ? (
