@@ -1008,8 +1008,30 @@ export default function AdminDealDetail() {
     },
   });
 
+  const convertProgramMutation = useMutation({
+    mutationFn: async (programId: number) => {
+      return apiRequest('POST', `/api/admin/projects/${linkedProjectId}/convert-program`, { programId });
+    },
+    onSuccess: async (response) => {
+      const result = await response.json();
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/projects', linkedProjectId] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
+      toast({
+        title: "Loan program changed",
+        description: `Converted to ${result.programName}. ${result.documentsPreserved} uploaded documents preserved. ${result.stagesCreated} stages, ${result.tasksCreated} tasks created.`,
+      });
+      setConvertProgramDialogOpen(false);
+      setPendingProgramId(null);
+    },
+    onError: () => {
+      toast({ title: "Failed to change loan program", variant: "destructive" });
+    },
+  });
+
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [selectedProgramId, setSelectedProgramId] = useState<string>("");
+  const [convertProgramDialogOpen, setConvertProgramDialogOpen] = useState(false);
+  const [pendingProgramId, setPendingProgramId] = useState<string | null>(null);
   const [editTargetCloseDateOpen, setEditTargetCloseDateOpen] = useState(false);
   const [targetCloseDateValue, setTargetCloseDateValue] = useState<string>("");
 
@@ -1639,9 +1661,26 @@ export default function AdminDealDetail() {
 
               <div className="flex items-center justify-between gap-4 mt-3 pt-3 border-t">
                 <span className="text-sm font-medium text-muted-foreground">Loan Program</span>
-                <span className="text-sm font-medium" data-testid="text-loan-program">
-                  {deal.programName || <span className="text-muted-foreground italic">None</span>}
-                </span>
+                <Select
+                  value={deal.programId ? String(deal.programId) : ""}
+                  onValueChange={(val) => {
+                    if (val && val !== String(deal.programId)) {
+                      setPendingProgramId(val);
+                      setConvertProgramDialogOpen(true);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-[180px] h-8 text-sm" data-testid="select-loan-program">
+                    <SelectValue placeholder="Select program" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(loanProgramsData || []).map((prog: any) => (
+                      <SelectItem key={prog.id} value={String(prog.id)}>
+                        {prog.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </CardContent>
           </Card>
@@ -3066,6 +3105,54 @@ export default function AdminDealDetail() {
             >
               {rebuildPipelineMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Sync Pipeline
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={convertProgramDialogOpen} onOpenChange={(open) => {
+        setConvertProgramDialogOpen(open);
+        if (!open) setPendingProgramId(null);
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Loan Program</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to convert this deal to a different loan program? All required documents and tasks will be changed to match the new program. However, documents already collected <span className="font-semibold text-foreground">will transfer over</span>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {pendingProgramId && (
+              <div className="rounded-lg border p-3 bg-muted/50">
+                <div className="text-sm">
+                  <span className="text-muted-foreground">Changing from: </span>
+                  <span className="font-medium">{deal?.programName || 'None'}</span>
+                </div>
+                <div className="text-sm mt-1">
+                  <span className="text-muted-foreground">Changing to: </span>
+                  <span className="font-medium">
+                    {(loanProgramsData || []).find((p: any) => String(p.id) === pendingProgramId)?.name || 'Unknown'}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setConvertProgramDialogOpen(false); setPendingProgramId(null); }} data-testid="button-cancel-convert">
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (pendingProgramId) {
+                  convertProgramMutation.mutate(parseInt(pendingProgramId));
+                }
+              }}
+              disabled={convertProgramMutation.isPending}
+              data-testid="button-confirm-convert"
+            >
+              {convertProgramMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Yes, Change Program
             </Button>
           </DialogFooter>
         </DialogContent>

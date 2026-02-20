@@ -181,6 +181,85 @@ export async function rebuildProjectPipelineFromProgram(
   return buildProjectPipelineFromProgram(projectId, programId, projectId, tx);
 }
 
+export async function convertDealToProgram(
+  projectId: number,
+  newProgramId: number,
+): Promise<PipelineResult & { documentsPreserved: number }> {
+  return await db.transaction(async (tx) => {
+    const existingDocs = await tx.select()
+      .from(dealDocuments)
+      .where(eq(dealDocuments.dealId, projectId));
+
+    const uploadedDocs = existingDocs.filter(d => d.filePath);
+    const emptyDocs = existingDocs.filter(d => !d.filePath);
+
+    for (const doc of emptyDocs) {
+      await tx.delete(dealDocuments).where(eq(dealDocuments.id, doc.id));
+    }
+
+    await tx.delete(projectTasks).where(eq(projectTasks.projectId, projectId));
+    await tx.delete(projectStages).where(eq(projectStages.projectId, projectId));
+
+    const result = await buildProjectPipelineFromProgram(projectId, newProgramId, undefined, tx);
+
+    if (uploadedDocs.length > 0) {
+      const newStages = await tx.select()
+        .from(projectStages)
+        .where(eq(projectStages.projectId, projectId))
+        .orderBy(asc(projectStages.stageOrder));
+
+      const stage1Id = newStages.length > 0 ? newStages[0].id : null;
+
+      for (const doc of uploadedDocs) {
+        const matchingNewDocs = await tx.select()
+          .from(dealDocuments)
+          .where(and(
+            eq(dealDocuments.dealId, projectId),
+            eq(dealDocuments.documentName, doc.documentName)
+          ));
+
+        if (matchingNewDocs.length > 0) {
+          const templateDoc = matchingNewDocs[0];
+          await tx.update(dealDocuments)
+            .set({
+              filePath: doc.filePath,
+              fileSize: doc.fileSize,
+              mimeType: doc.mimeType,
+              fileName: doc.fileName,
+              status: doc.status,
+              uploadedAt: doc.uploadedAt,
+              uploadedBy: doc.uploadedBy,
+              reviewedAt: doc.reviewedAt,
+              reviewedBy: doc.reviewedBy,
+              reviewNotes: doc.reviewNotes,
+              driveFileId: doc.driveFileId,
+              documentCategory: templateDoc.documentCategory,
+              documentDescription: templateDoc.documentDescription,
+              assignedTo: templateDoc.assignedTo,
+              visibility: templateDoc.visibility,
+              isRequired: templateDoc.isRequired,
+            })
+            .where(eq(dealDocuments.id, templateDoc.id));
+
+          await tx.delete(dealDocuments).where(eq(dealDocuments.id, doc.id));
+        } else {
+          await tx.update(dealDocuments)
+            .set({
+              programDocumentTemplateId: null,
+              stageId: stage1Id,
+            })
+            .where(eq(dealDocuments.id, doc.id));
+        }
+      }
+    }
+
+    return {
+      ...result,
+      documentsPreserved: uploadedDocs.length,
+    };
+  });
+}
+
 async function buildProjectPipelineFromLegacyTemplate(
   projectId: number,
   tx?: NodePgDatabase<typeof schemaTypes>

@@ -5228,6 +5228,54 @@ export async function registerRoutes(
     }
   });
 
+  // Admin - Convert deal to a different loan program (preserves uploaded documents)
+  app.post('/api/admin/projects/:id/convert-program', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const projectId = parseInt(req.params.id);
+      const { programId } = req.body;
+      if (!programId) {
+        return res.status(400).json({ error: 'programId is required' });
+      }
+
+      const newProgramId = parseInt(programId);
+      const project = await storage.getProjectByIdInternal(projectId);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+
+      if (project.programId === newProgramId) {
+        return res.status(400).json({ error: 'Deal is already assigned to this program' });
+      }
+
+      await db.update(projects)
+        .set({ programId: newProgramId })
+        .where(eq(projects.id, projectId));
+
+      const { convertDealToProgram } = await import('./services/projectPipeline');
+      const result = await convertDealToProgram(projectId, newProgramId);
+
+      await storage.createProjectActivity({
+        projectId,
+        userId: req.user!.id,
+        activityType: 'program_converted',
+        activityDescription: `Loan program changed to "${result.programName || 'Unknown'}". ${result.documentsPreserved} uploaded documents preserved. ${result.stagesCreated} stages, ${result.tasksCreated} tasks, ${result.documentsCreated} document requirements created.`,
+        visibleToBorrower: false,
+      });
+
+      res.json({
+        success: true,
+        stagesCreated: result.stagesCreated,
+        tasksCreated: result.tasksCreated,
+        documentsCreated: result.documentsCreated,
+        documentsPreserved: result.documentsPreserved,
+        programName: result.programName,
+      });
+    } catch (error) {
+      console.error('Convert program error:', error);
+      res.status(500).json({ error: 'Failed to convert loan program' });
+    }
+  });
+
   // Admin - Create admin task for project
   app.post('/api/admin/projects/:id/tasks', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
