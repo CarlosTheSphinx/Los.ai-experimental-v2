@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from 'express';
 import type { RouteDeps } from './types';
-import { eq, asc, and } from 'drizzle-orm';
-import { dealDocuments, dealDocumentFiles, projectStages, loanPrograms, projectActivity, platformSettings, systemSettings } from '@shared/schema';
+import { eq, asc, and, ne, isNotNull } from 'drizzle-orm';
+import { dealDocuments, dealDocumentFiles, projectStages, loanPrograms, projectActivity, platformSettings, systemSettings, projects } from '@shared/schema';
 import multer from 'multer';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -478,6 +478,133 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
     } catch (error) {
       console.error('Broker portal error:', error);
       res.status(500).json({ error: 'Failed to load broker portal' });
+    }
+  });
+
+  // ==================== BORROWER RELATED DEALS ====================
+
+  app.get('/api/portal/:token/related-deals', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const project = await storage.getProjectByToken(token);
+      if (!project) return res.status(404).json({ error: 'Deal not found' });
+
+      let relatedDeals: any[] = [];
+      if (project.borrowerEmail) {
+        const allDeals = await db.select({
+          id: projects.id,
+          projectName: projects.projectName,
+          propertyAddress: projects.propertyAddress,
+          loanAmount: projects.loanAmount,
+          loanType: projects.loanType,
+          status: projects.status,
+          currentStage: projects.currentStage,
+          borrowerPortalToken: projects.borrowerPortalToken,
+          borrowerPortalEnabled: projects.borrowerPortalEnabled,
+          programId: projects.programId,
+        }).from(projects)
+          .where(and(
+            eq(projects.borrowerEmail, project.borrowerEmail),
+            isNotNull(projects.borrowerPortalToken),
+            eq(projects.borrowerPortalEnabled, true),
+          ))
+          .orderBy(asc(projects.id));
+
+        const dealsWithPrograms = await Promise.all(allDeals.map(async (deal) => {
+          let programName: string | null = null;
+          if (deal.programId) {
+            const [program] = await db.select({ name: loanPrograms.name }).from(loanPrograms).where(eq(loanPrograms.id, deal.programId));
+            if (program) programName = program.name;
+          }
+          return {
+            id: deal.id,
+            dealName: deal.projectName,
+            propertyAddress: deal.propertyAddress,
+            loanAmount: deal.loanAmount,
+            loanType: deal.loanType,
+            status: deal.status,
+            currentStage: deal.currentStage,
+            portalToken: deal.borrowerPortalToken,
+            programName,
+            isCurrent: deal.borrowerPortalToken === token,
+          };
+        }));
+        relatedDeals = dealsWithPrograms;
+      } else {
+        relatedDeals = [{
+          id: project.id,
+          dealName: project.projectName,
+          propertyAddress: project.propertyAddress,
+          loanAmount: project.loanAmount,
+          loanType: project.loanType,
+          status: project.status,
+          currentStage: project.currentStage,
+          portalToken: token,
+          programName: null,
+          isCurrent: true,
+        }];
+      }
+
+      res.json({ deals: relatedDeals });
+    } catch (error) {
+      console.error('Related deals error:', error);
+      res.status(500).json({ error: 'Failed to load related deals' });
+    }
+  });
+
+  // ==================== BROKER RELATED DEALS ====================
+
+  app.get('/api/broker-portal/:token/related-deals', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const project = await storage.getProjectByBrokerToken(token);
+      if (!project) return res.status(404).json({ error: 'Deal not found' });
+      if (!project.brokerPortalEnabled) return res.status(403).json({ error: 'Portal disabled' });
+
+      const allDeals = await db.select({
+        id: projects.id,
+        projectName: projects.projectName,
+        propertyAddress: projects.propertyAddress,
+        loanAmount: projects.loanAmount,
+        loanType: projects.loanType,
+        status: projects.status,
+        currentStage: projects.currentStage,
+        brokerPortalToken: projects.brokerPortalToken,
+        brokerPortalEnabled: projects.brokerPortalEnabled,
+        programId: projects.programId,
+        userId: projects.userId,
+      }).from(projects)
+        .where(and(
+          eq(projects.userId, project.userId!),
+          isNotNull(projects.brokerPortalToken),
+          eq(projects.brokerPortalEnabled, true),
+        ))
+        .orderBy(asc(projects.id));
+
+      const dealsWithPrograms = await Promise.all(allDeals.map(async (deal) => {
+        let programName: string | null = null;
+        if (deal.programId) {
+          const [program] = await db.select({ name: loanPrograms.name }).from(loanPrograms).where(eq(loanPrograms.id, deal.programId));
+          if (program) programName = program.name;
+        }
+        return {
+          id: deal.id,
+          dealName: deal.projectName,
+          propertyAddress: deal.propertyAddress,
+          loanAmount: deal.loanAmount,
+          loanType: deal.loanType,
+          status: deal.status,
+          currentStage: deal.currentStage,
+          portalToken: deal.brokerPortalToken,
+          programName,
+          isCurrent: deal.brokerPortalToken === token,
+        };
+      }));
+
+      res.json({ deals: dealsWithPrograms });
+    } catch (error) {
+      console.error('Broker related deals error:', error);
+      res.status(500).json({ error: 'Failed to load related deals' });
     }
   });
 

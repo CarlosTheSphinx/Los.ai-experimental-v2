@@ -1,10 +1,11 @@
 import { useState, useRef } from "react";
-import { useRoute } from "wouter";
+import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DollarSign,
   Building2,
@@ -20,6 +21,7 @@ import {
   Upload,
   Inbox as InboxIcon,
   MessageSquare,
+  ChevronDown,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -72,9 +74,23 @@ interface BrokerPortalData {
   onboardingConfig?: any;
 }
 
+interface RelatedDeal {
+  id: number;
+  dealName: string;
+  propertyAddress: string | null;
+  loanAmount: number | null;
+  loanType: string | null;
+  status: string;
+  currentStage: string;
+  portalToken: string;
+  programName: string | null;
+  isCurrent: boolean;
+}
+
 export default function BrokerPortal() {
   const [, params] = useRoute("/broker-portal/:token");
   const token = params?.token;
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
@@ -97,6 +113,30 @@ export default function BrokerPortal() {
     enabled: !!token,
     retry: false,
   });
+
+  const { data: relatedDealsData } = useQuery<{ deals: RelatedDeal[] }>({
+    queryKey: ["broker-portal", token, "related-deals"],
+    queryFn: async () => {
+      if (!token) throw new Error("Token is required");
+      const response = await fetch(`/api/broker-portal/${token}/related-deals`, { credentials: "include" });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    },
+    enabled: !!token && !showOnboarding,
+    retry: false,
+  });
+
+  const relatedDeals = relatedDealsData?.deals || [];
+  const displayDeals = relatedDeals.length > 0
+    ? relatedDeals
+    : data ? [{ id: data.deal.id, dealName: data.deal.dealName, propertyAddress: data.deal.propertyAddress, loanAmount: data.deal.loanAmount, loanType: data.deal.loanType, status: data.deal.status, currentStage: data.deal.currentStage, portalToken: token!, programName: data.deal.programName, isCurrent: true }]
+    : [];
+
+  const handleDealSwitch = (portalToken: string) => {
+    if (portalToken !== token) {
+      setLocation(`/broker-portal/${portalToken}`);
+    }
+  };
 
   const uploadMutation = useMutation({
     mutationFn: async ({ docId, file }: { docId: number; file: File }) => {
@@ -413,8 +453,36 @@ export default function BrokerPortal() {
         {activeView === "loans" && (
           <>
             <div className="mb-6">
-              <h1 className="text-2xl font-bold text-gray-900">Documents</h1>
-              <p className="text-sm text-muted-foreground">Upload and track required documents</p>
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">Documents</h1>
+                  <p className="text-sm text-muted-foreground">Upload and track required documents</p>
+                </div>
+                {displayDeals.length > 0 && (
+                  <div className="w-full sm:w-auto sm:min-w-[280px]">
+                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Select Loan</label>
+                    <Select
+                      value={token}
+                      onValueChange={handleDealSwitch}
+                      data-testid="select-loan-broker"
+                    >
+                      <SelectTrigger className="w-full" data-testid="select-trigger-loan-broker">
+                        <SelectValue placeholder="Select a loan" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {displayDeals.map((rd) => (
+                          <SelectItem key={rd.portalToken} value={rd.portalToken} data-testid={`select-loan-${rd.id}`}>
+                            <span className="truncate">
+                              DEAL-{rd.id} — {rd.propertyAddress || rd.dealName}
+                              {rd.loanAmount ? ` ($${rd.loanAmount.toLocaleString()})` : ""}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
             </div>
 
             {documents.length === 0 ? (
