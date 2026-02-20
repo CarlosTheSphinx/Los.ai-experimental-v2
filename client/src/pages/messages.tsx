@@ -31,6 +31,8 @@ import {
   RefreshCw,
   X,
   Loader2,
+  Search,
+  Reply,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useBranding } from "@/hooks/use-branding";
@@ -106,6 +108,10 @@ export default function MessagesPage() {
   const [isMergeTagPopoverOpen, setIsMergeTagPopoverOpen] = useState(false);
   const [isLinkDealDialogOpen, setIsLinkDealDialogOpen] = useState(false);
   const [linkDealSelectedId, setLinkDealSelectedId] = useState("");
+  const [inboxSearchQuery, setInboxSearchQuery] = useState("");
+  const [emailSearchQuery, setEmailSearchQuery] = useState("");
+  const [emailReplyText, setEmailReplyText] = useState("");
+  const [showReplyCompose, setShowReplyCompose] = useState(false);
   const messageInputRef = useRef<HTMLInputElement>(null);
   
   const isAdmin = user?.role && ['admin', 'staff', 'super_admin'].includes(user.role);
@@ -277,6 +283,23 @@ export default function MessagesPage() {
     },
   });
 
+  const replyEmailMutation = useMutation({
+    mutationFn: ({ threadId, body }: { threadId: number; body: string }) =>
+      apiRequest("POST", `/api/email/threads/${threadId}/reply`, { body }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/email/threads", "all"] });
+      if (activeEmailThreadId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/email/threads", activeEmailThreadId, "detail"] });
+      }
+      setEmailReplyText("");
+      setShowReplyCompose(false);
+      toast({ title: "Reply Sent", description: "Your email reply has been sent" });
+    },
+    onError: () => {
+      toast({ title: "Failed to send reply", variant: "destructive" });
+    },
+  });
+
   // Handle URL params for opening new thread with pre-selected deal
   // Wait for quotes data to be loaded before opening dialog
   useEffect(() => {
@@ -289,6 +312,27 @@ export default function MessagesPage() {
   }, [urlDealId, openNew, setLocation, quotesData]);
 
   const threads = threadsData?.threads || [];
+  const filteredThreads = inboxSearchQuery.trim()
+    ? threads.filter((t: any) => {
+        const q = inboxSearchQuery.toLowerCase();
+        return (t.subject?.toLowerCase().includes(q)) ||
+          (t.userName?.toLowerCase().includes(q)) ||
+          (t.dealName?.toLowerCase().includes(q)) ||
+          (t.propertyAddress?.toLowerCase().includes(q)) ||
+          (t.lastMessagePreview?.toLowerCase().includes(q));
+      })
+    : threads;
+
+  const filteredEmailThreads = emailSearchQuery.trim()
+    ? emailThreads.filter((t: any) => {
+        const q = emailSearchQuery.toLowerCase();
+        return (t.subject?.toLowerCase().includes(q)) ||
+          (t.fromName?.toLowerCase().includes(q)) ||
+          (t.fromAddress?.toLowerCase().includes(q)) ||
+          (t.snippet?.toLowerCase().includes(q));
+      })
+    : emailThreads;
+
   const activeThread = activeThreadData?.thread;
   const messages = activeThreadData?.messages || [];
 
@@ -508,23 +552,35 @@ export default function MessagesPage() {
           <ScrollArea className="flex-1">
             {inboxTab === 'email' && isAdmin ? (
               <>
-                <div className="px-3 py-2 flex items-center justify-between border-b">
-                  <span className="text-xs text-muted-foreground">{emailThreads.length} thread{emailThreads.length !== 1 ? 's' : ''}</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs gap-1"
-                    onClick={() => syncEmailMutation.mutate()}
-                    disabled={syncEmailMutation.isPending}
-                    data-testid="button-sync-email-inbox-tab"
-                  >
-                    <RefreshCw className={`h-3 w-3 ${syncEmailMutation.isPending ? 'animate-spin' : ''}`} />
-                    {syncEmailMutation.isPending ? 'Syncing...' : 'Sync'}
-                  </Button>
+                <div className="px-3 py-2 space-y-2 border-b">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder="Search emails..."
+                      value={emailSearchQuery}
+                      onChange={(e) => setEmailSearchQuery(e.target.value)}
+                      className="h-8 pl-8 text-xs"
+                      data-testid="input-email-search"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">{filteredEmailThreads.length} thread{filteredEmailThreads.length !== 1 ? 's' : ''}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => syncEmailMutation.mutate()}
+                      disabled={syncEmailMutation.isPending}
+                      data-testid="button-sync-email-inbox-tab"
+                    >
+                      <RefreshCw className={`h-3 w-3 ${syncEmailMutation.isPending ? 'animate-spin' : ''}`} />
+                      {syncEmailMutation.isPending ? 'Syncing...' : 'Sync'}
+                    </Button>
+                  </div>
                 </div>
                 {emailThreadsLoading ? (
                 <div className="p-4 text-center text-muted-foreground">Loading emails...</div>
-              ) : emailThreads.length === 0 ? (
+              ) : filteredEmailThreads.length === 0 ? (
                 <div className="p-4 text-center text-muted-foreground">
                   <Mail className="h-12 w-12 mx-auto mb-2 opacity-50" />
                   <p>No email threads found</p>
@@ -532,7 +588,7 @@ export default function MessagesPage() {
                 </div>
               ) : (
                 <div className="p-2">
-                  {emailThreads.map((thread: any) => (
+                  {filteredEmailThreads.map((thread: any) => (
                     <button
                       key={thread.id}
                       className={`group w-full text-left p-3 rounded-lg mb-1 transition-colors cursor-pointer hover-elevate ${
@@ -540,7 +596,7 @@ export default function MessagesPage() {
                           ? "bg-primary/10 border border-primary/20"
                           : ""
                       }`}
-                      onClick={() => setActiveEmailThreadId(thread.id)}
+                      onClick={() => { setActiveEmailThreadId(thread.id); setShowReplyCompose(false); setEmailReplyText(""); }}
                       data-testid={`email-thread-msg-${thread.id}`}
                     >
                       <div className="flex items-start justify-between gap-2 mb-1">
@@ -590,16 +646,30 @@ export default function MessagesPage() {
             </>
             ) : threadsLoading ? (
               <div className="p-4 text-center text-muted-foreground">Loading...</div>
-            ) : threads.length === 0 ? (
-              <div className="p-4 text-center text-muted-foreground">
-                <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p>No conversations yet</p>
-                {isAdmin && <p className="text-xs mt-1">Start a new conversation above</p>}
-              </div>
             ) : (
+              <>
+                <div className="px-3 py-2 border-b">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder="Search conversations..."
+                      value={inboxSearchQuery}
+                      onChange={(e) => setInboxSearchQuery(e.target.value)}
+                      className="h-8 pl-8 text-xs"
+                      data-testid="input-inbox-search"
+                    />
+                  </div>
+                </div>
+                {filteredThreads.length === 0 ? (
+                  <div className="p-4 text-center text-muted-foreground">
+                    <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>{inboxSearchQuery ? 'No matching conversations' : 'No conversations yet'}</p>
+                    {isAdmin && !inboxSearchQuery && <p className="text-xs mt-1">Start a new conversation above</p>}
+                  </div>
+                ) : (
               <div className="p-2">
-                {threads.map((thread) => {
-                  const t = thread as any;
+                {filteredThreads.map((thread: any) => {
+                  const t = thread;
                   return (
                     <div
                       key={thread.id}
@@ -689,6 +759,8 @@ export default function MessagesPage() {
                   );
                 })}
               </div>
+                )}
+              </>
             )}
           </ScrollArea>
         </Card>
@@ -798,6 +870,57 @@ export default function MessagesPage() {
                   ))}
                 </div>
               </ScrollArea>
+              <Separator />
+              <div className="p-3">
+                {showReplyCompose ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Reply to thread: {emailThreadDetail.thread.subject || 'Email'}
+                      </p>
+                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => { setShowReplyCompose(false); setEmailReplyText(""); }}>
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    <Textarea
+                      placeholder="Write your reply..."
+                      value={emailReplyText}
+                      onChange={(e) => setEmailReplyText(e.target.value)}
+                      rows={3}
+                      className="text-sm"
+                      data-testid="textarea-email-reply"
+                    />
+                    <div className="flex justify-end">
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          if (!activeEmailThreadId || !emailReplyText.trim()) return;
+                          replyEmailMutation.mutate({
+                            threadId: activeEmailThreadId,
+                            body: emailReplyText.replace(/\n/g, '<br/>'),
+                          });
+                        }}
+                        disabled={!emailReplyText.trim() || replyEmailMutation.isPending}
+                        data-testid="button-send-email-reply"
+                      >
+                        {replyEmailMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
+                        Send Reply
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setShowReplyCompose(true)}
+                    data-testid="button-reply-email"
+                  >
+                    <Reply className="h-4 w-4 mr-1" />
+                    Reply
+                  </Button>
+                )}
+              </div>
             </>
           ) : activeThread ? (
             <>

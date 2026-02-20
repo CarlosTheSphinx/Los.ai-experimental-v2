@@ -3,7 +3,7 @@ import type { AuthRequest } from '../auth';
 import type { RouteDeps } from './types';
 import { eq, desc, and, sql, ilike, or, inArray } from 'drizzle-orm';
 import { emailAccounts, emailThreads, emailMessages, emailThreadDealLinks, projects, users } from '@shared/schema';
-import { getGmailAuthUrl, exchangeGmailCode, syncEmails, getAttachment, checkLinkedThreadsForNewEmails } from '../services/gmail';
+import { getGmailAuthUrl, exchangeGmailCode, syncEmails, getAttachment, checkLinkedThreadsForNewEmails, sendReply } from '../services/gmail';
 import { encryptToken } from '../utils/encryption';
 
 export function registerEmailRoutes(app: Express, deps: RouteDeps) {
@@ -295,6 +295,74 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
     } catch (error: any) {
       console.error('Error getting email thread:', error);
       res.status(500).json({ error: 'Failed to get email thread' });
+    }
+  });
+
+  // POST /api/email/threads/:id/reply - Reply to an email thread
+  app.post('/api/email/threads/:id/reply', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const threadId = parseInt(req.params.id);
+      const { body: replyBody } = req.body;
+
+      if (!replyBody) {
+        return res.status(400).json({ error: 'body is required' });
+      }
+
+      const [thread] = await db.select().from(emailThreads).where(eq(emailThreads.id, threadId));
+      if (!thread) return res.status(404).json({ error: 'Thread not found' });
+
+      const [account] = await db.select().from(emailAccounts)
+        .where(and(
+          eq(emailAccounts.id, thread.accountId),
+          eq(emailAccounts.userId, req.user!.id)
+        ));
+      if (!account) return res.status(403).json({ error: 'Access denied' });
+
+      const messages = await db.select().from(emailMessages)
+        .where(eq(emailMessages.threadId, threadId))
+        .orderBy(desc(emailMessages.internalDate));
+
+      const lastMessage = messages[0];
+      const myEmail = account.emailAddress.toLowerCase();
+
+      let replyTo = '';
+      if (lastMessage?.fromAddress && lastMessage.fromAddress.toLowerCase() !== myEmail) {
+        replyTo = lastMessage.fromAddress;
+      } else {
+        const allParticipants = new Set<string>();
+        for (const msg of messages) {
+          if (msg.fromAddress) allParticipants.add(msg.fromAddress.toLowerCase());
+          if (msg.toAddresses && Array.isArray(msg.toAddresses)) {
+            (msg.toAddresses as string[]).forEach(a => allParticipants.add(a.toLowerCase()));
+          }
+        }
+        allParticipants.delete(myEmail);
+        replyTo = Array.from(allParticipants)[0] || thread.fromAddress || '';
+      }
+
+      if (!replyTo) {
+        return res.status(400).json({ error: 'Could not determine reply recipient' });
+      }
+
+      const inReplyTo = lastMessage?.gmailMessageId || undefined;
+      const subject = thread.subject?.startsWith('Re:') ? thread.subject : `Re: ${thread.subject || ''}`;
+
+      const result = await sendReply(
+        account.id,
+        thread.gmailThreadId,
+        replyTo,
+        subject,
+        replyBody,
+        inReplyTo ? `<${inReplyTo}>` : undefined,
+        inReplyTo ? `<${inReplyTo}>` : undefined
+      );
+
+      await syncEmails(account.id, 10);
+
+      res.json({ success: true, messageId: result.messageId });
+    } catch (error: any) {
+      console.error('Error sending email reply:', error);
+      res.status(500).json({ error: 'Failed to send reply' });
     }
   });
 
