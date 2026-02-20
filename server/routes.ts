@@ -5961,6 +5961,7 @@ export async function registerRoutes(
           id: p.id,
           projectId: p.id,
           projectNumber: p.projectNumber,
+          loanNumber: p.loanNumber,
           userId: p.userId,
           customerFirstName: firstName,
           customerLastName: lastName,
@@ -5999,7 +6000,8 @@ export async function registerRoutes(
           d.customerLastName?.toLowerCase().includes(searchLower) ||
           d.propertyAddress?.toLowerCase().includes(searchLower) ||
           d.userName?.toLowerCase().includes(searchLower) ||
-          d.projectNumber?.toLowerCase().includes(searchLower)
+          d.projectNumber?.toLowerCase().includes(searchLower) ||
+          d.loanNumber?.toLowerCase().includes(searchLower)
         );
       }
       

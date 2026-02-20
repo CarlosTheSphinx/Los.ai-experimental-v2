@@ -1062,7 +1062,7 @@ export default function AdminDeals({ embedded = false }: { embedded?: boolean })
       <div className="flex flex-wrap gap-2">
         <Badge variant="outline" className="gap-1.5 cursor-pointer hover:bg-accent">
           <Filter className="h-3.5 w-3.5" />
-          All Deals
+          All Loans
         </Badge>
         <Badge variant="outline" className="gap-1.5 cursor-pointer hover:bg-accent">
           <Zap className="h-3.5 w-3.5" />
@@ -1077,7 +1077,7 @@ export default function AdminDeals({ embedded = false }: { embedded?: boolean })
       <div className="space-y-4">
         <div className="flex flex-row flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight">All Deals</h2>
+            <h2 className="text-3xl font-bold tracking-tight">All Loans</h2>
             <p className="text-muted-foreground text-sm">Quotes submitted by all users</p>
           </div>
           <div className="flex items-center gap-2">
