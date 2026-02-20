@@ -131,7 +131,7 @@ const superAdminNavItems: NavItem[] = [
   { href: "/admin/platform", label: "Platform Overview", icon: Globe },
   { href: "/admin/ai-agents", label: "AI Orchestration", icon: Sparkles },
   { href: "/admin/integrations", label: "Integrations", icon: Plug },
-  { href: "/admin/onboarding-config", label: "Onboarding Process", icon: GraduationCap },
+  { href: "/admin/onboarding-config", label: "Broker/Borrower Links", icon: GraduationCap },
 ];
 
 type ViewAsMode = "super_admin" | "lender" | "borrower";
