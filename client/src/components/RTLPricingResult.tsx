@@ -6,11 +6,27 @@ import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { type RTLPricingResponse, type RTLPricingFormData } from "@shared/schema";
-import { CheckCircle2, XCircle, AlertTriangle, RotateCcw, TrendingUp, Percent, DollarSign, Building, Calculator, Save, User, MapPin } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, RotateCcw, TrendingUp, Percent, DollarSign, Building, Calculator, Save, User, MapPin, Info } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+
+interface ProgramConfig {
+  yspEnabled?: boolean;
+  yspBrokerCanToggle?: boolean;
+  yspFixedAmount?: number;
+  yspMin?: number;
+  yspMax?: number;
+  yspStep?: number;
+  basePoints?: number;
+  basePointsMin?: number;
+  basePointsMax?: number;
+  brokerPointsEnabled?: boolean;
+  brokerPointsMax?: number;
+  brokerPointsStep?: number;
+}
 
 interface RTLPricingResultProps {
   result: RTLPricingResponse;
@@ -18,23 +34,88 @@ interface RTLPricingResultProps {
   onReset: () => void;
   onEdit: () => void;
   programId?: number | null;
+  programConfig?: ProgramConfig | null;
 }
 
-export function RTLPricingResult({ result, formData, onReset, onEdit, programId }: RTLPricingResultProps) {
+export function RTLPricingResult({ result, formData, onReset, onEdit, programId, programConfig }: RTLPricingResultProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [, setLocation] = useLocation();
-  const MIN_POINTS = 2.0;
-  const MAX_ADDITIONAL_POINTS = 3.0;
-  const [additionalPoints, setAdditionalPoints] = useState(0);
+
+  // Determine user role
+  const isLender = user?.role === 'admin' || user?.role === 'super_admin';
+
+  // Program config with defaults
+  const cfg = programConfig || {};
+  const programBasePoints = cfg.basePoints ?? 2;
+  const programBasePointsMin = cfg.basePointsMin ?? 1;
+  const programBasePointsMax = cfg.basePointsMax ?? 4;
+  const programBrokerPointsEnabled = cfg.brokerPointsEnabled ?? true;
+  const programBrokerPointsMax = cfg.brokerPointsMax ?? 3;
+  const programBrokerPointsStep = cfg.brokerPointsStep ?? 0.125;
+  const programYspEnabled = cfg.yspEnabled ?? false;
+  const programYspBrokerCanToggle = cfg.yspBrokerCanToggle ?? false;
+  const programYspFixedAmount = cfg.yspFixedAmount ?? 0;
+  const programYspMin = cfg.yspMin ?? 0;
+  const programYspMax = cfg.yspMax ?? 3;
+  const programYspStep = cfg.yspStep ?? 0.125;
+
+  // Points state — split into base and broker additional
+  const [basePointsValue, setBasePointsValue] = useState(programBasePoints);
+  const [brokerPointsValue, setBrokerPointsValue] = useState(0);
+
+  // YSP state
+  const [yspValue, setYspValue] = useState(
+    programYspEnabled && !programYspBrokerCanToggle ? programYspFixedAmount : 0
+  );
+
   const [showQuoteForm, setShowQuoteForm] = useState(false);
   const [customerFirstName, setCustomerFirstName] = useState("");
   const [customerLastName, setCustomerLastName] = useState("");
   const [customerCompanyName, setCustomerCompanyName] = useState("");
-  
+
+  // Computed values
+  const totalPoints = basePointsValue + brokerPointsValue;
+
+  // Calculate max loan amounts based on property values and leverage caps
+  const asIsValue = formData?.asIsValue || 0;
+  const arv = formData?.arv || 0;
+  const rehabBudget = formData?.rehabBudget || 0;
+  const totalCost = asIsValue + rehabBudget;
+
+  const maxLTC = result.caps?.maxLTC || 0;
+  const maxLTAIV = result.caps?.maxLTAIV || 0;
+  const maxLTARV = result.caps?.maxLTARV;
+  const isLTARVApplicable = maxLTARV !== null && maxLTARV !== undefined;
+
+  const maxLoanByLTC = (totalCost * maxLTC) / 100;
+  const calculatedLTAIV = asIsValue > 0
+    ? ((((rehabBudget + asIsValue) * (maxLTC / 100)) - rehabBudget) / asIsValue) * 100
+    : 0;
+  const effectiveLTAIV = Math.min(calculatedLTAIV, maxLTAIV);
+  const maxLoanByLTAIV = (asIsValue * effectiveLTAIV) / 100;
+  const maxLoanByLTARV = isLTARVApplicable ? (arv * maxLTARV) / 100 : Infinity;
+
+  const maxLoanAmount = isLTARVApplicable
+    ? Math.min(maxLoanByLTC, maxLoanByLTAIV, maxLoanByLTARV)
+    : Math.min(maxLoanByLTC, maxLoanByLTAIV);
+
+  // Points dollar amounts (based on max loan)
+  const basePointsAmount = (maxLoanByLTC * basePointsValue) / 100;
+  const brokerPointsAmount = (maxLoanByLTC * brokerPointsValue) / 100;
+  const totalPointsAmount = (maxLoanByLTC * totalPoints) / 100;
+
+  // YSP calculations
+  const yspDollarAmount = (maxLoanByLTC * yspValue) / 100;
+  const yspRateImpactEstimate = yspValue * 0.25;
+
+  // Broker commission = additional points + YSP
+  const brokerCommission = brokerPointsAmount + yspDollarAmount;
+
   const saveQuoteMutation = useMutation({
     mutationFn: async () => {
       const formattedRate = result.finalRate ? `${result.finalRate.toFixed(3)}%` : "N/A";
-      
+
       const response = await apiRequest('POST', '/api/quotes', {
         customerFirstName,
         customerLastName,
@@ -42,8 +123,13 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
         propertyAddress: formData?.propertyAddress || "",
         loanData: formData,
         interestRate: formattedRate,
-        pointsCharged: MIN_POINTS + additionalPoints,
-        programId: programId || null
+        pointsCharged: totalPoints,
+        programId: programId || null,
+        yspAmount: yspValue,
+        yspRateImpact: yspRateImpactEstimate,
+        yspDollarAmount,
+        basePointsCharged: basePointsValue,
+        brokerPointsCharged: brokerPointsValue,
       });
       return response.json();
     },
@@ -76,38 +162,7 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
     }
     saveQuoteMutation.mutate();
   };
-  
-  const totalPoints = MIN_POINTS + additionalPoints;
-  
-  // Calculate max loan amounts based on property values and leverage caps
-  const asIsValue = formData?.asIsValue || 0;
-  const arv = formData?.arv || 0;
-  const rehabBudget = formData?.rehabBudget || 0;
-  const totalCost = asIsValue + rehabBudget;
-  
-  const maxLTC = result.caps?.maxLTC || 0;
-  const maxLTAIV = result.caps?.maxLTAIV || 0;
-  const maxLTARV = result.caps?.maxLTARV; // Can be null, number, or undefined
-  const isLTARVApplicable = maxLTARV !== null && maxLTARV !== undefined;
-  
-  // Max loan based on each metric
-  const maxLoanByLTC = (totalCost * maxLTC) / 100;
-  // LTAIV formula: (((budget + as-is value) * LTC) - budget) / As is value
-  // This gives max loan = calculated LTAIV * asIsValue, capped by maxLTAIV
-  const calculatedLTAIV = asIsValue > 0 
-    ? ((((rehabBudget + asIsValue) * (maxLTC / 100)) - rehabBudget) / asIsValue) * 100
-    : 0;
-  const effectiveLTAIV = Math.min(calculatedLTAIV, maxLTAIV);
-  const maxLoanByLTAIV = (asIsValue * effectiveLTAIV) / 100;
-  const maxLoanByLTARV = isLTARVApplicable ? (arv * maxLTARV) / 100 : Infinity;
-  
-  // The actual max loan is the minimum of applicable constraints
-  const maxLoanAmount = isLTARVApplicable 
-    ? Math.min(maxLoanByLTC, maxLoanByLTAIV, maxLoanByLTARV)
-    : Math.min(maxLoanByLTC, maxLoanByLTAIV);
-  
-  // Commission is the additional points amount on maximum loan amount (maxLoanByLTC)
-  const additionalPointsAmount = (maxLoanByLTC * additionalPoints) / 100;
+
   if (!result.eligible) {
     return (
       <Card className="w-full bg-background/90 backdrop-blur-sm shadow-xl border-destructive/60 overflow-hidden">
@@ -191,15 +246,20 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
                 </span>
               )}
             </div>
+            {programYspEnabled && yspValue > 0 && (
+              <div className="mt-2 text-sm text-warning">
+                +{yspRateImpactEstimate.toFixed(3)}% YSP rate impact
+              </div>
+            )}
           </div>
 
           <div className="p-4 bg-muted rounded-lg border border-border">
             <div className="flex items-center gap-2 text-muted-foreground mb-2">
               <TrendingUp className="h-4 w-4" />
-              <span className="text-sm font-medium">Points</span>
+              <span className="text-sm font-medium">Total Points</span>
             </div>
             <span className="text-3xl font-bold text-foreground" data-testid="text-rtl-points">
-              {result.points?.toFixed(2)}
+              {totalPoints.toFixed(2)}
             </span>
           </div>
         </div>
@@ -233,79 +293,179 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
           </div>
         )}
 
-
+        {/* Points & Commission Section */}
         {formData && result.caps && maxLoanAmount > 0 && (
           <div className="mb-6 bg-muted rounded-lg p-5 border border-border">
             <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
               <DollarSign className="h-4 w-4" />
-              Commission Calculator
+              Points & Commission
             </h3>
-            
+
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label className="flex items-center gap-1 text-foreground">
-                  <Percent className="w-3 h-3" />
-                  Additional Points (on top of {MIN_POINTS} minimum)
-                </Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={MAX_ADDITIONAL_POINTS}
-                    step={0.125}
-                    value={additionalPoints}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value);
-                      if (!isNaN(val) && val >= 0 && val <= MAX_ADDITIONAL_POINTS) {
-                        setAdditionalPoints(val);
-                      }
-                    }}
-                    className="w-20 text-center text-lg font-bold border-border"
-                    data-testid="input-additional-points"
-                  />
-                  <span className="text-sm text-muted-foreground">points</span>
+              {/* Base Points */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="text-foreground font-medium">
+                    Base Lender Points
+                  </Label>
+                  <span className="text-lg font-bold text-foreground">{basePointsValue.toFixed(2)}</span>
                 </div>
+                {isLender ? (
+                  <>
+                    <div className="bg-background rounded-lg p-4 border border-border">
+                      <Slider
+                        value={[basePointsValue]}
+                        onValueChange={([val]) => setBasePointsValue(val)}
+                        min={programBasePointsMin}
+                        max={programBasePointsMax}
+                        step={programBrokerPointsStep}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                        <span>{programBasePointsMin}</span>
+                        <span>{programBasePointsMax}</span>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="bg-background rounded-lg p-3 border border-border text-sm text-muted-foreground">
+                    Fixed by lender — {programBasePoints.toFixed(2)} points
+                    <span className="ml-2 text-foreground font-medium">
+                      (${basePointsAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                    </span>
+                  </div>
+                )}
               </div>
-              
-              <div className="bg-background rounded-lg p-4 border border-border">
-                <Slider
-                  value={[additionalPoints]}
-                  onValueChange={([val]) => setAdditionalPoints(val)}
-                  max={MAX_ADDITIONAL_POINTS}
-                  step={0.125}
-                  className="w-full"
-                  data-testid="slider-additional-points"
-                />
-                <div className="flex justify-between text-xs text-muted-foreground mt-2">
-                  <span>+0</span>
-                  <span>+1</span>
-                  <span>+2</span>
-                  <span>+3</span>
+
+              {/* Broker Additional Points */}
+              {programBrokerPointsEnabled && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="flex items-center gap-1 text-foreground font-medium">
+                      <Percent className="w-3 h-3" />
+                      Additional Broker Points
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={programBrokerPointsMax}
+                        step={programBrokerPointsStep}
+                        value={brokerPointsValue}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          if (!isNaN(val) && val >= 0 && val <= programBrokerPointsMax) {
+                            setBrokerPointsValue(val);
+                          }
+                        }}
+                        className="w-20 text-center text-lg font-bold border-border"
+                        data-testid="input-additional-points"
+                      />
+                      <span className="text-sm text-muted-foreground">pts</span>
+                    </div>
+                  </div>
+                  <div className="bg-background rounded-lg p-4 border border-border">
+                    <Slider
+                      value={[brokerPointsValue]}
+                      onValueChange={([val]) => setBrokerPointsValue(val)}
+                      max={programBrokerPointsMax}
+                      step={programBrokerPointsStep}
+                      className="w-full"
+                      data-testid="slider-additional-points"
+                    />
+                    <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                      <span>+0</span>
+                      <span>+{(programBrokerPointsMax / 2).toFixed(1)}</span>
+                      <span>+{programBrokerPointsMax.toFixed(1)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Points Summary */}
+              <div className="bg-background rounded-lg p-4 border border-border space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Base Lender Points</span>
+                  <span className="font-medium">{basePointsValue.toFixed(2)} (${basePointsAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })})</span>
+                </div>
+                {programBrokerPointsEnabled && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Additional Broker Points</span>
+                    <span className="font-medium">+{brokerPointsValue.toFixed(2)} (${brokerPointsAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })})</span>
+                  </div>
+                )}
+                <div className="border-t pt-2 flex justify-between text-sm font-semibold">
+                  <span className="text-foreground">Total Points</span>
+                  <span className="text-primary">{totalPoints.toFixed(2)} (${totalPointsAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })})</span>
                 </div>
               </div>
 
-              <div className="bg-background rounded-lg p-4 border border-border space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Minimum Points Required</span>
-                  <span className="font-medium">{MIN_POINTS.toFixed(2)}</span>
+              {/* YSP Section — only if enabled for this program */}
+              {programYspEnabled && (
+                <div className="border-t pt-4 mt-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="flex items-center gap-1 text-foreground font-medium">
+                      <TrendingUp className="w-3 h-3" />
+                      YSP (Yield Spread Premium)
+                    </Label>
+                    <span className="text-lg font-bold text-foreground">{yspValue.toFixed(3)}%</span>
+                  </div>
+
+                  {/* Lender always gets full slider; Broker only if allowed */}
+                  {(isLender || programYspBrokerCanToggle) ? (
+                    <div className="bg-background rounded-lg p-4 border border-border">
+                      <Slider
+                        value={[yspValue]}
+                        onValueChange={([val]) => setYspValue(val)}
+                        min={programYspMin}
+                        max={programYspMax}
+                        step={programYspStep}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                        <span>{programYspMin}%</span>
+                        <span>{(programYspMax / 2).toFixed(1)}%</span>
+                        <span>{programYspMax}%</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-background rounded-lg p-3 border border-border text-sm text-muted-foreground">
+                      Fixed YSP: {programYspFixedAmount.toFixed(2)}% (set by lender)
+                    </div>
+                  )}
+
+                  {yspValue > 0 && (
+                    <div className="mt-3 p-3 bg-warning/10 rounded-lg border border-warning/20 space-y-1">
+                      <div className="flex items-center gap-1 text-warning text-sm font-medium">
+                        <Info className="w-3 h-3" />
+                        YSP Impact
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Estimated Rate Impact</span>
+                        <span className="font-medium text-warning">+{yspRateImpactEstimate.toFixed(3)}%</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">YSP Dollar Value</span>
+                        <span className="font-medium text-success">${yspDollarAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Additional Points</span>
-                  <span className="font-medium">+{additionalPoints.toFixed(2)}</span>
-                </div>
-                <div className="border-t pt-2 flex justify-between text-sm font-semibold">
-                  <span className="text-foreground">Total Points</span>
-                  <span className="text-primary">{totalPoints.toFixed(2)}</span>
-                </div>
-              </div>
-              
-              <div className="bg-success/10 rounded-lg p-4 border border-success/20">
+              )}
+
+              {/* Revenue Breakdown */}
+              <div className="bg-success/10 rounded-lg p-4 border border-success/20 space-y-2">
                 <div className="flex justify-between items-center">
-                  <span className="font-semibold text-success">Your Commission</span>
+                  <span className="font-semibold text-success">Broker Commission</span>
                   <span className="text-2xl font-bold text-success" data-testid="text-rtl-commission">
-                    ${additionalPointsAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ${brokerCommission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
+                {programYspEnabled && yspValue > 0 && (
+                  <div className="text-xs text-muted-foreground">
+                    Additional points: ${brokerPointsAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })} + YSP: ${yspDollarAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -377,7 +537,7 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
               <div className="flex justify-between items-center py-2 border-b border-border">
                 <span className="text-foreground">Total Points ({totalPoints.toFixed(2)}%)</span>
                 <span className="text-lg font-semibold text-foreground" data-testid="text-total-points-dollars">
-                  ${((maxLoanByLTC * totalPoints) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  ${totalPointsAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-border">
@@ -391,7 +551,7 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
               <div className="flex justify-between items-center py-3 bg-primary/5 rounded-lg px-3 -mx-3">
                 <span className="text-foreground font-semibold">Estimated Total Cash to Close</span>
                 <span className="text-2xl font-bold text-primary" data-testid="text-cash-to-close">
-                  ${(Math.max(0, asIsValue - maxLoanByLTAIV) + ((maxLoanByLTC * totalPoints) / 100) + ((maxLoanByLTC * 1.5) / 100)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  ${(Math.max(0, asIsValue - maxLoanByLTAIV) + totalPointsAmount + ((maxLoanByLTC * 1.5) / 100)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </span>
               </div>
             </div>
@@ -400,7 +560,7 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
 
         {!showQuoteForm ? (
           <>
-            <Button 
+            <Button
               onClick={() => setShowQuoteForm(true)}
               className="w-full mb-3 h-12 text-lg font-semibold bg-gradient-to-r from-success to-success/80 shadow-lg shadow-success/20"
               data-testid="button-save-rtl-quote"
@@ -408,7 +568,7 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
               <Save className="mr-2 h-5 w-5" />
               Save as Quote
             </Button>
-            <Button 
+            <Button
               onClick={onEdit}
               variant="secondary"
               className="w-full mb-3"
@@ -514,13 +674,13 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId 
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Total Points ({totalPoints.toFixed(2)}%):</span>
-                  <span className="font-bold text-foreground">${((maxLoanByLTC * totalPoints) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  <span className="font-bold text-foreground">${totalPointsAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                 </div>
               </div>
               <div className="border-t pt-3 mt-3">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Your Commission:</span>
-                  <span className="font-bold text-success">${additionalPointsAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span className="text-muted-foreground">Broker Commission:</span>
+                  <span className="font-bold text-success">${brokerCommission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               </div>
             </div>

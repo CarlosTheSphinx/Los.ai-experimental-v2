@@ -28,6 +28,20 @@ interface ProgramWithPricing {
   hasActiveRuleset: boolean;
   activeRulesetId?: number;
   activeRulesetVersion?: number;
+  // YSP Configuration
+  yspEnabled?: boolean;
+  yspBrokerCanToggle?: boolean;
+  yspFixedAmount?: number;
+  yspMin?: number;
+  yspMax?: number;
+  yspStep?: number;
+  // Points Configuration
+  basePoints?: number;
+  basePointsMin?: number;
+  basePointsMax?: number;
+  brokerPointsEnabled?: boolean;
+  brokerPointsMax?: number;
+  brokerPointsStep?: number;
 }
 
 interface EnginePricingResult {
@@ -590,12 +604,13 @@ export default function Home() {
                   visibleFields={allActivePrograms.find(p => p.id === selectedQuoteProgramId)?.quoteFormFields as any}
                 />
               ) : rtlResult ? (
-                <RTLPricingResult 
-                  result={rtlResult} 
+                <RTLPricingResult
+                  result={rtlResult}
                   formData={rtlFormData}
                   onReset={handleReset}
                   onEdit={handleRTLEdit}
                   programId={selectedQuoteProgramId}
+                  programConfig={allActivePrograms.find(p => p.id === selectedQuoteProgramId) || null}
                 />
               ) : (
                 <RTLLoanForm 
@@ -620,11 +635,12 @@ export default function Home() {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.3 }}
             >
-              <PricingResult 
-                result={result} 
-                formData={lastFormData} 
+              <PricingResult
+                result={result}
+                formData={lastFormData}
                 onReset={handleReset}
                 programId={selectedQuoteProgramId}
+                programConfig={allActivePrograms.find(p => p.id === selectedQuoteProgramId) || null}
               />
             </motion.div>
           )}

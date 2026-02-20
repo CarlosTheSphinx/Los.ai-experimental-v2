@@ -949,7 +949,13 @@ export async function registerRoutes(
         pointsAmount,
         tpoPremiumAmount,
         totalRevenue,
-        commission
+        commission,
+        // Persist YSP + split points
+        yspAmount: quoteData.yspAmount ?? 0,
+        yspRateImpact: quoteData.yspRateImpact ?? 0,
+        yspDollarAmount: quoteData.yspDollarAmount ?? 0,
+        basePointsCharged: quoteData.basePointsCharged ?? 0,
+        brokerPointsCharged: quoteData.brokerPointsCharged ?? 0,
       }, req.user!.id);
 
       // Auto-populate document checklist based on programId or loan type
@@ -8397,23 +8403,29 @@ export async function registerRoutes(
   // Create loan program
   app.post('/api/admin/programs', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
-      const { 
-        name, description, loanType, 
-        minLoanAmount, maxLoanAmount, 
-        minLtv, maxLtv, 
+      const {
+        name, description, loanType,
+        minLoanAmount, maxLoanAmount,
+        minLtv, maxLtv,
         minInterestRate, maxInterestRate,
         termOptions, eligiblePropertyTypes,
         isActive,
         documents,
         tasks,
         steps,
-        creditPolicyId
+        creditPolicyId,
+        // YSP configuration
+        yspEnabled, yspBrokerCanToggle, yspFixedAmount,
+        yspMin, yspMax, yspStep,
+        // Points configuration
+        basePoints, basePointsMin, basePointsMax,
+        brokerPointsEnabled, brokerPointsMax, brokerPointsStep,
       } = req.body;
-      
+
       if (!name || !loanType) {
         return res.status(400).json({ error: 'Name and loan type are required' });
       }
-      
+
       const result = await db.transaction(async (tx) => {
         const [program] = await tx.insert(loanPrograms).values({
           name,
@@ -8430,6 +8442,20 @@ export async function registerRoutes(
           isActive: isActive !== false,
           creditPolicyId: creditPolicyId ? parseInt(creditPolicyId) : null,
           createdBy: req.user!.id,
+          // YSP configuration
+          yspEnabled: yspEnabled === true,
+          yspBrokerCanToggle: yspBrokerCanToggle === true,
+          yspFixedAmount: yspFixedAmount != null ? parseFloat(yspFixedAmount) : 0,
+          yspMin: yspMin != null ? parseFloat(yspMin) : 0,
+          yspMax: yspMax != null ? parseFloat(yspMax) : 3,
+          yspStep: yspStep != null ? parseFloat(yspStep) : 0.125,
+          // Points configuration
+          basePoints: basePoints != null ? parseFloat(basePoints) : 1,
+          basePointsMin: basePointsMin != null ? parseFloat(basePointsMin) : 0.5,
+          basePointsMax: basePointsMax != null ? parseFloat(basePointsMax) : 3,
+          brokerPointsEnabled: brokerPointsEnabled !== false,
+          brokerPointsMax: brokerPointsMax != null ? parseFloat(brokerPointsMax) : 2,
+          brokerPointsStep: brokerPointsStep != null ? parseFloat(brokerPointsStep) : 0.125,
         }).returning();
 
         const stepIndexToId = new Map<number, number>();
@@ -8509,16 +8535,22 @@ export async function registerRoutes(
         return res.status(403).json({ error: 'Not authorized to modify this program' });
       }
       
-      const { 
-        name, description, loanType, 
-        minLoanAmount, maxLoanAmount, 
-        minLtv, maxLtv, 
+      const {
+        name, description, loanType,
+        minLoanAmount, maxLoanAmount,
+        minLtv, maxLtv,
         minInterestRate, maxInterestRate,
         termOptions, eligiblePropertyTypes,
         isActive, reviewGuidelines, creditPolicyId,
-        documents, tasks, steps
+        documents, tasks, steps,
+        // YSP configuration
+        yspEnabled, yspBrokerCanToggle, yspFixedAmount,
+        yspMin, yspMax, yspStep,
+        // Points configuration
+        basePoints, basePointsMin, basePointsMax,
+        brokerPointsEnabled, brokerPointsMax, brokerPointsStep,
       } = req.body;
-      
+
       const updateData: any = { updatedAt: new Date() };
       if (name !== undefined) updateData.name = name;
       if (description !== undefined) updateData.description = description;
@@ -8534,6 +8566,20 @@ export async function registerRoutes(
       if (isActive !== undefined) updateData.isActive = isActive;
       if (reviewGuidelines !== undefined) updateData.reviewGuidelines = reviewGuidelines;
       if (creditPolicyId !== undefined) updateData.creditPolicyId = creditPolicyId ? parseInt(creditPolicyId) : null;
+      // YSP configuration
+      if (yspEnabled !== undefined) updateData.yspEnabled = yspEnabled === true;
+      if (yspBrokerCanToggle !== undefined) updateData.yspBrokerCanToggle = yspBrokerCanToggle === true;
+      if (yspFixedAmount !== undefined) updateData.yspFixedAmount = parseFloat(yspFixedAmount) || 0;
+      if (yspMin !== undefined) updateData.yspMin = parseFloat(yspMin) || 0;
+      if (yspMax !== undefined) updateData.yspMax = parseFloat(yspMax) || 3;
+      if (yspStep !== undefined) updateData.yspStep = parseFloat(yspStep) || 0.125;
+      // Points configuration
+      if (basePoints !== undefined) updateData.basePoints = parseFloat(basePoints) || 1;
+      if (basePointsMin !== undefined) updateData.basePointsMin = parseFloat(basePointsMin) || 0.5;
+      if (basePointsMax !== undefined) updateData.basePointsMax = parseFloat(basePointsMax) || 3;
+      if (brokerPointsEnabled !== undefined) updateData.brokerPointsEnabled = brokerPointsEnabled !== false;
+      if (brokerPointsMax !== undefined) updateData.brokerPointsMax = parseFloat(brokerPointsMax) || 2;
+      if (brokerPointsStep !== undefined) updateData.brokerPointsStep = parseFloat(brokerPointsStep) || 0.125;
       
       await db.transaction(async (tx) => {
         await tx.update(loanPrograms)

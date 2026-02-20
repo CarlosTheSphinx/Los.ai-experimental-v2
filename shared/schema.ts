@@ -94,6 +94,12 @@ export const savedQuotes = pgTable("saved_quotes", {
   tpoPremiumAmount: real("tpo_premium_amount").notNull().default(0),
   totalRevenue: real("total_revenue").notNull().default(0),
   commission: real("commission").notNull().default(0),
+  // YSP & split points tracking
+  yspAmount: real("ysp_amount").default(0), // YSP % selected
+  yspRateImpact: real("ysp_rate_impact").default(0), // Rate increase from YSP
+  yspDollarAmount: real("ysp_dollar_amount").default(0), // Dollar value of YSP
+  basePointsCharged: real("base_points_charged").default(0), // Lender's base points
+  brokerPointsCharged: real("broker_points_charged").default(0), // Broker's additional points
   stage: varchar("stage", { length: 50 }).default("initial-review").notNull(),
   programId: integer("program_id").references(() => loanPrograms.id, { onDelete: 'set null' }),
   googleDriveFolderId: varchar("google_drive_folder_id", { length: 255 }),
@@ -219,6 +225,8 @@ export const rtlPricingResponseSchema = z.object({
   baseRate: z.number().optional(),
   finalRate: z.number().optional(),
   points: z.number().optional(),
+  yspRateImpact: z.number().optional(),
+  effectiveRate: z.number().optional(),
   caps: z.object({
     maxLTC: z.number().optional(),
     maxLTAIV: z.number().optional(),
@@ -746,6 +754,22 @@ export const loanPrograms = pgTable("loan_programs", {
   eligiblePropertyTypes: text("eligible_property_types").array(), // ['single-family-residence', '2-4-unit', 'multifamily-5-plus', etc.]
 
   quoteFormFields: jsonb("quote_form_fields"), // JSON array of field configs for quote form
+
+  // YSP (Yield Spread Premium) Configuration
+  yspEnabled: boolean("ysp_enabled").default(false),
+  yspBrokerCanToggle: boolean("ysp_broker_can_toggle").default(false),
+  yspFixedAmount: real("ysp_fixed_amount").default(0), // Fixed YSP % if broker can't toggle
+  yspMin: real("ysp_min").default(0),
+  yspMax: real("ysp_max").default(3),
+  yspStep: real("ysp_step").default(0.125),
+
+  // Points Configuration
+  basePoints: real("base_points").default(1),
+  basePointsMin: real("base_points_min").default(0.5),
+  basePointsMax: real("base_points_max").default(3),
+  brokerPointsEnabled: boolean("broker_points_enabled").default(true),
+  brokerPointsMax: real("broker_points_max").default(2),
+  brokerPointsStep: real("broker_points_step").default(0.125),
 
   isActive: boolean("is_active").default(true),
   isTemplate: boolean("is_template").default(false),
