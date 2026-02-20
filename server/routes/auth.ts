@@ -295,9 +295,13 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
     const googleOAuth = new OAuth2Client(clientId, process.env.GOOGLE_CLIENT_SECRET, redirectUri);
 
     const userType = req.query.userType as string | undefined;
+    const returnTo = req.query.returnTo as string | undefined;
     const stateObj: Record<string, string> = {};
     if (userType && ['broker', 'borrower', 'lender'].includes(userType)) {
       stateObj.userType = userType;
+    }
+    if (returnTo && returnTo.startsWith('/')) {
+      stateObj.returnTo = returnTo;
     }
 
     const authorizeUrl = googleOAuth.generateAuthUrl({
@@ -414,7 +418,10 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
       const token = generateToken(user.id, user.email);
       setAuthCookie(res, token);
 
-      if (!user.userType) {
+      const returnTo = oauthState.returnTo || null;
+      if (returnTo && returnTo.startsWith('/')) {
+        res.redirect(returnTo);
+      } else if (!user.userType) {
         res.redirect('/select-role');
       } else if (user.userType === 'lender' || ['admin', 'staff', 'super_admin'].includes(user.role || '')) {
         res.redirect('/admin/onboarding');
