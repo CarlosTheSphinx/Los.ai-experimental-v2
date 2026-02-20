@@ -10,6 +10,7 @@ import { db } from "../db";
 import {
   agentConfigurations,
   agentRuns,
+  lenderAgentCustomizations,
   type AgentConfiguration,
   type AgentRun,
 } from "@shared/schema";
@@ -125,7 +126,32 @@ export async function executeAgent(
     agentRun = runResult[0];
 
     // Fill template variables in system prompt
-    const systemPrompt = fillTemplate(config.systemPrompt, params.contextData);
+    let systemPrompt = fillTemplate(config.systemPrompt, params.contextData);
+
+    // Merge lender-specific customizations on top of baseline prompt
+    if (params.triggeredBy) {
+      try {
+        const lenderCustomization = await db
+          .select()
+          .from(lenderAgentCustomizations)
+          .where(
+            and(
+              eq(lenderAgentCustomizations.userId, params.triggeredBy),
+              eq(lenderAgentCustomizations.agentType, params.agentType),
+              eq(lenderAgentCustomizations.isActive, true)
+            )
+          )
+          .then((r) => r[0]);
+
+        if (lenderCustomization && lenderCustomization.additionalPrompt.trim()) {
+          systemPrompt += `\n\n--- LENDER-SPECIFIC INSTRUCTIONS ---\nThe following additional instructions come from this lender's custom configuration. Apply them in addition to all baseline rules above:\n\n${lenderCustomization.additionalPrompt}`;
+          console.log(`📝 Applied lender customization for ${params.agentType} (user ${params.triggeredBy})`);
+        }
+      } catch (err) {
+        console.warn(`⚠️ Failed to fetch lender customizations for user ${params.triggeredBy}:`, err);
+        // Non-fatal — continue with baseline prompt
+      }
+    }
 
     // Prepare messages with context
     const userMessage = JSON.stringify(params.contextData, null, 2);

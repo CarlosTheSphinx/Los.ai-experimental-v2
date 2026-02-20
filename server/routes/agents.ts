@@ -25,7 +25,8 @@ import {
   loanDigestRecipients,
   scheduledDigestDrafts,
   dealMemoryEntries,
-  systemSettings
+  systemSettings,
+  lenderAgentCustomizations
 } from '@shared/schema';
 import { asc, gte, lte, sql } from 'drizzle-orm';
 import { startPipeline, getPipelineStatus, getPipelineHistory } from '../agents/orchestrator';
@@ -119,6 +120,79 @@ Return JSON (no markdown, raw JSON only):
   "reasoning": "brief explanation of why you classified it this way"
 }`
 };
+
+/**
+ * Auto-seed default agent configurations on server startup.
+ * Only inserts configs that don't already exist — safe to call on every boot.
+ */
+export async function seedDefaultAgentConfigs(db: RouteDeps['db']): Promise<void> {
+  const defaultConfigs = [
+    {
+      agentType: 'document_intelligence',
+      name: 'Document Intelligence Agent',
+      systemPrompt: DEFAULT_AGENT_PROMPTS.DOCUMENT_EXTRACTION,
+      toolDefinitions: ['document_extraction', 'text_analysis'],
+      modelProvider: 'openai',
+      modelName: 'gpt-4o',
+      maxTokens: 2048,
+      temperature: 0.3
+    },
+    {
+      agentType: 'processor',
+      name: 'Deal Processor Agent',
+      systemPrompt: DEFAULT_AGENT_PROMPTS.DEAL_PROCESSOR,
+      toolDefinitions: ['document_analysis', 'data_extraction', 'risk_assessment'],
+      modelProvider: 'openai',
+      modelName: 'gpt-4o',
+      maxTokens: 4096,
+      temperature: 0.5
+    },
+    {
+      agentType: 'communication',
+      name: 'Communication Draft Agent',
+      systemPrompt: DEFAULT_AGENT_PROMPTS.COMMUNICATION_DRAFT,
+      toolDefinitions: ['communication_generation', 'tone_adjustment'],
+      modelProvider: 'openai',
+      modelName: 'gpt-4o',
+      maxTokens: 2048,
+      temperature: 0.7
+    },
+    {
+      agentType: 'email_doc_classifier',
+      name: 'Email Document Classifier',
+      systemPrompt: DEFAULT_AGENT_PROMPTS.EMAIL_DOC_CLASSIFIER,
+      toolDefinitions: ['document_classification'],
+      modelProvider: 'openai',
+      modelName: 'gpt-4o',
+      maxTokens: 1024,
+      temperature: 0.2
+    }
+  ];
+
+  let created = 0;
+  for (const config of defaultConfigs) {
+    const existing = await db
+      .select()
+      .from(agentConfigurations)
+      .where(eq(agentConfigurations.agentType, config.agentType));
+
+    if (existing.length === 0) {
+      await db.insert(agentConfigurations).values({
+        ...config,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      created++;
+    }
+  }
+
+  if (created > 0) {
+    console.log(`🤖 Auto-seeded ${created} default agent configuration(s)`);
+  } else {
+    console.log(`🤖 Agent configurations already present (${defaultConfigs.length} found)`);
+  }
+}
 
 /**
  * Register agent routes
@@ -1303,6 +1377,132 @@ export function registerAgentRoutes(app: Express, deps: RouteDeps): void {
       } catch (error) {
         console.error('Error fetching recent pipeline runs:', error);
         res.status(500).json({ error: 'Failed to fetch recent pipeline runs' });
+      }
+    }
+  );
+
+  // ==================== LENDER AI CUSTOMIZATIONS ====================
+
+  /**
+   * GET /api/admin/agents/customizations
+   * Get all AI customizations for the current lender user
+   */
+  app.get(
+    '/api/admin/agents/customizations',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const userId = req.user!.id;
+        const customizations = await db
+          .select()
+          .from(lenderAgentCustomizations)
+          .where(eq(lenderAgentCustomizations.userId, userId))
+          .orderBy(asc(lenderAgentCustomizations.agentType));
+
+        res.json(customizations);
+      } catch (error) {
+        console.error('Error fetching lender AI customizations:', error);
+        res.status(500).json({ error: 'Failed to fetch AI customizations' });
+      }
+    }
+  );
+
+  /**
+   * PUT /api/admin/agents/customizations
+   * Upsert a lender AI customization for a specific agent type.
+   * If a record already exists for this user + agentType, it updates. Otherwise inserts.
+   */
+  app.put(
+    '/api/admin/agents/customizations',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const userId = req.user!.id;
+        const { agentType, additionalPrompt, isActive } = req.body;
+
+        if (!agentType || typeof additionalPrompt !== 'string') {
+          return res.status(400).json({ error: 'agentType and additionalPrompt are required' });
+        }
+
+        // Check if this user already has a customization for this agent type
+        const existing = await db
+          .select()
+          .from(lenderAgentCustomizations)
+          .where(
+            and(
+              eq(lenderAgentCustomizations.userId, userId),
+              eq(lenderAgentCustomizations.agentType, agentType)
+            )
+          )
+          .then((r) => r[0]);
+
+        let result;
+        if (existing) {
+          [result] = await db
+            .update(lenderAgentCustomizations)
+            .set({
+              additionalPrompt,
+              isActive: isActive !== undefined ? isActive : existing.isActive,
+              updatedAt: new Date(),
+            })
+            .where(eq(lenderAgentCustomizations.id, existing.id))
+            .returning();
+        } else {
+          [result] = await db
+            .insert(lenderAgentCustomizations)
+            .values({
+              userId,
+              agentType,
+              additionalPrompt,
+              isActive: isActive !== undefined ? isActive : true,
+            })
+            .returning();
+        }
+
+        res.json(result);
+      } catch (error) {
+        console.error('Error saving lender AI customization:', error);
+        res.status(500).json({ error: 'Failed to save AI customization' });
+      }
+    }
+  );
+
+  /**
+   * DELETE /api/admin/agents/customizations/:id
+   * Delete a specific lender AI customization
+   */
+  app.delete(
+    '/api/admin/agents/customizations/:id',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const customizationId = parseInt(req.params.id);
+        const userId = req.user!.id;
+
+        // Ensure the user owns this customization
+        const existing = await db
+          .select()
+          .from(lenderAgentCustomizations)
+          .where(
+            and(
+              eq(lenderAgentCustomizations.id, customizationId),
+              eq(lenderAgentCustomizations.userId, userId)
+            )
+          )
+          .then((r) => r[0]);
+
+        if (!existing) {
+          return res.status(404).json({ error: 'Customization not found' });
+        }
+
+        await db.delete(lenderAgentCustomizations).where(eq(lenderAgentCustomizations.id, customizationId));
+        res.json({ success: true });
+      } catch (error) {
+        console.error('Error deleting lender AI customization:', error);
+        res.status(500).json({ error: 'Failed to delete AI customization' });
       }
     }
   );

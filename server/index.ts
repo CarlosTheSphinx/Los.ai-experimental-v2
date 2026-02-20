@@ -6,6 +6,8 @@ import { createServer } from "http";
 import { apiLimiter, authLimiter, pricingLimiter, uploadLimiter } from "./middleware/rateLimiter";
 
 import { validateConfig } from "./utils/validateConfig";
+import { seedDefaultAgentConfigs } from "./routes/agents";
+import { db } from "./db";
 const app = express();
 app.set('trust proxy', 1);
 const httpServer = createServer(app);
@@ -119,6 +121,13 @@ app.use((req, res, next) => {
   validateConfig();
 
   await registerRoutes(httpServer, app);
+
+  // Auto-seed default agent configurations (master orchestration baseline)
+  try {
+    await seedDefaultAgentConfigs(db);
+  } catch (err) {
+    console.error('⚠️ Failed to auto-seed agent configs:', err);
+  }
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

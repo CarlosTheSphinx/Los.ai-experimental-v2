@@ -64,6 +64,7 @@ import NotificationsConfig from "@/components/admin/config/NotificationsConfig";
 import CustomFieldsConfig from "@/components/admin/config/CustomFieldsConfig";
 import BillingPlansConfig from "@/components/admin/config/BillingPlansConfig";
 import EmailIntegrationConfig from "@/components/admin/config/EmailIntegrationConfig";
+import AICustomizationConfig from "@/components/admin/config/AICustomizationConfig";
 
 interface DealStage {
   id: number;
@@ -114,6 +115,7 @@ const CONFIG_TABS = [
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "integrations", label: "Integrations", icon: Plug },
   { id: "platform-integrations", label: "Platform Integrations", icon: Plug, superAdminOnly: true },
+  { id: "ai-customization", label: "AI Customization", icon: Bot },
   { id: "custom-fields", label: "Custom Fields", icon: LayoutList },
   { id: "billing", label: "Billing & Plans", icon: CreditCard },
 ] as const;
@@ -1198,6 +1200,8 @@ export default function AdminSettings() {
               </Card>
             </>
           )}
+
+          {activeTab === "ai-customization" && <AICustomizationConfig />}
 
           {activeTab === "custom-fields" && <CustomFieldsConfig />}
 

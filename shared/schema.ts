@@ -2340,6 +2340,21 @@ export const insertAgentConfigurationSchema = createInsertSchema(agentConfigurat
 export type AgentConfiguration = typeof agentConfigurations.$inferSelect;
 export type InsertAgentConfiguration = z.infer<typeof insertAgentConfigurationSchema>;
 
+// Lender Agent Customizations - per-lender supplemental prompts layered on top of baseline agent configs
+export const lenderAgentCustomizations = pgTable("lender_agent_customizations", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(), // the lender/admin user
+  agentType: varchar("agent_type", { length: 50 }).notNull(), // matches agentConfigurations.agentType
+  additionalPrompt: text("additional_prompt").notNull(), // appended to baseline system prompt
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertLenderAgentCustomizationSchema = createInsertSchema(lenderAgentCustomizations).omit({ id: true, createdAt: true, updatedAt: true });
+export type LenderAgentCustomization = typeof lenderAgentCustomizations.$inferSelect;
+export type InsertLenderAgentCustomization = z.infer<typeof insertLenderAgentCustomizationSchema>;
+
 // Document Extractions - stores Agent 1's structured output per document
 export const documentExtractions = pgTable("document_extractions", {
   id: serial("id").primaryKey(),
