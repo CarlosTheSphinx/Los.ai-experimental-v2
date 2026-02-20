@@ -135,6 +135,29 @@ export async function buildProjectPipelineFromProgram(
     documentsCreated = newDocuments.length;
   }
 
+  // Always ensure a "Signed Agreement" placeholder exists in Stage 1
+  const stage1Id = stageIdByOrder.get(1) || null;
+  if (stage1Id) {
+    const hasSignedAgreement = docTemplates.some(
+      d => d.documentName === 'Signed Agreement'
+    );
+    if (!hasSignedAgreement) {
+      await dbOrTx.insert(dealDocuments).values({
+        dealId: projectId,
+        stageId: stage1Id,
+        documentName: 'Signed Agreement',
+        documentCategory: 'closing_docs',
+        documentDescription: 'PandaDoc signed agreement — auto-populated when the borrower signs',
+        status: 'pending',
+        isRequired: true,
+        assignedTo: 'admin',
+        visibility: 'all',
+        sortOrder: 0,
+      });
+      documentsCreated++;
+    }
+  }
+
   return {
     stagesCreated,
     tasksCreated,
@@ -167,6 +190,8 @@ async function buildProjectPipelineFromLegacyTemplate(
 
   let stagesCreated = 0;
   let tasksCreated = 0;
+  let documentsCreated = 0;
+  let stage1Id: number | null = null;
 
   for (const stageTemplate of LOAN_CLOSING_STAGES) {
     const [stage] = await dbOrTx.insert(projectStages).values({
@@ -181,6 +206,10 @@ async function buildProjectPipelineFromLegacyTemplate(
       startedAt: stageTemplate.stage_order === 1 ? new Date() : null,
     }).returning();
     stagesCreated++;
+
+    if (stageTemplate.stage_order === 1) {
+      stage1Id = stage.id;
+    }
 
     for (const taskTemplate of stageTemplate.tasks) {
       await dbOrTx.insert(projectTasks).values({
@@ -198,10 +227,27 @@ async function buildProjectPipelineFromLegacyTemplate(
     }
   }
 
+  // Add "Signed Agreement" placeholder in Stage 1
+  if (stage1Id) {
+    await dbOrTx.insert(dealDocuments).values({
+      dealId: projectId,
+      stageId: stage1Id,
+      documentName: 'Signed Agreement',
+      documentCategory: 'closing_docs',
+      documentDescription: 'PandaDoc signed agreement — auto-populated when the borrower signs',
+      status: 'pending',
+      isRequired: true,
+      assignedTo: 'admin',
+      visibility: 'all',
+      sortOrder: 0,
+    });
+    documentsCreated++;
+  }
+
   return {
     stagesCreated,
     tasksCreated,
-    documentsCreated: 0,
+    documentsCreated,
     usedProgramTemplate: false,
   };
 }
