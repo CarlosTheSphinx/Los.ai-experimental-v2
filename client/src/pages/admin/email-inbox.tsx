@@ -20,6 +20,7 @@ import {
   Download,
   Inbox,
   Filter,
+  Settings,
 } from "lucide-react";
 import {
   Dialog,
@@ -229,12 +230,12 @@ export default function EmailInboxPage() {
             <div>
               <h3 className="font-semibold text-lg">Connect Your Email</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                Connect your Gmail account in Settings to sync emails and link them to deals
+                Set up your Gmail integration in Settings to sync emails and link them to deals
               </p>
             </div>
-            <Button onClick={() => window.location.href = '/api/email/connect'} data-testid="button-connect-email-inbox">
-              <Mail className="h-4 w-4 mr-2" />
-              Connect Gmail
+            <Button onClick={() => window.location.href = '/admin/settings?tab=integrations'} data-testid="button-connect-email-inbox">
+              <Settings className="h-4 w-4 mr-2" />
+              Go to Settings
             </Button>
           </CardContent>
         </Card>
