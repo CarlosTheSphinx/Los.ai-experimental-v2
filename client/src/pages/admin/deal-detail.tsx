@@ -1745,39 +1745,23 @@ export default function AdminDealDetail() {
                         <span className="text-sm font-medium text-right" data-testid={`text-app-${label.toLowerCase().replace(/\s+/g, '-')}`}>{value}</span>
                       </div>
                     ))}
-                  </div>
-                  {(() => {
-                    const properties = data?.properties || [];
-                    const totalRent = properties.reduce((sum, p) => sum + (p.monthlyRent || 0), 0);
-                    const totalTaxes = properties.reduce((sum, p) => sum + (p.annualTaxes || 0), 0);
-                    const totalInsurance = properties.reduce((sum, p) => sum + (p.annualInsurance || 0), 0);
-                    if (totalRent === 0 && totalTaxes === 0 && totalInsurance === 0) return null;
-                    return (
-                      <div className="mt-4 pt-3 border-t">
-                        <p className="text-xs font-semibold text-muted-foreground mb-2">Property Totals</p>
-                        <div className="grid grid-cols-3 gap-3">
-                          {totalRent > 0 && (
-                            <div className="text-center p-2 rounded-md bg-muted/30 border" data-testid="text-total-rent">
-                              <p className="text-xs text-muted-foreground">Total Rent</p>
-                              <p className="text-sm font-semibold">{formatCurrency(totalRent)}<span className="text-xs font-normal text-muted-foreground">/mo</span></p>
-                            </div>
-                          )}
-                          {totalTaxes > 0 && (
-                            <div className="text-center p-2 rounded-md bg-muted/30 border" data-testid="text-total-taxes">
-                              <p className="text-xs text-muted-foreground">Total Taxes</p>
-                              <p className="text-sm font-semibold">{formatCurrency(totalTaxes)}<span className="text-xs font-normal text-muted-foreground">/yr</span></p>
-                            </div>
-                          )}
-                          {totalInsurance > 0 && (
-                            <div className="text-center p-2 rounded-md bg-muted/30 border" data-testid="text-total-insurance">
-                              <p className="text-xs text-muted-foreground">Total Insurance</p>
-                              <p className="text-sm font-semibold">{formatCurrency(totalInsurance)}<span className="text-xs font-normal text-muted-foreground">/yr</span></p>
-                            </div>
-                          )}
+                    {(() => {
+                      const properties = data?.properties || [];
+                      const totalRent = properties.reduce((sum, p) => sum + (p.monthlyRent || 0), 0);
+                      const totalTaxes = properties.reduce((sum, p) => sum + (p.annualTaxes || 0), 0);
+                      const totalInsurance = properties.reduce((sum, p) => sum + (p.annualInsurance || 0), 0);
+                      const totals: { label: string; value: string; testId: string }[] = [];
+                      if (totalRent > 0) totals.push({ label: 'Total Rent (Monthly)', value: formatCurrency(totalRent), testId: 'text-total-rent' });
+                      if (totalTaxes > 0) totals.push({ label: 'Total Taxes (Annual)', value: formatCurrency(totalTaxes), testId: 'text-total-taxes' });
+                      if (totalInsurance > 0) totals.push({ label: 'Total Insurance (Annual)', value: formatCurrency(totalInsurance), testId: 'text-total-insurance' });
+                      return totals.map(({ label, value, testId }) => (
+                        <div key={label} className="flex items-center justify-between gap-2 py-1 border-b border-border/50 last:border-0">
+                          <span className="text-xs text-muted-foreground">{label}</span>
+                          <span className="text-sm font-semibold text-right" data-testid={testId}>{value}</span>
                         </div>
-                      </div>
-                    );
-                  })()}
+                      ));
+                    })()}
+                  </div>
                 </CardContent>
               </Card>
             );
