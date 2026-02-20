@@ -32,7 +32,6 @@ import {
   X,
   Loader2,
   Search,
-  Reply,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useBranding } from "@/hooks/use-branding";
@@ -111,7 +110,6 @@ export default function MessagesPage() {
   const [inboxSearchQuery, setInboxSearchQuery] = useState("");
   const [emailSearchQuery, setEmailSearchQuery] = useState("");
   const [emailReplyText, setEmailReplyText] = useState("");
-  const [showReplyCompose, setShowReplyCompose] = useState(false);
   const messageInputRef = useRef<HTMLInputElement>(null);
   
   const isAdmin = user?.role && ['admin', 'staff', 'super_admin'].includes(user.role);
@@ -292,7 +290,6 @@ export default function MessagesPage() {
         queryClient.invalidateQueries({ queryKey: ["/api/email/threads", activeEmailThreadId, "detail"] });
       }
       setEmailReplyText("");
-      setShowReplyCompose(false);
       toast({ title: "Reply Sent", description: "Your email reply has been sent" });
     },
     onError: () => {
@@ -596,7 +593,7 @@ export default function MessagesPage() {
                           ? "bg-primary/10 border border-primary/20"
                           : ""
                       }`}
-                      onClick={() => { setActiveEmailThreadId(thread.id); setShowReplyCompose(false); setEmailReplyText(""); }}
+                      onClick={() => { setActiveEmailThreadId(thread.id); setEmailReplyText(""); }}
                       data-testid={`email-thread-msg-${thread.id}`}
                     >
                       <div className="flex items-start justify-between gap-2 mb-1">
@@ -816,14 +813,6 @@ export default function MessagesPage() {
                       <Link2 className="h-4 w-4 mr-1" />
                       Link to Deal
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setLocation('/admin/email?threadId=' + activeEmailThreadId)}
-                      data-testid="button-open-in-inbox"
-                    >
-                      Open in Inbox
-                    </Button>
                   </div>
                 </div>
               </CardHeader>
@@ -870,56 +859,71 @@ export default function MessagesPage() {
                   ))}
                 </div>
               </ScrollArea>
-              <Separator />
-              <div className="p-3">
-                {showReplyCompose ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-medium text-muted-foreground">
-                        Reply to thread: {emailThreadDetail.thread.subject || 'Email'}
-                      </p>
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => { setShowReplyCompose(false); setEmailReplyText(""); }}>
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                    <Textarea
-                      placeholder="Write your reply..."
+              <div className="border-t px-3 pt-2 pb-3 space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {["Thanks, received!", "I'll look into this", "Can you send more details?"].map((chip) => (
+                    <Button
+                      key={chip}
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full text-xs"
+                      onClick={() => {
+                        if (!activeEmailThreadId) return;
+                        replyEmailMutation.mutate({
+                          threadId: activeEmailThreadId,
+                          body: chip,
+                        });
+                      }}
+                      disabled={replyEmailMutation.isPending}
+                      data-testid={`chip-quick-reply-${chip.replace(/[^a-zA-Z]/g, '').toLowerCase()}`}
+                    >
+                      {chip}
+                    </Button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-0.5">
+                    <Button variant="ghost" size="icon" data-testid="button-email-template">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                    <Button variant="ghost" size="icon" data-testid="button-email-attach">
+                      <Paperclip className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </div>
+                  <div className="flex-1 flex items-center gap-2">
+                    <Input
+                      placeholder="Type a message..."
                       value={emailReplyText}
                       onChange={(e) => setEmailReplyText(e.target.value)}
-                      rows={3}
                       className="text-sm"
-                      data-testid="textarea-email-reply"
-                    />
-                    <div className="flex justify-end">
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          if (!activeEmailThreadId || !emailReplyText.trim()) return;
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey && emailReplyText.trim() && activeEmailThreadId) {
+                          e.preventDefault();
                           replyEmailMutation.mutate({
                             threadId: activeEmailThreadId,
                             body: emailReplyText.replace(/\n/g, '<br/>'),
                           });
-                        }}
-                        disabled={!emailReplyText.trim() || replyEmailMutation.isPending}
-                        data-testid="button-send-email-reply"
-                      >
-                        {replyEmailMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
-                        Send Reply
-                      </Button>
-                    </div>
+                        }
+                      }}
+                      data-testid="input-email-reply"
+                    />
+                    <Button
+                      size="icon"
+                      className="shrink-0"
+                      onClick={() => {
+                        if (!activeEmailThreadId || !emailReplyText.trim()) return;
+                        replyEmailMutation.mutate({
+                          threadId: activeEmailThreadId,
+                          body: emailReplyText.replace(/\n/g, '<br/>'),
+                        });
+                      }}
+                      disabled={!emailReplyText.trim() || replyEmailMutation.isPending}
+                      data-testid="button-send-email-reply"
+                    >
+                      {replyEmailMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    </Button>
                   </div>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => setShowReplyCompose(true)}
-                    data-testid="button-reply-email"
-                  >
-                    <Reply className="h-4 w-4 mr-1" />
-                    Reply
-                  </Button>
-                )}
+                </div>
               </div>
             </>
           ) : activeThread ? (
