@@ -670,9 +670,9 @@ export default function AdminDealDetail() {
 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState<{ url: string; fileName: string | null; mimeType?: string | null; downloadUrl: string } | null>(null);
-  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewReady, setPreviewReady] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'completed' | 'todo' | 'digests' | 'ai_insights'>('all');
   const [subFilter, setSubFilter] = useState<'all' | 'documents' | 'tasks'>('all');
   const [showMemoryPanel, setShowMemoryPanel] = useState(true);
@@ -693,31 +693,30 @@ export default function AdminDealDetail() {
 
   useEffect(() => {
     if (!previewOpen || !previewFile) {
-      if (previewBlobUrl) {
-        URL.revokeObjectURL(previewBlobUrl);
-        setPreviewBlobUrl(null);
-      }
       setPreviewError(null);
       setPreviewLoading(false);
+      setPreviewReady(false);
       return;
     }
     const pType = getPreviewType(previewFile.fileName, previewFile.mimeType);
-    if (pType === 'unsupported') return;
+    if (pType === 'unsupported') {
+      setPreviewReady(true);
+      return;
+    }
 
     let cancelled = false;
     setPreviewLoading(true);
     setPreviewError(null);
-    setPreviewBlobUrl(null);
+    setPreviewReady(false);
 
-    fetch(previewFile.url, { credentials: 'include' })
+    fetch(previewFile.url, { method: 'HEAD', credentials: 'include' })
       .then(res => {
-        if (!res.ok) throw new Error('File not available');
-        return res.blob();
-      })
-      .then(blob => {
         if (cancelled) return;
-        const blobUrl = URL.createObjectURL(blob);
-        setPreviewBlobUrl(blobUrl);
+        if (!res.ok) {
+          setPreviewError('This file is no longer available. It may have been moved or deleted.');
+        } else {
+          setPreviewReady(true);
+        }
         setPreviewLoading(false);
       })
       .catch(() => {
