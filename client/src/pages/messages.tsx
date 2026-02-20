@@ -110,6 +110,8 @@ export default function MessagesPage() {
   const [inboxSearchQuery, setInboxSearchQuery] = useState("");
   const [emailSearchQuery, setEmailSearchQuery] = useState("");
   const [emailReplyText, setEmailReplyText] = useState("");
+  const [emailLinkFilter, setEmailLinkFilter] = useState<'all' | 'linked' | 'unlinked'>('all');
+  const [emailReadFilter, setEmailReadFilter] = useState<'all' | 'unread' | 'read'>('all');
   const messageInputRef = useRef<HTMLInputElement>(null);
   
   const isAdmin = user?.role && ['admin', 'staff', 'super_admin'].includes(user.role);
@@ -222,6 +224,7 @@ export default function MessagesPage() {
       return res.json();
     },
     enabled: !!isAdmin,
+    refetchInterval: inboxTab === 'email' ? 60000 : false,
   });
 
   const { data: emailThreadDetail } = useQuery<{ thread: any; messages: any[]; dealLinks: any[] }>({
@@ -297,6 +300,23 @@ export default function MessagesPage() {
     },
   });
 
+  const markEmailReadMutation = useMutation({
+    mutationFn: (threadId: number) =>
+      apiRequest("POST", `/api/email/threads/${threadId}/read`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/email/threads", "all"] });
+    },
+  });
+
+  useEffect(() => {
+    if (activeEmailThreadId && emailThreads.length > 0) {
+      const thread = emailThreads.find((t: any) => t.id === activeEmailThreadId);
+      if (thread?.isUnread) {
+        markEmailReadMutation.mutate(activeEmailThreadId);
+      }
+    }
+  }, [activeEmailThreadId]);
+
   // Handle URL params for opening new thread with pre-selected deal
   // Wait for quotes data to be loaded before opening dialog
   useEffect(() => {
@@ -320,15 +340,21 @@ export default function MessagesPage() {
       })
     : threads;
 
-  const filteredEmailThreads = emailSearchQuery.trim()
-    ? emailThreads.filter((t: any) => {
-        const q = emailSearchQuery.toLowerCase();
-        return (t.subject?.toLowerCase().includes(q)) ||
-          (t.fromName?.toLowerCase().includes(q)) ||
-          (t.fromAddress?.toLowerCase().includes(q)) ||
-          (t.snippet?.toLowerCase().includes(q));
-      })
-    : emailThreads;
+  const filteredEmailThreads = emailThreads.filter((t: any) => {
+    if (emailSearchQuery.trim()) {
+      const q = emailSearchQuery.toLowerCase();
+      const matchesSearch = (t.subject?.toLowerCase().includes(q)) ||
+        (t.fromName?.toLowerCase().includes(q)) ||
+        (t.fromAddress?.toLowerCase().includes(q)) ||
+        (t.snippet?.toLowerCase().includes(q));
+      if (!matchesSearch) return false;
+    }
+    if (emailLinkFilter === 'linked' && !(t.linkedDealIds?.length > 0)) return false;
+    if (emailLinkFilter === 'unlinked' && t.linkedDealIds?.length > 0) return false;
+    if (emailReadFilter === 'unread' && !t.isUnread) return false;
+    if (emailReadFilter === 'read' && t.isUnread) return false;
+    return true;
+  });
 
   const activeThread = activeThreadData?.thread;
   const messages = activeThreadData?.messages || [];
@@ -560,6 +586,28 @@ export default function MessagesPage() {
                       data-testid="input-email-search"
                     />
                   </div>
+                  <div className="flex items-center gap-2">
+                    <Select value={emailLinkFilter} onValueChange={(v) => setEmailLinkFilter(v as any)}>
+                      <SelectTrigger className="h-7 text-xs flex-1" data-testid="select-email-link-filter">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Emails</SelectItem>
+                        <SelectItem value="linked">Linked to Deal</SelectItem>
+                        <SelectItem value="unlinked">Not Linked</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={emailReadFilter} onValueChange={(v) => setEmailReadFilter(v as any)}>
+                      <SelectTrigger className="h-7 text-xs flex-1" data-testid="select-email-read-filter">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        <SelectItem value="unread">Unread</SelectItem>
+                        <SelectItem value="read">Read</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">{filteredEmailThreads.length} thread{filteredEmailThreads.length !== 1 ? 's' : ''}</span>
                     <Button
@@ -603,25 +651,27 @@ export default function MessagesPage() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5">
-                              <span className={`text-sm truncate ${thread.isUnread ? 'font-bold' : 'font-semibold'}`}>
+                              <span className={`text-sm truncate ${thread.isUnread ? 'font-bold' : ''}`}>
                                 {thread.fromName || thread.fromAddress || "Unknown"}
                               </span>
                               <Badge variant="outline" className="text-[10px] h-4 px-1.5 shrink-0 border-indigo-300 text-indigo-600 dark:border-indigo-700 dark:text-indigo-400">
                                 Email
                               </Badge>
                             </div>
-                            <div className="text-xs text-muted-foreground truncate">
+                            <div className={`text-xs truncate ${thread.isUnread ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
                               {thread.subject || "(No Subject)"}
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          {thread.hasAttachments && <Paperclip className="h-3 w-3 text-muted-foreground" />}
-                          {thread.isUnread && (
-                            <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
-                          )}
-                          <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                            {thread.lastMessageAt ? format(new Date(thread.lastMessageAt), "MMM d") : ""}
+                        <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                          <div className="flex items-center gap-1.5">
+                            {thread.hasAttachments && <Paperclip className="h-3 w-3 text-muted-foreground" />}
+                            {thread.isUnread && (
+                              <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
+                            )}
+                          </div>
+                          <span className={`text-[11px] whitespace-nowrap ${thread.isUnread ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
+                            {thread.lastMessageAt ? format(new Date(thread.lastMessageAt), "MMM d, h:mm a") : ""}
                           </span>
                         </div>
                       </div>

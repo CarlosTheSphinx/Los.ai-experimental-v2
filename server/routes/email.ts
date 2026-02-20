@@ -298,6 +298,30 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
     }
   });
 
+  // POST /api/email/threads/:id/read - Mark email thread as read
+  app.post('/api/email/threads/:id/read', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const threadId = parseInt(req.params.id);
+      const [thread] = await db.select().from(emailThreads).where(eq(emailThreads.id, threadId));
+      if (!thread) return res.status(404).json({ error: 'Thread not found' });
+
+      const [account] = await db.select().from(emailAccounts)
+        .where(and(
+          eq(emailAccounts.id, thread.accountId),
+          eq(emailAccounts.userId, req.user!.id)
+        ));
+      if (!account) return res.status(403).json({ error: 'Access denied' });
+
+      await db.update(emailThreads).set({ isUnread: false }).where(eq(emailThreads.id, threadId));
+      await db.update(emailMessages).set({ isUnread: false }).where(eq(emailMessages.threadId, threadId));
+
+      res.json({ ok: true });
+    } catch (error: any) {
+      console.error('Error marking email thread read:', error);
+      res.status(500).json({ error: 'Failed to mark thread read' });
+    }
+  });
+
   // POST /api/email/threads/:id/reply - Reply to an email thread
   app.post('/api/email/threads/:id/reply', authenticateUser, async (req: AuthRequest, res: Response) => {
     try {
