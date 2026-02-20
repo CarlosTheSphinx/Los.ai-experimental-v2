@@ -575,34 +575,34 @@ export default function MessagesPage() {
           <ScrollArea className="flex-1">
             {inboxTab === 'email' && isAdmin ? (
               <>
-                <div className="px-3 py-2 space-y-2 border-b">
-                  <div className="relative">
+                <div className="px-3 py-2 space-y-2 border-b overflow-hidden">
+                  <div className="relative w-full">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                     <Input
                       placeholder="Search emails..."
                       value={emailSearchQuery}
                       onChange={(e) => setEmailSearchQuery(e.target.value)}
-                      className="h-8 pl-8 text-xs"
+                      className="h-8 pl-8 text-xs w-full"
                       data-testid="input-email-search"
                     />
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 w-full">
                     <Select value={emailLinkFilter} onValueChange={(v) => setEmailLinkFilter(v as any)}>
-                      <SelectTrigger className="h-7 text-xs flex-1" data-testid="select-email-link-filter">
+                      <SelectTrigger className="h-7 text-xs min-w-0 flex-1" data-testid="select-email-link-filter">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Emails</SelectItem>
-                        <SelectItem value="linked">Linked to Deal</SelectItem>
+                        <SelectItem value="linked">Linked</SelectItem>
                         <SelectItem value="unlinked">Not Linked</SelectItem>
                       </SelectContent>
                     </Select>
                     <Select value={emailReadFilter} onValueChange={(v) => setEmailReadFilter(v as any)}>
-                      <SelectTrigger className="h-7 text-xs flex-1" data-testid="select-email-read-filter">
+                      <SelectTrigger className="h-7 text-xs min-w-0 flex-1" data-testid="select-email-read-filter">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All</SelectItem>
+                        <SelectItem value="all">All Status</SelectItem>
                         <SelectItem value="unread">Unread</SelectItem>
                         <SelectItem value="read">Read</SelectItem>
                       </SelectContent>
