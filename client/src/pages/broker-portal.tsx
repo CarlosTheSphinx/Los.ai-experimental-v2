@@ -5,9 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DollarSign,
@@ -26,12 +23,9 @@ import {
   MessageSquare,
   ChevronDown,
 } from "lucide-react";
-import { SiGoogle } from "react-icons/si";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { useBranding } from "@/hooks/use-branding";
-import { apiRequest } from "@/lib/queryClient";
 import { PortalOnboarding, hasCompletedOnboarding } from "@/components/portal/PortalOnboarding";
 import { PortalSidebar, type PortalView } from "@/components/portal/PortalSidebar";
 
@@ -94,233 +88,6 @@ interface RelatedDeal {
   isCurrent: boolean;
 }
 
-function PortalAuthGate({ token, children }: { token: string; children: React.ReactNode }) {
-  const { user, isLoading: authLoading, login } = useAuth();
-  const { branding } = useBranding();
-  const { toast } = useToast();
-  const [authMode, setAuthMode] = useState<"login" | "register">("login");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-  const [regFirstName, setRegFirstName] = useState("");
-  const [regLastName, setRegLastName] = useState("");
-  const [regEmail, setRegEmail] = useState("");
-  const [regPassword, setRegPassword] = useState("");
-  const queryClient = useQueryClient();
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center p-4">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (user) {
-    return <>{children}</>;
-  }
-
-  const portalPath = `/broker-portal/${token}`;
-  const googleAuthUrl = `/api/auth/google?userType=broker&returnTo=${encodeURIComponent(portalPath)}`;
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    try {
-      await login(loginEmail, loginPassword);
-    } catch (error: any) {
-      toast({
-        title: "Sign-in failed",
-        description: error?.message || "Invalid email or password",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (regPassword.length < 8) {
-      toast({ title: "Password must be at least 8 characters", variant: "destructive" });
-      return;
-    }
-    setIsSubmitting(true);
-    try {
-      const res = await apiRequest("POST", "/api/auth/register", {
-        email: regEmail,
-        password: regPassword,
-        firstName: regFirstName,
-        lastName: regLastName,
-        userType: "broker",
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Registration failed");
-      }
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-    } catch (error: any) {
-      toast({
-        title: "Registration failed",
-        description: error?.message || "Could not create account",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="flex items-center justify-center gap-0 mb-2">
-            <span className="text-2xl font-bold text-foreground">Lendry.</span>
-            <span className="text-2xl font-bold text-primary">AI</span>
-          </div>
-          <CardTitle className="text-xl">
-            {authMode === "login" ? "Sign in to continue" : "Create your account"}
-          </CardTitle>
-          <p className="text-sm text-muted-foreground mt-1">
-            {authMode === "login"
-              ? "Sign in to access your deal portal"
-              : "Create a broker account to get started"}
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Button
-            variant="outline"
-            className="w-full h-11"
-            onClick={() => { window.location.href = googleAuthUrl; }}
-            data-testid="button-portal-google-auth"
-          >
-            <SiGoogle className="mr-2 h-4 w-4" />
-            Continue with Google
-          </Button>
-
-          <div className="relative">
-            <Separator />
-            <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
-              or
-            </span>
-          </div>
-
-          {authMode === "login" ? (
-            <form onSubmit={handleLogin} className="space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="login-email">Email</Label>
-                <Input
-                  id="login-email"
-                  type="email"
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  required
-                  data-testid="input-portal-login-email"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="login-password">Password</Label>
-                <Input
-                  id="login-password"
-                  type="password"
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  required
-                  data-testid="input-portal-login-password"
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={isSubmitting} data-testid="button-portal-login">
-                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Sign In
-              </Button>
-            </form>
-          ) : (
-            <form onSubmit={handleRegister} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="reg-first">First Name</Label>
-                  <Input
-                    id="reg-first"
-                    value={regFirstName}
-                    onChange={(e) => setRegFirstName(e.target.value)}
-                    required
-                    data-testid="input-portal-reg-first"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="reg-last">Last Name</Label>
-                  <Input
-                    id="reg-last"
-                    value={regLastName}
-                    onChange={(e) => setRegLastName(e.target.value)}
-                    required
-                    data-testid="input-portal-reg-last"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="reg-email">Email</Label>
-                <Input
-                  id="reg-email"
-                  type="email"
-                  value={regEmail}
-                  onChange={(e) => setRegEmail(e.target.value)}
-                  required
-                  data-testid="input-portal-reg-email"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="reg-password">Password</Label>
-                <Input
-                  id="reg-password"
-                  type="password"
-                  value={regPassword}
-                  onChange={(e) => setRegPassword(e.target.value)}
-                  required
-                  minLength={8}
-                  data-testid="input-portal-reg-password"
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={isSubmitting} data-testid="button-portal-register">
-                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Create Account
-              </Button>
-            </form>
-          )}
-
-          <div className="text-center text-sm text-muted-foreground">
-            {authMode === "login" ? (
-              <>
-                Don't have an account?{" "}
-                <button
-                  type="button"
-                  onClick={() => setAuthMode("register")}
-                  className="text-primary hover:underline font-medium"
-                  data-testid="button-switch-to-register"
-                >
-                  Create one
-                </button>
-              </>
-            ) : (
-              <>
-                Already have an account?{" "}
-                <button
-                  type="button"
-                  onClick={() => setAuthMode("login")}
-                  className="text-primary hover:underline font-medium"
-                  data-testid="button-switch-to-login"
-                >
-                  Sign in
-                </button>
-              </>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
 export default function BrokerPortal() {
   const [, params] = useRoute("/broker-portal/:token");
   const token = params?.token;
@@ -338,16 +105,13 @@ export default function BrokerPortal() {
     );
   }
 
-  return (
-    <PortalAuthGate token={token}>
-      <BrokerPortalContent token={token} />
-    </PortalAuthGate>
-  );
+  return <BrokerPortalContent token={token} />;
 }
 
 function BrokerPortalContent({ token }: { token: string }) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
@@ -364,6 +128,7 @@ function BrokerPortalContent({ token }: { token: string }) {
       if (!response.ok) throw new Error(await response.text());
       return response.json();
     },
+    enabled: !!user,
     retry: false,
   });
 
@@ -374,7 +139,7 @@ function BrokerPortalContent({ token }: { token: string }) {
       if (!response.ok) throw new Error(await response.text());
       return response.json();
     },
-    enabled: !showOnboarding,
+    enabled: !!user && !showOnboarding,
     retry: false,
   });
 
@@ -475,6 +240,29 @@ function BrokerPortalContent({ token }: { token: string }) {
     return `$${amount.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
   };
 
+  if (showOnboarding) {
+    return (
+      <PortalOnboarding
+        config={data?.onboardingConfig}
+        portalType="broker"
+        token={token}
+        onComplete={() => setShowOnboarding(false)}
+      />
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md text-center">
+          <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground">Please sign in to access your portal.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-4 md:p-8">
@@ -501,17 +289,6 @@ function BrokerPortalContent({ token }: { token: string }) {
           </CardContent>
         </Card>
       </div>
-    );
-  }
-
-  if (showOnboarding) {
-    return (
-      <PortalOnboarding
-        config={data.onboardingConfig}
-        portalType="broker"
-        token={token}
-        onComplete={() => setShowOnboarding(false)}
-      />
     );
   }
 
