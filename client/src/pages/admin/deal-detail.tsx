@@ -1506,6 +1506,7 @@ export default function AdminDealDetail() {
       <div className="grid md:grid-cols-3 gap-6">
         <div className="md:col-span-2">
           <Card className="p-4">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Loan Details</p>
             <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
               <div className="flex items-center gap-2">
                 <DollarSign className="h-4 w-4 text-success" />
