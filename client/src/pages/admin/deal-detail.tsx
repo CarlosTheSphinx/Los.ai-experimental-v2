@@ -1562,16 +1562,6 @@ export default function AdminDealDetail() {
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
               </div>
-              {deal.programName && (
-                <>
-                  <Separator orientation="vertical" className="h-5 hidden md:block" />
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">Program</span>
-                    <span className="font-semibold text-sm" data-testid="text-loan-program">{deal.programName}</span>
-                  </div>
-                </>
-              )}
             </div>
             <div className="flex flex-wrap items-center gap-x-6 gap-y-3 mt-3 pt-3 border-t">
               <div className="flex items-center gap-2">
