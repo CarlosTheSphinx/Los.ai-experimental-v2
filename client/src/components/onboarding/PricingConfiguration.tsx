@@ -121,6 +121,20 @@ export function PricingConfiguration({
   const [adjusters, setAdjusters] = useState<AdjusterEntry[]>([]);
   const [disqualifiers, setDisqualifiers] = useState<EligibilityEntry[]>([]);
 
+  // YSP & Points state
+  const [yspEnabled, setYspEnabled] = useState(false);
+  const [yspBrokerCanToggle, setYspBrokerCanToggle] = useState(false);
+  const [yspFixedAmount, setYspFixedAmount] = useState('0');
+  const [yspMin, setYspMin] = useState('0');
+  const [yspMax, setYspMax] = useState('3');
+  const [yspStep, setYspStep] = useState('0.125');
+  const [basePoints, setBasePoints] = useState('1');
+  const [basePointsMin, setBasePointsMin] = useState('0.5');
+  const [basePointsMax, setBasePointsMax] = useState('3');
+  const [brokerPointsEnabled, setBrokerPointsEnabled] = useState(true);
+  const [brokerPointsMax, setBrokerPointsMax] = useState('2');
+  const [brokerPointsStep, setBrokerPointsStep] = useState('0.125');
+
   // External pricer state
   const [externalUrl, setExternalUrl] = useState('');
 
@@ -181,6 +195,22 @@ export function PricingConfiguration({
         });
       }
 
+      // Also save YSP/points config on the program
+      await apiRequest('PUT', `/api/admin/programs/${selectedProgramId}`, {
+        yspEnabled,
+        yspBrokerCanToggle,
+        yspFixedAmount: parseFloat(yspFixedAmount) || 0,
+        yspMin: parseFloat(yspMin) || 0,
+        yspMax: parseFloat(yspMax) || 3,
+        yspStep: parseFloat(yspStep) || 0.125,
+        basePoints: parseFloat(basePoints) || 1,
+        basePointsMin: parseFloat(basePointsMin) || 0.5,
+        basePointsMax: parseFloat(basePointsMax) || 3,
+        brokerPointsEnabled,
+        brokerPointsMax: parseFloat(brokerPointsMax) || 2,
+        brokerPointsStep: parseFloat(brokerPointsStep) || 0.125,
+      });
+
       return data;
     },
     onSuccess: () => {
@@ -193,6 +223,34 @@ export function PricingConfiguration({
         description: error?.message || 'Please check your configuration',
         variant: 'destructive',
       });
+    },
+  });
+
+  // Save YSP/points config standalone (for non-rule-based modes)
+  const saveCompensationMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedProgramId) throw new Error('Select a program first');
+      await apiRequest('PUT', `/api/admin/programs/${selectedProgramId}`, {
+        yspEnabled,
+        yspBrokerCanToggle,
+        yspFixedAmount: parseFloat(yspFixedAmount) || 0,
+        yspMin: parseFloat(yspMin) || 0,
+        yspMax: parseFloat(yspMax) || 3,
+        yspStep: parseFloat(yspStep) || 0.125,
+        basePoints: parseFloat(basePoints) || 1,
+        basePointsMin: parseFloat(basePointsMin) || 0.5,
+        basePointsMax: parseFloat(basePointsMax) || 3,
+        brokerPointsEnabled,
+        brokerPointsMax: parseFloat(brokerPointsMax) || 2,
+        brokerPointsStep: parseFloat(brokerPointsStep) || 0.125,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/programs'] });
+      toast({ title: 'Compensation settings saved!' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Failed to save compensation settings', description: error?.message, variant: 'destructive' });
     },
   });
 
@@ -268,8 +326,24 @@ export function PricingConfiguration({
                 <Select
                   value={selectedProgramId?.toString() || ''}
                   onValueChange={(val) => {
-                    setSelectedProgramId(parseInt(val));
+                    const pid = parseInt(val);
+                    setSelectedProgramId(pid);
                     setPricingMode('none');
+                    const prog = programs.find((p: any) => p.id === pid);
+                    if (prog) {
+                      setYspEnabled(prog.yspEnabled ?? false);
+                      setYspBrokerCanToggle(prog.yspBrokerCanToggle ?? false);
+                      setYspFixedAmount(String(prog.yspFixedAmount ?? 0));
+                      setYspMin(String(prog.yspMin ?? 0));
+                      setYspMax(String(prog.yspMax ?? 3));
+                      setYspStep(String(prog.yspStep ?? 0.125));
+                      setBasePoints(String(prog.basePoints ?? 1));
+                      setBasePointsMin(String(prog.basePointsMin ?? 0.5));
+                      setBasePointsMax(String(prog.basePointsMax ?? 3));
+                      setBrokerPointsEnabled(prog.brokerPointsEnabled ?? true);
+                      setBrokerPointsMax(String(prog.brokerPointsMax ?? 2));
+                      setBrokerPointsStep(String(prog.brokerPointsStep ?? 0.125));
+                    }
                   }}
                 >
                   <SelectTrigger>
@@ -333,6 +407,115 @@ export function PricingConfiguration({
                       />
                     </div>
                   </div>
+
+                  {/* Compensation & Pricing Section */}
+                  <div className="border-t pt-6 space-y-4">
+                    <Label className="text-base font-semibold flex items-center gap-2">
+                      <DollarSign className="h-4 w-4" />
+                      Compensation & Pricing
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Configure YSP and origination points for this program
+                    </p>
+
+                    <div className="bg-muted/30 rounded-lg p-4 space-y-3 border">
+                      <h4 className="text-sm font-semibold">Origination Points</h4>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Base Points</Label>
+                          <Input type="number" step="0.125" min="0" max="10" value={basePoints} onChange={(e) => setBasePoints(e.target.value)} data-testid="input-base-points" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Min Base</Label>
+                          <Input type="number" step="0.125" min="0" value={basePointsMin} onChange={(e) => setBasePointsMin(e.target.value)} data-testid="input-base-points-min" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Max Base</Label>
+                          <Input type="number" step="0.125" min="0" value={basePointsMax} onChange={(e) => setBasePointsMax(e.target.value)} data-testid="input-base-points-max" />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 pt-2">
+                        <Switch checked={brokerPointsEnabled} onCheckedChange={(v) => setBrokerPointsEnabled(v)} data-testid="switch-broker-points" />
+                        <Label className="text-sm">Broker Can Add Additional Points</Label>
+                      </div>
+                      {brokerPointsEnabled && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Max Additional Broker Points</Label>
+                            <Input type="number" step="0.125" min="0" max="10" value={brokerPointsMax} onChange={(e) => setBrokerPointsMax(e.target.value)} data-testid="input-broker-points-max" />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Step Size</Label>
+                            <Input type="number" step="0.0625" min="0.0625" value={brokerPointsStep} onChange={(e) => setBrokerPointsStep(e.target.value)} data-testid="input-broker-points-step" />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-muted/30 rounded-lg p-4 space-y-3 border">
+                      <div className="flex items-center gap-3">
+                        <Switch checked={yspEnabled} onCheckedChange={(v) => setYspEnabled(v)} data-testid="switch-ysp-enabled" />
+                        <h4 className="text-sm font-semibold">YSP (Yield Spread Premium) Available</h4>
+                      </div>
+                      {yspEnabled && (
+                        <>
+                          <div className="flex items-center gap-3 pt-1">
+                            <Switch checked={yspBrokerCanToggle} onCheckedChange={(v) => setYspBrokerCanToggle(v)} data-testid="switch-ysp-broker-toggle" />
+                            <Label className="text-sm">Broker Can Adjust YSP on Quotes</Label>
+                          </div>
+                          {!yspBrokerCanToggle && (
+                            <div className="space-y-1">
+                              <Label className="text-xs">Fixed YSP Amount (%)</Label>
+                              <Input type="number" step="0.125" min="0" max="5" value={yspFixedAmount} onChange={(e) => setYspFixedAmount(e.target.value)} data-testid="input-ysp-fixed" />
+                              <p className="text-xs text-muted-foreground">This fixed YSP % will be applied to every quote</p>
+                            </div>
+                          )}
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Min YSP (%)</Label>
+                              <Input type="number" step="0.125" min="0" value={yspMin} onChange={(e) => setYspMin(e.target.value)} data-testid="input-ysp-min" />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Max YSP (%)</Label>
+                              <Input type="number" step="0.125" min="0" value={yspMax} onChange={(e) => setYspMax(e.target.value)} data-testid="input-ysp-max" />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Step Size</Label>
+                              <Input type="number" step="0.0625" min="0.0625" value={yspStep} onChange={(e) => setYspStep(e.target.value)} data-testid="input-ysp-step" />
+                            </div>
+                          </div>
+                          <div className="bg-amber-50 border border-amber-200 rounded p-2 text-xs text-amber-800">
+                            <Info className="h-3 w-3 inline mr-1" />
+                            YSP rate impact tiers can be configured in the pricing ruleset for this program. Add a <code>yspPricing</code> array to define how each YSP% tier affects the interest rate.
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {pricingMode !== 'rule-based' && (
+                      <div className="flex items-center gap-3">
+                        <Button
+                          onClick={() => saveCompensationMutation.mutate()}
+                          disabled={saveCompensationMutation.isPending}
+                          variant="outline"
+                          data-testid="button-save-compensation"
+                        >
+                          {saveCompensationMutation.isPending ? (
+                            <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</>
+                          ) : (
+                            <><CheckCircle2 className="h-4 w-4 mr-2" />Save Compensation Settings</>
+                          )}
+                        </Button>
+                        {saveCompensationMutation.isSuccess && (
+                          <span className="text-sm text-green-600 flex items-center gap-1">
+                            <CheckCircle2 className="h-4 w-4" /> Saved
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <Separator />
 
                   {/* Mode content */}
                   {pricingMode === 'rule-based' && (
