@@ -69,6 +69,7 @@ import PublicHomePage from "@/pages/public/home";
 import PublicPricingPage from "@/pages/public/pricing";
 import PublicUseCasesPage from "@/pages/public/use-cases";
 import PublicContactPage from "@/pages/public/contact";
+import PublicApplyPage from "@/pages/public/apply";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -271,6 +272,8 @@ function AppContent() {
   const [isPublicPricingPage] = useRoute("/pricing");
   const [isPublicUseCasesPage] = useRoute("/use-cases");
   const [isPublicContactPage] = useRoute("/contact");
+  const [isPublicApplyPage] = useRoute("/apply");
+  const [isPublicApplyProgramPage] = useRoute("/apply/:programId");
   const [isHomePage] = useRoute("/");
 
   const { isAuthenticated, isLoading } = useAuth();
@@ -320,6 +323,14 @@ function AppContent() {
     return (
       <Switch>
         <Route path="/select-role" component={SelectRolePage} />
+      </Switch>
+    );
+  }
+
+  if (isPublicApplyPage || isPublicApplyProgramPage) {
+    return (
+      <Switch>
+        <Route path="/apply/:programId?" component={PublicApplyPage} />
       </Switch>
     );
   }

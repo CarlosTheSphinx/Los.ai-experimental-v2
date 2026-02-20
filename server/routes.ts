@@ -15649,6 +15649,110 @@ Return JSON only:
   }, 10000);
 
 
+  // ==================== PUBLIC APPLICATION ENDPOINTS ====================
+
+  app.get('/api/public/programs', async (req: Request, res: Response) => {
+    try {
+      const programs = await db.select({
+        id: loanPrograms.id,
+        name: loanPrograms.name,
+        description: loanPrograms.description,
+        loanType: loanPrograms.loanType,
+        minLoanAmount: loanPrograms.minLoanAmount,
+        maxLoanAmount: loanPrograms.maxLoanAmount,
+        eligiblePropertyTypes: loanPrograms.eligiblePropertyTypes,
+        quoteFormFields: loanPrograms.quoteFormFields,
+      })
+        .from(loanPrograms)
+        .where(eq(loanPrograms.isActive, true))
+        .orderBy(loanPrograms.sortOrder);
+
+      res.json({ programs });
+    } catch (error) {
+      console.error('Public programs error:', error);
+      res.status(500).json({ error: 'Failed to get programs' });
+    }
+  });
+
+  app.post('/api/public/apply', async (req: Request, res: Response) => {
+    try {
+      const { programId, firstName, lastName, email, phone, propertyAddress, formData } = req.body;
+
+      if (!programId || !firstName || !lastName || !email || !propertyAddress) {
+        return res.status(400).json({ error: 'Missing required fields: programId, firstName, lastName, email, propertyAddress' });
+      }
+
+      const [program] = await db.select()
+        .from(loanPrograms)
+        .where(and(eq(loanPrograms.id, programId), eq(loanPrograms.isActive, true)));
+
+      if (!program) {
+        return res.status(404).json({ error: 'Program not found' });
+      }
+
+      let existingUser = await storage.getUserByEmail(email);
+      if (!existingUser) {
+        const randomPassword = Math.random().toString(36).slice(-12);
+        const bcrypt = await import('bcrypt');
+        const hashedPassword = await bcrypt.hash(randomPassword, 10);
+        existingUser = await storage.createUser({
+          email,
+          password: hashedPassword,
+          fullName: `${firstName} ${lastName}`,
+          phone: phone || null,
+          userType: 'borrower',
+          role: 'user',
+        });
+      }
+
+      const borrowerName = `${firstName} ${lastName}`.trim();
+      const projectName = `${borrowerName} — ${propertyAddress}`;
+
+      const [newProject] = await db.insert(projects).values({
+        userId: existingUser.id,
+        projectName,
+        status: 'active',
+        currentStage: 1,
+        programId: program.id,
+        propertyAddress,
+      }).returning();
+
+      await db.insert(activities).values({
+        userId: existingUser.id,
+        projectId: newProject.id,
+        activityType: 'application_submitted',
+        activityDescription: `Loan application submitted via public apply link for program: ${program.name}`,
+      });
+
+      const quote = await storage.createPricingRequest({
+        userId: existingUser.id,
+        customerFirstName: firstName,
+        customerLastName: lastName,
+        customerEmail: email,
+        customerPhone: phone || null,
+        propertyAddress,
+        loanData: {
+          programId,
+          programName: program.name,
+          loanType: program.loanType,
+          source: 'public_apply',
+          ...(formData || {}),
+        },
+        status: 'submitted',
+      });
+
+      res.json({
+        success: true,
+        message: 'Application submitted successfully',
+        applicationId: newProject.id,
+        dealIdentifier: `DEAL-${newProject.id}`,
+      });
+    } catch (error) {
+      console.error('Public apply error:', error);
+      res.status(500).json({ error: 'Failed to submit application' });
+    }
+  });
+
   // Branding endpoints
   app.get('/api/settings/branding', async (req: AuthRequest, res: Response) => {
     try {
