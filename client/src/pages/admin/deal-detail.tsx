@@ -181,6 +181,10 @@ interface DealProperty {
   zip: string | null;
   propertyType: string | null;
   estimatedValue: number | null;
+  units: number | null;
+  monthlyRent: number | null;
+  annualTaxes: number | null;
+  annualInsurance: number | null;
   isPrimary: boolean;
   sortOrder: number;
   createdAt: string;
@@ -442,6 +446,10 @@ export default function AdminDealDetail() {
     zip: "",
     propertyType: "",
     estimatedValue: "",
+    units: "",
+    monthlyRent: "",
+    annualTaxes: "",
+    annualInsurance: "",
     isPrimary: false,
   });
 
@@ -592,7 +600,7 @@ export default function AdminDealDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
       setPropertyDialogOpen(false);
-      setPropertyForm({ address: "", city: "", state: "", zip: "", propertyType: "", estimatedValue: "", isPrimary: false });
+      setPropertyForm({ address: "", city: "", state: "", zip: "", propertyType: "", estimatedValue: "", units: "", monthlyRent: "", annualTaxes: "", annualInsurance: "", isPrimary: false });
       toast({ title: "Property added" });
     },
     onError: () => {
@@ -608,7 +616,7 @@ export default function AdminDealDetail() {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
       setPropertyDialogOpen(false);
       setEditingProperty(null);
-      setPropertyForm({ address: "", city: "", state: "", zip: "", propertyType: "", estimatedValue: "", isPrimary: false });
+      setPropertyForm({ address: "", city: "", state: "", zip: "", propertyType: "", estimatedValue: "", units: "", monthlyRent: "", annualTaxes: "", annualInsurance: "", isPrimary: false });
       toast({ title: "Property updated" });
     },
     onError: () => {
@@ -1574,7 +1582,7 @@ export default function AdminDealDetail() {
                 size="sm"
                 onClick={() => {
                   setEditingProperty(null);
-                  setPropertyForm({ address: "", city: "", state: "", zip: "", propertyType: "", estimatedValue: "", isPrimary: false });
+                  setPropertyForm({ address: "", city: "", state: "", zip: "", propertyType: "", estimatedValue: "", units: "", monthlyRent: "", annualTaxes: "", annualInsurance: "", isPrimary: false });
                   setPropertyDialogOpen(true);
                 }}
                 data-testid="button-add-property"
@@ -1592,13 +1600,10 @@ export default function AdminDealDetail() {
                         {property.isPrimary && (
                           <Badge className="text-xs" data-testid={`badge-primary-${property.id}`}>Primary</Badge>
                         )}
-                        <span className="font-medium text-sm" data-testid={`text-property-address-${property.id}`}>{property.address}</span>
+                        <span className="font-medium text-sm" data-testid={`text-property-address-${property.id}`}>
+                          {[property.address, property.city, property.state, property.zip].filter(Boolean).join(", ")}
+                        </span>
                       </div>
-                      {(property.city || property.state || property.zip) && (
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {[property.city, property.state, property.zip].filter(Boolean).join(", ")}
-                        </div>
-                      )}
                       <div className="flex items-center gap-2 mt-1 flex-wrap">
                         {property.propertyType && (
                           <Badge variant="outline" className="text-xs" data-testid={`badge-property-type-${property.id}`}>{property.propertyType}</Badge>
@@ -1606,7 +1611,17 @@ export default function AdminDealDetail() {
                         {property.estimatedValue != null && (
                           <span className="text-xs text-muted-foreground" data-testid={`text-property-value-${property.id}`}>{formatCurrency(property.estimatedValue)}</span>
                         )}
+                        {property.units != null && (
+                          <span className="text-xs text-muted-foreground">{property.units} units</span>
+                        )}
                       </div>
+                      {(property.monthlyRent != null || property.annualTaxes != null || property.annualInsurance != null) && (
+                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                          {property.monthlyRent != null && <span>Rent: {formatCurrency(property.monthlyRent)}/mo</span>}
+                          {property.annualTaxes != null && <span>Taxes: {formatCurrency(property.annualTaxes)}/yr</span>}
+                          {property.annualInsurance != null && <span>Ins: {formatCurrency(property.annualInsurance)}/yr</span>}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-1">
                       <Button
@@ -1621,6 +1636,10 @@ export default function AdminDealDetail() {
                             zip: property.zip || "",
                             propertyType: property.propertyType || "",
                             estimatedValue: property.estimatedValue != null ? String(property.estimatedValue) : "",
+                            units: property.units != null ? String(property.units) : "",
+                            monthlyRent: property.monthlyRent != null ? String(property.monthlyRent) : "",
+                            annualTaxes: property.annualTaxes != null ? String(property.annualTaxes) : "",
+                            annualInsurance: property.annualInsurance != null ? String(property.annualInsurance) : "",
                             isPrimary: property.isPrimary,
                           });
                           setPropertyDialogOpen(true);
@@ -1727,6 +1746,38 @@ export default function AdminDealDetail() {
                       </div>
                     ))}
                   </div>
+                  {(() => {
+                    const properties = data?.properties || [];
+                    const totalRent = properties.reduce((sum, p) => sum + (p.monthlyRent || 0), 0);
+                    const totalTaxes = properties.reduce((sum, p) => sum + (p.annualTaxes || 0), 0);
+                    const totalInsurance = properties.reduce((sum, p) => sum + (p.annualInsurance || 0), 0);
+                    if (totalRent === 0 && totalTaxes === 0 && totalInsurance === 0) return null;
+                    return (
+                      <div className="mt-4 pt-3 border-t">
+                        <p className="text-xs font-semibold text-muted-foreground mb-2">Property Totals</p>
+                        <div className="grid grid-cols-3 gap-3">
+                          {totalRent > 0 && (
+                            <div className="text-center p-2 rounded-md bg-muted/30 border" data-testid="text-total-rent">
+                              <p className="text-xs text-muted-foreground">Total Rent</p>
+                              <p className="text-sm font-semibold">{formatCurrency(totalRent)}<span className="text-xs font-normal text-muted-foreground">/mo</span></p>
+                            </div>
+                          )}
+                          {totalTaxes > 0 && (
+                            <div className="text-center p-2 rounded-md bg-muted/30 border" data-testid="text-total-taxes">
+                              <p className="text-xs text-muted-foreground">Total Taxes</p>
+                              <p className="text-sm font-semibold">{formatCurrency(totalTaxes)}<span className="text-xs font-normal text-muted-foreground">/yr</span></p>
+                            </div>
+                          )}
+                          {totalInsurance > 0 && (
+                            <div className="text-center p-2 rounded-md bg-muted/30 border" data-testid="text-total-insurance">
+                              <p className="text-xs text-muted-foreground">Total Insurance</p>
+                              <p className="text-sm font-semibold">{formatCurrency(totalInsurance)}<span className="text-xs font-normal text-muted-foreground">/yr</span></p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </CardContent>
               </Card>
             );
@@ -3717,7 +3768,7 @@ export default function AdminDealDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog open={propertyDialogOpen} onOpenChange={(open) => { if (!open) { setPropertyDialogOpen(false); setEditingProperty(null); setPropertyForm({ address: "", city: "", state: "", zip: "", propertyType: "", estimatedValue: "", isPrimary: false }); } }}>
+      <Dialog open={propertyDialogOpen} onOpenChange={(open) => { if (!open) { setPropertyDialogOpen(false); setEditingProperty(null); setPropertyForm({ address: "", city: "", state: "", zip: "", propertyType: "", estimatedValue: "", units: "", monthlyRent: "", annualTaxes: "", annualInsurance: "", isPrimary: false }); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{editingProperty ? "Edit Property" : "Add Property"}</DialogTitle>
@@ -3790,16 +3841,64 @@ export default function AdminDealDetail() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="property-estimated-value">Estimated Value</Label>
-              <Input
-                id="property-estimated-value"
-                type="number"
-                value={propertyForm.estimatedValue}
-                onChange={(e) => setPropertyForm(prev => ({ ...prev, estimatedValue: e.target.value }))}
-                placeholder="0"
-                data-testid="input-property-estimated-value"
-              />
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
+                <Label htmlFor="property-estimated-value">Estimated Value</Label>
+                <Input
+                  id="property-estimated-value"
+                  type="number"
+                  value={propertyForm.estimatedValue}
+                  onChange={(e) => setPropertyForm(prev => ({ ...prev, estimatedValue: e.target.value }))}
+                  placeholder="0"
+                  data-testid="input-property-estimated-value"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="property-units">Units</Label>
+                <Input
+                  id="property-units"
+                  type="number"
+                  value={propertyForm.units}
+                  onChange={(e) => setPropertyForm(prev => ({ ...prev, units: e.target.value }))}
+                  placeholder="1"
+                  data-testid="input-property-units"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-2">
+                <Label htmlFor="property-monthly-rent">Monthly Rent</Label>
+                <Input
+                  id="property-monthly-rent"
+                  type="number"
+                  value={propertyForm.monthlyRent}
+                  onChange={(e) => setPropertyForm(prev => ({ ...prev, monthlyRent: e.target.value }))}
+                  placeholder="0"
+                  data-testid="input-property-monthly-rent"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="property-annual-taxes">Annual Taxes</Label>
+                <Input
+                  id="property-annual-taxes"
+                  type="number"
+                  value={propertyForm.annualTaxes}
+                  onChange={(e) => setPropertyForm(prev => ({ ...prev, annualTaxes: e.target.value }))}
+                  placeholder="0"
+                  data-testid="input-property-annual-taxes"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="property-annual-insurance">Annual Insurance</Label>
+                <Input
+                  id="property-annual-insurance"
+                  type="number"
+                  value={propertyForm.annualInsurance}
+                  onChange={(e) => setPropertyForm(prev => ({ ...prev, annualInsurance: e.target.value }))}
+                  placeholder="0"
+                  data-testid="input-property-annual-insurance"
+                />
+              </div>
             </div>
             <div className="flex items-center space-x-2">
               <Checkbox
@@ -3814,7 +3913,7 @@ export default function AdminDealDetail() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setPropertyDialogOpen(false); setEditingProperty(null); setPropertyForm({ address: "", city: "", state: "", zip: "", propertyType: "", estimatedValue: "", isPrimary: false }); }} data-testid="button-cancel-property">
+            <Button variant="outline" onClick={() => { setPropertyDialogOpen(false); setEditingProperty(null); setPropertyForm({ address: "", city: "", state: "", zip: "", propertyType: "", estimatedValue: "", units: "", monthlyRent: "", annualTaxes: "", annualInsurance: "", isPrimary: false }); }} data-testid="button-cancel-property">
               Cancel
             </Button>
             <Button
@@ -3826,6 +3925,10 @@ export default function AdminDealDetail() {
                   zip: propertyForm.zip || undefined,
                   propertyType: propertyForm.propertyType || undefined,
                   estimatedValue: propertyForm.estimatedValue ? Number(propertyForm.estimatedValue) : null,
+                  units: propertyForm.units ? Number(propertyForm.units) : null,
+                  monthlyRent: propertyForm.monthlyRent ? Number(propertyForm.monthlyRent) : null,
+                  annualTaxes: propertyForm.annualTaxes ? Number(propertyForm.annualTaxes) : null,
+                  annualInsurance: propertyForm.annualInsurance ? Number(propertyForm.annualInsurance) : null,
                   isPrimary: propertyForm.isPrimary,
                 };
                 if (editingProperty) {

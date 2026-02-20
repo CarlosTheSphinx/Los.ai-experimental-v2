@@ -6430,10 +6430,20 @@ export async function registerRoutes(
         .where(eq(dealDocuments.dealId, projectId))
         .orderBy(dealDocuments.sortOrder);
 
-      const props = await db.select()
+      let props = await db.select()
         .from(dealProperties)
         .where(eq(dealProperties.dealId, projectId))
         .orderBy(dealProperties.sortOrder);
+
+      if (props.length === 0 && project.propertyAddress) {
+        const [newProp] = await db.insert(dealProperties).values({
+          dealId: projectId,
+          address: project.propertyAddress,
+          isPrimary: true,
+          sortOrder: 0,
+        }).returning();
+        if (newProp) props = [newProp];
+      }
       
       res.json({ deal, documents: docs, project, properties: props });
     } catch (error) {
