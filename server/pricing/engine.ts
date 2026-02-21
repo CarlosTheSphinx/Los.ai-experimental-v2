@@ -12,12 +12,19 @@ export interface AppliedAdjuster {
   pointsAdd: number;
 }
 
+export interface YspPricingTier {
+  yspPercent: number;
+  rateAdd: number;
+}
+
 export interface PricingResult {
   eligible: boolean;
   reasons?: string[];
   baseRate?: number;
   finalRate?: number;
   points?: number;
+  yspRateImpact?: number;
+  effectiveRate?: number;
   caps?: {
     maxLTC: number;
     maxLTAIV: number;
@@ -42,6 +49,39 @@ export function validateRuleset(rules: unknown): string[] {
   if (!Array.isArray(r.leverageCaps)) errors.push("Missing rules.leverageCaps[]");
   
   return errors;
+}
+
+/**
+ * Interpolate the rate impact for a given YSP percentage from the pricing tiers.
+ * If yspPercent falls between two tiers, we linearly interpolate.
+ */
+export function interpolateYspRateImpact(tiers: YspPricingTier[], yspPercent: number): number {
+  if (!tiers || tiers.length === 0 || yspPercent <= 0) return 0;
+
+  // Sort tiers by yspPercent ascending
+  const sorted = [...tiers].sort((a, b) => a.yspPercent - b.yspPercent);
+
+  // Below the lowest tier — extrapolate linearly from origin
+  if (yspPercent <= sorted[0].yspPercent) {
+    return (yspPercent / sorted[0].yspPercent) * sorted[0].rateAdd;
+  }
+
+  // Above the highest tier — cap at highest
+  if (yspPercent >= sorted[sorted.length - 1].yspPercent) {
+    return sorted[sorted.length - 1].rateAdd;
+  }
+
+  // Find the two surrounding tiers and interpolate
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const lo = sorted[i];
+    const hi = sorted[i + 1];
+    if (yspPercent >= lo.yspPercent && yspPercent <= hi.yspPercent) {
+      const t = (yspPercent - lo.yspPercent) / (hi.yspPercent - lo.yspPercent);
+      return lo.rateAdd + t * (hi.rateAdd - lo.rateAdd);
+    }
+  }
+
+  return 0;
 }
 
 export function priceQuote(rules: PricingRules, inputs: PricingInputs): PricingResult {
@@ -97,11 +137,21 @@ export function priceQuote(rules: PricingRules, inputs: PricingInputs): PricingR
     }
   }
 
+  // YSP rate impact — look up yspPricing tiers in the ruleset
+  const yspPercent = (inputs as any).yspPercent ?? 0;
+  const yspTiers: YspPricingTier[] = (rules as any).yspPricing ?? [];
+  const yspRateImpact = interpolateYspRateImpact(yspTiers, yspPercent);
+
+  const finalRate = Number(rate.toFixed(3));
+  const effectiveRate = Number((rate + yspRateImpact).toFixed(3));
+
   return {
     eligible: true,
     baseRate,
-    finalRate: Number(rate.toFixed(3)),
+    finalRate,
     points: Number(points.toFixed(3)),
+    yspRateImpact: Number(yspRateImpact.toFixed(4)),
+    effectiveRate,
     caps: { maxLTC, maxLTAIV, maxLTARV },
     appliedAdjusters,
     notes

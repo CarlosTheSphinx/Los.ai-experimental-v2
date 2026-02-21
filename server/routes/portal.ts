@@ -1,11 +1,24 @@
 import type { Express, Request, Response } from 'express';
 import type { RouteDeps } from './types';
-import { eq, asc, and } from 'drizzle-orm';
-import { dealDocuments, dealDocumentFiles, projectStages, loanPrograms, projectActivity, platformSettings } from '@shared/schema';
+import { eq, asc, and, ne, isNotNull } from 'drizzle-orm';
+import { dealDocuments, dealDocumentFiles, projectStages, loanPrograms, projectActivity, platformSettings, systemSettings, projects } from '@shared/schema';
 import multer from 'multer';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
+
+async function getOnboardingConfig(db: any, configKey: string) {
+  try {
+    const [configSetting] = await db.select()
+      .from(systemSettings)
+      .where(eq(systemSettings.settingKey, configKey));
+    if (configSetting?.settingValue) {
+      return JSON.parse(configSetting.settingValue);
+    }
+  } catch {
+  }
+  return null;
+}
 
 export function registerPortalRoutes(app: Express, deps: RouteDeps) {
   const { storage, db, objectStorageService } = deps;
@@ -46,6 +59,8 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
         tasks: tasks.filter(t => t.stageId === stage.id && t.visibleToBorrower),
       }));
 
+      const portalConfig = await getOnboardingConfig(db, 'onboarding_borrower_config');
+
       // Return limited project data
       res.json({
         project: {
@@ -67,6 +82,7 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
         },
         stages: visibleStages,
         activity,
+        portalConfig,
       });
     } catch (error) {
       console.error('Borrower portal error:', error);
@@ -361,6 +377,20 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
         console.error('Portal auto-trigger check error:', triggerErr.message);
       }
 
+      // Auto-trigger AI document review based on lender config
+      try {
+        const { onDocumentUploaded } = await import('../services/documentReviewOrchestrator');
+        onDocumentUploaded({
+          documentId: docId,
+          projectId: project.id,
+          uploaderType: 'borrower',
+        }).catch(err => {
+          console.error(`Auto doc review trigger failed for doc ${docId}:`, err.message);
+        });
+      } catch (reviewErr: any) {
+        console.error('Doc review orchestrator error:', reviewErr.message);
+      }
+
       res.json({ document: updated, file: newFile });
     } catch (error) {
       console.error('Portal upload complete error:', error);
@@ -407,7 +437,13 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
         return { ...doc, files };
       }));
 
-      // Return full deal data for broker
+      const onboardingConfig = await getOnboardingConfig(db, 'onboarding_broker_config');
+
+      // Filter documents visible to broker
+      const brokerDocs = docsWithFiles.filter(doc =>
+        doc.visibility === 'broker' || doc.visibility === 'all' || !doc.visibility
+      );
+
       res.json({
         deal: {
           id: project.id,
@@ -434,13 +470,14 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
           stageOrder: s.stageOrder,
           status: s.status,
         })),
-        documents: docsWithFiles.map(doc => ({
+        documents: brokerDocs.map(doc => ({
           id: doc.id,
           documentName: doc.documentName,
           documentCategory: doc.documentCategory,
           documentDescription: doc.documentDescription,
           status: doc.status,
           isRequired: doc.isRequired,
+          assignedTo: doc.assignedTo,
           uploadedAt: doc.uploadedAt,
           reviewedAt: doc.reviewedAt,
           files: doc.files.map(f => ({
@@ -450,10 +487,320 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
             uploadedAt: f.uploadedAt,
           })),
         })),
+        onboardingConfig,
       });
     } catch (error) {
       console.error('Broker portal error:', error);
       res.status(500).json({ error: 'Failed to load broker portal' });
+    }
+  });
+
+  // ==================== BORROWER RELATED DEALS ====================
+
+  app.get('/api/portal/:token/related-deals', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const project = await storage.getProjectByToken(token);
+      if (!project) return res.status(404).json({ error: 'Deal not found' });
+
+      let relatedDeals: any[] = [];
+      if (project.borrowerEmail) {
+        const allDeals = await db.select({
+          id: projects.id,
+          projectName: projects.projectName,
+          propertyAddress: projects.propertyAddress,
+          loanAmount: projects.loanAmount,
+          loanType: projects.loanType,
+          status: projects.status,
+          currentStage: projects.currentStage,
+          borrowerPortalToken: projects.borrowerPortalToken,
+          borrowerPortalEnabled: projects.borrowerPortalEnabled,
+          programId: projects.programId,
+        }).from(projects)
+          .where(and(
+            eq(projects.borrowerEmail, project.borrowerEmail),
+            isNotNull(projects.borrowerPortalToken),
+            eq(projects.borrowerPortalEnabled, true),
+          ))
+          .orderBy(asc(projects.id));
+
+        const dealsWithPrograms = await Promise.all(allDeals.map(async (deal) => {
+          let programName: string | null = null;
+          if (deal.programId) {
+            const [program] = await db.select({ name: loanPrograms.name }).from(loanPrograms).where(eq(loanPrograms.id, deal.programId));
+            if (program) programName = program.name;
+          }
+          return {
+            id: deal.id,
+            dealName: deal.projectName,
+            propertyAddress: deal.propertyAddress,
+            loanAmount: deal.loanAmount,
+            loanType: deal.loanType,
+            status: deal.status,
+            currentStage: deal.currentStage,
+            portalToken: deal.borrowerPortalToken,
+            programName,
+            isCurrent: deal.borrowerPortalToken === token,
+          };
+        }));
+        relatedDeals = dealsWithPrograms;
+      } else {
+        relatedDeals = [{
+          id: project.id,
+          dealName: project.projectName,
+          propertyAddress: project.propertyAddress,
+          loanAmount: project.loanAmount,
+          loanType: project.loanType,
+          status: project.status,
+          currentStage: project.currentStage,
+          portalToken: token,
+          programName: null,
+          isCurrent: true,
+        }];
+      }
+
+      res.json({ deals: relatedDeals });
+    } catch (error) {
+      console.error('Related deals error:', error);
+      res.status(500).json({ error: 'Failed to load related deals' });
+    }
+  });
+
+  // ==================== BROKER RELATED DEALS ====================
+
+  app.get('/api/broker-portal/:token/related-deals', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const project = await storage.getProjectByBrokerToken(token);
+      if (!project) return res.status(404).json({ error: 'Deal not found' });
+      if (!project.brokerPortalEnabled) return res.status(403).json({ error: 'Portal disabled' });
+
+      const allDeals = await db.select({
+        id: projects.id,
+        projectName: projects.projectName,
+        propertyAddress: projects.propertyAddress,
+        loanAmount: projects.loanAmount,
+        loanType: projects.loanType,
+        status: projects.status,
+        currentStage: projects.currentStage,
+        brokerPortalToken: projects.brokerPortalToken,
+        brokerPortalEnabled: projects.brokerPortalEnabled,
+        programId: projects.programId,
+        userId: projects.userId,
+      }).from(projects)
+        .where(and(
+          eq(projects.userId, project.userId!),
+          isNotNull(projects.brokerPortalToken),
+          eq(projects.brokerPortalEnabled, true),
+        ))
+        .orderBy(asc(projects.id));
+
+      const dealsWithPrograms = await Promise.all(allDeals.map(async (deal) => {
+        let programName: string | null = null;
+        if (deal.programId) {
+          const [program] = await db.select({ name: loanPrograms.name }).from(loanPrograms).where(eq(loanPrograms.id, deal.programId));
+          if (program) programName = program.name;
+        }
+        return {
+          id: deal.id,
+          dealName: deal.projectName,
+          propertyAddress: deal.propertyAddress,
+          loanAmount: deal.loanAmount,
+          loanType: deal.loanType,
+          status: deal.status,
+          currentStage: deal.currentStage,
+          portalToken: deal.brokerPortalToken,
+          programName,
+          isCurrent: deal.brokerPortalToken === token,
+        };
+      }));
+
+      res.json({ deals: dealsWithPrograms });
+    } catch (error) {
+      console.error('Broker related deals error:', error);
+      res.status(500).json({ error: 'Failed to load related deals' });
+    }
+  });
+
+  // ==================== BROKER PORTAL DOCUMENT UPLOAD ====================
+
+  app.post('/api/broker-portal/:token/documents/:docId/upload-url', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const docId = parseInt(req.params.docId);
+      const { name, size, contentType } = req.body;
+
+      const project = await storage.getProjectByBrokerToken(token);
+      if (!project) return res.status(404).json({ error: 'Deal not found' });
+      if (!project.brokerPortalEnabled) return res.status(403).json({ error: 'Portal disabled' });
+
+      const [doc] = await db.select().from(dealDocuments)
+        .where(and(eq(dealDocuments.id, docId), eq(dealDocuments.dealId, project.id)));
+      if (!doc) return res.status(404).json({ error: 'Document not found' });
+      if (!name) return res.status(400).json({ error: 'File name is required' });
+
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const isLocal = uploadURL.startsWith('__local__:');
+      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+
+      res.json({
+        uploadURL: isLocal ? `/api/broker-portal/${token}/documents/${docId}/upload-direct` : uploadURL,
+        objectPath,
+        docId,
+        useDirectUpload: isLocal,
+        metadata: { name, size, contentType },
+      });
+    } catch (error) {
+      console.error('Broker portal upload URL error:', error);
+      res.status(500).json({ error: 'Failed to generate upload URL' });
+    }
+  });
+
+  const brokerMulterUpload = multer({ dest: path.join(process.cwd(), 'uploads', 'temp') });
+  app.post('/api/broker-portal/:token/documents/:docId/upload-direct', brokerMulterUpload.single('file'), async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const project = await storage.getProjectByBrokerToken(token);
+      if (!project) return res.status(404).json({ error: 'Deal not found' });
+      if (!project.brokerPortalEnabled) return res.status(403).json({ error: 'Portal disabled' });
+
+      if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+      const uploadsDir = path.join(process.cwd(), 'uploads', 'uploads');
+      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+      const objectId = randomUUID();
+      const destPath = path.join(uploadsDir, objectId);
+      fs.renameSync(req.file.path, destPath);
+      fs.writeFileSync(destPath + '.meta', JSON.stringify({
+        fileName: req.file.originalname,
+        contentType: req.file.mimetype,
+        size: req.file.size,
+      }));
+
+      res.json({
+        objectPath: `/objects/uploads/${objectId}`,
+        fileName: req.file.originalname,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype,
+      });
+    } catch (error) {
+      console.error('Broker portal direct upload error:', error);
+      res.status(500).json({ error: 'Failed to upload file' });
+    }
+  });
+
+  app.post('/api/broker-portal/:token/documents/:docId/upload-complete', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const docId = parseInt(req.params.docId);
+      const { objectPath, fileName, fileSize, mimeType } = req.body;
+
+      const project = await storage.getProjectByBrokerToken(token);
+      if (!project) return res.status(404).json({ error: 'Deal not found' });
+      if (!project.brokerPortalEnabled) return res.status(403).json({ error: 'Portal disabled' });
+
+      const [doc] = await db.select().from(dealDocuments)
+        .where(and(eq(dealDocuments.id, docId), eq(dealDocuments.dealId, project.id)));
+      if (!doc) return res.status(404).json({ error: 'Document not found' });
+      if (!objectPath) return res.status(400).json({ error: 'Object path is required' });
+
+      const existingFiles = await db.select().from(dealDocumentFiles)
+        .where(eq(dealDocumentFiles.documentId, docId));
+      const nextSortOrder = existingFiles.length;
+
+      const [newFile] = await db.insert(dealDocumentFiles).values({
+        documentId: docId,
+        filePath: objectPath,
+        fileName: fileName || null,
+        fileSize: fileSize || null,
+        mimeType: mimeType || null,
+        uploadedAt: new Date(),
+        sortOrder: nextSortOrder,
+      }).returning();
+
+      const [updated] = await db.update(dealDocuments)
+        .set({
+          filePath: objectPath,
+          fileName: fileName || null,
+          fileSize: fileSize || null,
+          mimeType: mimeType || null,
+          status: 'uploaded',
+          uploadedAt: new Date(),
+        })
+        .where(eq(dealDocuments.id, docId))
+        .returning();
+
+      await db.insert(projectActivity).values({
+        projectId: project.id,
+        activityType: 'document_uploaded',
+        activityDescription: `Broker uploaded: ${updated?.documentName || fileName || 'Document'}`,
+        visibleToBorrower: true,
+      });
+
+      try {
+        const { isDriveIntegrationEnabled, syncDealDocumentToDrive } = await import('../services/googleDrive');
+        const driveEnabled = await isDriveIntegrationEnabled();
+        if (driveEnabled && updated && newFile) {
+          syncDealDocumentToDrive(updated.id, newFile.id).catch((err: any) => {
+            console.error(`Drive sync failed for broker portal doc ${updated.id}:`, err.message);
+          });
+        }
+      } catch (driveErr: any) {
+        console.error('Drive sync check error:', driveErr.message);
+      }
+
+      // Auto-trigger AI document review based on lender config
+      try {
+        const { onDocumentUploaded } = await import('../services/documentReviewOrchestrator');
+        onDocumentUploaded({
+          documentId: docId,
+          projectId: project.id,
+          uploaderType: 'broker',
+        }).catch(err => {
+          console.error(`Auto doc review trigger failed for broker doc ${docId}:`, err.message);
+        });
+      } catch (reviewErr: any) {
+        console.error('Doc review orchestrator error:', reviewErr.message);
+      }
+
+      res.json({ document: updated, file: newFile });
+    } catch (error) {
+      console.error('Broker portal upload complete error:', error);
+      res.status(500).json({ error: 'Failed to complete upload' });
+    }
+  });
+
+  app.get('/api/broker-portal/:token/documents', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const project = await storage.getProjectByBrokerToken(token);
+      if (!project) return res.status(404).json({ error: 'Deal not found' });
+      if (!project.brokerPortalEnabled) return res.status(403).json({ error: 'Portal disabled' });
+
+      const docs = await db.select().from(dealDocuments)
+        .where(eq(dealDocuments.dealId, project.id))
+        .orderBy(asc(dealDocuments.sortOrder));
+
+      const stages = await db.select().from(projectStages)
+        .where(eq(projectStages.projectId, project.id))
+        .orderBy(asc(projectStages.stageOrder));
+
+      const docsWithFiles = await Promise.all(docs.map(async (doc) => {
+        const files = await db.select().from(dealDocumentFiles)
+          .where(eq(dealDocumentFiles.documentId, doc.id))
+          .orderBy(asc(dealDocumentFiles.sortOrder));
+        return { ...doc, files };
+      }));
+
+      const brokerDocs = docsWithFiles.filter(doc =>
+        doc.visibility === 'broker' || doc.visibility === 'all' || !doc.visibility
+      );
+
+      res.json({ documents: brokerDocs, stages });
+    } catch (error) {
+      console.error('Broker portal documents error:', error);
+      res.status(500).json({ error: 'Failed to load documents' });
     }
   });
 }

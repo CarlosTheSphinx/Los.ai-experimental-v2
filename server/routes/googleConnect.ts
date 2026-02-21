@@ -118,6 +118,15 @@ export function registerGoogleConnectRoutes(app: Express, deps: RouteDeps) {
   app.get('/api/google/connect', authenticateUser, async (req: AuthRequest, res: Response) => {
     try {
       const returnTo = (req.query.returnTo as string) || '/admin/onboarding';
+
+      const clientId = process.env.GOOGLE_CLIENT_ID;
+      const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+      if (!clientId || !clientSecret) {
+        console.error('Google OAuth credentials not configured');
+        const separator = returnTo.includes('?') ? '&' : '?';
+        return res.redirect(`${returnTo}${separator}error=google_not_configured`);
+      }
+
       const baseUrl = getBaseUrl(req);
       const redirectUri = `${baseUrl}/api/google/callback`;
 
@@ -130,7 +139,7 @@ export function registerGoogleConnectRoutes(app: Express, deps: RouteDeps) {
       const authUrl = client.generateAuthUrl({
         access_type: 'offline',
         scope: UNIFIED_SCOPES,
-        prompt: 'consent', // Force consent to always get refresh_token
+        prompt: 'consent',
         state,
       });
 

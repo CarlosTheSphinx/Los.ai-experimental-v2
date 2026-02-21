@@ -384,8 +384,35 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createProject(project: InsertProject): Promise<Project> {
+    if (!project.loanNumber) {
+      project.loanNumber = await this.generateLoanNumber(project.propertyAddress || '');
+    }
     const [created] = await db.insert(projects).values(project).returning();
     return created;
+  }
+
+  private async generateLoanNumber(propertyAddress: string): Promise<string> {
+    const streetMatch = propertyAddress.match(/^\d+\s+(.+?)(?:,|\s+(?:apt|suite|unit|#))/i)
+      || propertyAddress.match(/^\d+\s+(\S+)/i)
+      || propertyAddress.match(/^(\S+)/i);
+    const streetWord = streetMatch ? streetMatch[1].replace(/[^a-zA-Z]/g, '') : 'LN';
+    const prefix = streetWord.substring(0, 3).toUpperCase().padEnd(3, 'X');
+
+    const lastLoan = await db.select({ loanNumber: projects.loanNumber })
+      .from(projects)
+      .where(sql`${projects.loanNumber} IS NOT NULL`)
+      .orderBy(desc(projects.id))
+      .limit(20);
+
+    let maxSeq = 149;
+    for (const row of lastLoan) {
+      if (row.loanNumber) {
+        const numPart = parseInt(row.loanNumber.slice(-3));
+        if (!isNaN(numPart) && numPart > maxSeq) maxSeq = numPart;
+      }
+    }
+
+    return `${prefix}${maxSeq + 1}`;
   }
 
   async getProjects(userId: number, status?: string, archived?: boolean): Promise<Project[]> {
@@ -541,6 +568,7 @@ export class DatabaseStorage implements IStorage {
         borrowerName: projects.borrowerName,
         propertyAddress: projects.propertyAddress,
         projectNumber: projects.projectNumber,
+        loanNumber: projects.loanNumber,
       })
       .from(projectTasks)
       .innerJoin(projects, eq(projectTasks.projectId, projects.id))

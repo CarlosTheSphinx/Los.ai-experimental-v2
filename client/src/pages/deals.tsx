@@ -20,6 +20,9 @@ import {
   LayoutGrid,
   List,
   MapPin,
+  LinkIcon,
+  Copy,
+  Check,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,6 +39,7 @@ import {
 } from "@/components/ui/table";
 import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 
 interface Deal {
   id: number;
@@ -197,10 +201,21 @@ function formatStage(stage: string | null) {
 
 export default function Projects() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const copyApplyLink = () => {
+    const url = `${window.location.origin}/apply`;
+    navigator.clipboard.writeText(url).then(() => {
+      setLinkCopied(true);
+      toast({ title: "Link Copied!", description: "Application link copied to clipboard" });
+      setTimeout(() => setLinkCopied(false), 2000);
+    });
+  };
 
   const { data, isLoading } = useQuery<{ projects: Deal[] }>({
     queryKey: ['/api/deals'],
@@ -263,14 +278,26 @@ export default function Projects() {
           <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Loans Dashboard</h1>
           <p className="text-muted-foreground">Overview of all your loans</p>
         </div>
-        {isAdmin && (
-          <Link href="/deals/new">
-            <Button data-testid="button-new-deal">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Active Loans
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Button
+              variant="outline"
+              onClick={copyApplyLink}
+              data-testid="button-copy-apply-link"
+            >
+              {linkCopied ? <Check className="h-4 w-4 mr-2 text-green-500" /> : <LinkIcon className="h-4 w-4 mr-2" />}
+              {linkCopied ? "Copied!" : "Copy Application Link"}
             </Button>
-          </Link>
-        )}
+          )}
+          {isAdmin && (
+            <Link href="/deals/new">
+              <Button data-testid="button-new-deal">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Active Loans
+              </Button>
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -405,7 +432,7 @@ export default function Projects() {
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs text-muted-foreground font-mono" data-testid={`text-deal-number-${project.id}`}>
-                          DEAL-{project.id}
+                          {project.loanNumber || `DEAL-${project.id}`}
                         </span>
                         {getStatusBadge(project.status)}
                       </div>
@@ -507,7 +534,7 @@ export default function Projects() {
                     <TableCell>
                       <Link href={`/deals/${project.id}`}>
                         <span className="font-mono text-sm text-primary hover:underline" data-testid={`link-deal-row-${project.id}`}>
-                          DEAL-{project.id}
+                          {project.loanNumber || `DEAL-${project.id}`}
                         </span>
                       </Link>
                     </TableCell>

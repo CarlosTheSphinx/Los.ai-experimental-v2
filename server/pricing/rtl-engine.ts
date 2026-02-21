@@ -1,4 +1,5 @@
 import type { RTLPricingFormData, RTLPricingResponse } from "@shared/schema";
+import { interpolateYspRateImpact, type YspPricingTier } from "./engine";
 
 interface Disqualifier {
   id: string;
@@ -72,11 +73,21 @@ export function calculateRTLPricing(input: RTLPricingFormData): RTLPricingRespon
   // Calculate leverage caps
   const caps = calculateLeverageCaps(input);
 
+  // YSP rate impact (if yspPricing tiers + yspPercent passed via extended input)
+  const yspPercent = (input as any).yspPercent ?? 0;
+  const yspTiers: YspPricingTier[] = (input as any).yspPricingTiers ?? [];
+  const yspRateImpact = interpolateYspRateImpact(yspTiers, yspPercent);
+
+  const finalRate = Math.round(rate * 1000) / 1000;
+  const effectiveRate = Math.round((rate + yspRateImpact) * 1000) / 1000;
+
   return {
     eligible: true,
     baseRate,
-    finalRate: Math.round(rate * 1000) / 1000,
+    finalRate,
     points: DEFAULT_POINTS,
+    yspRateImpact: Math.round(yspRateImpact * 10000) / 10000,
+    effectiveRate,
     caps,
     appliedAdjusters,
     flags: runFlags(input),

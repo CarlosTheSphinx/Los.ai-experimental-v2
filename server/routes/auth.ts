@@ -294,6 +294,16 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
     console.log('Google OAuth: Request host:', req.get('host'), 'x-forwarded-host:', req.headers['x-forwarded-host'], 'x-forwarded-proto:', req.headers['x-forwarded-proto']);
     const googleOAuth = new OAuth2Client(clientId, process.env.GOOGLE_CLIENT_SECRET, redirectUri);
 
+    const userType = req.query.userType as string | undefined;
+    const returnTo = req.query.returnTo as string | undefined;
+    const stateObj: Record<string, string> = {};
+    if (userType && ['broker', 'borrower', 'lender'].includes(userType)) {
+      stateObj.userType = userType;
+    }
+    if (returnTo && returnTo.startsWith('/')) {
+      stateObj.returnTo = returnTo;
+    }
+
     const authorizeUrl = googleOAuth.generateAuthUrl({
       access_type: 'offline',
       scope: [
@@ -303,6 +313,7 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         'https://www.googleapis.com/auth/drive.file',
       ],
       prompt: 'consent',
+      state: Object.keys(stateObj).length > 0 ? JSON.stringify(stateObj) : undefined,
     });
 
     res.redirect(authorizeUrl);
@@ -312,7 +323,13 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
   app.get('/api/auth/google/callback', async (req: Request, res: Response) => {
     console.log('Google OAuth callback hit. Query params:', JSON.stringify(req.query));
     try {
-      const { code } = req.query;
+      const { code, state } = req.query;
+      let oauthState: Record<string, string> = {};
+      if (state && typeof state === 'string') {
+        try { oauthState = JSON.parse(state); } catch {}
+      }
+      const requestedUserType = oauthState.userType || null;
+
       if (!code || typeof code !== 'string') {
         console.error('Google OAuth callback: No code provided. Query:', JSON.stringify(req.query));
         return res.redirect('/login?error=google_auth_failed');
@@ -374,6 +391,12 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         }
         await storage.updateUser(user.id, { lastLoginAt: new Date(), emailVerified: true });
       } else {
+        const assignedUserType = requestedUserType && ['broker', 'borrower', 'lender'].includes(requestedUserType)
+          ? requestedUserType
+          : null;
+        const assignedRole = assignedUserType === 'lender' ? 'admin' : 'user';
+        const onboardingCompleted = assignedUserType === 'borrower';
+
         user = await storage.createUser({
           email,
           passwordHash: null,
@@ -382,22 +405,28 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
           avatarUrl,
           emailVerified: true,
           isActive: true,
-          userType: null,
-          onboardingCompleted: false,
+          userType: assignedUserType,
+          onboardingCompleted,
           companyName: null,
           phone: null,
           passwordResetToken: null,
           passwordResetExpires: null,
+          role: assignedRole,
         });
       }
 
       const token = generateToken(user.id, user.email);
       setAuthCookie(res, token);
 
-      if (!user.userType) {
+      const returnTo = oauthState.returnTo || null;
+      if (returnTo && returnTo.startsWith('/')) {
+        res.redirect(returnTo);
+      } else if (!user.userType) {
         res.redirect('/select-role');
-      } else if (!user.onboardingCompleted && ['admin', 'staff', 'super_admin'].includes(user.role || '')) {
+      } else if (user.userType === 'lender' || ['admin', 'staff', 'super_admin'].includes(user.role || '')) {
         res.redirect('/admin/onboarding');
+      } else if (user.userType === 'broker' && !user.onboardingCompleted) {
+        res.redirect('/onboarding');
       } else {
         res.redirect('/');
       }

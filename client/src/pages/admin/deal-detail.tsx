@@ -86,6 +86,27 @@ import { LinkedEmailsSection } from "@/components/admin/LinkedEmailsSection";
 import { AIInsightsPanel } from "@/components/admin/AIInsightsPanel";
 import { DealMemoryPanel } from "@/components/admin/DealMemoryPanel";
 
+function getPreviewType(fileName: string | null, mimeType?: string | null): 'image' | 'pdf' | 'unsupported' {
+  const mime = (mimeType || '').toLowerCase();
+  const name = (fileName || '').toLowerCase();
+  if (mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(name)) return 'image';
+  if (mime === 'application/pdf' || name.endsWith('.pdf')) return 'pdf';
+  return 'unsupported';
+}
+
+function getFileExtensionLabel(fileName: string | null): string {
+  if (!fileName) return 'Document';
+  const ext = fileName.split('.').pop()?.toUpperCase();
+  const labels: Record<string, string> = {
+    DOC: 'Word Document', DOCX: 'Word Document',
+    XLS: 'Excel Spreadsheet', XLSX: 'Excel Spreadsheet',
+    PPT: 'PowerPoint', PPTX: 'PowerPoint',
+    CSV: 'CSV File', TXT: 'Text File',
+    ZIP: 'ZIP Archive', RAR: 'RAR Archive',
+  };
+  return labels[ext || ''] || `${ext} File`;
+}
+
 interface Deal {
   id: number;
   userId: number | null;
@@ -181,6 +202,10 @@ interface DealProperty {
   zip: string | null;
   propertyType: string | null;
   estimatedValue: number | null;
+  units: number | null;
+  monthlyRent: number | null;
+  annualTaxes: number | null;
+  annualInsurance: number | null;
   isPrimary: boolean;
   sortOrder: number;
   createdAt: string;
@@ -412,7 +437,10 @@ export default function AdminDealDetail() {
     loanType: "",
     loanPurpose: "",
     propertyType: "",
+    loanTerm: "",
   });
+  const [appEditDialogOpen, setAppEditDialogOpen] = useState(false);
+  const [appEditForm, setAppEditForm] = useState<Record<string, string>>({});
   
   // Task dialog state
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
@@ -442,6 +470,10 @@ export default function AdminDealDetail() {
     zip: "",
     propertyType: "",
     estimatedValue: "",
+    units: "",
+    monthlyRent: "",
+    annualTaxes: "",
+    annualInsurance: "",
     isPrimary: false,
   });
 
@@ -468,6 +500,9 @@ export default function AdminDealDetail() {
   const [borrowerForm, setBorrowerForm] = useState({ firstName: "", lastName: "", email: "", phone: "" });
   const [showEditBroker, setShowEditBroker] = useState(false);
   const [selectedBrokerId, setSelectedBrokerId] = useState<string>("");
+  const [showAddThirdParty, setShowAddThirdParty] = useState(false);
+  const [thirdPartyForm, setThirdPartyForm] = useState({ name: "", email: "", phone: "", role: "", company: "", customRole: "" });
+  const [editingThirdPartyId, setEditingThirdPartyId] = useState<number | null>(null);
 
   const { data: projectDetailData, isLoading: projectLoading } = useQuery<ProjectDetailResponse>({
     queryKey: ['/api/admin/projects', linkedProjectId],
@@ -532,6 +567,56 @@ export default function AdminDealDetail() {
     },
   });
   
+  const { data: thirdPartiesData } = useQuery<{ contacts: any[] }>({
+    queryKey: ['/api/admin/deals', dealId, 'third-parties'],
+    enabled: !!dealId,
+  });
+
+  const addThirdPartyMutation = useMutation({
+    mutationFn: async (data: { name: string; email: string; phone: string; role: string; company: string }) => {
+      return apiRequest("POST", `/api/admin/deals/${dealId}/third-parties`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/deals', dealId, 'third-parties'] });
+      setShowAddThirdParty(false);
+      setThirdPartyForm({ name: "", email: "", phone: "", role: "", company: "", customRole: "" });
+      setEditingThirdPartyId(null);
+      toast({ title: "Third party contact added" });
+    },
+    onError: () => {
+      toast({ title: "Failed to add contact", variant: "destructive" });
+    },
+  });
+
+  const updateThirdPartyMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      return apiRequest("PATCH", `/api/admin/deals/${dealId}/third-parties/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/deals', dealId, 'third-parties'] });
+      setShowAddThirdParty(false);
+      setThirdPartyForm({ name: "", email: "", phone: "", role: "", company: "", customRole: "" });
+      setEditingThirdPartyId(null);
+      toast({ title: "Contact updated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update contact", variant: "destructive" });
+    },
+  });
+
+  const deleteThirdPartyMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("DELETE", `/api/admin/deals/${dealId}/third-parties/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/deals', dealId, 'third-parties'] });
+      toast({ title: "Contact removed" });
+    },
+    onError: () => {
+      toast({ title: "Failed to remove contact", variant: "destructive" });
+    },
+  });
+
   const addPropertyMutation = useMutation({
     mutationFn: async (propertyData: { address: string; city?: string; state?: string; zip?: string; propertyType?: string; estimatedValue?: number | null; isPrimary?: boolean }) => {
       return apiRequest("POST", `/api/admin/deals/${dealId}/properties`, propertyData);
@@ -539,7 +624,7 @@ export default function AdminDealDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
       setPropertyDialogOpen(false);
-      setPropertyForm({ address: "", city: "", state: "", zip: "", propertyType: "", estimatedValue: "", isPrimary: false });
+      setPropertyForm({ address: "", city: "", state: "", zip: "", propertyType: "", estimatedValue: "", units: "", monthlyRent: "", annualTaxes: "", annualInsurance: "", isPrimary: false });
       toast({ title: "Property added" });
     },
     onError: () => {
@@ -555,7 +640,7 @@ export default function AdminDealDetail() {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
       setPropertyDialogOpen(false);
       setEditingProperty(null);
-      setPropertyForm({ address: "", city: "", state: "", zip: "", propertyType: "", estimatedValue: "", isPrimary: false });
+      setPropertyForm({ address: "", city: "", state: "", zip: "", propertyType: "", estimatedValue: "", units: "", monthlyRent: "", annualTaxes: "", annualInsurance: "", isPrimary: false });
       toast({ title: "Property updated" });
     },
     onError: () => {
@@ -583,6 +668,11 @@ export default function AdminDealDetail() {
   );
   const project = projectDetailData?.project;
 
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewFile, setPreviewFile] = useState<{ url: string; fileName: string | null; mimeType?: string | null; downloadUrl: string } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewReady, setPreviewReady] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'completed' | 'todo' | 'digests' | 'ai_insights'>('all');
   const [subFilter, setSubFilter] = useState<'all' | 'documents' | 'tasks'>('all');
   const [showMemoryPanel, setShowMemoryPanel] = useState(true);
@@ -600,6 +690,45 @@ export default function AdminDealDetail() {
       setStageExpandInitialized(true);
     }
   }, [projectStages, stageExpandInitialized]);
+
+  useEffect(() => {
+    if (!previewOpen || !previewFile) {
+      setPreviewError(null);
+      setPreviewLoading(false);
+      setPreviewReady(false);
+      return;
+    }
+    const pType = getPreviewType(previewFile.fileName, previewFile.mimeType);
+    if (pType === 'unsupported') {
+      setPreviewReady(true);
+      return;
+    }
+
+    let cancelled = false;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    setPreviewReady(false);
+
+    fetch(previewFile.url, { credentials: 'include' })
+      .then(async (res) => {
+        if (cancelled) return;
+        if (!res.ok) {
+          setPreviewError('This file is no longer available. It may have been moved or deleted.');
+          setPreviewLoading(false);
+        } else {
+          res.body?.cancel().catch(() => {});
+          setPreviewReady(true);
+          setPreviewLoading(false);
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPreviewError('This file is no longer available. It may have been moved or deleted.');
+        setPreviewLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [previewOpen, previewFile]);
 
   const toggleStageExpanded = (stageId: number) => {
     setExpandedStages(prev => {
@@ -712,6 +841,20 @@ export default function AdminDealDetail() {
     },
   });
 
+  const updateAppDataMutation = useMutation({
+    mutationFn: async (appData: Record<string, string>) => {
+      return apiRequest("PUT", `/api/admin/deals/${dealId}`, { applicationData: appData });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
+      setAppEditDialogOpen(false);
+      toast({ title: "Application details updated" });
+    },
+    onError: () => {
+      toast({ title: "Update failed", variant: "destructive" });
+    },
+  });
+
   const updateStageMutation = useMutation({
     mutationFn: async (stage: string) => {
       return apiRequest("PATCH", `/api/admin/deals/${dealId}`, { stage });
@@ -771,6 +914,7 @@ export default function AdminDealDetail() {
         loanType: deal.loanData?.loanType || "",
         loanPurpose: deal.loanData?.loanPurpose || "",
         propertyType: deal.loanData?.propertyType || "",
+        loanTerm: deal.loanData?.loanTerm?.toString() || "",
       });
       setEditDialogOpen(true);
     }
@@ -896,6 +1040,25 @@ export default function AdminDealDetail() {
 
   const [pushingDocId, setPushingDocId] = useState<number | null>(null);
 
+  const [driveSyncing, setDriveSyncing] = useState(false);
+  const syncAllDriveMutation = useMutation({
+    mutationFn: async () => {
+      setDriveSyncing(true);
+      return apiRequest('POST', `/api/admin/deals/${dealId}/sync-all-drive`);
+    },
+    onSuccess: async (response) => {
+      const result = await response.json();
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/projects', linkedProjectId] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
+      toast({ title: "Drive sync complete", description: `${result.synced} synced, ${result.skipped} already synced${result.errors ? `, ${result.errors} errors` : ''}` });
+      setDriveSyncing(false);
+    },
+    onError: (error: any) => {
+      toast({ title: "Drive sync failed", description: error.message || "Could not sync documents to Google Drive", variant: "destructive" });
+      setDriveSyncing(false);
+    },
+  });
+
   const pushToDriveMutation = useMutation({
     mutationFn: async ({ docId }: { docId: number }) => {
       setPushingDocId(docId);
@@ -936,8 +1099,30 @@ export default function AdminDealDetail() {
     },
   });
 
+  const convertProgramMutation = useMutation({
+    mutationFn: async (programId: number) => {
+      return apiRequest('POST', `/api/admin/projects/${linkedProjectId}/convert-program`, { programId });
+    },
+    onSuccess: async (response) => {
+      const result = await response.json();
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/projects', linkedProjectId] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
+      toast({
+        title: "Loan program changed",
+        description: `Converted to ${result.programName}. ${result.documentsPreserved} uploaded documents preserved. ${result.stagesCreated} stages, ${result.tasksCreated} tasks created.`,
+      });
+      setConvertProgramDialogOpen(false);
+      setPendingProgramId(null);
+    },
+    onError: () => {
+      toast({ title: "Failed to change loan program", variant: "destructive" });
+    },
+  });
+
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [selectedProgramId, setSelectedProgramId] = useState<string>("");
+  const [convertProgramDialogOpen, setConvertProgramDialogOpen] = useState(false);
+  const [pendingProgramId, setPendingProgramId] = useState<string | null>(null);
   const [editTargetCloseDateOpen, setEditTargetCloseDateOpen] = useState(false);
   const [targetCloseDateValue, setTargetCloseDateValue] = useState<string>("");
 
@@ -1179,8 +1364,11 @@ export default function AdminDealDetail() {
     e.target.value = "";
   };
 
-  const handleViewDocument = (docId: number) => {
-    window.open(`/api/admin/deals/${dealId}/documents/${docId}/download`, "_blank");
+  const handleViewDocument = (docId: number, fileName: string | null, mimeType?: string | null) => {
+    const url = `/api/admin/deals/${dealId}/documents/${docId}/download`;
+    const downloadUrl = `/api/admin/deals/${dealId}/documents/${docId}/download?download=true`;
+    setPreviewFile({ url, fileName, mimeType, downloadUrl });
+    setPreviewOpen(true);
   };
 
   const handleDownloadDocument = (docId: number, fileName: string | null) => {
@@ -1192,8 +1380,11 @@ export default function AdminDealDetail() {
     document.body.removeChild(link);
   };
 
-  const handleViewFile = (fileId: number) => {
-    window.open(`/api/admin/document-files/${fileId}/download`, "_blank");
+  const handleViewFile = (fileId: number, fileName: string | null, mimeType?: string | null) => {
+    const url = `/api/admin/document-files/${fileId}/download`;
+    const downloadUrl = `/api/admin/document-files/${fileId}/download?download=true`;
+    setPreviewFile({ url, fileName, mimeType, downloadUrl });
+    setPreviewOpen(true);
   };
 
   const handleDownloadFile = (fileId: number, fileName: string | null) => {
@@ -1211,7 +1402,7 @@ export default function AdminDealDetail() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${linkedProjectId}`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/projects', linkedProjectId] });
       queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}`] });
       toast({ title: "File removed" });
     },
@@ -1279,77 +1470,13 @@ export default function AdminDealDetail() {
           </Button>
         </Link>
         <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground font-mono">DEAL-{deal.id}</span>
-            {stages.length > 0 ? (
-              <Select 
-                value={deal.stage} 
-                onValueChange={(value) => updateStageMutation.mutate(value)}
-                disabled={updateStageMutation.isPending}
-              >
-                <SelectTrigger 
-                  className="w-auto h-6 text-xs font-semibold px-2 rounded-md border-0"
-                  style={getStageStyle(deal.stage, stages)}
-                  data-testid="select-deal-stage"
-                >
-                  <SelectValue>{getStageLabelFromStages(deal.stage, stages)}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {stages.filter(s => s.isActive !== false).map((stage) => (
-                    <SelectItem key={stage.id} value={stage.key}>
-                      <span className="flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color || '#6b7280' }} />
-                        {stage.label}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Badge variant="secondary" className="text-xs">
-                {deal.stage || 'No Stage'}
-              </Badge>
-            )}
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="text-sm text-muted-foreground font-mono">{deal.loanNumber || `DEAL-${deal.id}`}</span>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl font-semibold" data-testid="text-borrower-name">{borrowerName}</h1>
-            {deal.programName && (
-              <Badge variant="outline" data-testid="badge-program-name">
-                {deal.programName}
-              </Badge>
-            )}
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={copyBorrowerPortalLink} data-testid="button-copy-portal-link">
-            <Copy className="h-4 w-4 mr-2" />
-            Borrower Link
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" data-testid="button-more-actions">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={openEditDialog}>
-                <Pencil className="h-4 w-4 mr-2" />
-                Edit Loan Details
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleContactBorrower}>
-                <Mail className="h-4 w-4 mr-2" />
-                Contact Borrower
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <ExternalLink className="h-4 w-4 mr-2" />
-                View Borrower Portal
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setSyncDialogOpen(true)} data-testid="button-sync-pipeline">
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Sync Pipeline from Program
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <h1 className="text-xl font-semibold" data-testid="text-deal-address">
+            {deal.propertyAddress || 'No Address'}
+          </h1>
+          <p className="text-sm text-muted-foreground" data-testid="text-borrower-name">{borrowerName}</p>
         </div>
       </div>
 
@@ -1429,17 +1556,7 @@ export default function AdminDealDetail() {
                   );
                 })}
               </div>
-              {deal.programName && (
-                <div className="border-t mt-5 pt-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Loan Program</span>
-                    </div>
-                    <span className="text-sm font-medium" data-testid="text-program-name">{deal.programName}</span>
-                  </div>
-                </div>
-              )}
+              
             </CardContent>
           </Card>
         );
@@ -1449,6 +1566,12 @@ export default function AdminDealDetail() {
       <div className="grid md:grid-cols-3 gap-6">
         <div className="md:col-span-2">
           <Card className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Loan Details</p>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={openEditDialog} data-testid="button-edit-loan-details-inline">
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            </div>
             <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
               <div className="flex items-center gap-2">
                 <DollarSign className="h-4 w-4 text-success" />
@@ -1469,12 +1592,6 @@ export default function AdminDealDetail() {
               </div>
               <Separator orientation="vertical" className="h-5 hidden md:block" />
               <div className="flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-warning" />
-                <span className="text-xs text-muted-foreground">Property</span>
-                <span className="font-semibold text-sm" data-testid="text-property-type">{deal.loanData?.propertyType || '\u2014'}</span>
-              </div>
-              <Separator orientation="vertical" className="h-5 hidden md:block" />
-              <div className="flex items-center gap-2">
                 <CalendarDays className="h-4 w-4 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">Target Close</span>
                 <span className="font-semibold text-sm" data-testid="text-target-close-date">
@@ -1490,87 +1607,39 @@ export default function AdminDealDetail() {
                 </Button>
               </div>
             </div>
-          </Card>
-          <Card className="mt-4" data-testid="card-deal-status">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="h-3 w-3 rounded-full flex-shrink-0"
-                    style={{
-                      backgroundColor: {
-                        active: '#16a34a',
-                        closed: '#2563eb',
-                        on_hold: '#d97706',
-                        archived: '#6b7280',
-                      }[deal.projectStatus || 'active'] || '#6b7280',
-                    }}
-                  />
-                  <span className="text-sm font-medium text-muted-foreground">Deal Status</span>
-                </div>
-                <Select
-                  value={deal.projectStatus || 'active'}
-                  onValueChange={(value) => updateStatusMutation.mutate(value)}
-                  disabled={updateStatusMutation.isPending}
-                >
-                  <SelectTrigger
-                    className="w-[140px] font-semibold"
-                    style={{
-                      backgroundColor: {
-                        active: 'rgba(34, 197, 94, 0.1)',
-                        closed: 'rgba(59, 130, 246, 0.1)',
-                        on_hold: 'rgba(245, 158, 11, 0.1)',
-                        archived: 'rgba(107, 114, 128, 0.1)',
-                      }[deal.projectStatus || 'active'] || 'rgba(107, 114, 128, 0.1)',
-                      borderColor: {
-                        active: 'rgba(34, 197, 94, 0.3)',
-                        closed: 'rgba(59, 130, 246, 0.3)',
-                        on_hold: 'rgba(245, 158, 11, 0.3)',
-                        archived: 'rgba(107, 114, 128, 0.3)',
-                      }[deal.projectStatus || 'active'] || 'rgba(107, 114, 128, 0.3)',
-                      color: {
-                        active: '#16a34a',
-                        closed: '#2563eb',
-                        on_hold: '#d97706',
-                        archived: '#6b7280',
-                      }[deal.projectStatus || 'active'] || '#6b7280',
-                    }}
-                    data-testid="select-deal-status"
-                  >
-                    <SelectValue>
-                      {{ active: 'Active', closed: 'Closed', on_hold: 'On Hold', archived: 'Archive' }[deal.projectStatus || 'active'] || deal.projectStatus}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[
-                      { value: 'active', label: 'Active', color: '#16a34a' },
-                      { value: 'closed', label: 'Closed', color: '#2563eb' },
-                      { value: 'on_hold', label: 'On Hold', color: '#d97706' },
-                      { value: 'archived', label: 'Archive', color: '#6b7280' },
-                    ].map((s) => (
-                      <SelectItem key={s.value} value={s.value}>
-                        <span className="flex items-center gap-2">
-                          <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
-                          {s.label}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 mt-3 pt-3 border-t">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Origination Points</span>
+                <span className="font-semibold text-sm" data-testid="text-origination-points">{deal.pointsCharged ?? 0}</span>
               </div>
-            </CardContent>
+              <Separator orientation="vertical" className="h-5 hidden md:block" />
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Broker Points</span>
+                <span className="font-semibold text-sm" data-testid="text-broker-points">{deal.commission ?? 0}</span>
+              </div>
+              <Separator orientation="vertical" className="h-5 hidden md:block" />
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">YSP</span>
+                <span className="font-semibold text-sm" data-testid="text-ysp">{deal.tpoPremiumAmount ?? 0}</span>
+              </div>
+              <Separator orientation="vertical" className="h-5 hidden md:block" />
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Total Points</span>
+                <span className="font-semibold text-sm" data-testid="text-total-points">{formatCurrency(deal.pointsAmount || 0)}</span>
+              </div>
+            </div>
           </Card>
           <Card className="mt-4">
             <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2 flex-wrap">
               <CardTitle className="text-base flex items-center gap-2">
                 <MapPin className="h-4 w-4" />
-                Properties
+                Property Details
               </CardTitle>
               <Button
                 size="sm"
                 onClick={() => {
                   setEditingProperty(null);
-                  setPropertyForm({ address: "", city: "", state: "", zip: "", propertyType: "", estimatedValue: "", isPrimary: false });
+                  setPropertyForm({ address: "", city: "", state: "", zip: "", propertyType: "", estimatedValue: "", units: "", monthlyRent: "", annualTaxes: "", annualInsurance: "", isPrimary: false });
                   setPropertyDialogOpen(true);
                 }}
                 data-testid="button-add-property"
@@ -1588,13 +1657,10 @@ export default function AdminDealDetail() {
                         {property.isPrimary && (
                           <Badge className="text-xs" data-testid={`badge-primary-${property.id}`}>Primary</Badge>
                         )}
-                        <span className="font-medium text-sm" data-testid={`text-property-address-${property.id}`}>{property.address}</span>
+                        <span className="font-medium text-sm" data-testid={`text-property-address-${property.id}`}>
+                          {[property.address, property.city, property.state, property.zip].filter(Boolean).join(", ")}
+                        </span>
                       </div>
-                      {(property.city || property.state || property.zip) && (
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {[property.city, property.state, property.zip].filter(Boolean).join(", ")}
-                        </div>
-                      )}
                       <div className="flex items-center gap-2 mt-1 flex-wrap">
                         {property.propertyType && (
                           <Badge variant="outline" className="text-xs" data-testid={`badge-property-type-${property.id}`}>{property.propertyType}</Badge>
@@ -1602,7 +1668,17 @@ export default function AdminDealDetail() {
                         {property.estimatedValue != null && (
                           <span className="text-xs text-muted-foreground" data-testid={`text-property-value-${property.id}`}>{formatCurrency(property.estimatedValue)}</span>
                         )}
+                        {property.units != null && (
+                          <span className="text-xs text-muted-foreground">{property.units} units</span>
+                        )}
                       </div>
+                      {(property.monthlyRent != null || property.annualTaxes != null || property.annualInsurance != null) && (
+                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                          {property.monthlyRent != null && <span>Rent: {formatCurrency(property.monthlyRent)}/mo</span>}
+                          {property.annualTaxes != null && <span>Taxes: {formatCurrency(property.annualTaxes)}/yr</span>}
+                          {property.annualInsurance != null && <span>Ins: {formatCurrency(property.annualInsurance)}/yr</span>}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-1">
                       <Button
@@ -1617,6 +1693,10 @@ export default function AdminDealDetail() {
                             zip: property.zip || "",
                             propertyType: property.propertyType || "",
                             estimatedValue: property.estimatedValue != null ? String(property.estimatedValue) : "",
+                            units: property.units != null ? String(property.units) : "",
+                            monthlyRent: property.monthlyRent != null ? String(property.monthlyRent) : "",
+                            annualTaxes: property.annualTaxes != null ? String(property.annualTaxes) : "",
+                            annualInsurance: property.annualInsurance != null ? String(property.annualInsurance) : "",
                             isPrimary: property.isPrimary,
                           });
                           setPropertyDialogOpen(true);
@@ -1708,11 +1788,29 @@ export default function AdminDealDetail() {
 
             return (
               <Card className="mt-4" data-testid="card-application-details">
-                <CardHeader className="pb-3">
+                <CardHeader className="pb-3 flex flex-row items-center justify-between">
                   <CardTitle className="text-base flex items-center gap-2">
                     <FileText className="h-4 w-4" />
                     Application Details
                   </CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => {
+                      const formData: Record<string, string> = {};
+                      entries.forEach(({ label, value }) => {
+                        const key = Object.entries(FIELD_LABELS).find(([, v]) => v === label)?.[0] || label;
+                        const originalVal = sourceData[key];
+                        formData[key] = originalVal !== null && originalVal !== undefined ? String(originalVal) : '';
+                      });
+                      setAppEditForm(formData);
+                      setAppEditDialogOpen(true);
+                    }}
+                    data-testid="button-edit-application-details"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-x-6 gap-y-2">
@@ -1722,150 +1820,161 @@ export default function AdminDealDetail() {
                         <span className="text-sm font-medium text-right" data-testid={`text-app-${label.toLowerCase().replace(/\s+/g, '-')}`}>{value}</span>
                       </div>
                     ))}
+                    {(() => {
+                      const properties = data?.properties || [];
+                      const totalRent = properties.reduce((sum, p) => sum + (p.monthlyRent || 0), 0);
+                      const totalTaxes = properties.reduce((sum, p) => sum + (p.annualTaxes || 0), 0);
+                      const totalInsurance = properties.reduce((sum, p) => sum + (p.annualInsurance || 0), 0);
+                      const totals: { label: string; value: string; testId: string }[] = [];
+                      if (totalRent > 0) totals.push({ label: 'Total Rent (Monthly)', value: formatCurrency(totalRent), testId: 'text-total-rent' });
+                      if (totalTaxes > 0) totals.push({ label: 'Total Taxes (Annual)', value: formatCurrency(totalTaxes), testId: 'text-total-taxes' });
+                      if (totalInsurance > 0) totals.push({ label: 'Total Insurance (Annual)', value: formatCurrency(totalInsurance), testId: 'text-total-insurance' });
+                      return totals.map(({ label, value, testId }) => (
+                        <div key={label} className="flex items-center justify-between gap-2 py-1 border-b border-border/50 last:border-0">
+                          <span className="text-xs text-muted-foreground">{label}</span>
+                          <span className="text-sm font-semibold text-right" data-testid={testId}>{value}</span>
+                        </div>
+                      ));
+                    })()}
                   </div>
                 </CardContent>
               </Card>
             );
           })()}
 
-          {/* Share Deal Links Card */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <LinkIcon className="h-4 w-4" />
-                Share Deal Links
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm">
-              {/* Borrower Portal Link */}
-              <div className="space-y-2">
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Borrower Portal Link</div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => generateBorrowerLinkMutation.mutate()}
-                    disabled={generateBorrowerLinkMutation.isPending}
-                    data-testid="button-generate-borrower-link"
-                  >
-                    {generateBorrowerLinkMutation.isPending ? (
-                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                    ) : deal?.borrowerPortalToken ? (
-                      <RefreshCw className="h-3.5 w-3.5 mr-1" />
-                    ) : (
-                      <Plus className="h-3.5 w-3.5 mr-1" />
-                    )}
-                    {deal?.borrowerPortalToken ? 'Regenerate' : 'Generate Link'}
-                  </Button>
-                  {deal?.borrowerPortalToken && (
-                    <>
-                      <input
-                        type="text"
-                        readOnly
-                        value={`${window.location.origin}/portal/${deal.borrowerPortalToken}`}
-                        className="flex-1 min-w-0 px-3 py-1.5 text-xs border rounded-md bg-muted/50 cursor-pointer"
-                        onClick={() => copyToClipboard(`${window.location.origin}/portal/${deal.borrowerPortalToken}`, "Borrower link")}
-                        data-testid="input-borrower-link"
-                      />
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() =>
-                          copyToClipboard(`${window.location.origin}/portal/${deal.borrowerPortalToken}`, "Borrower link")
-                        }
-                        className="flex-shrink-0"
-                        data-testid="button-copy-borrower-link"
-                      >
-                        {borrowerPortalCopied ? (
-                          <Check className="h-4 w-4 text-green-600" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          updatePortalSettingsMutation.mutate({
-                            borrowerPortalEnabled: !deal?.borrowerPortalEnabled,
-                          })
-                        }
-                        disabled={updatePortalSettingsMutation.isPending}
-                        data-testid="button-toggle-borrower-portal"
-                      >
-                        {deal?.borrowerPortalEnabled ? "Disable" : "Enable"}
-                      </Button>
-                    </>
-                  )}
+          <Card className="mt-4" data-testid="card-deal-status">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="h-3 w-3 rounded-full flex-shrink-0"
+                    style={{
+                      backgroundColor: {
+                        active: '#16a34a',
+                        closed: '#2563eb',
+                        on_hold: '#d97706',
+                        archived: '#6b7280',
+                      }[deal.projectStatus || 'active'] || '#6b7280',
+                    }}
+                  />
+                  <span className="text-sm font-medium text-muted-foreground">Deal Status</span>
                 </div>
+                <Select
+                  value={deal.projectStatus || 'active'}
+                  onValueChange={(value) => updateStatusMutation.mutate(value)}
+                  disabled={updateStatusMutation.isPending}
+                >
+                  <SelectTrigger
+                    className="w-[140px] font-semibold"
+                    style={{
+                      backgroundColor: {
+                        active: 'rgba(34, 197, 94, 0.1)',
+                        closed: 'rgba(59, 130, 246, 0.1)',
+                        on_hold: 'rgba(245, 158, 11, 0.1)',
+                        archived: 'rgba(107, 114, 128, 0.1)',
+                      }[deal.projectStatus || 'active'] || 'rgba(107, 114, 128, 0.1)',
+                      borderColor: {
+                        active: 'rgba(34, 197, 94, 0.3)',
+                        closed: 'rgba(59, 130, 246, 0.3)',
+                        on_hold: 'rgba(245, 158, 11, 0.3)',
+                        archived: 'rgba(107, 114, 128, 0.3)',
+                      }[deal.projectStatus || 'active'] || 'rgba(107, 114, 128, 0.3)',
+                      color: {
+                        active: '#16a34a',
+                        closed: '#2563eb',
+                        on_hold: '#d97706',
+                        archived: '#6b7280',
+                      }[deal.projectStatus || 'active'] || '#6b7280',
+                    }}
+                    data-testid="select-deal-status"
+                  >
+                    <SelectValue>
+                      {{ active: 'Active', closed: 'Closed', on_hold: 'On Hold', archived: 'Archive' }[deal.projectStatus || 'active'] || deal.projectStatus}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[
+                      { value: 'active', label: 'Active', color: '#16a34a' },
+                      { value: 'closed', label: 'Closed', color: '#2563eb' },
+                      { value: 'on_hold', label: 'On Hold', color: '#d97706' },
+                      { value: 'archived', label: 'Archive', color: '#6b7280' },
+                    ].map((s) => (
+                      <SelectItem key={s.value} value={s.value}>
+                        <span className="flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                          {s.label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div className="border-t pt-3" />
-
-              {/* Broker Portal Link */}
-              <div className="space-y-2">
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Broker Portal Link</div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => generateBrokerLinkMutation.mutate()}
-                    disabled={generateBrokerLinkMutation.isPending}
-                    data-testid="button-generate-broker-link"
-                  >
-                    {generateBrokerLinkMutation.isPending ? (
-                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                    ) : deal?.brokerPortalToken ? (
-                      <RefreshCw className="h-3.5 w-3.5 mr-1" />
-                    ) : (
-                      <Plus className="h-3.5 w-3.5 mr-1" />
-                    )}
-                    {deal?.brokerPortalToken ? 'Regenerate' : 'Generate Link'}
-                  </Button>
-                  {deal?.brokerPortalToken && (
-                    <>
-                      <input
-                        type="text"
-                        readOnly
-                        value={`${window.location.origin}/broker-portal/${deal.brokerPortalToken}`}
-                        className="flex-1 min-w-0 px-3 py-1.5 text-xs border rounded-md bg-muted/50 cursor-pointer"
-                        onClick={() => copyToClipboard(`${window.location.origin}/broker-portal/${deal.brokerPortalToken}`, "Broker link")}
-                        data-testid="input-broker-link"
-                      />
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() =>
-                          copyToClipboard(`${window.location.origin}/broker-portal/${deal.brokerPortalToken}`, "Broker link")
-                        }
-                        className="flex-shrink-0"
-                        data-testid="button-copy-broker-link"
-                      >
-                        {brokerPortalCopied ? (
-                          <Check className="h-4 w-4 text-green-600" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          updatePortalSettingsMutation.mutate({
-                            brokerPortalEnabled: !deal?.brokerPortalEnabled,
-                          })
-                        }
-                        disabled={updatePortalSettingsMutation.isPending}
-                        data-testid="button-toggle-broker-portal"
-                      >
-                        {deal?.brokerPortalEnabled ? "Disable" : "Enable"}
-                      </Button>
-                    </>
-                  )}
+              <div className="flex items-center justify-between gap-4 mt-3 pt-3 border-t">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="h-3 w-3 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: stages.find(s => s.key === deal.stage)?.color || '#6b7280' }}
+                  />
+                  <span className="text-sm font-medium text-muted-foreground">Stage</span>
                 </div>
+                {stages.length > 0 ? (
+                  <Select
+                    value={deal.stage}
+                    onValueChange={(value) => updateStageMutation.mutate(value)}
+                    disabled={updateStageMutation.isPending}
+                  >
+                    <SelectTrigger
+                      className="w-[180px] font-semibold"
+                      style={getStageStyle(deal.stage, stages)}
+                      data-testid="select-deal-stage"
+                    >
+                      <SelectValue>{getStageLabelFromStages(deal.stage, stages)}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {stages.filter(s => s.isActive !== false).map((stage) => (
+                        <SelectItem key={stage.id} value={stage.key}>
+                          <span className="flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color || '#6b7280' }} />
+                            {stage.label}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Badge variant="secondary" className="text-xs">
+                    {deal.stage || 'No Stage'}
+                  </Badge>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between gap-4 mt-3 pt-3 border-t">
+                <span className="text-sm font-medium text-muted-foreground">Loan Program</span>
+                <Select
+                  value={deal.programId ? String(deal.programId) : ""}
+                  onValueChange={(val) => {
+                    if (val && val !== String(deal.programId)) {
+                      setPendingProgramId(val);
+                      setConvertProgramDialogOpen(true);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-[180px] h-8 text-sm" data-testid="select-loan-program">
+                    <SelectValue placeholder="Select program" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(loanProgramsData || []).map((prog: any) => (
+                      <SelectItem key={prog.id} value={String(prog.id)}>
+                        {prog.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </CardContent>
           </Card>
+
         </div>
 
         <Card>
@@ -1959,9 +2068,308 @@ export default function AdminDealDetail() {
                 <p className="text-xs text-muted-foreground italic ml-9">No broker assigned</p>
               )}
             </div>
+            <div className="border-t pt-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Third Parties</div>
+                <Button variant="ghost" size="sm" onClick={() => {
+                  setEditingThirdPartyId(null);
+                  setThirdPartyForm({ name: "", email: "", phone: "", role: "", company: "", customRole: "" });
+                  setShowAddThirdParty(true);
+                }} data-testid="button-add-third-party">
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Add
+                </Button>
+              </div>
+              {thirdPartiesData?.contacts && thirdPartiesData.contacts.length > 0 ? (
+                <div className="space-y-2">
+                  {thirdPartiesData.contacts.map((contact: any) => (
+                    <div key={contact.id} className="flex items-center gap-2 group" data-testid={`third-party-${contact.id}`}>
+                      <div className="h-7 w-7 rounded-full bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                        <User className="h-3.5 w-3.5 text-amber-600" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium truncate text-xs">{contact.name}</div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {contact.role}{contact.company ? ` · ${contact.company}` : ''}
+                        </div>
+                        {contact.email && <div className="text-xs text-muted-foreground truncate">{contact.email}</div>}
+                      </div>
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => {
+                          const predefinedRoles = ['Title Contact', 'Attorney', 'Insurance Agent', 'Appraiser', 'Surveyor', 'Inspector', 'Accountant', 'Contractor'];
+                          const isPredefined = predefinedRoles.includes(contact.role);
+                          setEditingThirdPartyId(contact.id);
+                          setThirdPartyForm({
+                            name: contact.name || "",
+                            email: contact.email || "",
+                            phone: contact.phone || "",
+                            role: isPredefined ? contact.role : "custom",
+                            company: contact.company || "",
+                            customRole: isPredefined ? "" : contact.role,
+                          });
+                          setShowAddThirdParty(true);
+                        }} data-testid={`button-edit-third-party-${contact.id}`}>
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => deleteThirdPartyMutation.mutate(contact.id)} data-testid={`button-delete-third-party-${contact.id}`}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic ml-9">No third parties added</p>
+              )}
+            </div>
+
+            {/* Share Deal Links - nested in People */}
+            <div className="border-t pt-3">
+              <div className="flex items-center gap-2 mb-3">
+                <LinkIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Share Deal Links</div>
+              </div>
+
+              <div className="space-y-3">
+                {/* Borrower Portal Link */}
+                <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Borrower Portal</div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => generateBorrowerLinkMutation.mutate()}
+                      disabled={generateBorrowerLinkMutation.isPending}
+                      data-testid="button-generate-borrower-link"
+                    >
+                      {generateBorrowerLinkMutation.isPending ? (
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      ) : deal?.borrowerPortalToken ? (
+                        <RefreshCw className="h-3 w-3 mr-1" />
+                      ) : (
+                        <Plus className="h-3 w-3 mr-1" />
+                      )}
+                      {deal?.borrowerPortalToken ? 'Regenerate' : 'Generate'}
+                    </Button>
+                    {deal?.borrowerPortalToken && (
+                      <>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 flex-shrink-0"
+                          onClick={() => copyToClipboard(`${window.location.origin}/portal/${deal.borrowerPortalToken}`, "Borrower link")}
+                          data-testid="button-copy-borrower-link"
+                        >
+                          {borrowerPortalCopied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => updatePortalSettingsMutation.mutate({ borrowerPortalEnabled: !deal?.borrowerPortalEnabled })}
+                          disabled={updatePortalSettingsMutation.isPending}
+                          data-testid="button-toggle-borrower-portal"
+                        >
+                          {deal?.borrowerPortalEnabled ? "Disable" : "Enable"}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                  {deal?.borrowerPortalToken && (
+                    <>
+                      <div
+                        className="w-full px-2 py-1.5 text-[11px] border rounded bg-background cursor-pointer font-mono text-muted-foreground truncate hover:text-foreground transition-colors"
+                        onClick={() => copyToClipboard(`${window.location.origin}/portal/${deal.borrowerPortalToken}`, "Borrower link")}
+                        title={`${window.location.origin}/portal/${deal.borrowerPortalToken}`}
+                        data-testid="input-borrower-link"
+                      >
+                        {`${window.location.origin}/portal/${deal.borrowerPortalToken}`}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="w-full justify-center text-xs h-7"
+                        onClick={() => window.open(`/portal/${deal.borrowerPortalToken}`, '_blank')}
+                        data-testid="button-view-borrower-portal"
+                      >
+                        <Eye className="h-3 w-3 mr-1" />
+                        View Borrower Portal
+                      </Button>
+                    </>
+                  )}
+                </div>
+
+                {/* Broker Portal Link */}
+                <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Broker Portal</div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => generateBrokerLinkMutation.mutate()}
+                      disabled={generateBrokerLinkMutation.isPending}
+                      data-testid="button-generate-broker-link"
+                    >
+                      {generateBrokerLinkMutation.isPending ? (
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      ) : deal?.brokerPortalToken ? (
+                        <RefreshCw className="h-3 w-3 mr-1" />
+                      ) : (
+                        <Plus className="h-3 w-3 mr-1" />
+                      )}
+                      {deal?.brokerPortalToken ? 'Regenerate' : 'Generate'}
+                    </Button>
+                    {deal?.brokerPortalToken && (
+                      <>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 flex-shrink-0"
+                          onClick={() => copyToClipboard(`${window.location.origin}/broker-portal/${deal.brokerPortalToken}`, "Broker link")}
+                          data-testid="button-copy-broker-link"
+                        >
+                          {brokerPortalCopied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => updatePortalSettingsMutation.mutate({ brokerPortalEnabled: !deal?.brokerPortalEnabled })}
+                          disabled={updatePortalSettingsMutation.isPending}
+                          data-testid="button-toggle-broker-portal"
+                        >
+                          {deal?.brokerPortalEnabled ? "Disable" : "Enable"}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                  {deal?.brokerPortalToken && (
+                    <>
+                      <div
+                        className="w-full px-2 py-1.5 text-[11px] border rounded bg-background cursor-pointer font-mono text-muted-foreground truncate hover:text-foreground transition-colors"
+                        onClick={() => copyToClipboard(`${window.location.origin}/broker-portal/${deal.brokerPortalToken}`, "Broker link")}
+                        title={`${window.location.origin}/broker-portal/${deal.brokerPortalToken}`}
+                        data-testid="input-broker-link"
+                      >
+                        {`${window.location.origin}/broker-portal/${deal.brokerPortalToken}`}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="w-full justify-center text-xs h-7"
+                        onClick={() => window.open(`/broker-portal/${deal.brokerPortalToken}`, '_blank')}
+                        data-testid="button-view-broker-portal"
+                      >
+                        <Eye className="h-3 w-3 mr-1" />
+                        View Broker Portal
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Add/Edit Third Party Dialog */}
+      <Dialog open={showAddThirdParty} onOpenChange={setShowAddThirdParty}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingThirdPartyId ? 'Edit' : 'Add'} Third Party Contact</DialogTitle>
+            <DialogDescription>Add someone involved in this deal like an attorney, title agent, or insurance provider.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Role</Label>
+              <Select value={thirdPartyForm.role} onValueChange={(val) => setThirdPartyForm(prev => ({ ...prev, role: val, customRole: val === "custom" ? prev.customRole : "" }))}>
+                <SelectTrigger data-testid="select-third-party-role">
+                  <SelectValue placeholder="Select a role..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Title Contact">Title Contact</SelectItem>
+                  <SelectItem value="Attorney">Attorney</SelectItem>
+                  <SelectItem value="Insurance Agent">Insurance Agent</SelectItem>
+                  <SelectItem value="Appraiser">Appraiser</SelectItem>
+                  <SelectItem value="Surveyor">Surveyor</SelectItem>
+                  <SelectItem value="Inspector">Inspector</SelectItem>
+                  <SelectItem value="Accountant">Accountant</SelectItem>
+                  <SelectItem value="Contractor">Contractor</SelectItem>
+                  <SelectItem value="custom">Other (Custom Role)</SelectItem>
+                </SelectContent>
+              </Select>
+              {thirdPartyForm.role === "custom" && (
+                <Input
+                  value={thirdPartyForm.customRole}
+                  onChange={(e) => setThirdPartyForm(prev => ({ ...prev, customRole: e.target.value }))}
+                  placeholder="Enter custom role..."
+                  data-testid="input-third-party-custom-role"
+                />
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input
+                value={thirdPartyForm.name}
+                onChange={(e) => setThirdPartyForm(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="Full name"
+                data-testid="input-third-party-name"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input
+                  value={thirdPartyForm.email}
+                  onChange={(e) => setThirdPartyForm(prev => ({ ...prev, email: e.target.value }))}
+                  placeholder="email@example.com"
+                  type="email"
+                  data-testid="input-third-party-email"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Phone</Label>
+                <Input
+                  value={thirdPartyForm.phone}
+                  onChange={(e) => setThirdPartyForm(prev => ({ ...prev, phone: e.target.value }))}
+                  placeholder="(555) 123-4567"
+                  data-testid="input-third-party-phone"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Company</Label>
+              <Input
+                value={thirdPartyForm.company}
+                onChange={(e) => setThirdPartyForm(prev => ({ ...prev, company: e.target.value }))}
+                placeholder="Company name (optional)"
+                data-testid="input-third-party-company"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddThirdParty(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                const role = thirdPartyForm.role === "custom" ? thirdPartyForm.customRole : thirdPartyForm.role;
+                const payload = { name: thirdPartyForm.name, email: thirdPartyForm.email, phone: thirdPartyForm.phone, role, company: thirdPartyForm.company };
+                if (editingThirdPartyId) {
+                  updateThirdPartyMutation.mutate({ id: editingThirdPartyId, data: payload });
+                } else {
+                  addThirdPartyMutation.mutate(payload as any);
+                }
+              }}
+              disabled={!thirdPartyForm.name.trim() || (!thirdPartyForm.role || (thirdPartyForm.role === "custom" && !thirdPartyForm.customRole.trim())) || addThirdPartyMutation.isPending || updateThirdPartyMutation.isPending}
+              data-testid="button-confirm-third-party"
+            >
+              {(addThirdPartyMutation.isPending || updateThirdPartyMutation.isPending) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {editingThirdPartyId ? 'Update Contact' : 'Add Contact'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Manage Processor Dialog */}
       <Dialog open={showAddProcessor} onOpenChange={setShowAddProcessor}>
@@ -2190,15 +2598,27 @@ export default function AdminDealDetail() {
                 </SelectContent>
               </Select>
               {linkedProjectId && (
-                <Button
-                  onClick={(e) => { e.stopPropagation(); triggerPipeline.mutate(); }}
-                  disabled={pipelineRunning}
-                  className="bg-success hover:bg-success/90 text-white text-base px-6 py-3 h-auto font-semibold"
-                  data-testid="button-trigger-pipeline"
-                >
-                  {pipelineRunning ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <Zap className="h-5 w-5 mr-2" />}
-                  {pipelineRunning ? 'PROCESSING...' : 'AUTOMATIC PROCESSING'}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={(e) => { e.stopPropagation(); syncAllDriveMutation.mutate(); }}
+                    disabled={driveSyncing}
+                    variant="outline"
+                    className="text-base px-5 py-3 h-auto font-semibold"
+                    data-testid="button-sync-all-drive"
+                  >
+                    {driveSyncing ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <CloudUpload className="h-5 w-5 mr-2" />}
+                    {driveSyncing ? 'Syncing...' : 'Sync all Approved Documents to Drive'}
+                  </Button>
+                  <Button
+                    onClick={(e) => { e.stopPropagation(); triggerPipeline.mutate(); }}
+                    disabled={pipelineRunning}
+                    className="bg-success hover:bg-success/90 text-white text-base px-6 py-3 h-auto font-semibold"
+                    data-testid="button-trigger-pipeline"
+                  >
+                    {pipelineRunning ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <Zap className="h-5 w-5 mr-2" />}
+                    {pipelineRunning ? 'PROCESSING...' : 'AUTOMATIC PROCESSING'}
+                  </Button>
+                </div>
               )}
             </div>
           )}
@@ -2463,12 +2883,25 @@ export default function AdminDealDetail() {
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-1.5 flex-shrink-0">
+                                  {doc.status === 'approved' && (doc.filePath || doc.files?.length > 0) && (
+                                    <CheckCircle2 className="h-5 w-5 text-success" data-testid={`doc-approved-check-${doc.id}`} />
+                                  )}
                                   {getDocumentStatusBadge(doc.status)}
                                   {uploadingDocId === doc.id && (
                                     <div className="flex items-center gap-1">
                                       <Loader2 className="h-4 w-4 animate-spin text-primary" />
                                       <span className="text-xs text-muted-foreground">{uploadProgress}%</span>
                                     </div>
+                                  )}
+                                  {doc.filePath && (!doc.files || doc.files.length === 0) && (
+                                    <>
+                                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); handleViewDocument(doc.id, doc.fileName, doc.mimeType); }} data-testid={`button-view-doc-${doc.id}`} title="View">
+                                        <Eye className="h-3.5 w-3.5" />
+                                      </Button>
+                                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); handleDownloadDocument(doc.id, doc.fileName); }} data-testid={`button-download-doc-${doc.id}`} title="Download">
+                                        <Download className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </>
                                   )}
                                   {doc.filePath && (
                                     <>
@@ -2523,7 +2956,7 @@ export default function AdminDealDetail() {
                                       <span className="truncate flex-1 min-w-0">{file.fileName || 'Unnamed file'}</span>
                                       {file.fileSize && <span className="flex-shrink-0">{(file.fileSize / 1024).toFixed(0)} KB</span>}
                                       {file.uploadedAt && <span className="flex-shrink-0">{new Date(file.uploadedAt).toLocaleDateString()}</span>}
-                                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); handleViewFile(file.id); }} data-testid={`button-view-file-${file.id}`} title="View">
+                                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); handleViewFile(file.id, file.fileName, file.mimeType); }} data-testid={`button-view-file-${file.id}`} title="View">
                                         <Eye className="h-3 w-3" />
                                       </Button>
                                       <Button size="icon" variant="ghost" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); handleDownloadFile(file.id, file.fileName); }} data-testid={`button-download-file-${file.id}`} title="Download">
@@ -2660,6 +3093,9 @@ export default function AdminDealDetail() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
+                        {doc.status === 'approved' && (doc.filePath || doc.files?.length > 0) && (
+                          <CheckCircle2 className="h-5 w-5 text-success" data-testid={`doc-approved-check-${doc.id}`} />
+                        )}
                         {getDocumentStatusBadge(doc.status)}
                       </div>
                     </div>
@@ -2789,6 +3225,54 @@ export default function AdminDealDetail() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={convertProgramDialogOpen} onOpenChange={(open) => {
+        setConvertProgramDialogOpen(open);
+        if (!open) setPendingProgramId(null);
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Loan Program</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to convert this deal to a different loan program? All required documents and tasks will be changed to match the new program. However, documents already collected <span className="font-semibold text-foreground">will transfer over</span>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {pendingProgramId && (
+              <div className="rounded-lg border p-3 bg-muted/50">
+                <div className="text-sm">
+                  <span className="text-muted-foreground">Changing from: </span>
+                  <span className="font-medium">{deal?.programName || 'None'}</span>
+                </div>
+                <div className="text-sm mt-1">
+                  <span className="text-muted-foreground">Changing to: </span>
+                  <span className="font-medium">
+                    {(loanProgramsData || []).find((p: any) => String(p.id) === pendingProgramId)?.name || 'Unknown'}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setConvertProgramDialogOpen(false); setPendingProgramId(null); }} data-testid="button-cancel-convert">
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (pendingProgramId) {
+                  convertProgramMutation.mutate(parseInt(pendingProgramId));
+                }
+              }}
+              disabled={convertProgramMutation.isPending}
+              data-testid="button-confirm-convert"
+            >
+              {convertProgramMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Yes, Change Program
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -2890,9 +3374,22 @@ export default function AdminDealDetail() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="loanType">Loan Type</Label>
-                <div className="flex items-center h-9 px-3 rounded-md border bg-muted/50 text-sm" data-testid="text-edit-loan-type">
-                  {getLoanTypeLabel(editForm.loanType) || 'Not set'}
-                </div>
+                <Select
+                  value={editForm.loanType}
+                  onValueChange={(value) => setEditForm({ ...editForm, loanType: value })}
+                >
+                  <SelectTrigger data-testid="select-edit-loan-type">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="dscr">DSCR</SelectItem>
+                    <SelectItem value="fix-and-flip">Fix and Flip</SelectItem>
+                    <SelectItem value="ground-up">Ground Up Construction</SelectItem>
+                    <SelectItem value="bridge">Bridge</SelectItem>
+                    <SelectItem value="commercial">Commercial</SelectItem>
+                    <SelectItem value="conventional">Conventional</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="loanPurpose">Loan Purpose</Label>
@@ -2937,6 +3434,16 @@ export default function AdminDealDetail() {
                   <SelectItem value="special-purpose">Special Purpose</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="loanTerm">Loan Term</Label>
+              <Input
+                id="loanTerm"
+                value={editForm.loanTerm}
+                onChange={(e) => setEditForm({ ...editForm, loanTerm: e.target.value })}
+                placeholder="12 months"
+                data-testid="input-loan-term"
+              />
             </div>
           </div>
           <DialogFooter>
@@ -3347,7 +3854,7 @@ export default function AdminDealDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog open={propertyDialogOpen} onOpenChange={(open) => { if (!open) { setPropertyDialogOpen(false); setEditingProperty(null); setPropertyForm({ address: "", city: "", state: "", zip: "", propertyType: "", estimatedValue: "", isPrimary: false }); } }}>
+      <Dialog open={propertyDialogOpen} onOpenChange={(open) => { if (!open) { setPropertyDialogOpen(false); setEditingProperty(null); setPropertyForm({ address: "", city: "", state: "", zip: "", propertyType: "", estimatedValue: "", units: "", monthlyRent: "", annualTaxes: "", annualInsurance: "", isPrimary: false }); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{editingProperty ? "Edit Property" : "Add Property"}</DialogTitle>
@@ -3420,16 +3927,64 @@ export default function AdminDealDetail() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="property-estimated-value">Estimated Value</Label>
-              <Input
-                id="property-estimated-value"
-                type="number"
-                value={propertyForm.estimatedValue}
-                onChange={(e) => setPropertyForm(prev => ({ ...prev, estimatedValue: e.target.value }))}
-                placeholder="0"
-                data-testid="input-property-estimated-value"
-              />
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
+                <Label htmlFor="property-estimated-value">Estimated Value</Label>
+                <Input
+                  id="property-estimated-value"
+                  type="number"
+                  value={propertyForm.estimatedValue}
+                  onChange={(e) => setPropertyForm(prev => ({ ...prev, estimatedValue: e.target.value }))}
+                  placeholder="0"
+                  data-testid="input-property-estimated-value"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="property-units">Units</Label>
+                <Input
+                  id="property-units"
+                  type="number"
+                  value={propertyForm.units}
+                  onChange={(e) => setPropertyForm(prev => ({ ...prev, units: e.target.value }))}
+                  placeholder="1"
+                  data-testid="input-property-units"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-2">
+                <Label htmlFor="property-monthly-rent">Monthly Rent</Label>
+                <Input
+                  id="property-monthly-rent"
+                  type="number"
+                  value={propertyForm.monthlyRent}
+                  onChange={(e) => setPropertyForm(prev => ({ ...prev, monthlyRent: e.target.value }))}
+                  placeholder="0"
+                  data-testid="input-property-monthly-rent"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="property-annual-taxes">Annual Taxes</Label>
+                <Input
+                  id="property-annual-taxes"
+                  type="number"
+                  value={propertyForm.annualTaxes}
+                  onChange={(e) => setPropertyForm(prev => ({ ...prev, annualTaxes: e.target.value }))}
+                  placeholder="0"
+                  data-testid="input-property-annual-taxes"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="property-annual-insurance">Annual Insurance</Label>
+                <Input
+                  id="property-annual-insurance"
+                  type="number"
+                  value={propertyForm.annualInsurance}
+                  onChange={(e) => setPropertyForm(prev => ({ ...prev, annualInsurance: e.target.value }))}
+                  placeholder="0"
+                  data-testid="input-property-annual-insurance"
+                />
+              </div>
             </div>
             <div className="flex items-center space-x-2">
               <Checkbox
@@ -3444,7 +3999,7 @@ export default function AdminDealDetail() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setPropertyDialogOpen(false); setEditingProperty(null); setPropertyForm({ address: "", city: "", state: "", zip: "", propertyType: "", estimatedValue: "", isPrimary: false }); }} data-testid="button-cancel-property">
+            <Button variant="outline" onClick={() => { setPropertyDialogOpen(false); setEditingProperty(null); setPropertyForm({ address: "", city: "", state: "", zip: "", propertyType: "", estimatedValue: "", units: "", monthlyRent: "", annualTaxes: "", annualInsurance: "", isPrimary: false }); }} data-testid="button-cancel-property">
               Cancel
             </Button>
             <Button
@@ -3456,6 +4011,10 @@ export default function AdminDealDetail() {
                   zip: propertyForm.zip || undefined,
                   propertyType: propertyForm.propertyType || undefined,
                   estimatedValue: propertyForm.estimatedValue ? Number(propertyForm.estimatedValue) : null,
+                  units: propertyForm.units ? Number(propertyForm.units) : null,
+                  monthlyRent: propertyForm.monthlyRent ? Number(propertyForm.monthlyRent) : null,
+                  annualTaxes: propertyForm.annualTaxes ? Number(propertyForm.annualTaxes) : null,
+                  annualInsurance: propertyForm.annualInsurance ? Number(propertyForm.annualInsurance) : null,
                   isPrimary: propertyForm.isPrimary,
                 };
                 if (editingProperty) {
@@ -3479,7 +4038,130 @@ export default function AdminDealDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={appEditDialogOpen} onOpenChange={setAppEditDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Application Details</DialogTitle>
+            <DialogDescription>Update the application data fields for this deal.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 py-4">
+            {Object.entries(appEditForm).map(([key, value]) => {
+              const FIELD_LABELS: Record<string, string> = {
+                loanAmount: 'Loan Amount', propertyValue: 'Property Value', loanType: 'Loan Type',
+                loanPurpose: 'Loan Purpose', propertyType: 'Property Type', interestOnly: 'Interest Only',
+                ltv: 'LTV', dscr: 'Est. DSCR', ficoScore: 'Credit Score', creditScore: 'Credit Score',
+                prepaymentPenalty: 'Prepayment Penalty', tpoPremium: 'TPO Premium', loanTerm: 'Loan Term',
+                loanTermMonths: 'Loan Term (Months)', asIsValue: 'As-Is Value', arv: 'ARV',
+                rehabBudget: 'Rehab Budget', exitStrategy: 'Exit Strategy', experience: 'Experience',
+                constructionBudget: 'Construction Budget', entityType: 'Entity Type', entityName: 'Entity Name',
+                occupancy: 'Occupancy', units: 'Units', annualTaxes: 'Annual Taxes',
+                annualInsurance: 'Annual Insurance', monthlyRent: 'Monthly Rent', monthlyHOA: 'Monthly HOA',
+                appraisalValue: 'Appraisal Value', cashOut: 'Cash Out Amount', citizenshipStatus: 'Citizenship',
+                grossMonthlyRent: 'Gross Monthly Rent', calculatedDscr: 'Calculated DSCR',
+                monthlyPITIA: 'Monthly PITIA', downPayment: 'Down Payment', reserveMonths: 'Reserve Months',
+                squareFootage: 'Square Footage', yearBuilt: 'Year Built', occupancyStatus: 'Occupancy Status',
+                borrowerExperience: 'Borrower Experience', numberOfUnits: 'Number of Units',
+                estimatedPropertyValue: 'Estimated Property Value', purchasePrice: 'Purchase Price',
+              };
+              const label = FIELD_LABELS[key] || key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim();
+              return (
+                <div key={key} className="space-y-1">
+                  <Label className="text-xs">{label}</Label>
+                  <Input
+                    value={value}
+                    onChange={(e) => setAppEditForm(prev => ({ ...prev, [key]: e.target.value }))}
+                    data-testid={`input-app-edit-${key}`}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAppEditDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => updateAppDataMutation.mutate(appEditForm)}
+              disabled={updateAppDataMutation.isPending}
+              data-testid="button-save-app-details"
+            >
+              {updateAppDataMutation.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</> : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       </div>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-4xl w-[90vw] max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-2">
+            <DialogTitle className="flex items-center gap-2 text-sm font-medium truncate">
+              <FileText className="h-4 w-4 flex-shrink-0" />
+              <span className="truncate">{previewFile?.fileName || 'Document Preview'}</span>
+            </DialogTitle>
+            <DialogDescription className="sr-only">Preview uploaded document</DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden px-6 pb-4 min-h-0">
+            {previewLoading && (
+              <div className="flex flex-col items-center justify-center h-[70vh] bg-muted/30 rounded border gap-3">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Loading preview...</p>
+              </div>
+            )}
+            {previewError && (
+              <div className="flex flex-col items-center justify-center h-[70vh] bg-muted/30 rounded border gap-4">
+                <AlertCircle className="h-12 w-12 text-muted-foreground" />
+                <div className="text-center space-y-1">
+                  <p className="text-sm font-medium">Unable to Preview</p>
+                  <p className="text-xs text-muted-foreground">{previewError}</p>
+                </div>
+              </div>
+            )}
+            {!previewLoading && !previewError && previewReady && previewFile && getPreviewType(previewFile.fileName, previewFile.mimeType) === 'pdf' && (
+              <div className="flex flex-col items-center justify-center h-[70vh] bg-muted/30 rounded border gap-4">
+                <FileCheck className="h-16 w-16 text-primary" />
+                <div className="text-center space-y-1">
+                  <p className="text-lg font-medium">{previewFile.fileName}</p>
+                  <p className="text-xs text-muted-foreground">PDF files open in a new tab for the best viewing experience.</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={() => { window.open(previewFile.url, '_blank'); setPreviewOpen(false); }} data-testid="button-preview-open-pdf">
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Open PDF
+                  </Button>
+                  <Button variant="outline" onClick={() => { const link = document.createElement('a'); link.href = previewFile.downloadUrl; link.download = previewFile.fileName || 'document'; document.body.appendChild(link); link.click(); document.body.removeChild(link); }} data-testid="button-preview-download-pdf">
+                    <Download className="h-4 w-4 mr-2" />
+                    Download
+                  </Button>
+                </div>
+              </div>
+            )}
+            {!previewLoading && !previewError && previewReady && previewFile && getPreviewType(previewFile.fileName, previewFile.mimeType) === 'image' && (
+              <div className="flex items-center justify-center h-[70vh] bg-muted/30 rounded border">
+                <img
+                  src={previewFile.url}
+                  alt={previewFile.fileName || 'Document'}
+                  className="max-w-full max-h-full object-contain"
+                  data-testid="preview-image"
+                />
+              </div>
+            )}
+            {!previewLoading && !previewError && previewReady && previewFile && getPreviewType(previewFile.fileName, previewFile.mimeType) === 'unsupported' && (
+              <div className="flex flex-col items-center justify-center h-[70vh] bg-muted/30 rounded border gap-4">
+                <FileText className="h-16 w-16 text-muted-foreground" />
+                <div className="text-center space-y-1">
+                  <p className="text-lg font-medium">{getFileExtensionLabel(previewFile.fileName)}</p>
+                  <p className="text-sm text-muted-foreground">{previewFile.fileName}</p>
+                  <p className="text-xs text-muted-foreground">This file type can't be previewed in the browser. Please download it to view.</p>
+                </div>
+                <Button onClick={() => { const link = document.createElement('a'); link.href = previewFile.downloadUrl; link.download = previewFile.fileName || 'document'; document.body.appendChild(link); link.click(); document.body.removeChild(link); }} data-testid="button-preview-download">
+                  <Download className="h-4 w-4 mr-2" />
+                  Download to View
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className={cn("flex-shrink-0 h-full transition-all duration-200", showMemoryPanel ? "w-[380px]" : "w-10")} data-testid="memory-sidebar">
         <DealMemoryPanel

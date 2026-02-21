@@ -17,6 +17,8 @@ import DealDetail from "@/pages/deal-detail";
 import NewDeal from "@/pages/new-deal";
 import BorrowerPortal from "@/pages/borrower-portal";
 import BrokerPortal from "@/pages/broker-portal";
+import JoinBorrowerPage from "@/pages/join-borrower";
+import JoinBrokerPage from "@/pages/join-broker";
 import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
 import ForgotPasswordPage from "@/pages/forgot-password";
@@ -59,6 +61,7 @@ import SuperAdminDashboard from "@/pages/admin/super-admin-dashboard";
 import AdminCreditPolicies from "@/pages/admin/credit-policies";
 import EmailInboxPage from "@/pages/admin/email-inbox";
 import IntegrationsPage from "@/pages/admin/integrations";
+import OnboardingConfigPage from "@/pages/admin/onboarding-config";
 
 import BrokerContactsPage from "@/pages/broker-contacts";
 import BrokerOutreachPage from "@/pages/broker-outreach";
@@ -68,6 +71,7 @@ import PublicHomePage from "@/pages/public/home";
 import PublicPricingPage from "@/pages/public/pricing";
 import PublicUseCasesPage from "@/pages/public/use-cases";
 import PublicContactPage from "@/pages/public/contact";
+import PublicApplyPage from "@/pages/public/apply";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -246,6 +250,7 @@ function MainRoutes() {
           <Route path="/admin/credit-policies" component={() => <AdminProtectedRoute component={AdminCreditPolicies} />} />
           <Route path="/admin/email" component={() => <AdminProtectedRoute component={EmailInboxPage} />} />
           <Route path="/admin/integrations" component={() => <SuperAdminProtectedRoute component={IntegrationsPage} />} />
+          <Route path="/admin/onboarding-config" component={() => <SuperAdminProtectedRoute component={OnboardingConfigPage} />} />
 
 
           <Route component={NotFound} />
@@ -259,6 +264,8 @@ function AppContent() {
   const [isSignPage] = useRoute("/sign/:token");
   const [isPortalPage] = useRoute("/portal/:token");
   const [isBrokerPortalPage] = useRoute("/broker-portal/:token");
+  const [isJoinBorrowerPage] = useRoute("/join/borrower/:token");
+  const [isJoinBrokerPage] = useRoute("/join/broker/:token");
   const [isLoginPage] = useRoute("/login");
   const [isRegisterPage] = useRoute("/register");
   const [isForgotPasswordPage] = useRoute("/forgot-password");
@@ -269,6 +276,8 @@ function AppContent() {
   const [isPublicPricingPage] = useRoute("/pricing");
   const [isPublicUseCasesPage] = useRoute("/use-cases");
   const [isPublicContactPage] = useRoute("/contact");
+  const [isPublicApplyPage] = useRoute("/apply");
+  const [isPublicApplyProgramPage] = useRoute("/apply/:programId");
   const [isHomePage] = useRoute("/");
 
   const { isAuthenticated, isLoading } = useAuth();
@@ -302,6 +311,22 @@ function AppContent() {
     );
   }
 
+  if (isJoinBorrowerPage) {
+    return (
+      <Switch>
+        <Route path="/join/borrower/:token" component={JoinBorrowerPage} />
+      </Switch>
+    );
+  }
+
+  if (isJoinBrokerPage) {
+    return (
+      <Switch>
+        <Route path="/join/broker/:token" component={JoinBrokerPage} />
+      </Switch>
+    );
+  }
+
   if (isPublicAuthPage) {
     return (
       <Switch>
@@ -318,6 +343,14 @@ function AppContent() {
     return (
       <Switch>
         <Route path="/select-role" component={SelectRolePage} />
+      </Switch>
+    );
+  }
+
+  if (isPublicApplyPage || isPublicApplyProgramPage) {
+    return (
+      <Switch>
+        <Route path="/apply/:programId?" component={PublicApplyPage} />
       </Switch>
     );
   }

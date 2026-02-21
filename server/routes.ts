@@ -3,7 +3,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, documentReviewResults, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema, projectActivity, projectTasks, platformSettings, dealMemoryEntries, dealNotes, insertDealMemoryEntrySchema, insertDealNoteSchema, notifications, dealStatuses, insertDealStatusSchema, insertMessageTemplateSchema } from "@shared/schema";
+import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, documentReviewResults, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema, projectActivity, projectTasks, platformSettings, dealMemoryEntries, dealNotes, insertDealMemoryEntrySchema, insertDealNoteSchema, notifications, dealStatuses, insertDealStatusSchema, insertMessageTemplateSchema, dealThirdParties } from "@shared/schema";
 import { priceQuote, validateRuleset, SAMPLE_RTL_RULESET, SAMPLE_DSCR_RULESET, type PricingInputs, analyzeGuidelines, refineProposal } from "./pricing";
 import { getDocumentTemplatesForLoanType } from "./document-templates";
 import { eq, desc, asc, inArray, and, gt, gte, lte, sql, isNull, or } from "drizzle-orm";
@@ -33,7 +33,7 @@ import {
   getOutstandingDocuments,
   getRecentUpdates
 } from './digestService';
-import { loanDigestConfigs, loanDigestRecipients, loanUpdates, digestHistory, digestState, partnerBroadcasts, partnerBroadcastRecipients, inboundSmsMessages, scheduledDigestDrafts, esignEnvelopes, esignEvents } from '@shared/schema';
+import { loanDigestConfigs, loanDigestRecipients, loanUpdates, digestHistory, digestState, partnerBroadcasts, partnerBroadcastRecipients, inboundSmsMessages, scheduledDigestDrafts, esignEnvelopes, esignEvents, lenderReviewConfig } from '@shared/schema';
 import { sendPartnerBroadcast, handleIncomingSms, getInboundMessages, markMessageRead, getBroadcastHistory } from './broadcastService';
 import { registerObjectStorageRoutes, ObjectStorageService } from './replit_integrations/object_storage';
 import multer from 'multer';
@@ -949,7 +949,13 @@ export async function registerRoutes(
         pointsAmount,
         tpoPremiumAmount,
         totalRevenue,
-        commission
+        commission,
+        // Persist YSP + split points
+        yspAmount: quoteData.yspAmount ?? 0,
+        yspRateImpact: quoteData.yspRateImpact ?? 0,
+        yspDollarAmount: quoteData.yspDollarAmount ?? 0,
+        basePointsCharged: quoteData.basePointsCharged ?? 0,
+        brokerPointsCharged: quoteData.brokerPointsCharged ?? 0,
       }, req.user!.id);
 
       // Auto-populate document checklist based on programId or loan type
@@ -3139,8 +3145,20 @@ export async function registerRoutes(
     if (currentStage) {
       const stageTasks = await storage.getTasksByStageId(currentStage.id);
       const completedStageTasks = stageTasks.filter(t => t.status === 'completed').length;
+      const allTasksDone = stageTasks.length === 0 || completedStageTasks === stageTasks.length;
+
+      const stageDocs = await db.select().from(dealDocuments)
+        .where(and(
+          eq(dealDocuments.stageId, currentStage.id),
+          eq(dealDocuments.isRequired, true)
+        ));
+      const allDocsDone = stageDocs.length === 0 || stageDocs.every(d => 
+        d.status === 'approved' || d.status === 'waived' || d.status === 'not_applicable'
+      );
+
+      const hasContent = stageTasks.length > 0 || stageDocs.length > 0;
       
-      if (completedStageTasks === stageTasks.length && stageTasks.length > 0) {
+      if (allTasksDone && allDocsDone && hasContent) {
         // Mark stage complete
         await storage.updateStage(currentStage.id, { 
           status: 'completed', 
@@ -3349,11 +3367,13 @@ export async function registerRoutes(
 
       const uploaderInfo = await db.select({ firstName: users.firstName, lastName: users.lastName }).from(users).where(eq(users.id, userId)).limit(1);
       const uploaderName = uploaderInfo[0] ? `${uploaderInfo[0].firstName || ''} ${uploaderInfo[0].lastName || ''}`.trim() || 'A borrower' : 'A borrower';
+      const projForLabel = await db.select({ loanNumber: projects.loanNumber }).from(projects).where(eq(projects.id, projectId)).limit(1);
+      const dealLabel = projForLabel[0]?.loanNumber || `DEAL-${projectId}`;
       notifyDealAdmins(
         projectId,
         'document_uploaded',
         'New Document Uploaded',
-        `${uploaderName} uploaded "${fileName || 'a document'}" to DEAL-${projectId}`,
+        `${uploaderName} uploaded "${fileName || 'a document'}" to ${dealLabel}`,
         userId
       ).catch(err => console.error('Notification error:', err));
 
@@ -3484,11 +3504,13 @@ export async function registerRoutes(
 
       const brokerInfo = await db.select({ firstName: users.firstName, lastName: users.lastName }).from(users).where(eq(users.id, userId)).limit(1);
       const brokerName = brokerInfo[0] ? `${brokerInfo[0].firstName || ''} ${brokerInfo[0].lastName || ''}`.trim() || 'A broker' : 'A broker';
+      const projForBrokerLabel = await db.select({ loanNumber: projects.loanNumber }).from(projects).where(eq(projects.id, projectId)).limit(1);
+      const brokerDealLabel = projForBrokerLabel[0]?.loanNumber || `DEAL-${projectId}`;
       notifyDealAdmins(
         projectId,
         'document_uploaded',
         'New Document Uploaded',
-        `${brokerName} uploaded "${updated?.documentName || fileName || 'a document'}" to DEAL-${projectId}`,
+        `${brokerName} uploaded "${updated?.documentName || fileName || 'a document'}" to ${brokerDealLabel}`,
         userId
       ).catch(err => console.error('Notification error:', err));
 
@@ -3588,6 +3610,81 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error(`Drive push failed for deal ${req.params.id}:`, error.message);
       res.status(500).json({ error: error.message || 'Failed to create Google Drive folder' });
+    }
+  });
+
+  // Sync all deal documents to Google Drive
+  app.post('/api/admin/deals/:dealId/sync-all-drive', authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      if (isNaN(dealId)) {
+        return res.status(400).json({ error: 'Invalid deal ID' });
+      }
+
+      const { isDriveIntegrationEnabled, ensureProjectFolder, ensureDealFolder, syncDealDocumentToDrive } = await import('./services/googleDrive');
+      const driveEnabled = await isDriveIntegrationEnabled();
+      if (!driveEnabled) {
+        return res.status(400).json({ error: 'Google Drive integration is not configured.' });
+      }
+
+      const [project] = await db.select().from(projects).where(eq(projects.id, dealId)).limit(1);
+      if (project) {
+        await ensureProjectFolder(dealId);
+      } else {
+        await ensureDealFolder(dealId);
+      }
+
+      const docs = await db.select()
+        .from(dealDocuments)
+        .where(and(
+          eq(dealDocuments.dealId, dealId),
+          eq(dealDocuments.status, 'approved')
+        ));
+
+      let synced = 0;
+      let skipped = 0;
+      let errors = 0;
+
+      for (const doc of docs) {
+        if (doc.filePath && !doc.googleDriveFileId) {
+          try {
+            await syncDealDocumentToDrive(doc.id);
+            synced++;
+          } catch (err: any) {
+            console.error(`[Drive Sync All] Error syncing doc ${doc.id}:`, err.message);
+            errors++;
+          }
+        } else if (doc.filePath && doc.googleDriveFileId) {
+          skipped++;
+        }
+      }
+
+      if (docs.length > 0) {
+        const docIds = docs.map(d => d.id);
+        const files = await db.select()
+          .from(dealDocumentFiles)
+          .where(inArray(dealDocumentFiles.documentId, docIds));
+
+        for (const file of files) {
+          if (file.filePath && !file.googleDriveFileId) {
+            try {
+              await syncDealDocumentToDrive(file.documentId, file.id);
+              synced++;
+            } catch (err: any) {
+              console.error(`[Drive Sync All] Error syncing file ${file.id}:`, err.message);
+              errors++;
+            }
+          } else if (file.filePath && file.googleDriveFileId) {
+            skipped++;
+          }
+        }
+      }
+
+      console.log(`[Drive Sync All] Deal ${dealId}: synced=${synced}, skipped=${skipped}, errors=${errors}`);
+      res.json({ success: true, synced, skipped, errors });
+    } catch (error: any) {
+      console.error(`[Drive Sync All] Failed for deal ${req.params.dealId}:`, error.message);
+      res.status(500).json({ error: error.message || 'Failed to sync documents to Drive' });
     }
   });
 
@@ -3846,13 +3943,15 @@ export async function registerRoutes(
         const senderName = senderInfo[0] ? `${senderInfo[0].firstName || ''} ${senderInfo[0].lastName || ''}`.trim() || 'Someone' : 'Someone';
         const preview = body.length > 80 ? body.substring(0, 80) + '...' : body;
         const dealId = thread[0].dealId;
+        const msgProj = await db.select({ loanNumber: projects.loanNumber }).from(projects).where(eq(projects.id, dealId)).limit(1);
+        const msgDealLabel = msgProj[0]?.loanNumber || `DEAL-${dealId}`;
 
         if (senderRole === 'user') {
           notifyDealAdmins(
             dealId,
             'new_message',
             'New Message Received',
-            `${senderName} sent a message on DEAL-${dealId}: "${preview}"`,
+            `${senderName} sent a message on ${msgDealLabel}: "${preview}"`,
             userId
           ).catch(err => console.error('Message notification error:', err));
         } else {
@@ -3861,7 +3960,7 @@ export async function registerRoutes(
               userId: thread[0].userId,
               type: 'new_message',
               title: 'New Message From Your Lender',
-              message: `You have a new message on DEAL-${dealId}: "${preview}"`,
+              message: `You have a new message on ${msgDealLabel}: "${preview}"`,
               dealId,
               link: `/messages`,
             }).catch(err => console.error('Message notification error:', err));
@@ -5042,6 +5141,70 @@ export async function registerRoutes(
     }
   });
 
+  app.get('/api/admin/deals/:dealId/third-parties', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      const contacts = await db.select().from(dealThirdParties)
+        .where(eq(dealThirdParties.projectId, dealId))
+        .orderBy(asc(dealThirdParties.createdAt));
+      res.json({ contacts });
+    } catch (error) {
+      console.error('Get third parties error:', error);
+      res.status(500).json({ error: 'Failed to get third parties' });
+    }
+  });
+
+  app.post('/api/admin/deals/:dealId/third-parties', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      const { name, email, phone, role, company, notes } = req.body;
+      if (!name || !role) {
+        return res.status(400).json({ error: 'Name and role are required' });
+      }
+      const [contact] = await db.insert(dealThirdParties).values({
+        projectId: dealId,
+        name,
+        email: email || null,
+        phone: phone || null,
+        role,
+        company: company || null,
+        notes: notes || null,
+        createdBy: req.user!.id,
+      }).returning();
+      res.json(contact);
+    } catch (error) {
+      console.error('Add third party error:', error);
+      res.status(500).json({ error: 'Failed to add third party' });
+    }
+  });
+
+  app.patch('/api/admin/deals/:dealId/third-parties/:contactId', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const contactId = parseInt(req.params.contactId);
+      const { name, email, phone, role, company, notes } = req.body;
+      const [updated] = await db.update(dealThirdParties)
+        .set({ name, email: email || null, phone: phone || null, role, company: company || null, notes: notes || null, updatedAt: new Date() })
+        .where(eq(dealThirdParties.id, contactId))
+        .returning();
+      if (!updated) return res.status(404).json({ error: 'Contact not found' });
+      res.json(updated);
+    } catch (error) {
+      console.error('Update third party error:', error);
+      res.status(500).json({ error: 'Failed to update third party' });
+    }
+  });
+
+  app.delete('/api/admin/deals/:dealId/third-parties/:contactId', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const contactId = parseInt(req.params.contactId);
+      await db.delete(dealThirdParties).where(eq(dealThirdParties.id, contactId));
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Delete third party error:', error);
+      res.status(500).json({ error: 'Failed to delete third party' });
+    }
+  });
+
   // Admin - Rebuild project pipeline from linked program
   app.post('/api/admin/projects/:id/rebuild-pipeline', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
@@ -5083,6 +5246,54 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Rebuild pipeline error:', error);
       res.status(500).json({ error: 'Failed to rebuild pipeline' });
+    }
+  });
+
+  // Admin - Convert deal to a different loan program (preserves uploaded documents)
+  app.post('/api/admin/projects/:id/convert-program', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const projectId = parseInt(req.params.id);
+      const { programId } = req.body;
+      if (!programId) {
+        return res.status(400).json({ error: 'programId is required' });
+      }
+
+      const newProgramId = parseInt(programId);
+      const project = await storage.getProjectByIdInternal(projectId);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+
+      if (project.programId === newProgramId) {
+        return res.status(400).json({ error: 'Deal is already assigned to this program' });
+      }
+
+      await db.update(projects)
+        .set({ programId: newProgramId })
+        .where(eq(projects.id, projectId));
+
+      const { convertDealToProgram } = await import('./services/projectPipeline');
+      const result = await convertDealToProgram(projectId, newProgramId);
+
+      await storage.createProjectActivity({
+        projectId,
+        userId: req.user!.id,
+        activityType: 'program_converted',
+        activityDescription: `Loan program changed to "${result.programName || 'Unknown'}". ${result.documentsPreserved} uploaded documents preserved. ${result.stagesCreated} stages, ${result.tasksCreated} tasks, ${result.documentsCreated} document requirements created.`,
+        visibleToBorrower: false,
+      });
+
+      res.json({
+        success: true,
+        stagesCreated: result.stagesCreated,
+        tasksCreated: result.tasksCreated,
+        documentsCreated: result.documentsCreated,
+        documentsPreserved: result.documentsPreserved,
+        programName: result.programName,
+      });
+    } catch (error) {
+      console.error('Convert program error:', error);
+      res.status(500).json({ error: 'Failed to convert loan program' });
     }
   });
 
@@ -5626,14 +5837,22 @@ export async function registerRoutes(
           
           if (openaiConnection) {
             integrations.openai = { connected: true, status: 'Connected' };
+          } else if (process.env.OPENAI_API_KEY || process.env.AI_INTEGRATIONS_OPENAI_API_KEY) {
+            integrations.openai = { connected: true, status: 'Connected' };
           } else {
             integrations.openai = { connected: false, status: 'Not connected' };
           }
+        } else if (process.env.OPENAI_API_KEY || process.env.AI_INTEGRATIONS_OPENAI_API_KEY) {
+          integrations.openai = { connected: true, status: 'Connected' };
         } else {
           integrations.openai = { connected: false, status: 'Connector not available' };
         }
       } catch (error) {
-        integrations.openai = { connected: false, status: 'Error checking status' };
+        if (process.env.OPENAI_API_KEY || process.env.AI_INTEGRATIONS_OPENAI_API_KEY) {
+          integrations.openai = { connected: true, status: 'Connected' };
+        } else {
+          integrations.openai = { connected: false, status: 'Error checking status' };
+        }
       }
       
       // Check Geoapify integration (environment variable based)
@@ -5686,6 +5905,7 @@ export async function registerRoutes(
         id: projects.id,
         userId: projects.userId,
         projectNumber: projects.projectNumber,
+        loanNumber: projects.loanNumber,
         projectName: projects.projectName,
         borrowerName: projects.borrowerName,
         borrowerEmail: projects.borrowerEmail,
@@ -5753,6 +5973,7 @@ export async function registerRoutes(
           id: p.id,
           projectId: p.id,
           projectNumber: p.projectNumber,
+          loanNumber: p.loanNumber,
           userId: p.userId,
           customerFirstName: firstName,
           customerLastName: lastName,
@@ -5791,7 +6012,8 @@ export async function registerRoutes(
           d.customerLastName?.toLowerCase().includes(searchLower) ||
           d.propertyAddress?.toLowerCase().includes(searchLower) ||
           d.userName?.toLowerCase().includes(searchLower) ||
-          d.projectNumber?.toLowerCase().includes(searchLower)
+          d.projectNumber?.toLowerCase().includes(searchLower) ||
+          d.loanNumber?.toLowerCase().includes(searchLower)
         );
       }
       
@@ -6222,10 +6444,20 @@ export async function registerRoutes(
         .where(eq(dealDocuments.dealId, projectId))
         .orderBy(dealDocuments.sortOrder);
 
-      const props = await db.select()
+      let props = await db.select()
         .from(dealProperties)
         .where(eq(dealProperties.dealId, projectId))
         .orderBy(dealProperties.sortOrder);
+
+      if (props.length === 0 && project.propertyAddress) {
+        const [newProp] = await db.insert(dealProperties).values({
+          dealId: projectId,
+          address: project.propertyAddress,
+          isPrimary: true,
+          sortOrder: 0,
+        }).returning();
+        if (newProp) props = [newProp];
+      }
       
       res.json({ deal, documents: docs, project, properties: props });
     } catch (error) {
@@ -6862,7 +7094,7 @@ export async function registerRoutes(
                         <div class="header"><h1>Document Rejected</h1></div>
                         <div class="content">
                           <p>Hello ${borrowerName},</p>
-                          <p>The following document for your loan (DEAL-${dealId}) has been reviewed and needs to be resubmitted:</p>
+                          <p>The following document for your loan (${project.loanNumber || `DEAL-${dealId}`}) has been reviewed and needs to be resubmitted:</p>
                           <p><strong>${updated.documentName}</strong></p>
                           ${reviewNotes ? `<div class="reason"><strong>Reason:</strong> ${reviewNotes}</div>` : ''}
                           <p>Please upload a corrected version through your borrower portal at your earliest convenience.</p>
@@ -6880,6 +7112,14 @@ export async function registerRoutes(
         }
       }
       
+      if (status === 'approved' || status === 'waived' || status === 'not_applicable') {
+        try {
+          await updateProjectProgress(dealId, req.user!.id);
+        } catch (progressErr) {
+          console.error('Failed to check stage auto-advance after doc approval:', progressErr);
+        }
+      }
+
       res.json({ document: updated });
     } catch (error) {
       console.error('Admin update document error:', error);
@@ -6933,6 +7173,12 @@ export async function registerRoutes(
         console.error('Drive sync check error on bulk approval:', driveErr.message);
       }
       
+      try {
+        await updateProjectProgress(dealId, req.user!.id);
+      } catch (progressErr) {
+        console.error('Failed to check stage auto-advance after bulk approval:', progressErr);
+      }
+
       res.json({ approved: aiReviewedDocs.length, message: `${aiReviewedDocs.length} documents approved` });
     } catch (error: any) {
       console.error('Bulk approve error:', error);
@@ -7297,7 +7543,7 @@ export async function registerRoutes(
                           <div class="header"><h1>Document Rejected</h1></div>
                           <div class="content">
                             <p>Hello ${borrowerName},</p>
-                            <p>The following document for your loan (DEAL-${review.projectId}) has been reviewed and needs to be resubmitted:</p>
+                            <p>The following document for your loan (${project.loanNumber || `DEAL-${review.projectId}`}) has been reviewed and needs to be resubmitted:</p>
                             <p><strong>${doc.documentName}</strong></p>
                             <div class="reason"><strong>Reason:</strong> ${reason}</div>
                             <p>Please upload a corrected version through your borrower portal at your earliest convenience.</p>
@@ -7548,7 +7794,9 @@ export async function registerRoutes(
         loanType,
         loanPurpose,
         propertyType,
+        loanTerm,
         stage,
+        applicationData: incomingAppData,
       } = req.body;
       
       // Get current deal to preserve existing loanData
@@ -7570,6 +7818,7 @@ export async function registerRoutes(
         loanType: loanType || existingLoanData.loanType,
         loanPurpose: loanPurpose || existingLoanData.loanPurpose,
         propertyType: propertyType || existingLoanData.propertyType,
+        loanTerm: loanTerm || existingLoanData.loanTerm,
       };
       
       // Calculate LTV if we have both values
@@ -7587,6 +7836,7 @@ export async function registerRoutes(
           propertyAddress: propertyAddress || existingDeal.propertyAddress,
           interestRate: interestRate || existingDeal.interestRate,
           loanData: updatedLoanData,
+          ...(incomingAppData ? { applicationData: incomingAppData } : {}),
         })
         .where(eq(savedQuotes.id, dealId))
         .returning();
@@ -7847,11 +8097,13 @@ export async function registerRoutes(
         if (!isNaN(assigneeId) && assigneeId !== req.user!.id && assigneeId !== existingTask?.assignedTo) {
           const assignerName = req.user!.fullName || req.user!.email || 'Someone';
           const taskLabel = updated.taskName || 'a task';
+          const taskProj = await db.select({ loanNumber: projects.loanNumber }).from(projects).where(eq(projects.id, dealId)).limit(1);
+          const taskDealLabel = taskProj[0]?.loanNumber || `DEAL-${dealId}`;
           await createNotification({
             userId: assigneeId,
             type: 'task_assigned',
             title: 'Task Assigned',
-            message: `${assignerName} assigned you "${taskLabel}" on DEAL-${dealId}`,
+            message: `${assignerName} assigned you "${taskLabel}" on ${taskDealLabel}`,
             dealId,
             link: `/admin/deals/${dealId}`,
           });
@@ -8325,23 +8577,29 @@ export async function registerRoutes(
   // Create loan program
   app.post('/api/admin/programs', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
-      const { 
-        name, description, loanType, 
-        minLoanAmount, maxLoanAmount, 
-        minLtv, maxLtv, 
+      const {
+        name, description, loanType,
+        minLoanAmount, maxLoanAmount,
+        minLtv, maxLtv,
         minInterestRate, maxInterestRate,
         termOptions, eligiblePropertyTypes,
         isActive,
         documents,
         tasks,
         steps,
-        creditPolicyId
+        creditPolicyId,
+        // YSP configuration
+        yspEnabled, yspBrokerCanToggle, yspFixedAmount,
+        yspMin, yspMax, yspStep,
+        // Points configuration
+        basePoints, basePointsMin, basePointsMax,
+        brokerPointsEnabled, brokerPointsMax, brokerPointsStep,
       } = req.body;
-      
+
       if (!name || !loanType) {
         return res.status(400).json({ error: 'Name and loan type are required' });
       }
-      
+
       const result = await db.transaction(async (tx) => {
         const [program] = await tx.insert(loanPrograms).values({
           name,
@@ -8358,6 +8616,20 @@ export async function registerRoutes(
           isActive: isActive !== false,
           creditPolicyId: creditPolicyId ? parseInt(creditPolicyId) : null,
           createdBy: req.user!.id,
+          // YSP configuration
+          yspEnabled: yspEnabled === true,
+          yspBrokerCanToggle: yspBrokerCanToggle === true,
+          yspFixedAmount: yspFixedAmount != null ? parseFloat(yspFixedAmount) : 0,
+          yspMin: yspMin != null ? parseFloat(yspMin) : 0,
+          yspMax: yspMax != null ? parseFloat(yspMax) : 3,
+          yspStep: yspStep != null ? parseFloat(yspStep) : 0.125,
+          // Points configuration
+          basePoints: basePoints != null ? parseFloat(basePoints) : 1,
+          basePointsMin: basePointsMin != null ? parseFloat(basePointsMin) : 0.5,
+          basePointsMax: basePointsMax != null ? parseFloat(basePointsMax) : 3,
+          brokerPointsEnabled: brokerPointsEnabled !== false,
+          brokerPointsMax: brokerPointsMax != null ? parseFloat(brokerPointsMax) : 2,
+          brokerPointsStep: brokerPointsStep != null ? parseFloat(brokerPointsStep) : 0.125,
         }).returning();
 
         const stepIndexToId = new Map<number, number>();
@@ -8437,16 +8709,22 @@ export async function registerRoutes(
         return res.status(403).json({ error: 'Not authorized to modify this program' });
       }
       
-      const { 
-        name, description, loanType, 
-        minLoanAmount, maxLoanAmount, 
-        minLtv, maxLtv, 
+      const {
+        name, description, loanType,
+        minLoanAmount, maxLoanAmount,
+        minLtv, maxLtv,
         minInterestRate, maxInterestRate,
         termOptions, eligiblePropertyTypes,
         isActive, reviewGuidelines, creditPolicyId,
-        documents, tasks, steps
+        documents, tasks, steps,
+        // YSP configuration
+        yspEnabled, yspBrokerCanToggle, yspFixedAmount,
+        yspMin, yspMax, yspStep,
+        // Points configuration
+        basePoints, basePointsMin, basePointsMax,
+        brokerPointsEnabled, brokerPointsMax, brokerPointsStep,
       } = req.body;
-      
+
       const updateData: any = { updatedAt: new Date() };
       if (name !== undefined) updateData.name = name;
       if (description !== undefined) updateData.description = description;
@@ -8462,6 +8740,20 @@ export async function registerRoutes(
       if (isActive !== undefined) updateData.isActive = isActive;
       if (reviewGuidelines !== undefined) updateData.reviewGuidelines = reviewGuidelines;
       if (creditPolicyId !== undefined) updateData.creditPolicyId = creditPolicyId ? parseInt(creditPolicyId) : null;
+      // YSP configuration
+      if (yspEnabled !== undefined) updateData.yspEnabled = yspEnabled === true;
+      if (yspBrokerCanToggle !== undefined) updateData.yspBrokerCanToggle = yspBrokerCanToggle === true;
+      if (yspFixedAmount !== undefined) updateData.yspFixedAmount = parseFloat(yspFixedAmount) || 0;
+      if (yspMin !== undefined) updateData.yspMin = parseFloat(yspMin) || 0;
+      if (yspMax !== undefined) updateData.yspMax = parseFloat(yspMax) || 3;
+      if (yspStep !== undefined) updateData.yspStep = parseFloat(yspStep) || 0.125;
+      // Points configuration
+      if (basePoints !== undefined) updateData.basePoints = parseFloat(basePoints) || 1;
+      if (basePointsMin !== undefined) updateData.basePointsMin = parseFloat(basePointsMin) || 0.5;
+      if (basePointsMax !== undefined) updateData.basePointsMax = parseFloat(basePointsMax) || 3;
+      if (brokerPointsEnabled !== undefined) updateData.brokerPointsEnabled = brokerPointsEnabled !== false;
+      if (brokerPointsMax !== undefined) updateData.brokerPointsMax = parseFloat(brokerPointsMax) || 2;
+      if (brokerPointsStep !== undefined) updateData.brokerPointsStep = parseFloat(brokerPointsStep) || 0.125;
       
       await db.transaction(async (tx) => {
         await tx.update(loanPrograms)
@@ -10803,6 +11095,24 @@ If the user provides specific criteria, extract as many rules as you can from th
     } catch (error) {
       console.error('Complete onboarding error:', error);
       res.status(500).json({ error: 'Failed to complete onboarding' });
+    }
+  });
+
+  // Save communication consent preferences
+  app.post('/api/onboarding/consent', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const { emailConsent, smsConsent } = req.body;
+      await db.update(users)
+        .set({
+          emailConsent: !!emailConsent,
+          smsConsent: !!smsConsent,
+        })
+        .where(eq(users.id, userId));
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Save consent error:', error);
+      res.status(500).json({ error: 'Failed to save consent preferences' });
     }
   });
 
@@ -14531,77 +14841,22 @@ If the user provides specific criteria, extract as many rules as you can from th
                   
                   console.log(`[PandaDoc Webhook] Project ${projectNumber} auto-created from signed term sheet (envelope ${envelope.id}, quote ${quote.id})`);
                   
-                  // Store signed PDF as deal document and sync to cloud
+                  // Store signed PDF as deal document (Stage 1 "Signed Agreement") and sync to cloud
                   if (signedPdfPath && signedPdfSize > 0) {
                     try {
-                      const [signedDoc] = await db.insert(dealDocuments).values({
-                        dealId: project.id,
-                        documentName: 'Signed Term Sheet',
-                        documentCategory: 'closing_docs',
-                        documentDescription: `Signed PandaDoc term sheet: ${envelope.documentName}`,
-                        status: 'approved',
-                        isRequired: true,
-                        filePath: signedPdfPath,
-                        fileName: `${(envelope.documentName || 'signed-term-sheet').replace(/[^a-zA-Z0-9._-]/g, '_')}.pdf`,
+                      const { syncSignedDocumentToDeal } = await import('./services/signedDocumentSync');
+                      const syncResult = await syncSignedDocumentToDeal({
+                        projectId: project.id,
+                        envelopeId: envelope.id,
+                        externalDocumentId: documentId,
+                        documentName: envelope.documentName || 'Signed Term Sheet',
+                        signedPdfPath,
                         fileSize: signedPdfSize,
-                        mimeType: 'application/pdf',
-                        uploadedAt: new Date(),
-                        visibility: 'all',
-                        assignedTo: 'admin',
-                        sortOrder: 0,
-                      }).returning();
-
-                      console.log(`[PandaDoc Webhook] Created deal document ${signedDoc.id} for signed term sheet`);
-
-                      // Sync to cloud storage (Google Drive or OneDrive)
-                      try {
-                        const { isDriveIntegrationEnabled, ensureProjectFolder, uploadFileToProjectFolder } = await import('./services/googleDrive');
-                        const driveEnabled = await isDriveIntegrationEnabled();
-                        if (driveEnabled) {
-                          await ensureProjectFolder(project.id);
-                          const fs = await import('fs');
-                          const fileStream = fs.createReadStream(signedPdfPath);
-                          const result = await uploadFileToProjectFolder({
-                            projectId: project.id,
-                            fileStream,
-                            originalName: signedDoc.fileName || 'Signed_Term_Sheet.pdf',
-                            mimeType: 'application/pdf',
-                          });
-                          // Update deal document with Drive link
-                          await db.update(dealDocuments)
-                            .set({
-                              googleDriveFileId: result.fileId,
-                              googleDriveFileUrl: result.webViewLink,
-                              driveUploadStatus: 'SYNCED',
-                            })
-                            .where(eq(dealDocuments.id, signedDoc.id));
-                          console.log(`[PandaDoc Webhook] Signed PDF synced to Google Drive for deal ${project.id}`);
-                        }
-                      } catch (driveErr: any) {
-                        console.error('Drive sync for signed PDF error:', driveErr.message);
-                      }
-
-                      // OneDrive upload
-                      try {
-                        const { isOneDriveEnabled, ensureOneDriveDealFolder, uploadFileToOneDrive } = await import('./services/oneDrive');
-                        const onedriveEnabled = await isOneDriveEnabled();
-                        if (onedriveEnabled) {
-                          const fs = await import('fs');
-                          const pdfBuf = await fs.promises.readFile(signedPdfPath);
-                          const folderInfo = await ensureOneDriveDealFolder(project.id);
-                          await uploadFileToOneDrive(
-                            folderInfo.folderId,
-                            signedDoc.fileName || 'Signed_Term_Sheet.pdf',
-                            pdfBuf,
-                            'application/pdf',
-                          );
-                          console.log(`[PandaDoc Webhook] Signed PDF synced to OneDrive for deal ${project.id}`);
-                        }
-                      } catch (onedriveErr: any) {
-                        console.error('OneDrive sync for signed PDF error:', onedriveErr.message);
-                      }
+                        createdBy: envelope.createdBy,
+                      });
+                      console.log(`[PandaDoc Webhook] Signed doc synced for new deal ${project.id}: action=${syncResult.action}, drive=${syncResult.driveSync}, onedrive=${syncResult.onedriveSync}`);
                     } catch (docErr: any) {
-                      console.error('Failed to create deal document for signed PDF:', docErr.message);
+                      console.error('Failed to sync signed document for new deal:', docErr.message);
                     }
                   } else {
                     // Still try to create Drive folder even without signed PDF
@@ -14626,94 +14881,22 @@ If the user provides specific criteria, extract as many rules as you can from th
             }
           }
 
-          // Insert signed PDF into existing deal's stage 1 documents
+          // Insert signed PDF into existing deal's Stage 1 "Signed Agreement" slot and sync to cloud
           if (envelope.projectId && signedPdfPath && signedPdfSize > 0) {
             try {
-              const existingSignedDoc = await db.select({ id: dealDocuments.id })
-                .from(dealDocuments)
-                .where(and(
-                  eq(dealDocuments.dealId, envelope.projectId),
-                  eq(dealDocuments.documentDescription, `Signed PandaDoc document (${documentId}): ${envelope.documentName}`),
-                ))
-                .limit(1);
-
-              if (existingSignedDoc.length === 0) {
-                const [stage1] = await db.select()
-                  .from(projectStages)
-                  .where(eq(projectStages.projectId, envelope.projectId))
-                  .orderBy(asc(projectStages.stageOrder))
-                  .limit(1);
-
-                // Upload to object storage instead of just filesystem
-                const objectStorageService = new ObjectStorageService();
-                const pdfBuf = await (await import('fs')).promises.readFile(signedPdfPath);
-                const { objectPath } = await objectStorageService.uploadFile(
-                  pdfBuf,
-                  `${(envelope.documentName || 'signed-document').replace(/[^a-zA-Z0-9._-]/g, '_')}-signed.pdf`,
-                  'application/pdf'
-                );
-
-                const signedFileName = `${envelope.documentName || 'Signed Document'} (Signed).pdf`;
-                const [insertedDoc] = await db.insert(dealDocuments).values({
-                  dealId: envelope.projectId,
-                  stageId: stage1?.id || null,
-                  documentName: signedFileName,
-                  documentCategory: 'closing_docs',
-                  documentDescription: `Signed PandaDoc document (${documentId}): ${envelope.documentName}`,
-                  status: 'approved',
-                  isRequired: false,
-                  assignedTo: 'admin',
-                  visibility: 'all',
-                  filePath: objectPath,
-                  fileName: signedFileName,
-                  fileSize: signedPdfSize,
-                  mimeType: 'application/pdf',
-                  uploadedAt: new Date(),
-                  uploadedBy: envelope.createdBy,
-                  sortOrder: 0,
-                }).returning();
-
-                console.log(`[PandaDoc Webhook] Signed document "${signedFileName}" auto-inserted into deal ${envelope.projectId} at stage ${stage1?.stageName || 'first'} (doc ID: ${insertedDoc?.id})`);
-
-                // Log activity on the deal
-                await storage.createProjectActivity({
-                  projectId: envelope.projectId,
-                  userId: envelope.createdBy!,
-                  activityType: 'document_uploaded',
-                  activityDescription: `Signed document "${envelope.documentName}" received from PandaDoc and added to ${stage1?.stageName || 'Stage 1'}`,
-                  visibleToBorrower: true,
-                });
-
-                // Sync to Google Drive if enabled
-                try {
-                  const { isDriveIntegrationEnabled, ensureProjectFolder, uploadFileToProjectFolder } = await import('./services/googleDrive');
-                  const driveEnabled = await isDriveIntegrationEnabled();
-                  if (driveEnabled && insertedDoc) {
-                    await ensureProjectFolder(envelope.projectId);
-                    const fileStream = (await import('fs')).createReadStream(signedPdfPath);
-                    const driveResult = await uploadFileToProjectFolder({
-                      projectId: envelope.projectId,
-                      fileStream,
-                      originalName: signedFileName,
-                      mimeType: 'application/pdf',
-                    });
-                    await db.update(dealDocuments)
-                      .set({
-                        googleDriveFileId: driveResult.fileId,
-                        googleDriveFileUrl: driveResult.webViewLink,
-                        driveUploadStatus: 'SYNCED',
-                      })
-                      .where(eq(dealDocuments.id, insertedDoc.id));
-                    console.log(`[PandaDoc Webhook] Signed PDF synced to Drive for existing deal ${envelope.projectId}`);
-                  }
-                } catch (driveErr: any) {
-                  console.error('[PandaDoc Webhook] Drive sync for existing deal signed PDF:', driveErr.message);
-                }
-              } else {
-                console.log(`[PandaDoc Webhook] Signed document already exists for deal ${envelope.projectId}, skipping duplicate insert`);
-              }
+              const { syncSignedDocumentToDeal } = await import('./services/signedDocumentSync');
+              const syncResult = await syncSignedDocumentToDeal({
+                projectId: envelope.projectId,
+                envelopeId: envelope.id,
+                externalDocumentId: documentId,
+                documentName: envelope.documentName || 'Signed Document',
+                signedPdfPath,
+                fileSize: signedPdfSize,
+                createdBy: envelope.createdBy,
+              });
+              console.log(`[PandaDoc Webhook] Signed doc synced for existing deal ${envelope.projectId}: action=${syncResult.action}, drive=${syncResult.driveSync}, onedrive=${syncResult.onedriveSync}`);
             } catch (existingDealErr: any) {
-              console.error(`[PandaDoc Webhook] Error inserting signed doc into existing deal ${envelope.projectId}:`, existingDealErr.message);
+              console.error(`[PandaDoc Webhook] Error syncing signed doc into existing deal ${envelope.projectId}:`, existingDealErr.message);
             }
           }
         }
@@ -15658,6 +15841,432 @@ Return JSON only:
   }, 10000);
 
 
+  // ==================== PUBLIC APPLICATION ENDPOINTS ====================
+
+  app.get('/api/public/programs', async (req: Request, res: Response) => {
+    try {
+      const programs = await db.select({
+        id: loanPrograms.id,
+        name: loanPrograms.name,
+        description: loanPrograms.description,
+        loanType: loanPrograms.loanType,
+        minLoanAmount: loanPrograms.minLoanAmount,
+        maxLoanAmount: loanPrograms.maxLoanAmount,
+        eligiblePropertyTypes: loanPrograms.eligiblePropertyTypes,
+        quoteFormFields: loanPrograms.quoteFormFields,
+      })
+        .from(loanPrograms)
+        .where(eq(loanPrograms.isActive, true))
+        .orderBy(loanPrograms.sortOrder);
+
+      res.json({ programs });
+    } catch (error) {
+      console.error('Public programs error:', error);
+      res.status(500).json({ error: 'Failed to get programs' });
+    }
+  });
+
+  app.post('/api/public/apply', async (req: Request, res: Response) => {
+    try {
+      const { programId, firstName, lastName, email, phone, propertyAddress, formData } = req.body;
+
+      if (!programId || !firstName || !lastName || !email || !propertyAddress) {
+        return res.status(400).json({ error: 'Missing required fields: programId, firstName, lastName, email, propertyAddress' });
+      }
+
+      const [program] = await db.select()
+        .from(loanPrograms)
+        .where(and(eq(loanPrograms.id, programId), eq(loanPrograms.isActive, true)));
+
+      if (!program) {
+        return res.status(404).json({ error: 'Program not found' });
+      }
+
+      let existingUser = await storage.getUserByEmail(email);
+      if (!existingUser) {
+        const randomPassword = Math.random().toString(36).slice(-12);
+        const bcrypt = await import('bcrypt');
+        const hashedPassword = await bcrypt.hash(randomPassword, 10);
+        existingUser = await storage.createUser({
+          email,
+          password: hashedPassword,
+          fullName: `${firstName} ${lastName}`,
+          phone: phone || null,
+          userType: 'borrower',
+          role: 'user',
+        });
+      }
+
+      const borrowerName = `${firstName} ${lastName}`.trim();
+      const projectName = `${borrowerName} — ${propertyAddress}`;
+
+      const [newProject] = await db.insert(projects).values({
+        userId: existingUser.id,
+        projectName,
+        status: 'active',
+        currentStage: 1,
+        programId: program.id,
+        propertyAddress,
+      }).returning();
+
+      await db.insert(activities).values({
+        userId: existingUser.id,
+        projectId: newProject.id,
+        activityType: 'application_submitted',
+        activityDescription: `Loan application submitted via public apply link for program: ${program.name}`,
+      });
+
+      const quote = await storage.createPricingRequest({
+        userId: existingUser.id,
+        customerFirstName: firstName,
+        customerLastName: lastName,
+        customerEmail: email,
+        customerPhone: phone || null,
+        propertyAddress,
+        loanData: {
+          programId,
+          programName: program.name,
+          loanType: program.loanType,
+          source: 'public_apply',
+          ...(formData || {}),
+        },
+        status: 'submitted',
+      });
+
+      res.json({
+        success: true,
+        message: 'Application submitted successfully',
+        applicationId: newProject.id,
+        dealIdentifier: newProject.loanNumber || `DEAL-${newProject.id}`,
+      });
+    } catch (error) {
+      console.error('Public apply error:', error);
+      res.status(500).json({ error: 'Failed to submit application' });
+    }
+  });
+
+  // ==================== MAGIC LINK PUBLIC ENDPOINTS ====================
+
+  // Helper: validate a magic link token and return lender info
+  async function validateMagicLinkToken(token: string): Promise<{
+    lenderId: number;
+    type: 'borrower' | 'broker';
+    lenderName: string;
+    companyName: string;
+  } | null> {
+    // Check borrower magic links
+    const [borrowerMatch] = await db.select({
+      id: users.id,
+      fullName: users.fullName,
+      companyName: users.companyName,
+      borrowerMagicLinkEnabled: users.borrowerMagicLinkEnabled,
+    }).from(users).where(eq(users.borrowerMagicLink, token));
+
+    if (borrowerMatch && borrowerMatch.borrowerMagicLinkEnabled) {
+      return {
+        lenderId: borrowerMatch.id,
+        type: 'borrower',
+        lenderName: borrowerMatch.fullName || 'Lender',
+        companyName: borrowerMatch.companyName || 'Lendry',
+      };
+    }
+
+    // Check broker magic links
+    const [brokerMatch] = await db.select({
+      id: users.id,
+      fullName: users.fullName,
+      companyName: users.companyName,
+      brokerMagicLinkEnabled: users.brokerMagicLinkEnabled,
+    }).from(users).where(eq(users.brokerMagicLink, token));
+
+    if (brokerMatch && brokerMatch.brokerMagicLinkEnabled) {
+      return {
+        lenderId: brokerMatch.id,
+        type: 'broker',
+        lenderName: brokerMatch.fullName || 'Lender',
+        companyName: brokerMatch.companyName || 'Lendry',
+      };
+    }
+
+    return null;
+  }
+
+  // Validate a magic link token
+  app.get('/api/magic-link/validate/:token', async (req: Request, res: Response) => {
+    try {
+      const result = await validateMagicLinkToken(req.params.token);
+      if (!result) {
+        return res.status(404).json({ valid: false, error: 'Invalid or disabled magic link' });
+      }
+      res.json({ valid: true, type: result.type, lenderName: result.lenderName, companyName: result.companyName });
+    } catch (error) {
+      console.error('Magic link validation error:', error);
+      res.status(500).json({ error: 'Failed to validate magic link' });
+    }
+  });
+
+  // Get lender's programs via magic link
+  app.get('/api/magic-link/:token/programs', async (req: Request, res: Response) => {
+    try {
+      const linkData = await validateMagicLinkToken(req.params.token);
+      if (!linkData) {
+        return res.status(404).json({ error: 'Invalid or disabled magic link' });
+      }
+
+      const programs = await db
+        .select({
+          id: loanPrograms.id,
+          name: loanPrograms.name,
+          description: loanPrograms.description,
+          loanType: loanPrograms.loanType,
+          minLoanAmount: loanPrograms.minLoanAmount,
+          maxLoanAmount: loanPrograms.maxLoanAmount,
+          eligiblePropertyTypes: loanPrograms.eligiblePropertyTypes,
+          quoteFormFields: loanPrograms.quoteFormFields,
+          yspEnabled: loanPrograms.yspEnabled,
+          yspMin: loanPrograms.yspMin,
+          yspMax: loanPrograms.yspMax,
+          yspStep: loanPrograms.yspStep,
+          basePoints: loanPrograms.basePoints,
+          basePointsMin: loanPrograms.basePointsMin,
+          basePointsMax: loanPrograms.basePointsMax,
+          brokerPointsEnabled: loanPrograms.brokerPointsEnabled,
+          brokerPointsMax: loanPrograms.brokerPointsMax,
+          brokerPointsStep: loanPrograms.brokerPointsStep,
+        })
+        .from(loanPrograms)
+        .where(and(
+          eq(loanPrograms.createdBy, linkData.lenderId),
+          eq(loanPrograms.isActive, true)
+        ))
+        .orderBy(loanPrograms.sortOrder);
+
+      res.json({ programs, lenderName: linkData.lenderName, companyName: linkData.companyName });
+    } catch (error) {
+      console.error('Magic link programs error:', error);
+      res.status(500).json({ error: 'Failed to fetch programs' });
+    }
+  });
+
+  // DSCR pricing via magic link (no auth)
+  app.post('/api/magic-link/:token/pricing/calculate', async (req: Request, res: Response) => {
+    try {
+      const linkData = await validateMagicLinkToken(req.params.token);
+      if (!linkData) {
+        return res.status(404).json({ error: 'Invalid or disabled magic link' });
+      }
+
+      const { programId, inputs } = req.body;
+      if (!programId || !inputs) {
+        return res.status(400).json({ error: 'programId and inputs are required' });
+      }
+
+      // Verify program belongs to this lender
+      const [program] = await db.select().from(loanPrograms)
+        .where(and(eq(loanPrograms.id, programId), eq(loanPrograms.createdBy, linkData.lenderId)));
+      if (!program) {
+        return res.status(404).json({ error: 'Program not found' });
+      }
+
+      // Get active ruleset
+      const [ruleset] = await db.select().from(pricingRulesets)
+        .where(and(eq(pricingRulesets.programId, programId), eq(pricingRulesets.status, 'active')))
+        .orderBy(desc(pricingRulesets.version));
+      if (!ruleset) {
+        return res.status(404).json({ error: 'No active pricing ruleset for this program' });
+      }
+
+      const result = priceQuote(ruleset.rulesJson as any, inputs);
+      res.json({ result, rulesetId: ruleset.id, rulesetVersion: ruleset.version });
+    } catch (error) {
+      console.error('Magic link pricing error:', error);
+      res.status(500).json({ error: 'Failed to calculate pricing' });
+    }
+  });
+
+  // RTL pricing via magic link (no auth)
+  app.post('/api/magic-link/:token/pricing/rtl', async (req: Request, res: Response) => {
+    try {
+      const linkData = await validateMagicLinkToken(req.params.token);
+      if (!linkData) {
+        return res.status(404).json({ error: 'Invalid or disabled magic link' });
+      }
+
+      const { rtlPricingFormSchema } = await import('@shared/schema');
+      const parseResult = rtlPricingFormSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: 'Invalid RTL pricing input', details: parseResult.error.flatten() });
+      }
+
+      const { calculateRTLPricing } = await import('./pricing/rtl-engine');
+      const result = calculateRTLPricing(parseResult.data);
+      res.json(result);
+    } catch (error) {
+      console.error('Magic link RTL pricing error:', error);
+      res.status(500).json({ error: 'Failed to calculate RTL pricing' });
+    }
+  });
+
+  // Get matched deals after registration (requires auth)
+  app.get('/api/magic-link/:token/my-deals', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const linkData = await validateMagicLinkToken(req.params.token);
+      if (!linkData) {
+        return res.status(404).json({ error: 'Invalid or disabled magic link' });
+      }
+
+      const userEmail = req.user?.email;
+      if (!userEmail) {
+        return res.json({ deals: [] });
+      }
+
+      let matchedDeals;
+      if (linkData.type === 'borrower') {
+        // Match by borrower email
+        matchedDeals = await db
+          .select({
+            id: projects.id,
+            projectName: projects.projectName,
+            projectNumber: projects.projectNumber,
+            borrowerName: projects.borrowerName,
+            status: projects.status,
+            currentStage: projects.currentStage,
+            loanAmount: projects.loanAmount,
+            propertyAddress: projects.propertyAddress,
+          })
+          .from(projects)
+          .where(and(
+            sql`LOWER(${projects.borrowerEmail}) = LOWER(${userEmail})`,
+            sql`${projects.status} NOT IN ('voided', 'cancelled')`
+          ));
+      } else {
+        // Match broker by dealProcessors or partner associations
+        matchedDeals = await db
+          .select({
+            id: projects.id,
+            projectName: projects.projectName,
+            projectNumber: projects.projectNumber,
+            borrowerName: projects.borrowerName,
+            status: projects.status,
+            currentStage: projects.currentStage,
+            loanAmount: projects.loanAmount,
+            propertyAddress: projects.propertyAddress,
+          })
+          .from(projects)
+          .innerJoin(dealProcessors, eq(dealProcessors.projectId, projects.id))
+          .where(and(
+            eq(dealProcessors.userId, req.user!.id),
+            sql`${projects.status} NOT IN ('voided', 'cancelled')`
+          ));
+      }
+
+      res.json({ deals: matchedDeals });
+    } catch (error) {
+      console.error('Magic link my-deals error:', error);
+      res.status(500).json({ error: 'Failed to fetch matched deals' });
+    }
+  });
+
+  // ==================== MAGIC LINK ADMIN ENDPOINTS ====================
+
+  // Get lender's magic links
+  app.get('/api/admin/magic-links', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const [lender] = await db.select({
+        borrowerMagicLink: users.borrowerMagicLink,
+        borrowerMagicLinkEnabled: users.borrowerMagicLinkEnabled,
+        brokerMagicLink: users.brokerMagicLink,
+        brokerMagicLinkEnabled: users.brokerMagicLinkEnabled,
+      }).from(users).where(eq(users.id, userId));
+
+      if (!lender) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      res.json({
+        links: [
+          {
+            type: 'borrower',
+            token: lender.borrowerMagicLink || null,
+            enabled: lender.borrowerMagicLinkEnabled || false,
+            url: lender.borrowerMagicLink ? `${baseUrl}/join/borrower/${lender.borrowerMagicLink}` : null,
+          },
+          {
+            type: 'broker',
+            token: lender.brokerMagicLink || null,
+            enabled: lender.brokerMagicLinkEnabled || false,
+            url: lender.brokerMagicLink ? `${baseUrl}/join/broker/${lender.brokerMagicLink}` : null,
+          },
+        ],
+      });
+    } catch (error) {
+      console.error('Get magic links error:', error);
+      res.status(500).json({ error: 'Failed to fetch magic links' });
+    }
+  });
+
+  // Generate a magic link
+  app.post('/api/admin/magic-links/generate', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const { type } = req.body;
+
+      if (type !== 'borrower' && type !== 'broker') {
+        return res.status(400).json({ error: 'type must be "borrower" or "broker"' });
+      }
+
+      const token = uuidv4();
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+
+      if (type === 'borrower') {
+        await db.update(users).set({
+          borrowerMagicLink: token,
+          borrowerMagicLinkEnabled: true,
+        }).where(eq(users.id, userId));
+      } else {
+        await db.update(users).set({
+          brokerMagicLink: token,
+          brokerMagicLinkEnabled: true,
+        }).where(eq(users.id, userId));
+      }
+
+      res.json({
+        type,
+        token,
+        enabled: true,
+        url: `${baseUrl}/join/${type}/${token}`,
+      });
+    } catch (error) {
+      console.error('Generate magic link error:', error);
+      res.status(500).json({ error: 'Failed to generate magic link' });
+    }
+  });
+
+  // Toggle a magic link on/off
+  app.put('/api/admin/magic-links/toggle', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const { type, enabled } = req.body;
+
+      if (type !== 'borrower' && type !== 'broker') {
+        return res.status(400).json({ error: 'type must be "borrower" or "broker"' });
+      }
+
+      if (type === 'borrower') {
+        await db.update(users).set({ borrowerMagicLinkEnabled: enabled }).where(eq(users.id, userId));
+      } else {
+        await db.update(users).set({ brokerMagicLinkEnabled: enabled }).where(eq(users.id, userId));
+      }
+
+      res.json({ success: true, type, enabled });
+    } catch (error) {
+      console.error('Toggle magic link error:', error);
+      res.status(500).json({ error: 'Failed to toggle magic link' });
+    }
+  });
+
   // Branding endpoints
   app.get('/api/settings/branding', async (req: AuthRequest, res: Response) => {
     try {
@@ -16280,13 +16889,15 @@ Return JSON only:
 
       if (parsedMentions.length > 0) {
         const snippet = content.length > 80 ? content.substring(0, 80) + '...' : content;
+        const mentionProj = await db.select({ loanNumber: projects.loanNumber }).from(projects).where(eq(projects.id, dealId)).limit(1);
+        const mentionDealLabel = mentionProj[0]?.loanNumber || `DEAL-${dealId}`;
         for (const mention of parsedMentions) {
           if (mention.userId && mention.userId !== req.user!.id) {
             await createNotification({
               userId: mention.userId,
               type: 'mention_in_note',
               title: 'Mentioned in Note',
-              message: `${userName} mentioned you in a note on DEAL-${dealId}: "${snippet}"`,
+              message: `${userName} mentioned you in a note on ${mentionDealLabel}: "${snippet}"`,
               dealId,
               link: `/admin/deals/${dealId}`,
             });
@@ -16523,10 +17134,17 @@ Return JSON only:
       const adminUsers = await db.select({ id: users.id }).from(users)
         .where(or(eq(users.role, 'admin'), eq(users.role, 'super_admin'), eq(users.role, 'staff')));
 
-      for (const admin of adminUsers) {
-        if (excludeUserId && admin.id === excludeUserId) continue;
+      const processors = await db.select({ userId: dealProcessors.userId }).from(dealProcessors)
+        .where(eq(dealProcessors.dealId, dealId));
+
+      const notifyUserIds = new Set<number>();
+      for (const admin of adminUsers) notifyUserIds.add(admin.id);
+      for (const proc of processors) notifyUserIds.add(proc.userId);
+
+      for (const uid of notifyUserIds) {
+        if (excludeUserId && uid === excludeUserId) continue;
         await createNotification({
-          userId: admin.id,
+          userId: uid,
           type,
           title,
           message,
@@ -16665,6 +17283,243 @@ Return JSON only:
     } catch (error) {
       console.error('Delete template error:', error);
       res.status(500).json({ error: 'Failed to delete template' });
+    }
+  });
+
+  app.post('/api/admin/send-test-portal-link', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { email, dealId, portalType } = req.body;
+      if (!email || !dealId || !portalType) {
+        return res.status(400).json({ error: 'Email, dealId, and portalType are required' });
+      }
+      if (!['borrower', 'broker'].includes(portalType)) {
+        return res.status(400).json({ error: 'portalType must be borrower or broker' });
+      }
+
+      const project = await storage.getProjectByIdInternal(dealId);
+      if (!project) {
+        return res.status(404).json({ error: 'Deal not found' });
+      }
+
+      const { v4: uuidv4Gen } = await import('uuid');
+      const token = uuidv4Gen();
+      const tokenField = portalType === 'borrower' ? 'borrowerPortalToken' : 'brokerPortalToken';
+      await db.update(projects)
+        .set({ [tokenField]: token, lastUpdated: new Date() })
+        .where(eq(projects.id, dealId));
+
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const portalPath = portalType === 'borrower' ? 'portal' : 'broker-portal';
+      const portalUrl = `${baseUrl}/${portalPath}/${token}`;
+      const portalLabel = portalType === 'borrower' ? 'Borrower Portal' : 'Broker Portal';
+
+      const brandingSettings = await storage.getAllSettings();
+      const companyName = brandingSettings.find(s => s.settingKey === 'branding_company_name')?.settingValue || 'Lendry.AI';
+
+      try {
+        const { getResendClient } = await import('./email');
+        const { client, fromEmail } = await getResendClient();
+        await client.emails.send({
+          from: fromEmail || `${companyName} <info@lendry.ai>`,
+          to: email,
+          subject: `[TEST] ${portalLabel} Preview - ${project.loanNumber || `DEAL-${dealId}`}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <h2 style="color: #1e40af;">Test ${portalLabel} Link</h2>
+              <p>This is a test email from ${companyName} to preview the ${portalLabel.toLowerCase()} experience.</p>
+              <p><strong>Deal:</strong> ${project.loanNumber || `DEAL-${dealId}`}</p>
+              <p><strong>Property:</strong> ${project.propertyAddress || 'N/A'}</p>
+              <div style="margin: 24px 0;">
+                <a href="${portalUrl}" style="background-color: #1e40af; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                  Open ${portalLabel}
+                </a>
+              </div>
+              <p style="color: #6b7280; font-size: 14px;">Or copy this link: <a href="${portalUrl}">${portalUrl}</a></p>
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
+              <p style="color: #9ca3af; font-size: 12px;">This is a test email. The link above provides access to the ${portalLabel.toLowerCase()} for this deal.</p>
+            </div>
+          `,
+        });
+        res.json({ success: true, portalUrl, message: `Test ${portalLabel.toLowerCase()} link sent to ${email}` });
+      } catch (emailError: any) {
+        console.error('Failed to send test email:', emailError);
+        res.json({ success: true, portalUrl, emailFailed: true, message: `Link generated but email failed to send. You can copy the link directly.` });
+      }
+    } catch (error) {
+      console.error('Send test portal link error:', error);
+      res.status(500).json({ error: 'Failed to send test portal link' });
+    }
+  });
+
+  // ==================== LENDER REVIEW CONFIG ====================
+
+  // GET - Fetch lender's document review and communication config
+  app.get('/api/admin/review-config', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+      const [config] = await db
+        .select()
+        .from(lenderReviewConfig)
+        .where(eq(lenderReviewConfig.userId, userId));
+
+      if (!config) {
+        // Return defaults
+        return res.json({
+          aiReviewMode: 'manual',
+          timedReviewIntervalMinutes: 60,
+          failAlertEnabled: true,
+          failAlertRecipients: 'both',
+          failAlertChannels: { email: true, sms: false, inApp: true },
+          passNotifyEnabled: true,
+          passNotifyChannels: { email: false, inApp: true },
+          digestAutoSend: false,
+          aiDraftAutoSend: false,
+          draftReadyNotifyEnabled: true,
+          draftReadyNotifyChannels: { email: true, inApp: true },
+        });
+      }
+
+      res.json(config);
+    } catch (error) {
+      console.error('Error fetching review config:', error);
+      res.status(500).json({ error: 'Failed to fetch review config' });
+    }
+  });
+
+  // PUT - Update lender's document review and communication config
+  app.put('/api/admin/review-config', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+      const {
+        aiReviewMode,
+        timedReviewIntervalMinutes,
+        failAlertEnabled,
+        failAlertRecipients,
+        failAlertChannels,
+        passNotifyEnabled,
+        passNotifyChannels,
+        digestAutoSend,
+        aiDraftAutoSend,
+        draftReadyNotifyEnabled,
+        draftReadyNotifyChannels,
+      } = req.body;
+
+      // Validate aiReviewMode
+      if (aiReviewMode && !['automatic', 'timed', 'manual'].includes(aiReviewMode)) {
+        return res.status(400).json({ error: 'Invalid aiReviewMode. Must be automatic, timed, or manual.' });
+      }
+
+      const [existing] = await db
+        .select()
+        .from(lenderReviewConfig)
+        .where(eq(lenderReviewConfig.userId, userId));
+
+      const configData: any = {
+        ...(aiReviewMode !== undefined && { aiReviewMode }),
+        ...(timedReviewIntervalMinutes !== undefined && { timedReviewIntervalMinutes }),
+        ...(failAlertEnabled !== undefined && { failAlertEnabled }),
+        ...(failAlertRecipients !== undefined && { failAlertRecipients }),
+        ...(failAlertChannels !== undefined && { failAlertChannels }),
+        ...(passNotifyEnabled !== undefined && { passNotifyEnabled }),
+        ...(passNotifyChannels !== undefined && { passNotifyChannels }),
+        ...(digestAutoSend !== undefined && { digestAutoSend }),
+        ...(aiDraftAutoSend !== undefined && { aiDraftAutoSend }),
+        ...(draftReadyNotifyEnabled !== undefined && { draftReadyNotifyEnabled }),
+        ...(draftReadyNotifyChannels !== undefined && { draftReadyNotifyChannels }),
+        updatedAt: new Date(),
+      };
+
+      let result;
+      if (existing) {
+        [result] = await db
+          .update(lenderReviewConfig)
+          .set(configData)
+          .where(eq(lenderReviewConfig.userId, userId))
+          .returning();
+      } else {
+        [result] = await db
+          .insert(lenderReviewConfig)
+          .values({ userId, ...configData })
+          .returning();
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error('Error updating review config:', error);
+      res.status(500).json({ error: 'Failed to update review config' });
+    }
+  });
+
+  // POST - Schedule a communication for a specific date (put on calendar)
+  app.post('/api/admin/communications/:commId/schedule', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const commId = parseInt(req.params.commId);
+      const { scheduledDate } = req.body;
+
+      if (!scheduledDate) {
+        return res.status(400).json({ error: 'scheduledDate is required' });
+      }
+
+      const [updated] = await db
+        .update(agentCommunications)
+        .set({
+          scheduledSendDate: new Date(scheduledDate),
+          status: 'approved',
+          approvedBy: req.user?.id,
+          approvedAt: new Date(),
+        })
+        .where(eq(agentCommunications.id, commId))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ error: 'Communication not found' });
+      }
+
+      // Also create a scheduled digest draft entry so it appears on the calendar
+      if (updated.projectId) {
+        const [digestConfig] = await db
+          .select()
+          .from(loanDigestConfigs)
+          .where(eq(loanDigestConfigs.projectId, updated.projectId))
+          .limit(1);
+
+        if (digestConfig) {
+          await db.insert(scheduledDigestDrafts).values({
+            configId: digestConfig.id,
+            projectId: updated.projectId,
+            scheduledDate: new Date(scheduledDate),
+            timeOfDay: '09:00',
+            emailSubject: updated.subject,
+            emailBody: updated.editedBody || updated.body,
+            status: 'approved',
+            source: 'ai_communication',
+            sourceCommId: updated.id,
+            approvedBy: req.user?.id,
+            approvedAt: new Date(),
+          });
+        }
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error('Error scheduling communication:', error);
+      res.status(500).json({ error: 'Failed to schedule communication' });
+    }
+  });
+
+  // POST - Run timed batch review manually (admin trigger)
+  app.post('/api/admin/review-config/run-batch', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { runTimedBatchReview } = await import('./services/documentReviewOrchestrator');
+      const result = await runTimedBatchReview();
+      res.json({ success: true, ...result });
+    } catch (error) {
+      console.error('Error running batch review:', error);
+      res.status(500).json({ error: 'Failed to run batch review' });
     }
   });
 

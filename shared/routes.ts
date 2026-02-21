@@ -9,8 +9,15 @@ export const savedQuoteInputSchema = z.object({
   propertyAddress: z.string().min(1, "Property address is required"),
   loanData: z.record(z.any()),
   interestRate: z.string(),
-  pointsCharged: z.number().min(0).max(5),
+  pointsCharged: z.number().min(0).max(10),
   programId: z.number().nullable().optional(),
+  // YSP fields
+  yspAmount: z.number().min(0).max(5).optional().default(0),
+  yspRateImpact: z.number().optional().default(0),
+  yspDollarAmount: z.number().optional().default(0),
+  // Split points tracking
+  basePointsCharged: z.number().min(0).max(10).optional().default(0),
+  brokerPointsCharged: z.number().min(0).max(10).optional().default(0),
 });
 
 export const api = {

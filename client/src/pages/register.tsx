@@ -21,6 +21,7 @@ const registerSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
   email: z.string().email('Please enter a valid email address'),
+  phone: z.string().optional(),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
@@ -45,6 +46,7 @@ export default function RegisterPage() {
       firstName: '',
       lastName: '',
       email: '',
+      phone: '',
       password: '',
       confirmPassword: '',
     },
@@ -58,6 +60,7 @@ export default function RegisterPage() {
         password: data.password,
         firstName: data.firstName,
         lastName: data.lastName,
+        phone: data.phone || undefined,
         userType: data.userType,
       });
       if (data.userType === 'lender') {
@@ -169,6 +172,22 @@ export default function RegisterPage() {
                 })}
               </div>
 
+              <div className="relative my-6">
+                <Separator />
+                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background px-2 text-xs text-muted-foreground">
+                  or
+                </span>
+              </div>
+              <Button
+                variant="outline"
+                className="w-full h-11"
+                onClick={() => { window.location.href = '/api/auth/google'; }}
+                data-testid="button-google-signup"
+              >
+                <SiGoogle className="mr-2 h-4 w-4" />
+                Sign up with Google
+              </Button>
+
               {/* Sign In Link */}
               <div className="mt-8 text-center text-sm text-muted-foreground">
                 Already have an account?{' '}
@@ -257,6 +276,25 @@ export default function RegisterPage() {
                       </FormItem>
                     )}
                   />
+                  <FormField
+                    control={form.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Phone Number <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                        <FormControl>
+                          <Input
+                            type="tel"
+                            placeholder="(555) 123-4567"
+                            data-testid="input-phone"
+                            className="h-11"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   <div className="text-xs text-muted-foreground space-y-0.5 mb-4">
                     <p className="font-medium text-foreground/80">Password must contain:</p>
                     <ul className="list-disc list-inside space-y-0">
@@ -331,7 +369,7 @@ export default function RegisterPage() {
               <Button
                 variant="outline"
                 className="w-full h-11"
-                onClick={() => { window.location.href = '/api/auth/google'; }}
+                onClick={() => { window.location.href = `/api/auth/google?userType=${selectedAccountType}`; }}
                 data-testid="button-google-register"
               >
                 <SiGoogle className="mr-2 h-4 w-4" />

@@ -28,6 +28,20 @@ import {
   Save,
   Trash2,
   Tags,
+  RefreshCw,
+  X,
+  Loader2,
+  Search,
+  Bell,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle2,
+  XCircle,
+  Play,
+  Pencil,
+  Eye,
+  MapPin,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useBranding } from "@/hooks/use-branding";
@@ -40,7 +54,7 @@ import {
   type MessageThread,
   type Message
 } from "@/lib/messagesApi";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format } from "date-fns";
 import {
   Dialog,
@@ -64,6 +78,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 
 import { MERGE_TAGS, type MessageTemplate } from "@shared/schema";
 
@@ -76,6 +91,7 @@ const QUICK_REPLIES = [
 export default function MessagesPage() {
   const { user } = useAuth();
   const { branding } = useBranding();
+  const { toast } = useToast();
   const [, setLocation] = useLocation();
   const searchString = useSearch();
   const searchParams = new URLSearchParams(searchString);
@@ -92,13 +108,22 @@ export default function MessagesPage() {
   const [initialMessage, setInitialMessage] = useState("");
   const [starredThreadIds, setStarredThreadIds] = useState<Set<number>>(new Set());
   const [isTemplatePopoverOpen, setIsTemplatePopoverOpen] = useState(false);
-  const [inboxTab, setInboxTab] = useState<'messages' | 'email'>(urlTab === 'email' ? 'email' : 'messages');
+  const [inboxTab, setInboxTab] = useState<'messages' | 'email' | 'digests'>(urlTab === 'email' ? 'email' : 'messages');
   const [activeEmailThreadId, setActiveEmailThreadId] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const [isSaveTemplateOpen, setIsSaveTemplateOpen] = useState(false);
   const [saveTemplateName, setSaveTemplateName] = useState("");
   const [isMergeTagPopoverOpen, setIsMergeTagPopoverOpen] = useState(false);
+  const [isLinkDealDialogOpen, setIsLinkDealDialogOpen] = useState(false);
+  const [linkDealSelectedId, setLinkDealSelectedId] = useState("");
+  const [inboxSearchQuery, setInboxSearchQuery] = useState("");
+  const [emailSearchQuery, setEmailSearchQuery] = useState("");
+  const [emailReplyText, setEmailReplyText] = useState("");
+  const [emailLinkFilter, setEmailLinkFilter] = useState<'all' | 'linked' | 'unlinked'>('all');
+  const [emailReadFilter, setEmailReadFilter] = useState<'all' | 'unread' | 'read'>('all');
+  const [digestDate, setDigestDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  const [editingDraft, setEditingDraft] = useState<any>(null);
   const messageInputRef = useRef<HTMLInputElement>(null);
   
   const isAdmin = user?.role && ['admin', 'staff', 'super_admin'].includes(user.role);
@@ -205,12 +230,13 @@ export default function MessagesPage() {
   });
 
   const { data: emailThreadsData, isLoading: emailThreadsLoading } = useQuery<{ threads: any[]; total: number }>({
-    queryKey: ["/api/email/threads", "linked"],
+    queryKey: ["/api/email/threads", "all"],
     queryFn: async () => {
-      const res = await fetch('/api/email/threads?linked=true', { credentials: 'include' });
+      const res = await fetch('/api/email/threads', { credentials: 'include' });
       return res.json();
     },
     enabled: !!isAdmin,
+    refetchInterval: inboxTab === 'email' ? 60000 : false,
   });
 
   const { data: emailThreadDetail } = useQuery<{ thread: any; messages: any[]; dealLinks: any[] }>({
@@ -223,7 +249,136 @@ export default function MessagesPage() {
   });
 
   const emailThreads = emailThreadsData?.threads || [];
-  
+
+  const syncEmailMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/email/sync"),
+    onSuccess: async (res) => {
+      const result = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/email/threads", "all"] });
+      toast({ title: "Sync Complete", description: `Synced ${result.synced} threads` });
+    },
+    onError: () => {
+      toast({ title: "Sync Failed", variant: "destructive" });
+    },
+  });
+
+  const { data: dealsListData } = useQuery<{ quotes: any[] }>({
+    queryKey: ["/api/quotes"],
+    enabled: !!isAdmin && inboxTab === 'email',
+  });
+
+  const linkDealMutation = useMutation({
+    mutationFn: ({ threadId, dealId }: { threadId: number; dealId: number }) =>
+      apiRequest("POST", `/api/email/threads/${threadId}/link`, { dealId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/email/threads", "all"] });
+      if (activeEmailThreadId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/email/threads", activeEmailThreadId, "detail"] });
+      }
+      setIsLinkDealDialogOpen(false);
+      setLinkDealSelectedId("");
+      toast({ title: "Linked", description: "Email thread linked to deal" });
+    },
+    onError: () => {
+      toast({ title: "Failed to link", variant: "destructive" });
+    },
+  });
+
+  const unlinkDealMutation = useMutation({
+    mutationFn: ({ threadId, dealId }: { threadId: number; dealId: number }) =>
+      apiRequest("DELETE", `/api/email/threads/${threadId}/link/${dealId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/email/threads", "all"] });
+      if (activeEmailThreadId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/email/threads", activeEmailThreadId, "detail"] });
+      }
+      toast({ title: "Unlinked", description: "Email thread unlinked from deal" });
+    },
+  });
+
+  const replyEmailMutation = useMutation({
+    mutationFn: ({ threadId, body }: { threadId: number; body: string }) =>
+      apiRequest("POST", `/api/email/threads/${threadId}/reply`, { body }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/email/threads", "all"] });
+      if (activeEmailThreadId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/email/threads", activeEmailThreadId, "detail"] });
+      }
+      setEmailReplyText("");
+      toast({ title: "Reply Sent", description: "Your email reply has been sent" });
+    },
+    onError: () => {
+      toast({ title: "Failed to send reply", variant: "destructive" });
+    },
+  });
+
+  const markEmailReadMutation = useMutation({
+    mutationFn: (threadId: number) =>
+      apiRequest("POST", `/api/email/threads/${threadId}/read`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/email/threads", "all"] });
+    },
+  });
+
+  useEffect(() => {
+    if (activeEmailThreadId && emailThreads.length > 0) {
+      const thread = emailThreads.find((t: any) => t.id === activeEmailThreadId);
+      if (thread?.isUnread) {
+        markEmailReadMutation.mutate(activeEmailThreadId);
+      }
+    }
+  }, [activeEmailThreadId]);
+
+  // Digest queries and mutations
+  const { data: digestsData, isLoading: digestsLoading } = useQuery<{ date: string; digests: any[] }>({
+    queryKey: ['/api/admin/digests/scheduled', digestDate],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/digests/scheduled?date=${digestDate}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch digests');
+      return res.json();
+    },
+    enabled: inboxTab === 'digests' && !!isAdmin,
+    refetchInterval: inboxTab === 'digests' ? 30000 : false,
+  });
+
+  const approveDraftMutation = useMutation({
+    mutationFn: (draftId: number) => apiRequest('POST', `/api/admin/digests/drafts/${draftId}/approve`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/digests/scheduled', digestDate] });
+      toast({ title: 'Draft approved' });
+    },
+    onError: () => toast({ title: 'Failed to approve', variant: 'destructive' }),
+  });
+
+  const skipDraftMutation = useMutation({
+    mutationFn: (draftId: number) => apiRequest('POST', `/api/admin/digests/drafts/${draftId}/skip`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/digests/scheduled', digestDate] });
+      toast({ title: 'Draft skipped' });
+    },
+    onError: () => toast({ title: 'Failed to skip', variant: 'destructive' }),
+  });
+
+  const sendDraftMutation = useMutation({
+    mutationFn: (draftId: number) => apiRequest('POST', `/api/admin/digests/drafts/${draftId}/send`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/digests/scheduled', digestDate] });
+      toast({ title: 'Digest sent!' });
+    },
+    onError: () => toast({ title: 'Failed to send', variant: 'destructive' }),
+  });
+
+  const updateDraftMutation = useMutation({
+    mutationFn: ({ draftId, data }: { draftId: number; data: any }) =>
+      apiRequest('PUT', `/api/admin/digests/drafts/${draftId}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/digests/scheduled', digestDate] });
+      setEditingDraft(null);
+      toast({ title: 'Draft updated' });
+    },
+    onError: () => toast({ title: 'Failed to update', variant: 'destructive' }),
+  });
+
   // Handle URL params for opening new thread with pre-selected deal
   // Wait for quotes data to be loaded before opening dialog
   useEffect(() => {
@@ -236,6 +391,33 @@ export default function MessagesPage() {
   }, [urlDealId, openNew, setLocation, quotesData]);
 
   const threads = threadsData?.threads || [];
+  const filteredThreads = inboxSearchQuery.trim()
+    ? threads.filter((t: any) => {
+        const q = inboxSearchQuery.toLowerCase();
+        return (t.subject?.toLowerCase().includes(q)) ||
+          (t.userName?.toLowerCase().includes(q)) ||
+          (t.dealName?.toLowerCase().includes(q)) ||
+          (t.propertyAddress?.toLowerCase().includes(q)) ||
+          (t.lastMessagePreview?.toLowerCase().includes(q));
+      })
+    : threads;
+
+  const filteredEmailThreads = emailThreads.filter((t: any) => {
+    if (emailSearchQuery.trim()) {
+      const q = emailSearchQuery.toLowerCase();
+      const matchesSearch = (t.subject?.toLowerCase().includes(q)) ||
+        (t.fromName?.toLowerCase().includes(q)) ||
+        (t.fromAddress?.toLowerCase().includes(q)) ||
+        (t.snippet?.toLowerCase().includes(q));
+      if (!matchesSearch) return false;
+    }
+    if (emailLinkFilter === 'linked' && !(t.linkedDealIds?.length > 0)) return false;
+    if (emailLinkFilter === 'unlinked' && t.linkedDealIds?.length > 0) return false;
+    if (emailReadFilter === 'unread' && !t.isUnread) return false;
+    if (emailReadFilter === 'read' && t.isUnread) return false;
+    return true;
+  });
+
   const activeThread = activeThreadData?.thread;
   const messages = activeThreadData?.messages || [];
 
@@ -414,7 +596,7 @@ export default function MessagesPage() {
       </div>
 
       <div className="flex h-[calc(100vh-200px)] gap-4">
-        <Card className="w-96 flex flex-col">
+        <Card className="w-[504px] shrink-0 flex flex-col overflow-hidden">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2">
               <MessageCircle className="h-5 w-5" />
@@ -439,7 +621,7 @@ export default function MessagesPage() {
                   variant={inboxTab === 'email' ? 'default' : 'ghost'}
                   size="sm"
                   className="flex-1 text-xs"
-                  onClick={() => { setInboxTab('email'); setActiveThreadId(null); }}
+                  onClick={() => { setInboxTab('email'); }}
                   data-testid="tab-email"
                 >
                   <Mail className="h-3 w-3 mr-1" />
@@ -448,23 +630,80 @@ export default function MessagesPage() {
                     <Badge variant={inboxTab === 'email' ? 'secondary' : 'outline'} className="ml-1 h-4 min-w-[16px] px-1 text-[10px] leading-none">{emailThreads.filter((t: any) => t.unreadCount > 0).length}</Badge>
                   )}
                 </Button>
+                <Button
+                  variant={inboxTab === 'digests' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="flex-1 text-xs"
+                  onClick={() => { setInboxTab('digests'); }}
+                  data-testid="tab-digests"
+                >
+                  <Bell className="h-3 w-3 mr-1" />
+                  Updates
+                </Button>
               </div>
             )}
           </CardHeader>
           <Separator />
           <ScrollArea className="flex-1">
             {inboxTab === 'email' && isAdmin ? (
-              emailThreadsLoading ? (
+              <>
+                <div className="px-3 py-2 space-y-2 border-b overflow-hidden">
+                  <div className="relative w-full">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder="Search emails..."
+                      value={emailSearchQuery}
+                      onChange={(e) => setEmailSearchQuery(e.target.value)}
+                      className="h-8 pl-8 text-xs w-full"
+                      data-testid="input-email-search"
+                    />
+                  </div>
+                  <Select value={emailLinkFilter} onValueChange={(v) => setEmailLinkFilter(v as any)}>
+                    <SelectTrigger className="h-7 text-xs w-full" data-testid="select-email-link-filter">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Emails</SelectItem>
+                      <SelectItem value="linked">Linked to Deal</SelectItem>
+                      <SelectItem value="unlinked">Not Linked</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={emailReadFilter} onValueChange={(v) => setEmailReadFilter(v as any)}>
+                    <SelectTrigger className="h-7 text-xs w-full" data-testid="select-email-read-filter">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Read Status</SelectItem>
+                      <SelectItem value="unread">Unread Only</SelectItem>
+                      <SelectItem value="read">Read Only</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">{filteredEmailThreads.length} thread{filteredEmailThreads.length !== 1 ? 's' : ''}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => syncEmailMutation.mutate()}
+                      disabled={syncEmailMutation.isPending}
+                      data-testid="button-sync-email-inbox-tab"
+                    >
+                      <RefreshCw className={`h-3 w-3 ${syncEmailMutation.isPending ? 'animate-spin' : ''}`} />
+                      {syncEmailMutation.isPending ? 'Syncing...' : 'Sync'}
+                    </Button>
+                  </div>
+                </div>
+                {emailThreadsLoading ? (
                 <div className="p-4 text-center text-muted-foreground">Loading emails...</div>
-              ) : emailThreads.length === 0 ? (
+              ) : filteredEmailThreads.length === 0 ? (
                 <div className="p-4 text-center text-muted-foreground">
                   <Mail className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>No linked email threads</p>
-                  <p className="text-xs mt-1">Link emails to deals in the Email Inbox page</p>
+                  <p>No email threads found</p>
+                  <p className="text-xs mt-1">Click Sync to fetch your latest emails</p>
                 </div>
               ) : (
                 <div className="p-2">
-                  {emailThreads.map((thread: any) => (
+                  {filteredEmailThreads.map((thread: any) => (
                     <button
                       key={thread.id}
                       className={`group w-full text-left p-3 rounded-lg mb-1 transition-colors cursor-pointer hover-elevate ${
@@ -472,7 +711,7 @@ export default function MessagesPage() {
                           ? "bg-primary/10 border border-primary/20"
                           : ""
                       }`}
-                      onClick={() => setActiveEmailThreadId(thread.id)}
+                      onClick={() => { setActiveEmailThreadId(thread.id); setEmailReplyText(""); }}
                       data-testid={`email-thread-msg-${thread.id}`}
                     >
                       <div className="flex items-start justify-between gap-2 mb-1">
@@ -482,25 +721,32 @@ export default function MessagesPage() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5">
-                              <span className={`text-sm truncate ${thread.isUnread ? 'font-bold' : 'font-semibold'}`}>
+                              <span className={`text-sm truncate ${thread.isUnread ? 'font-bold' : ''}`}>
                                 {thread.fromName || thread.fromAddress || "Unknown"}
                               </span>
                               <Badge variant="outline" className="text-[10px] h-4 px-1.5 shrink-0 border-indigo-300 text-indigo-600 dark:border-indigo-700 dark:text-indigo-400">
                                 Email
                               </Badge>
                             </div>
-                            <div className="text-xs text-muted-foreground truncate">
+                            <div className={`text-xs truncate ${thread.isUnread ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
                               {thread.subject || "(No Subject)"}
                             </div>
+                            {thread.snippet && (
+                              <div className="text-[11px] text-muted-foreground truncate mt-0.5">
+                                {thread.snippet}
+                              </div>
+                            )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          {thread.hasAttachments && <Paperclip className="h-3 w-3 text-muted-foreground" />}
-                          {thread.isUnread && (
-                            <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
-                          )}
-                          <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                            {thread.lastMessageAt ? format(new Date(thread.lastMessageAt), "MMM d") : ""}
+                        <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                          <div className="flex items-center gap-1.5">
+                            {thread.hasAttachments && <Paperclip className="h-3 w-3 text-muted-foreground" />}
+                            {thread.isUnread && (
+                              <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />
+                            )}
+                          </div>
+                          <span className={`text-[11px] whitespace-nowrap ${thread.isUnread ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
+                            {thread.lastMessageAt ? format(new Date(thread.lastMessageAt), "MMM d, h:mm a") : ""}
                           </span>
                         </div>
                       </div>
@@ -518,19 +764,197 @@ export default function MessagesPage() {
                     </button>
                   ))}
                 </div>
-              )
+              )}
+            </>
+            ) : inboxTab === 'digests' && isAdmin ? (
+              <div className="p-3 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => {
+                      const d = new Date(digestDate);
+                      d.setDate(d.getDate() - 1);
+                      setDigestDate(format(d, 'yyyy-MM-dd'));
+                    }}
+                    data-testid="button-digest-prev-day"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <div className="flex items-center gap-1.5 text-sm font-medium">
+                    <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                    {format(new Date(digestDate + 'T12:00:00'), 'MMM d, yyyy')}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => {
+                      const d = new Date(digestDate);
+                      d.setDate(d.getDate() + 1);
+                      setDigestDate(format(d, 'yyyy-MM-dd'));
+                    }}
+                    data-testid="button-digest-next-day"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                {digestsLoading ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
+                    <p className="text-xs">Loading scheduled updates...</p>
+                  </div>
+                ) : !digestsData?.digests?.length ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Bell className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm font-medium">No scheduled updates</p>
+                    <p className="text-xs mt-1">Automated loan digests will appear here when scheduled</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">{digestsData.digests.length} update{digestsData.digests.length !== 1 ? 's' : ''} scheduled</p>
+                    {digestsData.digests.map((digest: any) => (
+                      <div
+                        key={digest.id}
+                        className="border rounded-lg p-3 space-y-2 hover:bg-muted/50 transition-colors"
+                        data-testid={`digest-item-${digest.id}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            {digest.propertyAddress && (
+                              <div className="flex items-center gap-1 text-xs text-muted-foreground mb-0.5">
+                                <MapPin className="h-3 w-3" />
+                                <span className="truncate">{digest.propertyAddress}</span>
+                              </div>
+                            )}
+                            <div className="text-sm font-medium truncate">
+                              {digest.borrowerName || 'Borrower'}
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              {digest.dealIdentifier && (
+                                <Badge variant="outline" className="text-[10px] h-4 px-1.5">{digest.dealIdentifier}</Badge>
+                              )}
+                              <Badge
+                                variant={digest.status === 'approved' ? 'default' : digest.status === 'sent' ? 'secondary' : digest.status === 'skipped' ? 'outline' : 'secondary'}
+                                className="text-[10px] h-4 px-1.5"
+                              >
+                                {digest.status}
+                              </Badge>
+                            </div>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                            {digest.scheduledFor ? format(new Date(digest.scheduledFor), 'h:mm a') : ''}
+                          </span>
+                        </div>
+
+                        {editingDraft?.id === digest.id ? (
+                          <div className="space-y-2">
+                            <textarea
+                              className="w-full text-xs border rounded p-2 min-h-[80px] resize-none bg-background"
+                              value={editingDraft.content}
+                              onChange={(e) => setEditingDraft({ ...editingDraft, content: e.target.value })}
+                              data-testid={`textarea-edit-digest-${digest.id}`}
+                            />
+                            <div className="flex gap-1.5 justify-end">
+                              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditingDraft(null)} data-testid={`button-cancel-edit-digest-${digest.id}`}>Cancel</Button>
+                              <Button
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => updateDraftMutation.mutate({ draftId: digest.id, data: { emailBody: editingDraft.content } })}
+                                disabled={updateDraftMutation.isPending}
+                                data-testid={`button-save-digest-${digest.id}`}
+                              >
+                                Save
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <p className="text-xs text-muted-foreground line-clamp-3">
+                              {digest.emailBody || digest.smsBody || 'No content preview available'}
+                            </p>
+                            {digest.status === 'draft' && (
+                              <div className="flex items-center gap-1.5 pt-1">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 text-xs gap-1"
+                                  onClick={() => setEditingDraft({ id: digest.id, content: digest.emailBody || '' })}
+                                  data-testid={`button-edit-digest-${digest.id}`}
+                                >
+                                  <Pencil className="h-3 w-3" /> Edit
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 text-xs gap-1 text-green-600"
+                                  onClick={() => approveDraftMutation.mutate(digest.id)}
+                                  disabled={approveDraftMutation.isPending}
+                                  data-testid={`button-approve-digest-${digest.id}`}
+                                >
+                                  <CheckCircle2 className="h-3 w-3" /> Approve
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 text-xs gap-1 text-red-600"
+                                  onClick={() => skipDraftMutation.mutate(digest.id)}
+                                  disabled={skipDraftMutation.isPending}
+                                  data-testid={`button-skip-digest-${digest.id}`}
+                                >
+                                  <XCircle className="h-3 w-3" /> Skip
+                                </Button>
+                              </div>
+                            )}
+                            {digest.status === 'approved' && (
+                              <div className="flex items-center gap-1.5 pt-1">
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  className="h-7 text-xs gap-1"
+                                  onClick={() => sendDraftMutation.mutate(digest.id)}
+                                  disabled={sendDraftMutation.isPending}
+                                  data-testid={`button-send-digest-${digest.id}`}
+                                >
+                                  <Play className="h-3 w-3" /> Send Now
+                                </Button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             ) : threadsLoading ? (
               <div className="p-4 text-center text-muted-foreground">Loading...</div>
-            ) : threads.length === 0 ? (
-              <div className="p-4 text-center text-muted-foreground">
-                <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p>No conversations yet</p>
-                {isAdmin && <p className="text-xs mt-1">Start a new conversation above</p>}
-              </div>
             ) : (
+              <>
+                <div className="px-3 py-2 border-b">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder="Search conversations..."
+                      value={inboxSearchQuery}
+                      onChange={(e) => setInboxSearchQuery(e.target.value)}
+                      className="h-8 pl-8 text-xs"
+                      data-testid="input-inbox-search"
+                    />
+                  </div>
+                </div>
+                {filteredThreads.length === 0 ? (
+                  <div className="p-4 text-center text-muted-foreground">
+                    <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>{inboxSearchQuery ? 'No matching conversations' : 'No conversations yet'}</p>
+                    {isAdmin && !inboxSearchQuery && <p className="text-xs mt-1">Start a new conversation above</p>}
+                  </div>
+                ) : (
               <div className="p-2">
-                {threads.map((thread) => {
-                  const t = thread as any;
+                {filteredThreads.map((thread: any) => {
+                  const t = thread;
                   return (
                     <div
                       key={thread.id}
@@ -548,11 +972,19 @@ export default function MessagesPage() {
                         <div className="flex items-start justify-between gap-2 mb-1">
                           <div className="flex items-center gap-2 flex-1 min-w-0">
                             <div className="flex items-center justify-center h-8 w-8 rounded-full bg-muted text-xs font-semibold shrink-0">
-                              {getInitials(t.userName)}
+                              {getInitials(t.propertyAddress || t.userName)}
                             </div>
                             <div className="flex-1 min-w-0">
+                              <div className={`text-sm truncate ${t.unreadCount > 0 ? 'font-bold' : 'font-semibold'}`}>
+                                {t.propertyAddress || t.subject || "General"}
+                              </div>
                               <div className="flex items-center gap-1.5">
-                                <span className={`text-sm truncate ${t.unreadCount > 0 ? 'font-bold' : 'font-semibold'}`}>
+                                {t.dealIdentifier && (
+                                  <Badge variant="outline" className="text-[10px] h-4 px-1.5">
+                                    {t.dealIdentifier}
+                                  </Badge>
+                                )}
+                                <span className="text-xs text-muted-foreground truncate">
                                   {t.userName || "User"}
                                 </span>
                                 {t.userType && (
@@ -560,9 +992,6 @@ export default function MessagesPage() {
                                     {t.userType === 'borrower' ? 'Borrower' : 'Broker'}
                                   </Badge>
                                 )}
-                              </div>
-                              <div className="text-xs text-muted-foreground truncate">
-                                {thread.subject || (t.dealIdentifier ? t.dealIdentifier : "General")}
                               </div>
                             </div>
                           </div>
@@ -577,18 +1006,6 @@ export default function MessagesPage() {
                             </span>
                           </div>
                         </div>
-                        {t.dealIdentifier && (
-                          <div className="flex items-center gap-1.5 ml-10 mb-1">
-                            <Badge variant="outline" className="text-[10px] h-4 px-1.5">
-                              {t.dealIdentifier}
-                            </Badge>
-                            {t.propertyAddress && (
-                              <span className="text-[10px] text-muted-foreground truncate">
-                                {t.propertyAddress}
-                              </span>
-                            )}
-                          </div>
-                        )}
                         <div className="text-xs text-muted-foreground line-clamp-1 ml-10">
                           {t.lastMessagePreview || "No messages yet"}
                         </div>
@@ -620,6 +1037,8 @@ export default function MessagesPage() {
                   );
                 })}
               </div>
+                )}
+              </>
             )}
           </ScrollArea>
         </Card>
@@ -642,22 +1061,40 @@ export default function MessagesPage() {
                           {emailThreadDetail.messages.length} message{emailThreadDetail.messages.length !== 1 ? "s" : ""}
                         </p>
                         {emailThreadDetail.dealLinks.map((link: any) => (
-                          <Badge key={link.dealId} variant="default" className="text-[10px] h-4 px-1.5 gap-0.5">
+                          <Badge key={link.dealId} variant="default" className="text-[10px] h-4 px-1.5 gap-0.5 group/badge">
                             <Link2 className="h-2.5 w-2.5" />
                             DEAL-{link.dealId}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (activeEmailThreadId) {
+                                  unlinkDealMutation.mutate({ threadId: activeEmailThreadId, dealId: link.dealId });
+                                }
+                              }}
+                              className="ml-0.5 opacity-0 group-hover/badge:opacity-100 transition-opacity"
+                              data-testid={`button-unlink-deal-${link.dealId}`}
+                            >
+                              <X className="h-2.5 w-2.5" />
+                            </button>
                           </Badge>
                         ))}
                       </div>
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setLocation('/admin/email?threadId=' + activeEmailThreadId)}
-                    data-testid="button-open-in-inbox"
-                  >
-                    Open in Inbox
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setLinkDealSelectedId("");
+                        setIsLinkDealDialogOpen(true);
+                      }}
+                      data-testid="button-link-to-deal"
+                    >
+                      <Link2 className="h-4 w-4 mr-1" />
+                      Link to Deal
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <Separator />
@@ -703,6 +1140,72 @@ export default function MessagesPage() {
                   ))}
                 </div>
               </ScrollArea>
+              <div className="border-t px-3 pt-2 pb-3 space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {["Thanks, received!", "I'll look into this", "Can you send more details?"].map((chip) => (
+                    <Button
+                      key={chip}
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full text-xs"
+                      onClick={() => {
+                        if (!activeEmailThreadId) return;
+                        replyEmailMutation.mutate({
+                          threadId: activeEmailThreadId,
+                          body: chip,
+                        });
+                      }}
+                      disabled={replyEmailMutation.isPending}
+                      data-testid={`chip-quick-reply-${chip.replace(/[^a-zA-Z]/g, '').toLowerCase()}`}
+                    >
+                      {chip}
+                    </Button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-0.5">
+                    <Button variant="ghost" size="icon" data-testid="button-email-template">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                    <Button variant="ghost" size="icon" data-testid="button-email-attach">
+                      <Paperclip className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </div>
+                  <div className="flex-1 flex items-center gap-2">
+                    <Input
+                      placeholder="Type a message..."
+                      value={emailReplyText}
+                      onChange={(e) => setEmailReplyText(e.target.value)}
+                      className="text-sm"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey && emailReplyText.trim() && activeEmailThreadId) {
+                          e.preventDefault();
+                          replyEmailMutation.mutate({
+                            threadId: activeEmailThreadId,
+                            body: emailReplyText.replace(/\n/g, '<br/>'),
+                          });
+                        }
+                      }}
+                      data-testid="input-email-reply"
+                    />
+                    <Button
+                      size="icon"
+                      className="shrink-0"
+                      onClick={() => {
+                        if (!activeEmailThreadId || !emailReplyText.trim()) return;
+                        replyEmailMutation.mutate({
+                          threadId: activeEmailThreadId,
+                          body: emailReplyText.replace(/\n/g, '<br/>'),
+                        });
+                      }}
+                      disabled={!emailReplyText.trim() || replyEmailMutation.isPending}
+                      data-testid="button-send-email-reply"
+                    >
+                      {replyEmailMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </>
           ) : activeThread ? (
             <>
@@ -971,6 +1474,47 @@ export default function MessagesPage() {
           )}
         </Card>
       </div>
+
+      <Dialog open={isLinkDealDialogOpen} onOpenChange={setIsLinkDealDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Link Email Thread to Deal</DialogTitle>
+            <DialogDescription>
+              Choose a deal to link this email conversation to. Linked emails will appear in the deal's communications.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Select Deal</p>
+            <Select value={linkDealSelectedId} onValueChange={setLinkDealSelectedId}>
+              <SelectTrigger data-testid="select-deal-to-link">
+                <SelectValue placeholder="Choose a deal..." />
+              </SelectTrigger>
+              <SelectContent>
+                {(dealsListData?.quotes || []).map((deal: any) => (
+                  <SelectItem key={deal.projectId || deal.id} value={String(deal.projectId || deal.id)}>
+                    {deal.loanNumber || `DEAL-${deal.projectId || deal.id}`} - {deal.borrowerName || deal.propertyAddress || "Unknown"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsLinkDealDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                if (activeEmailThreadId && linkDealSelectedId) {
+                  linkDealMutation.mutate({ threadId: activeEmailThreadId, dealId: parseInt(linkDealSelectedId) });
+                }
+              }}
+              disabled={!linkDealSelectedId || linkDealMutation.isPending}
+              data-testid="button-confirm-link"
+            >
+              {linkDealMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Link2 className="h-4 w-4 mr-1" />}
+              Link to Deal
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

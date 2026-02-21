@@ -540,7 +540,7 @@ export default function ProjectDetail() {
         </Link>
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground font-mono tracking-tight">DEAL-{project.id}</span>
+            <span className="text-sm text-muted-foreground font-mono tracking-tight">{project.loanNumber || `DEAL-${project.id}`}</span>
             <Badge variant={project.status === 'active' ? 'default' : 'secondary'}>
               {project.status}
             </Badge>
@@ -1068,7 +1068,7 @@ export default function ProjectDetail() {
                         size="icon"
                         className="h-7 w-7"
                         onClick={() => {
-                          const subject = encodeURIComponent(`RE: ${project.dealName} (DEAL-${project.id})`);
+                          const subject = encodeURIComponent(`RE: ${project.dealName} (${project.loanNumber || `DEAL-${project.id}`})`);
                           window.open(`mailto:${project.borrowerEmail}?subject=${subject}`, '_blank');
                         }}
                         title="Send email"
@@ -1086,7 +1086,7 @@ export default function ProjectDetail() {
                               try {
                                 await apiRequest('POST', '/api/communication/sms', {
                                   to: project.borrowerPhone,
-                                  message: `Hi ${project.borrowerName}, this is a message regarding your loan (DEAL-${project.id}). Please check your borrower portal for updates.`,
+                                  message: `Hi ${project.borrowerName}, this is a message regarding your loan (${project.loanNumber || `DEAL-${project.id}`}). Please check your borrower portal for updates.`,
                                   dealId: project.id,
                                 });
                                 toast({ title: "SMS sent" });
@@ -1151,7 +1151,7 @@ export default function ProjectDetail() {
                               size="icon"
                               className="h-7 w-7"
                               onClick={() => {
-                                const subject = encodeURIComponent(`RE: ${project.dealName} (DEAL-${project.id})`);
+                                const subject = encodeURIComponent(`RE: ${project.dealName} (${project.loanNumber || `DEAL-${project.id}`})`);
                                 window.open(`mailto:${proc.user.email}?subject=${subject}`, '_blank');
                               }}
                               title="Send email"
@@ -1169,7 +1169,7 @@ export default function ProjectDetail() {
                                     try {
                                       await apiRequest('POST', '/api/communication/sms', {
                                         to: proc.user.phone,
-                                        message: `Regarding DEAL-${project.id} (${project.dealName}): Please check the deal for updates.`,
+                                        message: `Regarding ${project.loanNumber || `DEAL-${project.id}`} (${project.dealName}): Please check the deal for updates.`,
                                         dealId: project.id,
                                       });
                                       toast({ title: "SMS sent" });

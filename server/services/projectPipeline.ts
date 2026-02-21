@@ -135,6 +135,29 @@ export async function buildProjectPipelineFromProgram(
     documentsCreated = newDocuments.length;
   }
 
+  // Always ensure a "Signed Agreement" placeholder exists in Stage 1
+  const stage1Id = stageIdByOrder.get(1) || null;
+  if (stage1Id) {
+    const hasSignedAgreement = docTemplates.some(
+      d => d.documentName === 'Signed Agreement'
+    );
+    if (!hasSignedAgreement) {
+      await dbOrTx.insert(dealDocuments).values({
+        dealId: projectId,
+        stageId: stage1Id,
+        documentName: 'Signed Agreement',
+        documentCategory: 'closing_docs',
+        documentDescription: 'PandaDoc signed agreement — auto-populated when the borrower signs',
+        status: 'pending',
+        isRequired: true,
+        assignedTo: 'admin',
+        visibility: 'all',
+        sortOrder: 0,
+      });
+      documentsCreated++;
+    }
+  }
+
   return {
     stagesCreated,
     tasksCreated,
@@ -158,6 +181,89 @@ export async function rebuildProjectPipelineFromProgram(
   return buildProjectPipelineFromProgram(projectId, programId, projectId, tx);
 }
 
+export async function convertDealToProgram(
+  projectId: number,
+  newProgramId: number,
+): Promise<PipelineResult & { documentsPreserved: number }> {
+  return await db.transaction(async (tx) => {
+    const existingDocs = await tx.select()
+      .from(dealDocuments)
+      .where(eq(dealDocuments.dealId, projectId));
+
+    const uploadedDocs = existingDocs.filter(d => d.filePath);
+    const emptyDocs = existingDocs.filter(d => !d.filePath);
+
+    for (const doc of emptyDocs) {
+      await tx.delete(dealDocuments).where(eq(dealDocuments.id, doc.id));
+    }
+
+    if (uploadedDocs.length > 0) {
+      for (const doc of uploadedDocs) {
+        await tx.update(dealDocuments)
+          .set({ stageId: null, programDocumentTemplateId: null })
+          .where(eq(dealDocuments.id, doc.id));
+      }
+    }
+
+    await tx.delete(projectTasks).where(eq(projectTasks.projectId, projectId));
+    await tx.delete(projectStages).where(eq(projectStages.projectId, projectId));
+
+    const result = await buildProjectPipelineFromProgram(projectId, newProgramId, undefined, tx);
+
+    const newStages = await tx.select()
+      .from(projectStages)
+      .where(eq(projectStages.projectId, projectId))
+      .orderBy(asc(projectStages.stageOrder));
+
+    const stage1Id = newStages.length > 0 ? newStages[0].id : null;
+
+    for (const doc of uploadedDocs) {
+      const matchingNewDocs = await tx.select()
+        .from(dealDocuments)
+        .where(and(
+          eq(dealDocuments.dealId, projectId),
+          eq(dealDocuments.documentName, doc.documentName),
+          isNull(dealDocuments.filePath)
+        ));
+
+      if (matchingNewDocs.length > 0) {
+        const templateDoc = matchingNewDocs[0];
+        await tx.update(dealDocuments)
+          .set({
+            filePath: doc.filePath,
+            fileSize: doc.fileSize,
+            mimeType: doc.mimeType,
+            fileName: doc.fileName,
+            status: doc.status,
+            uploadedAt: doc.uploadedAt,
+            uploadedBy: doc.uploadedBy,
+            reviewedAt: doc.reviewedAt,
+            reviewedBy: doc.reviewedBy,
+            reviewNotes: doc.reviewNotes,
+            driveFileId: doc.driveFileId,
+            documentCategory: templateDoc.documentCategory,
+            documentDescription: templateDoc.documentDescription,
+            assignedTo: templateDoc.assignedTo,
+            visibility: templateDoc.visibility,
+            isRequired: templateDoc.isRequired,
+          })
+          .where(eq(dealDocuments.id, templateDoc.id));
+
+        await tx.delete(dealDocuments).where(eq(dealDocuments.id, doc.id));
+      } else {
+        await tx.update(dealDocuments)
+          .set({ stageId: stage1Id })
+          .where(eq(dealDocuments.id, doc.id));
+      }
+    }
+
+    return {
+      ...result,
+      documentsPreserved: uploadedDocs.length,
+    };
+  });
+}
+
 async function buildProjectPipelineFromLegacyTemplate(
   projectId: number,
   tx?: NodePgDatabase<typeof schemaTypes>
@@ -167,6 +273,8 @@ async function buildProjectPipelineFromLegacyTemplate(
 
   let stagesCreated = 0;
   let tasksCreated = 0;
+  let documentsCreated = 0;
+  let stage1Id: number | null = null;
 
   for (const stageTemplate of LOAN_CLOSING_STAGES) {
     const [stage] = await dbOrTx.insert(projectStages).values({
@@ -181,6 +289,10 @@ async function buildProjectPipelineFromLegacyTemplate(
       startedAt: stageTemplate.stage_order === 1 ? new Date() : null,
     }).returning();
     stagesCreated++;
+
+    if (stageTemplate.stage_order === 1) {
+      stage1Id = stage.id;
+    }
 
     for (const taskTemplate of stageTemplate.tasks) {
       await dbOrTx.insert(projectTasks).values({
@@ -198,10 +310,27 @@ async function buildProjectPipelineFromLegacyTemplate(
     }
   }
 
+  // Add "Signed Agreement" placeholder in Stage 1
+  if (stage1Id) {
+    await dbOrTx.insert(dealDocuments).values({
+      dealId: projectId,
+      stageId: stage1Id,
+      documentName: 'Signed Agreement',
+      documentCategory: 'closing_docs',
+      documentDescription: 'PandaDoc signed agreement — auto-populated when the borrower signs',
+      status: 'pending',
+      isRequired: true,
+      assignedTo: 'admin',
+      visibility: 'all',
+      sortOrder: 0,
+    });
+    documentsCreated++;
+  }
+
   return {
     stagesCreated,
     tasksCreated,
-    documentsCreated: 0,
+    documentsCreated,
     usedProgramTemplate: false,
   };
 }

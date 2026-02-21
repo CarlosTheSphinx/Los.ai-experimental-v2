@@ -13,7 +13,7 @@ import {
   Save, Settings as SettingsIcon, RefreshCw, HardDrive, Phone, Mail, Brain,
   MapPin, Bot, CheckCircle2, XCircle, AlertCircle, Layers, Plus, Trash2,
   GripVertical, FileStack, ChevronRight, Shield, Palette, Lock,
-  Calculator, GitBranch, Bell, Plug, CreditCard, LayoutList, FileText
+  Calculator, GitBranch, Bell, Plug, CreditCard, LayoutList, FileText, Link2, FileSearch
 } from "lucide-react";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -64,6 +64,9 @@ import NotificationsConfig from "@/components/admin/config/NotificationsConfig";
 import CustomFieldsConfig from "@/components/admin/config/CustomFieldsConfig";
 import BillingPlansConfig from "@/components/admin/config/BillingPlansConfig";
 import EmailIntegrationConfig from "@/components/admin/config/EmailIntegrationConfig";
+import AICustomizationConfig from "@/components/admin/config/AICustomizationConfig";
+import MagicLinksConfig from "@/components/admin/config/MagicLinksConfig";
+import DocumentReviewConfig from "@/components/admin/config/DocumentReviewConfig";
 
 interface DealStage {
   id: number;
@@ -113,9 +116,13 @@ const CONFIG_TABS = [
   { id: "documents", label: "Documents & eSign", icon: FileText },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "integrations", label: "Integrations", icon: Plug },
+  { id: "platform-integrations", label: "Platform Integrations", icon: Plug, superAdminOnly: true },
+  { id: "ai-customization", label: "AI Customization", icon: Bot },
+  { id: "doc-review", label: "Doc Review & Comms", icon: FileSearch },
+  { id: "magic-links", label: "Magic Links", icon: Link2 },
   { id: "custom-fields", label: "Custom Fields", icon: LayoutList },
   { id: "billing", label: "Billing & Plans", icon: CreditCard },
-];
+] as const;
 
 function SortableStageItem({ stage, index, onDelete }: { stage: DealStage; index: number; onDelete: (id: number) => void }) {
   const {
@@ -354,7 +361,25 @@ export default function AdminSettings() {
   const { user } = useAuth();
   const [editedSettings, setEditedSettings] = useState<Record<string, string>>({});
   const isSuperAdmin = user?.role === 'super_admin';
-  const [activeTab, setActiveTab] = useState("general");
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const requestedTab = urlParams.get('tab') || 'general';
+  const superAdminTabs = ['platform-integrations'];
+  const initialTab = (superAdminTabs.includes(requestedTab) && !isSuperAdmin) ? 'general' : requestedTab;
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get('error');
+    if (error === 'google_not_configured') {
+      toast({ title: "Google Not Configured", description: "Google OAuth credentials (Client ID and Secret) need to be set up before connecting.", variant: "destructive" });
+      window.history.replaceState({}, '', '/admin/settings?tab=platform-integrations');
+    }
+    if (error === 'google_connect_failed') {
+      toast({ title: "Connection Failed", description: "Could not connect to Google. Please try again.", variant: "destructive" });
+      window.history.replaceState({}, '', '/admin/settings?tab=platform-integrations');
+    }
+  }, []);
 
   const { data, isLoading } = useQuery<{ settings: SystemSetting[] }>({
     queryKey: ["/api/admin/settings"],
@@ -362,6 +387,19 @@ export default function AdminSettings() {
 
   const { data: integrationsData, isLoading: integrationsLoading, refetch: refetchIntegrations } = useQuery<IntegrationsResponse>({
     queryKey: ["/api/admin/integrations/status"],
+  });
+
+  const { data: googleStatus, refetch: refetchGoogleStatus } = useQuery<{
+    connected: boolean;
+    gmail: { connected: boolean; emailAddress: string | null; lastSyncAt: string | null; syncStatus: string | null };
+    drive: { connected: boolean; folderId: string | null };
+  }>({
+    queryKey: ["/api/google/status"],
+  });
+
+  const { data: pandadocStatus } = useQuery<{ connected: boolean; maskedKey?: string }>({
+    queryKey: ['/api/admin/pandadoc/status'],
+    enabled: isSuperAdmin,
   });
 
   const updateSettingMutation = useMutation({
@@ -587,7 +625,7 @@ export default function AdminSettings() {
 
       <div className="flex gap-6">
         <nav className="w-52 shrink-0 space-y-1 sticky top-4 self-start" data-testid="nav-settings-tabs">
-          {CONFIG_TABS.map(tab => (
+          {CONFIG_TABS.filter(tab => !('superAdminOnly' in tab && tab.superAdminOnly) || isSuperAdmin).map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -620,37 +658,6 @@ export default function AdminSettings() {
                   {Object.entries(settingLabels)
                     .filter(([_, config]) => config.category === "general")
                     .map(([key, config]) => renderSettingField(key, config))}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <HardDrive className="h-5 w-5" />
-                    Google Drive Integration
-                  </CardTitle>
-                  <CardDescription>
-                    Configure Google Drive for automatic document sync. When a document is uploaded, a copy will be stored in the loan's Google Drive folder.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {Object.entries(settingLabels)
-                    .filter(([_, config]) => config.category === "google_drive")
-                    .map(([key, config]) => renderSettingField(key, config))}
-                  <div className="p-4 bg-muted/50 rounded-lg space-y-2">
-                    <p className="text-sm text-muted-foreground">
-                      <strong>Setup Instructions:</strong>
-                    </p>
-                    <ol className="text-sm text-muted-foreground list-decimal list-inside space-y-1">
-                      <li>Enable the Google Drive API in your Google Cloud Console</li>
-                      <li>Add the Drive file scope to your OAuth consent screen</li>
-                      <li>Log in with Google as a Super Admin to authorize Drive access</li>
-                      <li>Enter the Google Drive Parent Folder ID above</li>
-                    </ol>
-                    <p className="text-sm text-muted-foreground">
-                      When a deal is created, a folder will be automatically created inside the parent folder. Uploaded documents will sync to Google Drive.
-                    </p>
-                  </div>
                 </CardContent>
               </Card>
 
@@ -808,17 +815,17 @@ export default function AdminSettings() {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Bot className="h-5 w-5" />
-                    External Integrations
+                    <Plug className="h-5 w-5" />
+                    Integrations
                   </CardTitle>
                   <CardDescription>
-                    Status of connected external services for notifications, AI, and automation
+                    Manage your connected services for SMS, email sync, and document storage
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-6">
                   {integrationsLoading ? (
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {[1, 2, 3, 4, 5].map((i) => (
+                      {[1, 2, 3].map((i) => (
                         <Skeleton key={i} className="h-24" />
                       ))}
                     </div>
@@ -852,171 +859,357 @@ export default function AdminSettings() {
                         )}
                       </div>
 
-                      {isSuperAdmin && (
-                        <>
-                          <div className="border rounded-lg p-4 space-y-3" data-testid="integration-resend">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <Mail className="h-5 w-5 text-primary" />
-                                <span className="font-medium">Resend Email</span>
-                              </div>
-                              {integrationsData?.integrations.resend?.connected ? (
-                                <Badge variant="default">
-                                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                                  Connected
-                                </Badge>
-                              ) : (
-                                <Badge variant="secondary">
-                                  <XCircle className="h-3 w-3 mr-1" />
-                                  Not Connected
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              Send email notifications for loan digests and system alerts
-                            </p>
-                            {integrationsData?.integrations.resend?.details?.fromEmail && (
-                              <p className="text-xs text-muted-foreground">
-                                From: {integrationsData.integrations.resend.details.fromEmail}
-                              </p>
-                            )}
+                      <div className="border rounded-lg p-4 space-y-3" data-testid="integration-gmail">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Mail className="h-5 w-5 text-primary" />
+                            <span className="font-medium">Gmail</span>
                           </div>
-
-                          <div className="border rounded-lg p-4 space-y-3" data-testid="integration-openai">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <Brain className="h-5 w-5 text-success" />
-                                <span className="font-medium">OpenAI</span>
-                              </div>
-                              {integrationsData?.integrations.openai?.connected ? (
-                                <Badge variant="default">
-                                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                                  Connected
-                                </Badge>
-                              ) : (
-                                <Badge variant="secondary">
-                                  <XCircle className="h-3 w-3 mr-1" />
-                                  Not Connected
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              AI-powered features for document analysis and automation
-                            </p>
-                          </div>
-
-                          <div className="border rounded-lg p-4 space-y-3" data-testid="integration-apify">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <Bot className="h-5 w-5 text-warning" />
-                                <span className="font-medium">Apify Scraper</span>
-                              </div>
-                              {integrationsData?.integrations.apify?.connected ? (
-                                <Badge variant="default">
-                                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                                  Connected
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline">
-                                  <AlertCircle className="h-3 w-3 mr-1" />
-                                  Not Configured
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              Automated quote scraping from external pricing providers
-                            </p>
-                          </div>
-
-                          <div className="border rounded-lg p-4 space-y-3" data-testid="integration-geoapify">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <MapPin className="h-5 w-5 text-destructive" />
-                                <span className="font-medium">Geoapify</span>
-                              </div>
-                              {integrationsData?.integrations.geoapify?.connected ? (
-                                <Badge variant="default">
-                                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                                  Connected
-                                </Badge>
-                              ) : (
-                                <Badge variant="secondary">
-                                  <XCircle className="h-3 w-3 mr-1" />
-                                  Not Connected
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              Address autocomplete and geocoding for property locations
-                            </p>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                  {isSuperAdmin ? (
-                    <>
-                      <OpenAiApiKeySection />
-                      <PandaDocApiKeySection />
-
-                      <div className="mt-4 border rounded-lg p-4 space-y-3" data-testid="integration-pandadoc-webhook">
-                        <div className="flex items-center gap-2">
-                          <FileText className="h-5 w-5 text-primary" />
-                          <span className="font-medium">PandaDoc Webhook URL</span>
+                          {googleStatus?.gmail?.connected ? (
+                            <Badge variant="default">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Connected
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Not Connected
+                            </Badge>
+                          )}
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          Set this URL in your PandaDoc account (Settings &rarr; Integrations &rarr; Webhooks) to automatically create loan deals when documents are signed.
+                          Sync email conversations and link threads to deals
                         </p>
-                        <div className="flex items-center gap-2">
-                          <Input
-                            readOnly
-                            value={`${window.location.origin}/api/webhooks/pandadoc`}
-                            className="font-mono text-xs"
-                            data-testid="input-pandadoc-webhook-url"
-                          />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              navigator.clipboard.writeText(`${window.location.origin}/api/webhooks/pandadoc`);
-                              toast({ title: "Copied", description: "Webhook URL copied to clipboard" });
-                            }}
-                            data-testid="button-copy-webhook-url"
-                          >
-                            Copy
-                          </Button>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Subscribe to events: <strong>document.completed</strong>, <strong>document.viewed</strong>, <strong>document.sent</strong>
-                        </p>
+                        {googleStatus?.gmail?.emailAddress && (
+                          <p className="text-xs text-muted-foreground">
+                            Account: {googleStatus.gmail.emailAddress}
+                          </p>
+                        )}
                       </div>
-                    </>
-                  ) : (
-                    <PandaDocStatusReadonly />
+
+                      <div className="border rounded-lg p-4 space-y-3" data-testid="integration-drive">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <HardDrive className="h-5 w-5 text-primary" />
+                            <span className="font-medium">Google Drive</span>
+                          </div>
+                          {googleStatus?.drive?.connected ? (
+                            <Badge variant="default">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Connected
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Not Connected
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Automatically sync deal documents to Google Drive
+                        </p>
+                        {googleStatus?.drive?.folderId && (
+                          <p className="text-xs text-muted-foreground truncate">
+                            Folder: {googleStatus.drive.folderId}
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   )}
 
-                  <div className="mt-4 flex justify-end">
+                  <EmailIntegrationConfig />
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <HardDrive className="h-5 w-5" />
+                        Google Drive Settings
+                      </CardTitle>
+                      <CardDescription>
+                        Configure Google Drive for automatic document sync
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      {Object.entries(settingLabels)
+                        .filter(([_, config]) => config.category === "google_drive")
+                        .map(([key, config]) => renderSettingField(key, config))}
+                      <div className="p-4 bg-muted/50 rounded-lg space-y-2">
+                        <p className="text-sm text-muted-foreground">
+                          <strong>Setup:</strong> Enter the Google Drive Parent Folder ID above. When a deal is created, a folder will be automatically created inside it and uploaded documents will sync to Drive.
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <div className="flex justify-end">
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => refetchIntegrations()}
+                      onClick={() => { refetchIntegrations(); refetchGoogleStatus(); }}
                       data-testid="button-refresh-integrations"
                     >
                       <RefreshCw className="h-4 w-4 mr-2" />
                       Refresh Status
                     </Button>
                   </div>
-                  <div className="mt-4 p-4 bg-muted/50 rounded-lg">
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          {activeTab === "platform-integrations" && isSuperAdmin && (
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Bot className="h-5 w-5" />
+                    Platform Integrations
+                  </CardTitle>
+                  <CardDescription>
+                    Infrastructure-level services that power the platform. Only visible to super admins.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {integrationsLoading ? (
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      {[1, 2, 3, 4, 5, 6].map((i) => (
+                        <Skeleton key={i} className="h-24" />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      <div className="border rounded-lg p-4 space-y-3" data-testid="integration-google-auth">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none">
+                              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+                              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                            </svg>
+                            <span className="font-medium">Google Auth</span>
+                          </div>
+                          {googleStatus?.connected ? (
+                            <Badge variant="default">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Connected
+                            </Badge>
+                          ) : googleStatus?.gmail?.connected || googleStatus?.drive?.connected ? (
+                            <Badge variant="outline" className="text-yellow-600 border-yellow-400">
+                              <AlertCircle className="h-3 w-3 mr-1" />
+                              Partial
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Not Connected
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          OAuth connection for Gmail and Google Drive
+                        </p>
+                        {googleStatus?.gmail?.emailAddress && (
+                          <p className="text-xs text-muted-foreground">
+                            Account: {googleStatus.gmail.emailAddress}
+                          </p>
+                        )}
+                        {!googleStatus?.connected && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full mt-1"
+                            onClick={() => window.location.href = '/api/google/connect?returnTo=' + encodeURIComponent('/admin/settings?tab=platform-integrations')}
+                            data-testid="button-connect-google-grid"
+                          >
+                            Connect Google
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="border rounded-lg p-4 space-y-3" data-testid="integration-pandadoc">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-5 w-5 text-primary" />
+                            <span className="font-medium">PandaDoc</span>
+                          </div>
+                          {pandadocStatus?.connected ? (
+                            <Badge variant="default">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Connected
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Not Connected
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          E-signing and document management
+                        </p>
+                      </div>
+
+                      <div className="border rounded-lg p-4 space-y-3" data-testid="integration-resend">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Mail className="h-5 w-5 text-primary" />
+                            <span className="font-medium">Resend Email</span>
+                          </div>
+                          {integrationsData?.integrations.resend?.connected ? (
+                            <Badge variant="default">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Connected
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Not Connected
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Send email notifications for loan digests and system alerts
+                        </p>
+                        {integrationsData?.integrations.resend?.details?.fromEmail && (
+                          <p className="text-xs text-muted-foreground">
+                            From: {integrationsData.integrations.resend.details.fromEmail}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="border rounded-lg p-4 space-y-3" data-testid="integration-openai">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Brain className="h-5 w-5 text-success" />
+                            <span className="font-medium">OpenAI</span>
+                          </div>
+                          {integrationsData?.integrations.openai?.connected ? (
+                            <Badge variant="default">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Connected
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Not Connected
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          AI-powered features for document analysis and automation
+                        </p>
+                      </div>
+
+                      <div className="border rounded-lg p-4 space-y-3" data-testid="integration-apify">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Bot className="h-5 w-5 text-warning" />
+                            <span className="font-medium">Apify Scraper</span>
+                          </div>
+                          {integrationsData?.integrations.apify?.connected ? (
+                            <Badge variant="default">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Connected
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline">
+                              <AlertCircle className="h-3 w-3 mr-1" />
+                              Not Configured
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Automated quote scraping from external pricing providers
+                        </p>
+                      </div>
+
+                      <div className="border rounded-lg p-4 space-y-3" data-testid="integration-geoapify">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <MapPin className="h-5 w-5 text-destructive" />
+                            <span className="font-medium">Geoapify</span>
+                          </div>
+                          {integrationsData?.integrations.geoapify?.connected ? (
+                            <Badge variant="default">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Connected
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Not Connected
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Address autocomplete and geocoding for property locations
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <OpenAiApiKeySection />
+                  <PandaDocApiKeySection />
+
+                  <div className="border rounded-lg p-4 space-y-3" data-testid="integration-pandadoc-webhook">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-5 w-5 text-primary" />
+                      <span className="font-medium">PandaDoc Webhook URL</span>
+                    </div>
                     <p className="text-sm text-muted-foreground">
-                      <strong>Note:</strong> Integrations are managed through Replit's connector system. To connect or update an integration, use the Replit Integrations panel or contact your administrator.
+                      Set this URL in your PandaDoc account (Settings &rarr; Integrations &rarr; Webhooks) to automatically create loan deals when documents are signed.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        readOnly
+                        value={`${window.location.origin}/api/webhooks/pandadoc`}
+                        className="font-mono text-xs"
+                        data-testid="input-pandadoc-webhook-url"
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          navigator.clipboard.writeText(`${window.location.origin}/api/webhooks/pandadoc`);
+                          toast({ title: "Copied", description: "Webhook URL copied to clipboard" });
+                        }}
+                        data-testid="button-copy-webhook-url"
+                      >
+                        Copy
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Subscribe to events: <strong>document.completed</strong>, <strong>document.viewed</strong>, <strong>document.sent</strong>
+                    </p>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { refetchIntegrations(); refetchGoogleStatus(); }}
+                      data-testid="button-refresh-platform-integrations"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Refresh Status
+                    </Button>
+                  </div>
+                  <div className="p-4 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground">
+                      <strong>Note:</strong> Platform integrations are managed through Replit's connector system. To connect or update an integration, use the Replit Integrations panel.
                     </p>
                   </div>
                 </CardContent>
               </Card>
-
-              <EmailIntegrationConfig />
             </>
           )}
+
+          {activeTab === "ai-customization" && <AICustomizationConfig />}
+
+          {activeTab === "doc-review" && <DocumentReviewConfig />}
+
+          {activeTab === "magic-links" && <MagicLinksConfig />}
 
           {activeTab === "custom-fields" && <CustomFieldsConfig />}
 

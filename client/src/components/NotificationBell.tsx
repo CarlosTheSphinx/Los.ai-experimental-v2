@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
-import { Bell, FileUp, MessageSquare, Check, CheckCheck, ExternalLink, ClipboardList, AtSign, Mail } from "lucide-react";
+import { Bell, FileUp, MessageSquare, Check, CheckCheck, ExternalLink, ClipboardList, AtSign, Mail, Paperclip } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
@@ -77,6 +77,8 @@ export function NotificationBell() {
         return <AtSign className="h-4 w-4 text-purple-500" />;
       case "new_email":
         return <Mail className="h-4 w-4 text-indigo-500" />;
+      case "email_document_detected":
+        return <Paperclip className="h-4 w-4 text-amber-500" />;
       default:
         return <Bell className="h-4 w-4 text-muted-foreground" />;
     }
@@ -95,16 +97,15 @@ export function NotificationBell() {
   return (
     <div className="relative" ref={dropdownRef}>
       <Button
-        variant="ghost"
         size="icon"
         onClick={() => setIsOpen(!isOpen)}
-        className="relative"
+        className="relative h-10 w-10 rounded-full bg-primary hover:bg-primary/90 text-white"
         data-testid="button-notification-bell"
       >
-        <Bell className="h-5 w-5" />
+        <Bell className="!h-6 !w-6" />
         {unreadCount > 0 && (
           <span
-            className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none"
+            className="absolute -top-1 -right-1 flex items-center justify-center min-w-[20px] h-[20px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none ring-2 ring-background"
             data-testid="badge-notification-count"
           >
             {unreadCount > 99 ? "99+" : unreadCount}

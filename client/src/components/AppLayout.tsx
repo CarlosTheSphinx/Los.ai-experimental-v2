@@ -38,6 +38,7 @@ import {
   Plug,
   Cpu,
   Database,
+  GraduationCap,
   Inbox,
 } from "lucide-react";
 import {
@@ -99,6 +100,7 @@ const brokerNavItems: NavItem[] = [
   { href: "/broker/outreach", label: "Smart Prospect", icon: Target, shortcut: undefined },
   { href: "/inbox", label: "Inbox", icon: Inbox, showBadge: true, shortcut: undefined },
   { href: "/resources", label: "Resources", icon: BookOpen, shortcut: undefined },
+  { href: "/admin/settings", label: "Settings", icon: Settings, requiredPermission: "settings.view", shortcut: undefined },
 ];
 
 const borrowerNavItems: NavItem[] = [
@@ -130,6 +132,7 @@ const superAdminNavItems: NavItem[] = [
   { href: "/admin/platform", label: "Platform Overview", icon: Globe },
   { href: "/admin/ai-agents", label: "AI Orchestration", icon: Sparkles },
   { href: "/admin/integrations", label: "Integrations", icon: Plug },
+  { href: "/admin/onboarding-config", label: "Broker/Borrower Links", icon: GraduationCap },
 ];
 
 type ViewAsMode = "super_admin" | "lender" | "borrower";
@@ -512,8 +515,8 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
         )}
         <div className="flex items-center justify-end gap-1 px-3 py-1.5 border-b shrink-0">
           <Link href="/inbox">
-            <Button variant="ghost" size="icon" className="relative" data-testid="button-header-messages">
-              <MessageSquare className="h-5 w-5" />
+            <Button size="icon" className="relative h-10 w-10 rounded-full bg-primary hover:bg-primary/90 text-white" data-testid="button-header-messages">
+              <MessageSquare className="!h-6 !w-6" />
               <InboxBadge />
             </Button>
           </Link>

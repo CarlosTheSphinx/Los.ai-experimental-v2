@@ -84,6 +84,22 @@ interface LoanProgram {
   createdAt: string;
   documentCount?: number;
   taskCount?: number;
+  // YSP Configuration
+  yspEnabled?: boolean;
+  yspBrokerCanToggle?: boolean;
+  yspFixedAmount?: number;
+  yspMin?: number;
+  yspMax?: number;
+  yspStep?: number;
+  // Points Configuration
+  basePoints?: number;
+  basePointsMin?: number;
+  basePointsMax?: number;
+  brokerPointsEnabled?: boolean;
+  brokerPointsMax?: number;
+  brokerPointsStep?: number;
+  minUnits?: number | null;
+  maxUnits?: number | null;
 }
 
 interface ProgramDocument {
@@ -360,6 +376,20 @@ export default function AdminPrograms() {
     quoteFormFields: [] as QuoteFormField[],
     reviewGuidelines: "",
     creditPolicyId: null as number | null,
+    // YSP Configuration
+    yspEnabled: false,
+    yspBrokerCanToggle: false,
+    yspFixedAmount: "0",
+    yspMin: "0",
+    yspMax: "3",
+    yspStep: "0.125",
+    // Points Configuration
+    basePoints: "1",
+    basePointsMin: "0.5",
+    basePointsMax: "3",
+    brokerPointsEnabled: true,
+    brokerPointsMax: "2",
+    brokerPointsStep: "0.125",
   });
 
   const [inlineDocuments, setInlineDocuments] = useState<InlineDocument[]>([]);
@@ -674,6 +704,18 @@ export default function AdminPrograms() {
       quoteFormFields: [],
       reviewGuidelines: "",
       creditPolicyId: null,
+      yspEnabled: false,
+      yspBrokerCanToggle: false,
+      yspFixedAmount: "0",
+      yspMin: "0",
+      yspMax: "3",
+      yspStep: "0.125",
+      basePoints: "1",
+      basePointsMin: "0.5",
+      basePointsMax: "3",
+      brokerPointsEnabled: true,
+      brokerPointsMax: "2",
+      brokerPointsStep: "0.125",
     });
     setInlineDocuments([]);
     setInlineTasks([]);
@@ -863,6 +905,20 @@ export default function AdminPrograms() {
       quoteFormFields: (program.quoteFormFields as QuoteFormField[]) || [],
       reviewGuidelines: program.reviewGuidelines || "",
       creditPolicyId: (program as any).creditPolicyId || null,
+      // YSP Configuration
+      yspEnabled: (program as any).yspEnabled ?? false,
+      yspBrokerCanToggle: (program as any).yspBrokerCanToggle ?? false,
+      yspFixedAmount: String((program as any).yspFixedAmount ?? 0),
+      yspMin: String((program as any).yspMin ?? 0),
+      yspMax: String((program as any).yspMax ?? 3),
+      yspStep: String((program as any).yspStep ?? 0.125),
+      // Points Configuration
+      basePoints: String((program as any).basePoints ?? 1),
+      basePointsMin: String((program as any).basePointsMin ?? 0.5),
+      basePointsMax: String((program as any).basePointsMax ?? 3),
+      brokerPointsEnabled: (program as any).brokerPointsEnabled ?? true,
+      brokerPointsMax: String((program as any).brokerPointsMax ?? 2),
+      brokerPointsStep: String((program as any).brokerPointsStep ?? 0.125),
     });
     setSelectedProgram(program);
     setCustomLoanType("");
@@ -1333,6 +1389,138 @@ export default function AdminPrograms() {
                       >
                         <Plus className="h-4 w-4" />
                       </Button>
+                    </div>
+                  </div>
+
+                  {/* ── Compensation & Pricing Section ── */}
+                  <div className="border-t pt-6 mt-6 space-y-4">
+                    <Label className="text-base font-semibold flex items-center gap-2">
+                      <DollarSign className="h-4 w-4" />
+                      Compensation & Pricing
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Configure YSP and origination points for this program
+                    </p>
+
+                    {/* Points Configuration */}
+                    <div className="bg-muted/30 rounded-lg p-4 space-y-3 border">
+                      <h4 className="text-sm font-semibold">Origination Points</h4>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Base Points</Label>
+                          <Input
+                            type="number" step="0.125" min="0" max="10"
+                            value={programForm.basePoints}
+                            onChange={(e) => setProgramForm({ ...programForm, basePoints: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Min Base</Label>
+                          <Input
+                            type="number" step="0.125" min="0"
+                            value={programForm.basePointsMin}
+                            onChange={(e) => setProgramForm({ ...programForm, basePointsMin: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Max Base</Label>
+                          <Input
+                            type="number" step="0.125" min="0"
+                            value={programForm.basePointsMax}
+                            onChange={(e) => setProgramForm({ ...programForm, basePointsMax: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 pt-2">
+                        <Switch
+                          checked={programForm.brokerPointsEnabled}
+                          onCheckedChange={(v) => setProgramForm({ ...programForm, brokerPointsEnabled: v })}
+                        />
+                        <Label className="text-sm">Broker Can Add Additional Points</Label>
+                      </div>
+                      {programForm.brokerPointsEnabled && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Max Additional Broker Points</Label>
+                            <Input
+                              type="number" step="0.125" min="0" max="10"
+                              value={programForm.brokerPointsMax}
+                              onChange={(e) => setProgramForm({ ...programForm, brokerPointsMax: e.target.value })}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Step Size</Label>
+                            <Input
+                              type="number" step="0.0625" min="0.0625"
+                              value={programForm.brokerPointsStep}
+                              onChange={(e) => setProgramForm({ ...programForm, brokerPointsStep: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* YSP Configuration */}
+                    <div className="bg-muted/30 rounded-lg p-4 space-y-3 border">
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          checked={programForm.yspEnabled}
+                          onCheckedChange={(v) => setProgramForm({ ...programForm, yspEnabled: v })}
+                        />
+                        <h4 className="text-sm font-semibold">YSP (Yield Spread Premium) Available</h4>
+                      </div>
+                      {programForm.yspEnabled && (
+                        <>
+                          <div className="flex items-center gap-3 pt-1">
+                            <Switch
+                              checked={programForm.yspBrokerCanToggle}
+                              onCheckedChange={(v) => setProgramForm({ ...programForm, yspBrokerCanToggle: v })}
+                            />
+                            <Label className="text-sm">Broker Can Adjust YSP on Quotes</Label>
+                          </div>
+                          {!programForm.yspBrokerCanToggle && (
+                            <div className="space-y-1">
+                              <Label className="text-xs">Fixed YSP Amount (%)</Label>
+                              <Input
+                                type="number" step="0.125" min="0" max="5"
+                                value={programForm.yspFixedAmount}
+                                onChange={(e) => setProgramForm({ ...programForm, yspFixedAmount: e.target.value })}
+                              />
+                              <p className="text-xs text-muted-foreground">This fixed YSP % will be applied to every quote</p>
+                            </div>
+                          )}
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Min YSP (%)</Label>
+                              <Input
+                                type="number" step="0.125" min="0"
+                                value={programForm.yspMin}
+                                onChange={(e) => setProgramForm({ ...programForm, yspMin: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Max YSP (%)</Label>
+                              <Input
+                                type="number" step="0.125" min="0"
+                                value={programForm.yspMax}
+                                onChange={(e) => setProgramForm({ ...programForm, yspMax: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Step Size</Label>
+                              <Input
+                                type="number" step="0.0625" min="0.0625"
+                                value={programForm.yspStep}
+                                onChange={(e) => setProgramForm({ ...programForm, yspStep: e.target.value })}
+                              />
+                            </div>
+                          </div>
+                          <div className="bg-amber-50 border border-amber-200 rounded p-2 text-xs text-amber-800">
+                            <Info className="h-3 w-3 inline mr-1" />
+                            YSP rate impact tiers can be configured in the pricing ruleset for this program. Add a <code>yspPricing</code> array to define how each YSP% tier affects the interest rate.
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -2473,6 +2661,129 @@ export default function AdminPrograms() {
                 </Button>
               </div>
             </div>
+            {/* ── Compensation & Pricing Section (Edit) ── */}
+            <div className="border-t pt-6 mt-6 space-y-4">
+              <Label className="text-base font-semibold flex items-center gap-2">
+                <DollarSign className="h-4 w-4" />
+                Compensation & Pricing
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Configure YSP and origination points for this program
+              </p>
+
+              {/* Points Configuration */}
+              <div className="bg-muted/30 rounded-lg p-4 space-y-3 border">
+                <h4 className="text-sm font-semibold">Origination Points</h4>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Base Points</Label>
+                    <Input type="number" step="0.125" min="0" max="10"
+                      value={programForm.basePoints}
+                      onChange={(e) => setProgramForm({ ...programForm, basePoints: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Min Base</Label>
+                    <Input type="number" step="0.125" min="0"
+                      value={programForm.basePointsMin}
+                      onChange={(e) => setProgramForm({ ...programForm, basePointsMin: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Max Base</Label>
+                    <Input type="number" step="0.125" min="0"
+                      value={programForm.basePointsMax}
+                      onChange={(e) => setProgramForm({ ...programForm, basePointsMax: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 pt-2">
+                  <Switch
+                    checked={programForm.brokerPointsEnabled}
+                    onCheckedChange={(v) => setProgramForm({ ...programForm, brokerPointsEnabled: v })}
+                  />
+                  <Label className="text-sm">Broker Can Add Additional Points</Label>
+                </div>
+                {programForm.brokerPointsEnabled && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Max Additional Broker Points</Label>
+                      <Input type="number" step="0.125" min="0" max="10"
+                        value={programForm.brokerPointsMax}
+                        onChange={(e) => setProgramForm({ ...programForm, brokerPointsMax: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Step Size</Label>
+                      <Input type="number" step="0.0625" min="0.0625"
+                        value={programForm.brokerPointsStep}
+                        onChange={(e) => setProgramForm({ ...programForm, brokerPointsStep: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* YSP Configuration */}
+              <div className="bg-muted/30 rounded-lg p-4 space-y-3 border">
+                <div className="flex items-center gap-3">
+                  <Switch
+                    checked={programForm.yspEnabled}
+                    onCheckedChange={(v) => setProgramForm({ ...programForm, yspEnabled: v })}
+                  />
+                  <h4 className="text-sm font-semibold">YSP (Yield Spread Premium) Available</h4>
+                </div>
+                {programForm.yspEnabled && (
+                  <>
+                    <div className="flex items-center gap-3 pt-1">
+                      <Switch
+                        checked={programForm.yspBrokerCanToggle}
+                        onCheckedChange={(v) => setProgramForm({ ...programForm, yspBrokerCanToggle: v })}
+                      />
+                      <Label className="text-sm">Broker Can Adjust YSP on Quotes</Label>
+                    </div>
+                    {!programForm.yspBrokerCanToggle && (
+                      <div className="space-y-1">
+                        <Label className="text-xs">Fixed YSP Amount (%)</Label>
+                        <Input type="number" step="0.125" min="0" max="5"
+                          value={programForm.yspFixedAmount}
+                          onChange={(e) => setProgramForm({ ...programForm, yspFixedAmount: e.target.value })}
+                        />
+                        <p className="text-xs text-muted-foreground">This fixed YSP % will be applied to every quote</p>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Min YSP (%)</Label>
+                        <Input type="number" step="0.125" min="0"
+                          value={programForm.yspMin}
+                          onChange={(e) => setProgramForm({ ...programForm, yspMin: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Max YSP (%)</Label>
+                        <Input type="number" step="0.125" min="0"
+                          value={programForm.yspMax}
+                          onChange={(e) => setProgramForm({ ...programForm, yspMax: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Step Size</Label>
+                        <Input type="number" step="0.0625" min="0.0625"
+                          value={programForm.yspStep}
+                          onChange={(e) => setProgramForm({ ...programForm, yspStep: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="bg-amber-50 border border-amber-200 rounded p-2 text-xs text-amber-800">
+                      <Info className="h-3 w-3 inline mr-1" />
+                      YSP rate impact tiers can be configured in the pricing ruleset. Add a <code>yspPricing</code> array to define how each YSP% tier affects the interest rate.
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label>Credit Policy</Label>
               <Select

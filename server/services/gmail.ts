@@ -8,6 +8,7 @@ import { decryptToken, encryptToken } from '../utils/encryption';
 const GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.modify',
+  'https://www.googleapis.com/auth/gmail.send',
 ];
 
 export function getGmailOAuthClient(): OAuth2Client {
@@ -127,7 +128,7 @@ function extractBody(payload: gmail_v1.Schema$MessagePart | undefined): { text: 
   return { text, html };
 }
 
-export async function syncEmails(accountId: number, maxResults: number = 50): Promise<{ synced: number; errors: string[] }> {
+export async function syncEmails(accountId: number, maxResults: number = 200): Promise<{ synced: number; errors: string[] }> {
   const errors: string[] = [];
   let synced = 0;
   
@@ -301,6 +302,41 @@ export async function getAttachment(accountId: number, messageId: string, attach
     console.error('Error fetching attachment:', error);
     return null;
   }
+}
+
+export async function sendReply(
+  accountId: number,
+  threadId: string,
+  to: string,
+  subject: string,
+  body: string,
+  inReplyTo?: string,
+  references?: string
+): Promise<{ messageId: string }> {
+  const { gmail, account } = await getGmailClient(accountId);
+  
+  const fromEmail = account.emailAddress;
+  const headers = [
+    `From: ${fromEmail}`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    `Content-Type: text/html; charset=utf-8`,
+  ];
+  if (inReplyTo) headers.push(`In-Reply-To: ${inReplyTo}`);
+  if (references) headers.push(`References: ${references}`);
+  
+  const rawMessage = headers.join('\r\n') + '\r\n\r\n' + body;
+  const encodedMessage = Buffer.from(rawMessage).toString('base64url');
+  
+  const result = await gmail.users.messages.send({
+    userId: 'me',
+    requestBody: {
+      raw: encodedMessage,
+      threadId,
+    },
+  });
+  
+  return { messageId: result.data.id || '' };
 }
 
 export async function checkLinkedThreadsForNewEmails(accountId: number): Promise<void> {

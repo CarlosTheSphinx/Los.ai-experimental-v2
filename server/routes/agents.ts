@@ -24,10 +24,13 @@ import {
   loanDigestConfigs,
   loanDigestRecipients,
   scheduledDigestDrafts,
-  dealMemoryEntries
+  dealMemoryEntries,
+  systemSettings,
+  lenderAgentCustomizations
 } from '@shared/schema';
 import { asc, gte, lte, sql } from 'drizzle-orm';
 import { startPipeline, getPipelineStatus, getPipelineHistory } from '../agents/orchestrator';
+import { getSettings as getEmailDocCheckSettings, updateSettings as updateEmailDocCheckSettings, runEmailDocCheck, restartEmailDocCheckPolling } from '../services/emailDocCheck';
 
 // ==================== DEFAULT AGENT PROMPTS ====================
 
@@ -87,8 +90,109 @@ Return a JSON object with:
 - body: Full message body
 - tone: Tone classification (informational, urgent, collaborative, etc.)
 - call_to_action: What action is requested
-- estimated_response_time: Expected timeframe for response`
+- estimated_response_time: Expected timeframe for response`,
+
+  EMAIL_DOC_CLASSIFIER: `You are a lending document classifier. Analyze email attachments and identify the document type.
+
+Context:
+- Sender: {{sender_name}} ({{sender_email}})
+- Email Subject: {{email_subject}}
+- Deal: {{deal_name}} — Borrower: {{borrower_name}}
+
+Attachment:
+- Filename: {{filename}}
+- MIME Type: {{mime_type}}
+
+Document Preview:
+{{document_preview}}
+
+Classify into one of these lending document types:
+pay_stub, w2, tax_return, bank_statement, appraisal, title_commitment,
+insurance_certificate, purchase_agreement, closing_disclosure, loan_estimate,
+credit_report, employment_verification, id_document, property_photo, other
+
+Return JSON (no markdown, raw JSON only):
+{
+  "document_type": "one of the types above",
+  "document_type_label": "Human readable label",
+  "confidence": 0-100,
+  "suggested_action": "review|approve|archive|request_modification",
+  "reasoning": "brief explanation of why you classified it this way"
+}`
 };
+
+/**
+ * Auto-seed default agent configurations on server startup.
+ * Only inserts configs that don't already exist — safe to call on every boot.
+ */
+export async function seedDefaultAgentConfigs(db: RouteDeps['db']): Promise<void> {
+  const defaultConfigs = [
+    {
+      agentType: 'document_intelligence',
+      name: 'Document Intelligence Agent',
+      systemPrompt: DEFAULT_AGENT_PROMPTS.DOCUMENT_EXTRACTION,
+      toolDefinitions: ['document_extraction', 'text_analysis'],
+      modelProvider: 'openai',
+      modelName: 'gpt-4o',
+      maxTokens: 2048,
+      temperature: 0.3
+    },
+    {
+      agentType: 'processor',
+      name: 'Deal Processor Agent',
+      systemPrompt: DEFAULT_AGENT_PROMPTS.DEAL_PROCESSOR,
+      toolDefinitions: ['document_analysis', 'data_extraction', 'risk_assessment'],
+      modelProvider: 'openai',
+      modelName: 'gpt-4o',
+      maxTokens: 4096,
+      temperature: 0.5
+    },
+    {
+      agentType: 'communication',
+      name: 'Communication Draft Agent',
+      systemPrompt: DEFAULT_AGENT_PROMPTS.COMMUNICATION_DRAFT,
+      toolDefinitions: ['communication_generation', 'tone_adjustment'],
+      modelProvider: 'openai',
+      modelName: 'gpt-4o',
+      maxTokens: 2048,
+      temperature: 0.7
+    },
+    {
+      agentType: 'email_doc_classifier',
+      name: 'Email Document Classifier',
+      systemPrompt: DEFAULT_AGENT_PROMPTS.EMAIL_DOC_CLASSIFIER,
+      toolDefinitions: ['document_classification'],
+      modelProvider: 'openai',
+      modelName: 'gpt-4o',
+      maxTokens: 1024,
+      temperature: 0.2
+    }
+  ];
+
+  let created = 0;
+  for (const config of defaultConfigs) {
+    const existing = await db
+      .select()
+      .from(agentConfigurations)
+      .where(eq(agentConfigurations.agentType, config.agentType));
+
+    if (existing.length === 0) {
+      await db.insert(agentConfigurations).values({
+        ...config,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      created++;
+    }
+  }
+
+  if (created > 0) {
+    console.log(`🤖 Auto-seeded ${created} default agent configuration(s)`);
+  } else {
+    console.log(`🤖 Agent configurations already present (${defaultConfigs.length} found)`);
+  }
+}
 
 /**
  * Register agent routes
@@ -1277,6 +1381,132 @@ export function registerAgentRoutes(app: Express, deps: RouteDeps): void {
     }
   );
 
+  // ==================== LENDER AI CUSTOMIZATIONS ====================
+
+  /**
+   * GET /api/admin/agents/customizations
+   * Get all AI customizations for the current lender user
+   */
+  app.get(
+    '/api/admin/agents/customizations',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const userId = req.user!.id;
+        const customizations = await db
+          .select()
+          .from(lenderAgentCustomizations)
+          .where(eq(lenderAgentCustomizations.userId, userId))
+          .orderBy(asc(lenderAgentCustomizations.agentType));
+
+        res.json(customizations);
+      } catch (error) {
+        console.error('Error fetching lender AI customizations:', error);
+        res.status(500).json({ error: 'Failed to fetch AI customizations' });
+      }
+    }
+  );
+
+  /**
+   * PUT /api/admin/agents/customizations
+   * Upsert a lender AI customization for a specific agent type.
+   * If a record already exists for this user + agentType, it updates. Otherwise inserts.
+   */
+  app.put(
+    '/api/admin/agents/customizations',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const userId = req.user!.id;
+        const { agentType, additionalPrompt, isActive } = req.body;
+
+        if (!agentType || typeof additionalPrompt !== 'string') {
+          return res.status(400).json({ error: 'agentType and additionalPrompt are required' });
+        }
+
+        // Check if this user already has a customization for this agent type
+        const existing = await db
+          .select()
+          .from(lenderAgentCustomizations)
+          .where(
+            and(
+              eq(lenderAgentCustomizations.userId, userId),
+              eq(lenderAgentCustomizations.agentType, agentType)
+            )
+          )
+          .then((r) => r[0]);
+
+        let result;
+        if (existing) {
+          [result] = await db
+            .update(lenderAgentCustomizations)
+            .set({
+              additionalPrompt,
+              isActive: isActive !== undefined ? isActive : existing.isActive,
+              updatedAt: new Date(),
+            })
+            .where(eq(lenderAgentCustomizations.id, existing.id))
+            .returning();
+        } else {
+          [result] = await db
+            .insert(lenderAgentCustomizations)
+            .values({
+              userId,
+              agentType,
+              additionalPrompt,
+              isActive: isActive !== undefined ? isActive : true,
+            })
+            .returning();
+        }
+
+        res.json(result);
+      } catch (error) {
+        console.error('Error saving lender AI customization:', error);
+        res.status(500).json({ error: 'Failed to save AI customization' });
+      }
+    }
+  );
+
+  /**
+   * DELETE /api/admin/agents/customizations/:id
+   * Delete a specific lender AI customization
+   */
+  app.delete(
+    '/api/admin/agents/customizations/:id',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const customizationId = parseInt(req.params.id);
+        const userId = req.user!.id;
+
+        // Ensure the user owns this customization
+        const existing = await db
+          .select()
+          .from(lenderAgentCustomizations)
+          .where(
+            and(
+              eq(lenderAgentCustomizations.id, customizationId),
+              eq(lenderAgentCustomizations.userId, userId)
+            )
+          )
+          .then((r) => r[0]);
+
+        if (!existing) {
+          return res.status(404).json({ error: 'Customization not found' });
+        }
+
+        await db.delete(lenderAgentCustomizations).where(eq(lenderAgentCustomizations.id, customizationId));
+        res.json({ success: true });
+      } catch (error) {
+        console.error('Error deleting lender AI customization:', error);
+        res.status(500).json({ error: 'Failed to delete AI customization' });
+      }
+    }
+  );
+
   // ==================== DEFAULT PROMPTS SEEDING ====================
 
   /**
@@ -1319,6 +1549,16 @@ export function registerAgentRoutes(app: Express, deps: RouteDeps): void {
             modelName: 'gpt-4o',
             maxTokens: 2048,
             temperature: 0.7
+          },
+          {
+            agentType: 'email_doc_classifier',
+            name: 'Email Document Classifier',
+            systemPrompt: DEFAULT_AGENT_PROMPTS.EMAIL_DOC_CLASSIFIER,
+            toolDefinitions: ['document_classification'],
+            modelProvider: 'openai',
+            modelName: 'gpt-4o',
+            maxTokens: 1024,
+            temperature: 0.2
           }
         ];
 
@@ -1498,6 +1738,110 @@ export function registerAgentRoutes(app: Express, deps: RouteDeps): void {
       } catch (error) {
         console.error('Error reordering pipeline steps:', error);
         res.status(500).json({ error: 'Failed to reorder pipeline steps' });
+      }
+    }
+  );
+
+  // ==================== EMAIL DOC CHECK ORCHESTRATION ====================
+
+  /**
+   * GET /api/admin/agents/email-doc-check/settings
+   * Returns polling settings (interval, enabled, lastRun, totalClassifications)
+   */
+  app.get(
+    '/api/admin/agents/email-doc-check/settings',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const settings = await getEmailDocCheckSettings();
+        res.json(settings);
+      } catch (error) {
+        console.error('Error getting email doc check settings:', error);
+        res.status(500).json({ error: 'Failed to get settings' });
+      }
+    }
+  );
+
+  /**
+   * PATCH /api/admin/agents/email-doc-check/settings
+   * Update polling settings. Restarts polling if interval changes.
+   */
+  app.patch(
+    '/api/admin/agents/email-doc-check/settings',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const { enabled, intervalMinutes } = req.body;
+        const updates: Record<string, any> = {};
+
+        if (typeof enabled === 'boolean') updates.enabled = enabled;
+        if (typeof intervalMinutes === 'number' && intervalMinutes >= 15 && intervalMinutes <= 360) {
+          updates.intervalMinutes = intervalMinutes;
+        }
+
+        const settings = await updateEmailDocCheckSettings(updates);
+
+        // Restart polling with new settings
+        await restartEmailDocCheckPolling();
+
+        res.json(settings);
+      } catch (error) {
+        console.error('Error updating email doc check settings:', error);
+        res.status(500).json({ error: 'Failed to update settings' });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/agents/email-doc-check/trigger
+   * Manually trigger an email document check run
+   */
+  app.post(
+    '/api/admin/agents/email-doc-check/trigger',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        res.status(202).json({ message: 'Email doc check triggered' });
+
+        // Run asynchronously after responding
+        runEmailDocCheck().catch((err) =>
+          console.error('Manual email doc check error:', err)
+        );
+      } catch (error) {
+        console.error('Error triggering email doc check:', error);
+        res.status(500).json({ error: 'Failed to trigger check' });
+      }
+    }
+  );
+
+  /**
+   * GET /api/admin/agents/email-doc-check/runs
+   * Get recent classification runs (agentRuns where agentType = 'email_doc_classifier')
+   */
+  app.get(
+    '/api/admin/agents/email-doc-check/runs',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+        const offset = parseInt(req.query.offset as string) || 0;
+
+        const runs = await db
+          .select()
+          .from(agentRuns)
+          .where(eq(agentRuns.agentType, 'email_doc_classifier'))
+          .orderBy(desc(agentRuns.createdAt))
+          .limit(limit)
+          .offset(offset);
+
+        res.json(runs);
+      } catch (error) {
+        console.error('Error getting email doc check runs:', error);
+        res.status(500).json({ error: 'Failed to get runs' });
       }
     }
   );
