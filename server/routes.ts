@@ -17526,15 +17526,23 @@ Return JSON only:
   app.get('/api/projects/:dealId/review-mode', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const dealId = parseInt(req.params.dealId);
-      const [project] = await db.select({ aiReviewMode: projects.aiReviewMode }).from(projects).where(eq(projects.id, dealId));
+      const [project] = await db.select({
+        aiReviewMode: projects.aiReviewMode,
+        aiReviewIntervalMinutes: projects.aiReviewIntervalMinutes,
+      }).from(projects).where(eq(projects.id, dealId));
       if (!project) return res.status(404).json({ error: 'Deal not found' });
 
       const lenderId = req.user!.id;
-      const [lenderConfig] = await db.select({ aiReviewMode: lenderReviewConfig.aiReviewMode }).from(lenderReviewConfig).where(eq(lenderReviewConfig.userId, lenderId));
+      const [lenderConfig] = await db.select({
+        aiReviewMode: lenderReviewConfig.aiReviewMode,
+        timedReviewIntervalMinutes: lenderReviewConfig.timedReviewIntervalMinutes,
+      }).from(lenderReviewConfig).where(eq(lenderReviewConfig.userId, lenderId));
 
       res.json({
         dealReviewMode: project.aiReviewMode || null,
+        dealIntervalMinutes: project.aiReviewIntervalMinutes || null,
         lenderDefault: lenderConfig?.aiReviewMode || 'manual',
+        lenderDefaultInterval: lenderConfig?.timedReviewIntervalMinutes || 60,
         effectiveMode: project.aiReviewMode || lenderConfig?.aiReviewMode || 'manual',
       });
     } catch (error) {
@@ -17546,11 +17554,14 @@ Return JSON only:
   app.put('/api/projects/:dealId/review-mode', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const dealId = parseInt(req.params.dealId);
-      const { aiReviewMode } = req.body;
+      const { aiReviewMode, intervalMinutes } = req.body;
       if (aiReviewMode && !['automatic', 'timed', 'manual'].includes(aiReviewMode)) {
         return res.status(400).json({ error: 'Invalid review mode' });
       }
-      await db.update(projects).set({ aiReviewMode: aiReviewMode || null }).where(eq(projects.id, dealId));
+      await db.update(projects).set({
+        aiReviewMode: aiReviewMode || null,
+        aiReviewIntervalMinutes: intervalMinutes != null ? parseInt(intervalMinutes) : null,
+      }).where(eq(projects.id, dealId));
       res.json({ success: true });
     } catch (error) {
       console.error('Error updating deal review mode:', error);

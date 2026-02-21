@@ -421,7 +421,13 @@ function getCategoryIcon(category: string | null) {
 
 function DealReviewModeControl({ dealId }: { dealId: number }) {
   const { toast } = useToast();
-  const reviewModeQuery = useQuery<{ dealReviewMode: string | null; lenderDefault: string; effectiveMode: string }>({
+  const reviewModeQuery = useQuery<{
+    dealReviewMode: string | null;
+    dealIntervalMinutes: number | null;
+    lenderDefault: string;
+    lenderDefaultInterval: number;
+    effectiveMode: string;
+  }>({
     queryKey: ['/api/deals', dealId, 'review-mode'],
     queryFn: async () => {
       const res = await fetch(`/api/deals/${dealId}/review-mode`);
@@ -431,8 +437,8 @@ function DealReviewModeControl({ dealId }: { dealId: number }) {
   });
 
   const updateReviewMode = useMutation({
-    mutationFn: async (mode: string | null) => {
-      const res = await apiRequest('PUT', `/api/deals/${dealId}/review-mode`, { aiReviewMode: mode });
+    mutationFn: async (payload: { aiReviewMode: string | null; intervalMinutes?: number | null }) => {
+      const res = await apiRequest('PUT', `/api/deals/${dealId}/review-mode`, payload);
       return res.json();
     },
     onSuccess: () => {
@@ -445,6 +451,7 @@ function DealReviewModeControl({ dealId }: { dealId: number }) {
   });
 
   const currentMode = reviewModeQuery.data?.dealReviewMode ?? null;
+  const currentInterval = reviewModeQuery.data?.dealIntervalMinutes ?? null;
 
   const modes = [
     { value: null, label: "Use Lender Default", icon: <RefreshCw className="h-4 w-4" />, desc: "Falls back to your global setting" },
@@ -452,6 +459,19 @@ function DealReviewModeControl({ dealId }: { dealId: number }) {
     { value: "timed", label: "Timed / Batch", icon: <Clock className="h-4 w-4" />, desc: "Review on a schedule" },
     { value: "manual", label: "Manual", icon: <Hand className="h-4 w-4" />, desc: "Only when you trigger it" },
   ];
+
+  const frequencyOptions = [
+    { value: 15, label: "Every 15 min" },
+    { value: 30, label: "Every 30 min" },
+    { value: 60, label: "Every 1 hour" },
+    { value: 120, label: "Every 2 hours" },
+    { value: 240, label: "Every 4 hours" },
+    { value: 480, label: "Every 8 hours" },
+    { value: 720, label: "Every 12 hours" },
+    { value: 1440, label: "Every 24 hours" },
+  ];
+
+  const showFrequency = currentMode === "automatic" || currentMode === "timed";
 
   return (
     <div className="mt-4 pt-4 border-t" data-testid="deal-review-mode-control">
@@ -468,7 +488,7 @@ function DealReviewModeControl({ dealId }: { dealId: number }) {
           return (
             <button
               key={mode.value || 'default'}
-              onClick={() => updateReviewMode.mutate(mode.value)}
+              onClick={() => updateReviewMode.mutate({ aiReviewMode: mode.value, intervalMinutes: mode.value ? currentInterval : null })}
               disabled={updateReviewMode.isPending}
               className={`flex flex-col items-center gap-1 p-3 rounded-lg border text-xs transition-colors ${
                 isSelected
@@ -484,6 +504,47 @@ function DealReviewModeControl({ dealId }: { dealId: number }) {
           );
         })}
       </div>
+
+      {showFrequency && (
+        <div className="mt-3 p-3 bg-muted/30 rounded-lg border" data-testid="review-frequency-config">
+          <div className="flex items-center gap-2 mb-2">
+            <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-xs font-medium">
+              {currentMode === "automatic" ? "Review Frequency" : "Batch Review Schedule"}
+            </span>
+          </div>
+          <p className="text-[11px] text-muted-foreground mb-2">
+            {currentMode === "automatic"
+              ? "How often should the AI check for new documents to review?"
+              : "How often should the AI run batch reviews on pending documents?"}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {frequencyOptions.map((opt) => {
+              const isActive = currentInterval === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => updateReviewMode.mutate({ aiReviewMode: currentMode, intervalMinutes: opt.value })}
+                  disabled={updateReviewMode.isPending}
+                  className={`px-2.5 py-1.5 rounded-md border text-xs font-medium transition-colors ${
+                    isActive
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border hover:border-muted-foreground/30 text-muted-foreground hover:text-foreground'
+                  }`}
+                  data-testid={`button-frequency-${opt.value}`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+          {!currentInterval && (
+            <p className="text-[10px] text-amber-600 mt-2">
+              Select a frequency to activate {currentMode === "automatic" ? "automatic" : "scheduled"} reviews for this deal
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
