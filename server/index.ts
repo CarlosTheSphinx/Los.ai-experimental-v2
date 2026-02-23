@@ -8,6 +8,7 @@ import { apiLimiter, authLimiter, pricingLimiter, uploadLimiter } from "./middle
 import { validateConfig } from "./utils/validateConfig";
 import { seedDefaultAgentConfigs } from "./routes/agents";
 import { db } from "./db";
+import { seedSuperAdmins } from "./seedAdmins";
 const app = express();
 app.set('trust proxy', 1);
 const httpServer = createServer(app);
@@ -156,6 +157,8 @@ app.use((req, res, next) => {
     const { setupVite } = await import("./vite");
     await setupVite(httpServer, app);
   }
+
+  await seedSuperAdmins();
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
   // Other ports are firewalled. Default to 5000 if not specified.
