@@ -71,6 +71,7 @@ import {
   Zap,
   FileSearch,
   Hand,
+  FolderOpen,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -274,6 +275,8 @@ interface ProjectDetailResponse {
     borrowerPortalEnabled: boolean;
     brokerPortalToken: string | null;
     brokerPortalEnabled: boolean;
+    googleDriveFolderId: string | null;
+    googleDriveFolderUrl: string | null;
   };
   stages: ProjectStage[];
   tasks: ProjectTask[];
@@ -2846,6 +2849,21 @@ export default function AdminDealDetail() {
                     {driveSyncing ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <CloudUpload className="h-5 w-5 mr-2" />}
                     {driveSyncing ? 'Syncing...' : 'Sync all Approved Documents to Drive'}
                   </Button>
+                  {projectDetailData?.project?.googleDriveFolderId && (
+                    <Button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const folderUrl = projectDetailData.project.googleDriveFolderUrl || `https://drive.google.com/drive/folders/${projectDetailData.project.googleDriveFolderId}`;
+                        window.open(folderUrl, '_blank');
+                      }}
+                      variant="outline"
+                      className="text-base px-5 py-3 h-auto font-semibold border-green-300 text-green-700 hover:bg-green-50 dark:border-green-700 dark:text-green-400 dark:hover:bg-green-900/20"
+                      data-testid="button-open-drive-folder"
+                    >
+                      <FolderOpen className="h-5 w-5 mr-2" />
+                      Open Drive Folder
+                    </Button>
+                  )}
                   <Button
                     onClick={(e) => { e.stopPropagation(); triggerPipeline.mutate(); }}
                     disabled={pipelineRunning}
