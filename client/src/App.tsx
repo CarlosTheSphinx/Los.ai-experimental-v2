@@ -287,6 +287,14 @@ function AppContent() {
   // The "/" route must fall through to MainRoutes for authenticated users (their dashboard)
   const isPublicMarketingPage = !isLoading && !isAuthenticated && (isHomePage || isPublicPricingPage || isPublicUseCasesPage || isPublicContactPage);
 
+  if (isResetPasswordPage) {
+    return (
+      <Switch>
+        <Route path="/reset-password/:token" component={ResetPasswordPage} />
+      </Switch>
+    );
+  }
+
   if (isSignPage) {
     return (
       <Switch>
@@ -333,7 +341,7 @@ function AppContent() {
         <Route path="/login" component={() => <AuthRoute component={LoginPage} />} />
         <Route path="/register" component={() => <AuthRoute component={RegisterPage} />} />
         <Route path="/forgot-password" component={() => <AuthRoute component={ForgotPasswordPage} />} />
-        <Route path="/reset-password/:token" component={() => <AuthRoute component={ResetPasswordPage} />} />
+        <Route path="/reset-password/:token" component={ResetPasswordPage} />
         <Route path="/accept-invite/:token" component={() => <AuthRoute component={AcceptInvitePage} />} />
       </Switch>
     );

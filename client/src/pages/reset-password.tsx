@@ -24,7 +24,8 @@ type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>;
 export default function ResetPasswordPage() {
   const [, setLocation] = useLocation();
   const [, params] = useRoute('/reset-password/:token');
-  const token = params?.token;
+  const queryToken = new URLSearchParams(window.location.search).get('token');
+  const token = params?.token || queryToken;
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [resetComplete, setResetComplete] = useState(false);

@@ -249,7 +249,7 @@ export async function registerRoutes(
       });
       
       const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
-      const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
+      const resetUrl = `${baseUrl}/reset-password/${resetToken}`;
       
       await sendPasswordResetEmail(user.email, user.fullName || 'User', resetUrl);
       
@@ -263,13 +263,14 @@ export async function registerRoutes(
   // Reset password
   app.post('/api/auth/reset-password', async (req: Request, res: Response) => {
     try {
-      const { token, password } = req.body;
+      const { token, password, newPassword } = req.body;
+      const pwd = newPassword || password;
       
-      if (!token || !password) {
+      if (!token || !pwd) {
         return res.status(400).json({ error: 'Token and password are required' });
       }
       
-      if (password.length < 8) {
+      if (pwd.length < 8) {
         return res.status(400).json({ error: 'Password must be at least 8 characters' });
       }
       
@@ -279,7 +280,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Invalid or expired reset token' });
       }
       
-      const passwordHash = await hashPassword(password);
+      const passwordHash = await hashPassword(pwd);
       
       await storage.updateUser(user.id, {
         passwordHash,
