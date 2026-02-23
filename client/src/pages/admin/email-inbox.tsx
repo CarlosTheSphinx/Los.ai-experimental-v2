@@ -130,6 +130,7 @@ export default function EmailInboxPage() {
       return res.json();
     },
     enabled: !!accountData?.account,
+    refetchInterval: 30000,
   });
 
   const { data: threadDetail, isLoading: threadDetailLoading } = useQuery<{

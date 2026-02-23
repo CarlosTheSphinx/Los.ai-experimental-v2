@@ -223,7 +223,8 @@ export default function Projects() {
       const res = await fetch('/api/deals', { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to fetch deals');
       return res.json();
-    }
+    },
+    refetchInterval: 15000,
   });
 
   const projects = data?.projects ?? [];

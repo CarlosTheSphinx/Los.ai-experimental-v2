@@ -119,6 +119,7 @@ function TaskBoard() {
 
   const { data: taskBoard, isLoading: tasksLoading } = useQuery<TaskBoardResponse>({
     queryKey: [taskBoardUrl],
+    refetchInterval: 15000,
   });
 
   const completeMutation = useMutation({
@@ -594,6 +595,7 @@ function TaskRow({ task, onComplete, onEdit, priorityColor, isCompleting, showDe
 export default function AdminDashboard() {
   const { data, isLoading } = useQuery<{ stats: DashboardStats; recentActivity: AdminActivityItem[] }>({
     queryKey: ["/api/admin/dashboard"],
+    refetchInterval: 15000,
   });
 
   const formatCurrency = (value: number) => {

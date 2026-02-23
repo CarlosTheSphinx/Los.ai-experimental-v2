@@ -188,6 +188,7 @@ export function BorrowerDashboard() {
 
   const { data, isLoading } = useQuery<DashboardData>({
     queryKey: ['/api/deals'],
+    refetchInterval: 15000,
   });
 
   const { data: onboardingStatus } = useQuery({

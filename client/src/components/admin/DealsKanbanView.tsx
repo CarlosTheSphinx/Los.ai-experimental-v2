@@ -291,6 +291,7 @@ export default function DealsKanbanView() {
 
   const { data: pipelineData, isLoading } = useQuery<PipelineData>({
     queryKey: ["/api/admin/pipeline"],
+    refetchInterval: 15000,
   });
 
   const sensors = useSensors(
