@@ -3645,3 +3645,43 @@ export const lenderReviewConfig = pgTable("lender_review_config", {
 export const insertLenderReviewConfigSchema = createInsertSchema(lenderReviewConfig).omit({ id: true, createdAt: true, updatedAt: true });
 export type LenderReviewConfig = typeof lenderReviewConfig.$inferSelect;
 export type InsertLenderReviewConfig = z.infer<typeof insertLenderReviewConfigSchema>;
+
+// ==================== TEAM CHAT ====================
+
+export const teamChats = pgTable("team_chats", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }),
+  isGroup: boolean("is_group").default(false).notNull(),
+  createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
+  tenantId: integer("tenant_id"),
+  lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertTeamChatSchema = createInsertSchema(teamChats).omit({ id: true, createdAt: true, lastMessageAt: true });
+export type TeamChat = typeof teamChats.$inferSelect;
+export type InsertTeamChat = z.infer<typeof insertTeamChatSchema>;
+
+export const teamChatParticipants = pgTable("team_chat_participants", {
+  id: serial("id").primaryKey(),
+  chatId: integer("chat_id").references(() => teamChats.id, { onDelete: "cascade" }).notNull(),
+  userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  lastReadAt: timestamp("last_read_at").default(new Date("1970-01-01")).notNull(),
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+});
+
+export const insertTeamChatParticipantSchema = createInsertSchema(teamChatParticipants).omit({ id: true, joinedAt: true });
+export type TeamChatParticipant = typeof teamChatParticipants.$inferSelect;
+export type InsertTeamChatParticipant = z.infer<typeof insertTeamChatParticipantSchema>;
+
+export const teamChatMessages = pgTable("team_chat_messages", {
+  id: serial("id").primaryKey(),
+  chatId: integer("chat_id").references(() => teamChats.id, { onDelete: "cascade" }).notNull(),
+  senderId: integer("sender_id").references(() => users.id, { onDelete: "set null" }),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertTeamChatMessageSchema = createInsertSchema(teamChatMessages).omit({ id: true, createdAt: true });
+export type TeamChatMessage = typeof teamChatMessages.$inferSelect;
+export type InsertTeamChatMessage = z.infer<typeof insertTeamChatMessageSchema>;

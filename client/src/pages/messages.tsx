@@ -25,6 +25,7 @@ import {
   Link2,
   Paperclip,
   Inbox,
+  Users,
   Save,
   Trash2,
   Tags,
@@ -81,6 +82,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 
 import { MERGE_TAGS, type MessageTemplate } from "@shared/schema";
+import TeamChat, { TeamChatDetail } from "@/components/TeamChat";
 
 const QUICK_REPLIES = [
   "Thanks, received!",
@@ -108,7 +110,8 @@ export default function MessagesPage() {
   const [initialMessage, setInitialMessage] = useState("");
   const [starredThreadIds, setStarredThreadIds] = useState<Set<number>>(new Set());
   const [isTemplatePopoverOpen, setIsTemplatePopoverOpen] = useState(false);
-  const [inboxTab, setInboxTab] = useState<'messages' | 'email' | 'digests'>(urlTab === 'email' ? 'email' : 'messages');
+  const [inboxTab, setInboxTab] = useState<'messages' | 'email' | 'digests' | 'team'>(urlTab === 'email' ? 'email' : urlTab === 'team' ? 'team' : 'messages');
+  const [activeTeamChatId, setActiveTeamChatId] = useState<number | null>(null);
   const [activeEmailThreadId, setActiveEmailThreadId] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
@@ -265,6 +268,12 @@ export default function MessagesPage() {
   const { data: dealsListData } = useQuery<{ quotes: any[] }>({
     queryKey: ["/api/quotes"],
     enabled: !!isAdmin && inboxTab === 'email',
+  });
+
+  const { data: teamChatUnreadData } = useQuery<{ unreadCount: number }>({
+    queryKey: ["/api/team-chats/unread-count"],
+    enabled: !!isAdmin,
+    refetchInterval: 15000,
   });
 
   const linkDealMutation = useMutation({
@@ -631,6 +640,19 @@ export default function MessagesPage() {
                   )}
                 </Button>
                 <Button
+                  variant={inboxTab === 'team' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="flex-1 text-xs"
+                  onClick={() => { setInboxTab('team'); setActiveTeamChatId(null); }}
+                  data-testid="tab-team"
+                >
+                  <Users className="h-3 w-3 mr-1" />
+                  Team
+                  {(teamChatUnreadData?.unreadCount || 0) > 0 && (
+                    <Badge variant={inboxTab === 'team' ? 'secondary' : 'outline'} className="ml-1 h-4 min-w-[16px] px-1 text-[10px] leading-none">{teamChatUnreadData?.unreadCount}</Badge>
+                  )}
+                </Button>
+                <Button
                   variant={inboxTab === 'digests' ? 'default' : 'ghost'}
                   size="sm"
                   className="flex-1 text-xs"
@@ -766,6 +788,8 @@ export default function MessagesPage() {
                 </div>
               )}
             </>
+            ) : inboxTab === 'team' && isAdmin ? (
+              <TeamChat activeChatId={activeTeamChatId} onSelectChat={setActiveTeamChatId} />
             ) : inboxTab === 'digests' && isAdmin ? (
               <div className="p-3 space-y-3">
                 <div className="flex items-center justify-between gap-2">
@@ -1044,7 +1068,9 @@ export default function MessagesPage() {
         </Card>
 
         <Card className="flex-1 flex flex-col">
-          {inboxTab === 'email' && activeEmailThreadId && emailThreadDetail ? (
+          {inboxTab === 'team' ? (
+            <TeamChatDetail activeChatId={activeTeamChatId} />
+          ) : inboxTab === 'email' && activeEmailThreadId && emailThreadDetail ? (
             <>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between gap-4 flex-wrap">

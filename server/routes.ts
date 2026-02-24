@@ -44,6 +44,7 @@ import { randomUUID } from 'crypto';
 import { encryptToken } from './utils/encryption';
 import { registerAuthRoutes } from './routes/auth';
 import { registerMessagingRoutes } from './routes/messaging';
+import { registerTeamChatRoutes } from './routes/team-chat';
 import { registerPortalRoutes } from './routes/portal';
 import { registerAdminProgramsRoutes } from './routes/admin-programs';
 
@@ -3785,6 +3786,7 @@ export async function registerRoutes(
 
   // ==================== MESSAGING ROUTES ====================
   registerMessagingRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
+  registerTeamChatRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
 
   // ==================== AI ASSISTANT ROUTES ====================
   registerAiAssistantRoutes(app);
