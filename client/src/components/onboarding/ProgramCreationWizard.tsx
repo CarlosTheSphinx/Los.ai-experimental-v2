@@ -346,13 +346,18 @@ const dscrDefaultRules: RuleEntry[] = [
 export function ProgramCreationWizard({
   onComplete,
   onCancel,
+  editProgram,
 }: {
   onComplete: () => void;
   onCancel?: () => void;
+  editProgram?: { id: number } | null;
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [wizardStep, setWizardStep] = useState<WizardStep>('credit-policy');
+  const [editDataLoaded, setEditDataLoaded] = useState(false);
+
+  const isEditMode = !!editProgram;
 
   // Credit policy
   const [selectedCreditPolicyId, setSelectedCreditPolicyId] = useState<number | null>(null);
@@ -385,6 +390,84 @@ export function ProgramCreationWizard({
   // Review rules — pre-populated
   const [reviewRules, setReviewRules] = useState<RuleEntry[]>([...dscrDefaultRules]);
 
+  const { data: editProgramData } = useQuery<{
+    program: any;
+    documents: any[];
+    tasks: any[];
+    workflowSteps: any[];
+  }>({
+    queryKey: ['/api/admin/programs', editProgram?.id],
+    enabled: !!editProgram?.id,
+  });
+
+  const { data: editReviewRulesData } = useQuery<any[]>({
+    queryKey: [`/api/admin/programs/${editProgram?.id}/review-rules`],
+    enabled: !!editProgram?.id,
+  });
+
+  useEffect(() => {
+    if (!editProgram?.id || editDataLoaded || !editProgramData?.program) return;
+    const p = editProgramData.program;
+    setProgramName(p.name || '');
+    setProgramDescription(p.description || '');
+    setLoanType(p.loanType || 'dscr');
+    setMinLoanAmount(p.minLoanAmount != null ? String(p.minLoanAmount) : '');
+    setMaxLoanAmount(p.maxLoanAmount != null ? String(p.maxLoanAmount) : '');
+    setMinLtv(p.minLtv != null ? String(p.minLtv) : '');
+    setMaxLtv(p.maxLtv != null ? String(p.maxLtv) : '');
+    setMinInterestRate(p.minInterestRate != null ? String(p.minInterestRate) : '');
+    setMaxInterestRate(p.maxInterestRate != null ? String(p.maxInterestRate) : '');
+    setTermOptions(p.termOptions || '');
+    setEligiblePropertyTypes(p.eligiblePropertyTypes || []);
+    setQuoteFormFields((p.quoteFormFields as QuoteFormField[]) || getDefaultQuoteFields(p.loanType || 'dscr'));
+    setSelectedCreditPolicyId(p.creditPolicyId || null);
+
+    if (editProgramData.workflowSteps?.length > 0) {
+      setStages(editProgramData.workflowSteps.map((s: any) => ({
+        stepName: s.definition?.name || '',
+        isRequired: s.isRequired !== false,
+      })));
+    } else {
+      setStages([]);
+    }
+
+    if (editProgramData.documents?.length > 0) {
+      setDocuments(editProgramData.documents.map((d: any) => ({
+        documentName: d.documentName || '',
+        documentCategory: d.documentCategory || 'other',
+        isRequired: d.isRequired !== false,
+        stepIndex: d.stepId != null ? editProgramData.workflowSteps.findIndex((s: any) => s.id === d.stepId) : null,
+      })));
+    } else {
+      setDocuments([]);
+    }
+
+    if (editProgramData.tasks?.length > 0) {
+      setTasks(editProgramData.tasks.map((t: any) => ({
+        taskName: t.taskName || '',
+        taskCategory: t.taskCategory || 'other',
+        priority: t.priority || 'medium',
+        assignToRole: t.assignToRole || 'admin',
+        stepIndex: t.stepId != null ? editProgramData.workflowSteps.findIndex((s: any) => s.id === t.stepId) : null,
+      })));
+    } else {
+      setTasks([]);
+    }
+
+    if (editReviewRulesData && editReviewRulesData.length > 0) {
+      setReviewRules(editReviewRulesData.map((r: any) => ({
+        ruleTitle: r.ruleTitle || '',
+        documentType: r.documentType || 'General',
+        severity: r.severity || 'flag',
+        stepIndex: null,
+      })));
+    } else if (editProgram?.id) {
+      setReviewRules([]);
+    }
+
+    setEditDataLoaded(true);
+  }, [editProgram?.id, editProgramData, editReviewRulesData, editDataLoaded]);
+
   // Fetch credit policies
   const { data: creditPoliciesData } = useQuery<{ policies: any[] }>({
     queryKey: ['/api/admin/credit-policies'],
@@ -395,25 +478,28 @@ export function ProgramCreationWizard({
   });
   const teamMembers = teamData?.teamMembers || [];
 
-  // Create program mutation
   const createProgramMutation = useMutation({
     mutationFn: async (payload: any) => {
+      if (isEditMode && editProgram?.id) {
+        const res = await apiRequest('PUT', `/api/admin/programs/${editProgram.id}`, payload);
+        return res.json();
+      }
       const res = await apiRequest('POST', '/api/admin/programs', payload);
       return res.json();
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/programs'] });
       queryClient.invalidateQueries({ queryKey: ['/api/programs-with-pricing'] });
-      // If we have review rules, save them
-      if (reviewRules.length > 0 && data.program?.id) {
-        saveReviewRules(data.program.id);
+      const programId = isEditMode ? editProgram?.id : data.program?.id;
+      if (reviewRules.length > 0 && programId) {
+        saveReviewRules(programId);
       }
-      toast({ title: 'Program created successfully!' });
+      toast({ title: isEditMode ? 'Program updated successfully!' : 'Program created successfully!' });
       onComplete();
     },
     onError: (error: any) => {
       toast({
-        title: 'Failed to create program',
+        title: isEditMode ? 'Failed to update program' : 'Failed to create program',
         description: error?.message || 'Please check the form and try again.',
         variant: 'destructive',
       });
@@ -515,8 +601,8 @@ export function ProgramCreationWizard({
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <div>
-              <h2 className="text-lg font-semibold leading-tight">Add New Loan Program</h2>
-              <p className="text-xs text-muted-foreground">Configure a new loan program for your borrowers</p>
+              <h2 className="text-lg font-semibold leading-tight">{isEditMode ? 'Edit Loan Program' : 'Add New Loan Program'}</h2>
+              <p className="text-xs text-muted-foreground">{isEditMode ? 'Update your loan program configuration' : 'Configure a new loan program for your borrowers'}</p>
             </div>
           </div>
         </div>
@@ -650,12 +736,12 @@ export function ProgramCreationWizard({
             {createProgramMutation.isPending ? (
               <>
                 <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                Creating...
+                {isEditMode ? 'Updating...' : 'Creating...'}
               </>
             ) : (
               <>
                 <CheckCircle2 className="h-4 w-4 mr-1" />
-                Create Program
+                {isEditMode ? 'Update Program' : 'Create Program'}
               </>
             )}
           </Button>

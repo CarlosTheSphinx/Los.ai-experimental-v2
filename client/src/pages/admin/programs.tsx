@@ -302,6 +302,7 @@ export default function AdminPrograms() {
   const { toast } = useToast();
   const [selectedProgram, setSelectedProgram] = useState<LoanProgram | null>(null);
   const [showWizard, setShowWizard] = useState(false);
+  const [editWizardProgram, setEditWizardProgram] = useState<{ id: number } | null>(null);
   const [showEditProgram, setShowEditProgram] = useState(false);
   const [showAddDocument, setShowAddDocument] = useState(false);
   const [editingDocument, setEditingDocument] = useState<ProgramDocument | null>(null);
@@ -1085,13 +1086,15 @@ export default function AdminPrograms() {
       </div>
 
       <div className="space-y-4">
-          {showWizard ? (
+          {(showWizard || editWizardProgram) ? (
             <ProgramCreationWizard
               onComplete={() => {
                 setShowWizard(false);
+                setEditWizardProgram(null);
                 queryClient.invalidateQueries({ queryKey: ['/api/admin/programs'] });
               }}
-              onCancel={() => setShowWizard(false)}
+              onCancel={() => { setShowWizard(false); setEditWizardProgram(null); }}
+              editProgram={editWizardProgram}
             />
           ) : (
           <>
@@ -1202,12 +1205,12 @@ export default function AdminPrograms() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setWorkflowEditorProgram(program)}
-                          data-testid={`button-configure-workflow-${program.id}`}
+                          onClick={() => setEditWizardProgram({ id: program.id })}
+                          data-testid={`button-edit-workflow-${program.id}`}
                           className="gap-1"
                         >
                           <Workflow className="h-4 w-4" />
-                          Configure Workflow
+                          Edit Workflow
                         </Button>
                         <Button
                           variant={program.isTemplate ? "default" : "outline"}
@@ -1236,14 +1239,6 @@ export default function AdminPrograms() {
                           onCheckedChange={() => toggleProgram.mutate(program.id)}
                           data-testid={`switch-program-${program.id}`}
                         />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleEditProgram(program)}
-                          data-testid={`button-edit-program-${program.id}`}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
