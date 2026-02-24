@@ -58,6 +58,7 @@ import ProcessorDashboard from "@/pages/admin/processor-dashboard";
 import AIAgentsPage from "@/pages/admin/ai-agents";
 
 import SuperAdminDashboard from "@/pages/admin/super-admin-dashboard";
+import TenantDetailPage from "@/pages/admin/tenant-detail";
 import AdminCreditPolicies from "@/pages/admin/credit-policies";
 import EmailInboxPage from "@/pages/admin/email-inbox";
 import IntegrationsPage from "@/pages/admin/integrations";
@@ -226,6 +227,7 @@ function MainRoutes() {
 
           {/* Admin Routes */}
           <Route path="/admin/platform" component={() => <SuperAdminProtectedRoute component={SuperAdminDashboard} />} />
+          <Route path="/admin/platform/tenants/:tenantId" component={() => <SuperAdminProtectedRoute component={TenantDetailPage} />} />
           <Route path="/admin" component={() => <AdminProtectedRoute component={AdminDashboard} />} />
           <Route path="/admin/dashboard" component={() => <AdminProtectedRoute component={AdminDashboard} />} />
           <Route path="/admin/deals" component={() => <AdminProtectedRoute component={AdminDashboard} />} />

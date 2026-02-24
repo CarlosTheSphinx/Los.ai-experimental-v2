@@ -3,7 +3,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, documentReviewResults, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema, projectActivity, projectTasks, platformSettings, dealMemoryEntries, dealNotes, insertDealMemoryEntrySchema, insertDealNoteSchema, notifications, dealStatuses, insertDealStatusSchema, insertMessageTemplateSchema, dealThirdParties } from "@shared/schema";
+import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, documentReviewResults, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema, projectActivity, projectTasks, platformSettings, dealMemoryEntries, dealNotes, insertDealMemoryEntrySchema, insertDealNoteSchema, notifications, dealStatuses, insertDealStatusSchema, insertMessageTemplateSchema, dealThirdParties, systemSettings } from "@shared/schema";
 import { priceQuote, validateRuleset, SAMPLE_RTL_RULESET, SAMPLE_DSCR_RULESET, type PricingInputs, analyzeGuidelines, refineProposal } from "./pricing";
 import { getDocumentTemplatesForLoanType } from "./document-templates";
 import { eq, desc, asc, inArray, and, gt, gte, lte, sql, isNull, or } from "drizzle-orm";
@@ -26,6 +26,7 @@ import {
   clearAuthCookie,
   type AuthRequest 
 } from './auth';
+import { getTenantId } from './utils/tenant';
 import {
   runDigestJob,
   sendTestDigest,
@@ -1111,6 +1112,12 @@ export async function registerRoutes(
       const borrowerName = `${quote.customerFirstName || ''} ${quote.customerLastName || ''}`.trim() || user.fullName || user.email;
       const borrowerEmail = user.email || '';
 
+      let quoteTenantId: number | null = null;
+      if (quote.programId) {
+        const [prog] = await db.select({ createdBy: loanPrograms.createdBy }).from(loanPrograms).where(eq(loanPrograms.id, quote.programId)).limit(1);
+        if (prog?.createdBy) quoteTenantId = prog.createdBy;
+      }
+
       const { project, projectNumber: pn } = await db.transaction(async (tx) => {
         const [proj] = await tx.insert(projects).values({
           userId,
@@ -1134,6 +1141,7 @@ export async function registerRoutes(
           borrowerPortalToken: borrowerToken,
           borrowerPortalEnabled: true,
           quoteId: quoteId,
+          tenantId: quoteTenantId,
           notes: `Accepted from borrower quote #${quoteId}`,
           metadata: { applicationData: loanData },
         }).returning();
@@ -2882,6 +2890,7 @@ export async function registerRoutes(
       const projectNumber = await storage.generateProjectNumber();
       const borrowerToken = uuidv4().replace(/-/g, '') + uuidv4().replace(/-/g, '');
       
+      const userTenantId = await getTenantId(req.user!);
       const project = await storage.createProject({
         userId,
         projectName,
@@ -2904,6 +2913,7 @@ export async function registerRoutes(
         borrowerPortalToken: borrowerToken,
         borrowerPortalEnabled: true,
         notes,
+        tenantId: userTenantId,
       });
       
       if (propertyAddress) {
@@ -4144,7 +4154,8 @@ export async function registerRoutes(
   // Admin Dashboard Stats
   app.get('/api/admin/dashboard', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
-      const stats = await storage.getAdminDashboardStats();
+      const tenantId = await getTenantId(req.user!);
+      const stats = await storage.getAdminDashboardStats(tenantId);
       const recentActivity = await storage.getRecentAdminActivity(10);
       
       res.json({ stats, recentActivity });
@@ -4839,7 +4850,8 @@ export async function registerRoutes(
   // Admin - Pipeline grouped by program (for Kanban + pipeline summary views)
   app.get('/api/admin/pipeline', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
-      const allProjects = await storage.getAllProjects({ status: 'active' });
+      const tenantId = await getTenantId(req.user!);
+      const allProjects = await storage.getAllProjects({ status: 'active', tenantId });
 
       const projectsWithStages = await Promise.all(allProjects.map(async (p) => {
         const stages = await storage.getStagesByProjectId(p.id);
@@ -4970,7 +4982,8 @@ export async function registerRoutes(
       const limit = Math.min(parseInt(req.query.limit as string) || 200, 500);
       const offset = parseInt(req.query.offset as string) || 0;
 
-      const projectsList = await storage.getAllProjects({ status, stage, userId });
+      const tenantId = await getTenantId(req.user!);
+      const projectsList = await storage.getAllProjects({ status, stage, userId, tenantId });
 
       // Batch-fetch all unique owner IDs to avoid N+1 queries
       const ownerIds = [...new Set(projectsList.map(p => p.userId).filter((id): id is number => id !== null && id !== undefined))];
@@ -5548,7 +5561,8 @@ export async function registerRoutes(
   // Admin - System settings
   app.get('/api/admin/settings', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
-      const settings = await storage.getAllSettings();
+      const tenantId = await getTenantId(req.user!);
+      const settings = await storage.getAllSettings(tenantId);
       res.json({ settings });
     } catch (error) {
       console.error('Admin settings error:', error);
@@ -5569,8 +5583,9 @@ export async function registerRoutes(
       if (!value) {
         return res.status(400).json({ error: 'Value is required' });
       }
-      
-      const setting = await storage.upsertSetting(key, value, description || null, req.user!.id);
+
+      const tenantId = await getTenantId(req.user!);
+      const setting = await storage.upsertSetting(key, value, description || null, req.user!.id, tenantId);
       
       await storage.createAdminActivity({
         userId: req.user!.id,
@@ -5589,7 +5604,8 @@ export async function registerRoutes(
   app.delete('/api/admin/settings/:key', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const { key } = req.params;
-      await storage.deleteSetting(key);
+      const tenantId = await getTenantId(req.user!);
+      await storage.deleteSetting(key, tenantId);
       res.json({ success: true });
     } catch (error) {
       console.error('Admin delete setting error:', error);
@@ -6238,6 +6254,7 @@ export async function registerRoutes(
         ? new Date(targetCloseDate) 
         : new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
       
+      const adminTenantId = await getTenantId(req.user!);
       const project = await storage.createProject({
         userId: req.user!.id,
         projectName: `${borrowerName} - ${propertyAddress}`,
@@ -6261,6 +6278,7 @@ export async function registerRoutes(
         borrowerPortalEnabled: true,
         quoteId: deal.id,
         notes: null,
+        tenantId: adminTenantId,
       });
       
       const { buildProjectPipelineFromProgram } = await import('./services/projectPipeline');
@@ -8213,7 +8231,14 @@ export async function registerRoutes(
     try {
       const search = req.query.search as string | undefined;
       
-      let partnersList = await db.select().from(partners).orderBy(desc(partners.createdAt));
+      const tenantId = await getTenantId(req.user!);
+      const partnerConditions = [];
+      if (tenantId != null) {
+        partnerConditions.push(eq(partners.tenantId, tenantId));
+      }
+      let partnersList = partnerConditions.length > 0
+        ? await db.select().from(partners).where(and(...partnerConditions)).orderBy(desc(partners.createdAt))
+        : await db.select().from(partners).orderBy(desc(partners.createdAt));
       
       if (search) {
         const searchLower = search.toLowerCase();
@@ -14522,6 +14547,7 @@ If the user provides specific criteria, extract as many rules as you can from th
         if (quoteUser?.phone) borrowerPhone = quoteUser.phone;
       }
 
+      const envelopeTenantId = await getTenantId(req.user!);
       const project = await storage.createProject({
         userId: quote.userId || envelope.createdBy!,
         projectName: `${borrowerName} — ${quote.propertyAddress || envelope.documentName || 'New Loan'}`,
@@ -14544,6 +14570,7 @@ If the user provides specific criteria, extract as many rules as you can from th
         borrowerPortalToken: borrowerToken,
         borrowerPortalEnabled: true,
         quoteId: quote.id,
+        tenantId: envelopeTenantId,
         notes: `Manually created from signed envelope #${envelope.id} (Quote #${quote.id})`,
         metadata: {
           pandadocEnvelopeId: envelope.id,
@@ -15908,6 +15935,7 @@ Return JSON only:
         currentStage: 1,
         programId: program.id,
         propertyAddress,
+        tenantId: program.createdBy,
       }).returning();
 
       await db.insert(activities).values({
@@ -16580,43 +16608,36 @@ Return JSON only:
         .where(eq(users.role, 'admin'));
 
       const lenderAccounts = await Promise.all(lenderAdmins.map(async (admin) => {
-        // Count team members from same company
         const teamCount = await db.select({ count: sql<number>`count(*)` })
           .from(users)
-          .where(
-            and(
-              eq(users.companyName, admin.companyName!),
-              or(
-                eq(users.role, 'admin'),
-                eq(users.role, 'staff'),
-                eq(users.role, 'processor')
-              )
-            )
-          );
+          .where(eq(users.invitedBy, admin.id));
 
-        // Count active deals for this lender
         const dealsCount = await db.select({ count: sql<number>`count(*)` })
           .from(projects)
           .where(
             and(
-              eq(projects.userId, admin.id),
+              eq(projects.tenantId, admin.id),
               eq(projects.status, 'active')
             )
           );
 
-        // Sum loan volume for this lender
         const volume = await db.select({ sum: sql<number>`COALESCE(sum(loan_amount), 0)` })
           .from(projects)
-          .where(eq(projects.userId, admin.id));
+          .where(eq(projects.tenantId, admin.id));
+
+        const programCount = await db.select({ count: sql<number>`count(*)` })
+          .from(loanPrograms)
+          .where(eq(loanPrograms.createdBy, admin.id));
 
         return {
           id: admin.id,
           companyName: admin.companyName || 'N/A',
           adminName: admin.adminName || 'N/A',
           adminEmail: admin.adminEmail,
-          teamMembersCount: teamCount[0]?.count || 0,
+          teamMembersCount: Number(teamCount[0]?.count || 0) + 1,
           activeDealsCount: dealsCount[0]?.count || 0,
           totalLoanVolume: volume[0]?.sum || 0,
+          programCount: programCount[0]?.count || 0,
           isActive: admin.isActive,
           createdAt: admin.createdAt?.toISOString() || new Date().toISOString(),
         };
@@ -16723,6 +16744,174 @@ Return JSON only:
     } catch (error) {
       console.error('Super admin settings error:', error);
       res.status(500).json({ error: 'Failed to update settings' });
+    }
+  });
+
+  // Super Admin - Get tenant detail
+  app.get('/api/super-admin/tenants/:tenantId', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const tenantId = parseInt(req.params.tenantId);
+      const [tenant] = await db.select().from(users).where(eq(users.id, tenantId)).limit(1);
+      if (!tenant || tenant.role !== 'admin') {
+        return res.status(404).json({ error: 'Tenant not found' });
+      }
+
+      const teamMembers = await db.select({
+        id: users.id,
+        email: users.email,
+        fullName: users.fullName,
+        role: users.role,
+        userType: users.userType,
+        isActive: users.isActive,
+        createdAt: users.createdAt,
+        lastLoginAt: users.lastLoginAt,
+        inviteStatus: users.inviteStatus,
+      }).from(users).where(eq(users.invitedBy, tenantId));
+
+      const tenantDeals = await db.select().from(projects)
+        .where(eq(projects.tenantId, tenantId))
+        .orderBy(desc(projects.lastUpdated));
+
+      const tenantPrograms = await db.select().from(loanPrograms)
+        .where(eq(loanPrograms.createdBy, tenantId))
+        .orderBy(desc(loanPrograms.createdAt));
+
+      const tenantSettings = await db.select().from(systemSettings)
+        .where(eq(systemSettings.tenantId, tenantId));
+
+      const dealStats = {
+        total: tenantDeals.length,
+        active: tenantDeals.filter(d => d.status === 'active').length,
+        funded: tenantDeals.filter(d => d.status === 'funded').length,
+        closed: tenantDeals.filter(d => d.status === 'closed' || d.status === 'completed').length,
+        totalVolume: tenantDeals.reduce((sum, d) => sum + (d.loanAmount || 0), 0),
+      };
+
+      res.json({
+        tenant: {
+          id: tenant.id,
+          email: tenant.email,
+          fullName: tenant.fullName,
+          companyName: tenant.companyName,
+          phone: tenant.phone,
+          isActive: tenant.isActive,
+          createdAt: tenant.createdAt,
+          lastLoginAt: tenant.lastLoginAt,
+          onboardingCompleted: tenant.onboardingCompleted,
+        },
+        teamMembers: [
+          { id: tenant.id, email: tenant.email, fullName: tenant.fullName, role: tenant.role, userType: tenant.userType, isActive: tenant.isActive, createdAt: tenant.createdAt, lastLoginAt: tenant.lastLoginAt, inviteStatus: 'owner' },
+          ...teamMembers,
+        ],
+        deals: tenantDeals.map(d => ({
+          id: d.id,
+          projectName: d.projectName,
+          loanNumber: d.loanNumber,
+          borrowerName: d.borrowerName,
+          borrowerEmail: d.borrowerEmail,
+          loanAmount: d.loanAmount,
+          status: d.status,
+          currentStage: d.currentStage,
+          createdAt: d.createdAt,
+          lastUpdated: d.lastUpdated,
+        })),
+        programs: tenantPrograms.map(p => ({
+          id: p.id,
+          name: p.name,
+          loanType: p.loanType,
+          isActive: p.isActive,
+          createdAt: p.createdAt,
+        })),
+        settings: tenantSettings,
+        dealStats,
+      });
+    } catch (error) {
+      console.error('Super admin tenant detail error:', error);
+      res.status(500).json({ error: 'Failed to load tenant details' });
+    }
+  });
+
+  // Super Admin - Update tenant account
+  app.patch('/api/super-admin/tenants/:tenantId', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const tenantId = parseInt(req.params.tenantId);
+      const { isActive } = req.body;
+
+      const [tenant] = await db.select().from(users).where(eq(users.id, tenantId)).limit(1);
+      if (!tenant || tenant.role !== 'admin') {
+        return res.status(404).json({ error: 'Tenant not found' });
+      }
+
+      const updates: any = {};
+      if (isActive !== undefined) updates.isActive = isActive;
+
+      const [updated] = await db.update(users)
+        .set(updates)
+        .where(eq(users.id, tenantId))
+        .returning();
+
+      res.json({ tenant: { id: updated.id, email: updated.email, fullName: updated.fullName, companyName: updated.companyName, isActive: updated.isActive } });
+    } catch (error) {
+      console.error('Super admin update tenant error:', error);
+      res.status(500).json({ error: 'Failed to update tenant' });
+    }
+  });
+
+  // Super Admin - Manage a tenant's user
+  app.patch('/api/super-admin/tenants/:tenantId/users/:userId', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const tenantId = parseInt(req.params.tenantId);
+      const userId = parseInt(req.params.userId);
+      const { isActive, role } = req.body;
+
+      const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      if (user.id !== tenantId && user.invitedBy !== tenantId) {
+        return res.status(403).json({ error: 'User does not belong to this tenant' });
+      }
+
+      const updates: any = {};
+      if (isActive !== undefined) updates.isActive = isActive;
+      if (role !== undefined) updates.role = role;
+
+      const [updated] = await db.update(users)
+        .set(updates)
+        .where(eq(users.id, userId))
+        .returning();
+
+      res.json({ user: { id: updated.id, email: updated.email, fullName: updated.fullName, role: updated.role, isActive: updated.isActive } });
+    } catch (error) {
+      console.error('Super admin manage tenant user error:', error);
+      res.status(500).json({ error: 'Failed to update user' });
+    }
+  });
+
+  // Super Admin - Reset a tenant user's password
+  app.post('/api/super-admin/tenants/:tenantId/reset-password', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const tenantId = parseInt(req.params.tenantId);
+      const { userId, newPassword } = req.body;
+
+      const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      if (user.id !== tenantId && user.invitedBy !== tenantId) {
+        return res.status(403).json({ error: 'User does not belong to this tenant' });
+      }
+
+      const bcrypt = await import('bcrypt');
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await db.update(users)
+        .set({ passwordHash: hashedPassword })
+        .where(eq(users.id, userId));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Super admin reset password error:', error);
+      res.status(500).json({ error: 'Failed to reset password' });
     }
   });
 

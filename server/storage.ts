@@ -387,6 +387,12 @@ export class DatabaseStorage implements IStorage {
     if (!project.loanNumber) {
       project.loanNumber = await this.generateLoanNumber(project.propertyAddress || '');
     }
+    if (!project.tenantId && project.programId) {
+      const [program] = await db.select({ createdBy: loanPrograms.createdBy }).from(loanPrograms).where(eq(loanPrograms.id, project.programId)).limit(1);
+      if (program?.createdBy) {
+        project.tenantId = program.createdBy;
+      }
+    }
     const [created] = await db.insert(projects).values(project).returning();
     return created;
   }
@@ -696,33 +702,56 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Admin methods - System Settings
-  async getAllSettings(): Promise<SystemSetting[]> {
+  async getAllSettings(tenantId?: number | null): Promise<SystemSetting[]> {
+    if (tenantId != null) {
+      return await db.select().from(systemSettings)
+        .where(or(eq(systemSettings.tenantId, tenantId), sql`${systemSettings.tenantId} IS NULL`))
+        .orderBy(asc(systemSettings.settingKey));
+    }
     return await db.select().from(systemSettings).orderBy(asc(systemSettings.settingKey));
   }
 
-  async getSettingByKey(key: string): Promise<SystemSetting | undefined> {
-    const [setting] = await db.select().from(systemSettings).where(eq(systemSettings.settingKey, key));
+  async getSettingByKey(key: string, tenantId?: number | null): Promise<SystemSetting | undefined> {
+    if (tenantId != null) {
+      const [tenantSetting] = await db.select().from(systemSettings)
+        .where(and(eq(systemSettings.settingKey, key), eq(systemSettings.tenantId, tenantId)));
+      if (tenantSetting) return tenantSetting;
+    }
+    const [setting] = await db.select().from(systemSettings)
+      .where(and(eq(systemSettings.settingKey, key), sql`${systemSettings.tenantId} IS NULL`));
     return setting;
   }
 
-  async upsertSetting(key: string, value: string, description: string | null, updatedBy: number): Promise<SystemSetting> {
-    const existing = await this.getSettingByKey(key);
+  async upsertSetting(key: string, value: string, description: string | null, updatedBy: number, tenantId?: number | null): Promise<SystemSetting> {
+    const conditions = [eq(systemSettings.settingKey, key)];
+    if (tenantId != null) {
+      conditions.push(eq(systemSettings.tenantId, tenantId));
+    } else {
+      conditions.push(sql`${systemSettings.tenantId} IS NULL`);
+    }
+    const [existing] = await db.select().from(systemSettings).where(and(...conditions));
     if (existing) {
       const [updated] = await db.update(systemSettings)
         .set({ settingValue: value, settingDescription: description, updatedBy, updatedAt: new Date() })
-        .where(eq(systemSettings.settingKey, key))
+        .where(eq(systemSettings.id, existing.id))
         .returning();
       return updated;
     } else {
       const [created] = await db.insert(systemSettings)
-        .values({ settingKey: key, settingValue: value, settingDescription: description, updatedBy })
+        .values({ settingKey: key, settingValue: value, settingDescription: description, updatedBy, tenantId: tenantId ?? null })
         .returning();
       return created;
     }
   }
 
-  async deleteSetting(key: string): Promise<void> {
-    await db.delete(systemSettings).where(eq(systemSettings.settingKey, key));
+  async deleteSetting(key: string, tenantId?: number | null): Promise<void> {
+    const conditions = [eq(systemSettings.settingKey, key)];
+    if (tenantId != null) {
+      conditions.push(eq(systemSettings.tenantId, tenantId));
+    } else {
+      conditions.push(sql`${systemSettings.tenantId} IS NULL`);
+    }
+    await db.delete(systemSettings).where(and(...conditions));
   }
 
   // Admin methods - Get all users (admin view)
@@ -745,7 +774,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Admin methods - Get all projects (across all users)
-  async getAllProjects(filters?: { status?: string; stage?: string; userId?: number }): Promise<Project[]> {
+  async getAllProjects(filters?: { status?: string; stage?: string; userId?: number; tenantId?: number | null }): Promise<Project[]> {
     const conditions = [];
     
     if (filters?.status) {
@@ -756,6 +785,9 @@ export class DatabaseStorage implements IStorage {
     }
     if (filters?.userId) {
       conditions.push(eq(projects.userId, filters.userId));
+    }
+    if (filters?.tenantId !== undefined && filters?.tenantId !== null) {
+      conditions.push(eq(projects.tenantId, filters.tenantId));
     }
     
     if (conditions.length > 0) {
@@ -843,7 +875,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Dashboard stats
-  async getAdminDashboardStats(): Promise<{
+  async getAdminDashboardStats(tenantId?: number | null): Promise<{
     totalActiveUsers: number;
     regularUsers: number;
     activeProjects: number;
@@ -853,6 +885,8 @@ export class DatabaseStorage implements IStorage {
     activePipelineValue: number;
     fundedVolume: number;
   }> {
+    const tenantFilter = tenantId != null ? eq(projects.tenantId, tenantId) : undefined;
+
     const [userStats] = await db.select({ 
       totalActive: count() 
     }).from(users).where(eq(users.isActive, true));
@@ -861,34 +895,44 @@ export class DatabaseStorage implements IStorage {
       count: count() 
     }).from(users).where(eq(users.role, 'user'));
     
+    const activeConditions = [eq(projects.status, 'active')];
+    if (tenantFilter) activeConditions.push(tenantFilter);
     const [activeProjectStats] = await db.select({ 
       count: count() 
-    }).from(projects).where(eq(projects.status, 'active'));
+    }).from(projects).where(and(...activeConditions));
     
+    const completedConditions = [eq(projects.status, 'completed')];
+    if (tenantFilter) completedConditions.push(tenantFilter);
     const [completedProjectStats] = await db.select({ 
       count: count() 
-    }).from(projects).where(eq(projects.status, 'completed'));
+    }).from(projects).where(and(...completedConditions));
     
     const [completedAgreementStats] = await db.select({ 
       count: count() 
     }).from(documents).where(eq(documents.status, 'completed'));
     
+    const taskConditions = [
+      sql`${projectTasks.status} != 'completed'`,
+      sql`${projectTasks.status} != 'not_applicable'`
+    ];
+    if (tenantId != null) {
+      taskConditions.push(sql`${projectTasks.projectId} IN (SELECT id FROM projects WHERE tenant_id = ${tenantId})`);
+    }
     const [pendingTaskStats] = await db.select({ 
       count: count() 
-    }).from(projectTasks).where(
-      and(
-        sql`${projectTasks.status} != 'completed'`,
-        sql`${projectTasks.status} != 'not_applicable'`
-      )
-    );
+    }).from(projectTasks).where(and(...taskConditions));
     
+    const pipelineConditions = [eq(projects.status, 'active')];
+    if (tenantFilter) pipelineConditions.push(tenantFilter);
     const activePipelineResult = await db.select({ 
       total: sql<number>`COALESCE(SUM(${projects.loanAmount}), 0)` 
-    }).from(projects).where(eq(projects.status, 'active'));
+    }).from(projects).where(and(...pipelineConditions));
     
+    const fundedConditions = [eq(projects.status, 'funded')];
+    if (tenantFilter) fundedConditions.push(tenantFilter);
     const fundedResult = await db.select({ 
       total: sql<number>`COALESCE(SUM(${projects.loanAmount}), 0)` 
-    }).from(projects).where(eq(projects.status, 'funded'));
+    }).from(projects).where(and(...fundedConditions));
     
     return {
       totalActiveUsers: userStats?.totalActive ?? 0,

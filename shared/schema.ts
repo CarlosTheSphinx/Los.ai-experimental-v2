@@ -74,6 +74,7 @@ export const pricingRequests = pgTable("pricing_requests", {
   requestData: jsonb("request_data").notNull(),
   responseData: jsonb("response_data"),
   status: text("status").notNull(), // 'pending', 'success', 'error'
+  tenantId: integer("tenant_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -90,6 +91,7 @@ export const partners = pgTable("partners", {
   ), // beginner, intermediate, experienced
   notes: text("notes"),
   isActive: boolean("is_active").default(true),
+  tenantId: integer("tenant_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -501,6 +503,8 @@ export const projects = pgTable("projects", {
   ),
   driveSyncError: text("drive_sync_error"),
 
+  tenantId: integer("tenant_id").references(() => users.id, { onDelete: "set null" }),
+
   aiReviewMode: varchar("ai_review_mode", { length: 20 }).default("manual"),
   aiReviewIntervalMinutes: integer("ai_review_interval_minutes"),
   aiReviewScheduledTime: varchar("ai_review_scheduled_time", { length: 10 }),
@@ -849,9 +853,10 @@ export type InsertDealTask = z.infer<typeof insertDealTaskSchema>;
 // System settings table for admin configuration
 export const systemSettings = pgTable("system_settings", {
   id: serial("id").primaryKey(),
-  settingKey: varchar("setting_key", { length: 100 }).unique().notNull(),
+  settingKey: varchar("setting_key", { length: 100 }).notNull(),
   settingValue: text("setting_value").notNull(),
   settingDescription: text("setting_description"),
+  tenantId: integer("tenant_id").references(() => users.id, { onDelete: "cascade" }),
   updatedBy: integer("updated_by").references(() => users.id),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -889,6 +894,8 @@ export const adminTasks = pgTable("admin_tasks", {
   documentId: integer("document_id").references(() => projectDocuments.id),
 
   internalNotes: text("internal_notes"),
+
+  tenantId: integer("tenant_id").references(() => users.id, { onDelete: "set null" }),
 
   createdAt: timestamp("created_at").defaultNow(),
 });
