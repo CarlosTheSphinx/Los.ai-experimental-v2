@@ -279,7 +279,18 @@ export function DealMemoryPanel({ dealId, projectId, collapsed, onToggle }: Deal
     return groups;
   };
 
-  const groupedEntries = groupEntriesByDate(entries);
+  // Filter out plain notes from timeline — keep notes with @mentions
+  const timelineEntries = entries.filter((entry) => {
+    if (entry.entryType === "note_added") {
+      // Keep note in timeline only if it has @mentions
+      const hasMentions = entry.description?.includes("@") || entry.title?.includes("@") ||
+        (entry.metadata?.mentions && Array.isArray(entry.metadata.mentions) && entry.metadata.mentions.length > 0);
+      return hasMentions;
+    }
+    return true;
+  });
+
+  const groupedEntries = groupEntriesByDate(timelineEntries);
 
   function renderHighlightedContent(content: string) {
     const parts = content.split(/(@[\w\s]+?)(?=\s|$)/g);

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from "recharts";
+import { formatPhoneNumber, getPhoneError, getEmailError } from "@/lib/validation";
 import {
   Dialog,
   DialogContent,
@@ -863,6 +864,7 @@ export default function AdminDeals({ embedded = false }: { embedded?: boolean })
                     placeholder="john@example.com"
                     data-testid="input-borrower-email"
                   />
+                  {getEmailError(newDeal.borrowerEmail) && <p className="text-xs text-destructive mt-1">{getEmailError(newDeal.borrowerEmail)}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="borrowerPhone">Phone</Label>
@@ -870,10 +872,11 @@ export default function AdminDeals({ embedded = false }: { embedded?: boolean })
                     id="borrowerPhone"
                     type="tel"
                     value={newDeal.borrowerPhone}
-                    onChange={(e) => setNewDeal({ ...newDeal, borrowerPhone: e.target.value })}
+                    onChange={(e) => setNewDeal({ ...newDeal, borrowerPhone: formatPhoneNumber(e.target.value) })}
                     placeholder="(555) 123-4567"
                     data-testid="input-borrower-phone"
                   />
+                  {getPhoneError(newDeal.borrowerPhone) && <p className="text-xs text-destructive mt-1">{getPhoneError(newDeal.borrowerPhone)}</p>}
                 </div>
               </div>
               <div className="space-y-2">

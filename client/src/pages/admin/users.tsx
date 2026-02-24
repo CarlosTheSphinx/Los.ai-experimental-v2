@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { formatPhoneNumber, getPhoneError, getEmailError } from "@/lib/validation";
 
 interface AdminUser {
   id: number;
@@ -172,6 +173,7 @@ function UsersTab() {
                   onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
                   data-testid="input-new-user-email"
                 />
+                {getEmailError(newUser.email) && <p className="text-xs text-destructive mt-1">{getEmailError(newUser.email)}</p>}
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="user-password">Password *</Label>
@@ -210,9 +212,10 @@ function UsersTab() {
                   id="user-phone"
                   placeholder="(555) 123-4567"
                   value={newUser.phone}
-                  onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })}
+                  onChange={(e) => setNewUser({ ...newUser, phone: formatPhoneNumber(e.target.value) })}
                   data-testid="input-new-user-phone"
                 />
+                {getPhoneError(newUser.phone) && <p className="text-xs text-destructive mt-1">{getPhoneError(newUser.phone)}</p>}
               </div>
             </div>
             <DialogFooter>

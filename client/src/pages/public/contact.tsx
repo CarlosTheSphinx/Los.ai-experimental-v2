@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { PublicLayout } from "@/components/PublicLayout";
+import { formatPhoneNumber, getPhoneError, getEmailError } from "@/lib/validation";
 import {
   Select,
   SelectContent,
@@ -183,6 +184,7 @@ export default function PublicContactPage() {
                         placeholder="john@example.com"
                         required
                       />
+                      {getEmailError(formData.email) && <p className="text-xs text-destructive mt-1">{getEmailError(formData.email)}</p>}
                     </div>
 
                     <div>
@@ -205,9 +207,10 @@ export default function PublicContactPage() {
                         name="phone"
                         type="tel"
                         value={formData.phone}
-                        onChange={handleChange}
+                        onChange={(e) => handleChange({ target: { name: "phone", value: formatPhoneNumber(e.target.value) } })}
                         placeholder="(555) 123-4567"
                       />
+                      {getPhoneError(formData.phone) && <p className="text-xs text-destructive mt-1">{getPhoneError(formData.phone)}</p>}
                     </div>
 
                     <div>

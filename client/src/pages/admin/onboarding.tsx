@@ -169,14 +169,19 @@ export default function AdminOnboarding() {
     },
   });
 
+  // Track if step 3 was ever visited so we can keep it mounted (preserve wizard state)
+  const [hasVisitedStep3, setHasVisitedStep3] = useState(false);
+
   const handleNext = () => {
     if (currentStep < GUIDE_STEPS.length) {
+      if (currentStep + 1 === 3) setHasVisitedStep3(true);
       setCurrentStep(currentStep + 1);
     }
   };
 
   const handleBack = () => {
     if (currentStep > 1) {
+      if (currentStep - 1 === 3) setHasVisitedStep3(true);
       setCurrentStep(currentStep - 1);
     }
   };
@@ -219,7 +224,7 @@ export default function AdminOnboarding() {
                     return (
                       <button
                         key={step.id}
-                        onClick={() => setCurrentStep(step.id)}
+                        onClick={() => { if (step.id === 3) setHasVisitedStep3(true); setCurrentStep(step.id); }}
                         className={`w-full flex items-center gap-3 p-3 rounded-md text-left transition-colors ${
                           isActive
                             ? 'bg-primary/10 text-primary font-medium'
@@ -265,15 +270,17 @@ export default function AdminOnboarding() {
                   onBack={handleBack}
                 />
               )}
-              {currentStep === 3 && (
-                <StepProgramsWorkflow
-                  hasPrograms={hasPrograms}
-                  programCount={programsData?.programs?.length || 0}
-                  isLoading={programsLoading}
-                  onNext={handleNext}
-                  onBack={handleBack}
-                  onNavigate={setLocation}
-                />
+              {hasVisitedStep3 && (
+                <div style={{ display: currentStep === 3 ? 'block' : 'none' }}>
+                  <StepProgramsWorkflow
+                    hasPrograms={hasPrograms}
+                    programCount={programsData?.programs?.length || 0}
+                    isLoading={programsLoading}
+                    onNext={handleNext}
+                    onBack={handleBack}
+                    onNavigate={setLocation}
+                  />
+                </div>
               )}
               {currentStep === 4 && (
                 <PricingConfiguration
@@ -797,6 +804,7 @@ function StepIntegrations({
       queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/google/status"] });
       toast({ title: 'Google Drive folder ID saved' });
+      setIsEditingFolderId(false);
     },
     onError: () => {
       toast({ title: 'Failed to save folder ID', variant: 'destructive' });
@@ -1087,7 +1095,6 @@ function StepIntegrations({
                     size="sm"
                     onClick={() => {
                       saveDriveMutation.mutate(localDriveFolderId);
-                      setIsEditingFolderId(false);
                     }}
                     disabled={saveDriveMutation.isPending || !localDriveFolderId.trim()}
                     data-testid="button-save-drive-folder"

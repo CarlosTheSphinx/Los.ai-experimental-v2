@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
+import { formatPhoneNumber, getPhoneError, getEmailError } from "@/lib/validation";
 import {
   Dialog,
   DialogContent,
@@ -331,6 +332,10 @@ function formatCurrency(amount: number) {
 
 function getLoanTypeLabel(loanType: string): string {
   const labels: Record<string, string> = {
+    "purchase": "Purchase",
+    "refinance": "Refinance",
+    "cash-out-refinance": "Cash-Out Refinance",
+    // Legacy mappings for existing data
     "rtl": "RTL",
     "dscr": "DSCR",
     "fix-and-flip": "Fix & Flip",
@@ -2747,15 +2752,17 @@ export default function AdminDealDetail() {
                 onChange={(e) => setBorrowerForm(f => ({ ...f, email: e.target.value }))}
                 data-testid="input-borrower-email"
               />
+              {getEmailError(borrowerForm.email) && <p className="text-xs text-destructive mt-1">{getEmailError(borrowerForm.email)}</p>}
             </div>
             <div className="space-y-2">
               <Label>Phone</Label>
               <Input
                 type="tel"
                 value={borrowerForm.phone}
-                onChange={(e) => setBorrowerForm(f => ({ ...f, phone: e.target.value }))}
+                onChange={(e) => setBorrowerForm(f => ({ ...f, phone: formatPhoneNumber(e.target.value) }))}
                 data-testid="input-borrower-phone"
               />
+              {getPhoneError(borrowerForm.phone) && <p className="text-xs text-destructive mt-1">{getPhoneError(borrowerForm.phone)}</p>}
             </div>
           </div>
           <DialogFooter>
@@ -3615,6 +3622,7 @@ export default function AdminDealDetail() {
                   placeholder="borrower@example.com"
                   data-testid="input-customer-email"
                 />
+                {getEmailError(editForm.customerEmail) && <p className="text-xs text-destructive mt-1">{getEmailError(editForm.customerEmail)}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="customerPhone">Phone</Label>
@@ -3622,10 +3630,11 @@ export default function AdminDealDetail() {
                   id="customerPhone"
                   type="tel"
                   value={editForm.customerPhone}
-                  onChange={(e) => setEditForm({ ...editForm, customerPhone: e.target.value })}
+                  onChange={(e) => setEditForm({ ...editForm, customerPhone: formatPhoneNumber(e.target.value) })}
                   placeholder="(555) 123-4567"
                   data-testid="input-customer-phone"
                 />
+                {getPhoneError(editForm.customerPhone) && <p className="text-xs text-destructive mt-1">{getPhoneError(editForm.customerPhone)}</p>}
               </div>
             </div>
             <div className="space-y-2">
@@ -3684,12 +3693,9 @@ export default function AdminDealDetail() {
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="dscr">DSCR</SelectItem>
-                    <SelectItem value="fix-and-flip">Fix and Flip</SelectItem>
-                    <SelectItem value="ground-up">Ground Up Construction</SelectItem>
-                    <SelectItem value="bridge">Bridge</SelectItem>
-                    <SelectItem value="commercial">Commercial</SelectItem>
-                    <SelectItem value="conventional">Conventional</SelectItem>
+                    <SelectItem value="purchase">Purchase</SelectItem>
+                    <SelectItem value="refinance">Refinance</SelectItem>
+                    <SelectItem value="cash-out-refinance">Cash-Out Refinance</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { formatPhoneNumber, getPhoneError, getEmailError } from "@/lib/validation";
 import {
   Building2,
   DollarSign,
@@ -445,6 +446,7 @@ export default function PublicApplyPage() {
                       required
                       data-testid="input-email"
                     />
+                    {getEmailError(email) && <p className="text-xs text-destructive mt-1">{getEmailError(email)}</p>}
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-sm flex items-center gap-1.5">
@@ -453,10 +455,11 @@ export default function PublicApplyPage() {
                     <Input
                       type="tel"
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
+                      onChange={(e) => setPhone(formatPhoneNumber(e.target.value))}
                       placeholder="(555) 123-4567"
                       data-testid="input-phone"
                     />
+                    {getPhoneError(phone) && <p className="text-xs text-destructive mt-1">{getPhoneError(phone)}</p>}
                   </div>
                 </CardContent>
               </Card>

@@ -843,11 +843,19 @@ function CreditPolicyStep({
               <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-md">
                 <FileText className="h-4 w-4 text-primary flex-shrink-0" />
                 <span className="text-sm font-medium flex-1 truncate">{uploadedFileName}</span>
-                {isExtracting && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                {isExtracting && (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    <span className="text-xs text-muted-foreground">Analyzing document — this may take 60–90 seconds...</span>
+                  </div>
+                )}
                 {!isExtracting && extractedRules.length > 0 && (
-                  <Badge variant="secondary" className="text-xs">
-                    {extractedRules.length} rules extracted
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                    <Badge variant="secondary" className="text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                      {extractedRules.length} rules extracted successfully
+                    </Badge>
+                  </div>
                 )}
                 <Button
                   size="icon"
@@ -1965,6 +1973,7 @@ function TasksStep({
                       <SelectItem value="admin">Admin (role)</SelectItem>
                       <SelectItem value="processor">Processor (role)</SelectItem>
                       <SelectItem value="user">Borrower</SelectItem>
+                      <SelectItem value="broker">Broker</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select
@@ -2053,8 +2062,8 @@ function ReviewRulesStep({
   const docNames = ['General', ...new Set(documents.map((d) => d.documentName).filter(Boolean))];
 
   const severityConfig: Record<string, { label: string; color: string; desc: string }> = {
-    fail: { label: 'Fail', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', desc: 'Blocks the deal if not passed' },
-    warning: { label: 'Warning', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400', desc: 'Alerts the internal team only' },
+    fail: { label: 'Action Required', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', desc: 'Blocks the deal if not passed' },
+    warning: { label: 'Action Required', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400', desc: 'Alerts the internal team only' },
     info: { label: 'Info', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400', desc: 'Informational note for the team' },
   };
 
@@ -2111,10 +2120,10 @@ function ReviewRulesStep({
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="fail">
-                              <span className="text-red-600 font-medium">Fail</span>
+                              <span className="text-red-600 font-medium">Action Required</span>
                             </SelectItem>
                             <SelectItem value="warning">
-                              <span className="text-yellow-600 font-medium">Warning</span>
+                              <span className="text-yellow-600 font-medium">Action Required</span>
                             </SelectItem>
                             <SelectItem value="info">
                               <span className="text-blue-600 font-medium">Info</span>

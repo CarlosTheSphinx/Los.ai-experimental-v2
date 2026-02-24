@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { formatPhoneNumber, getPhoneError, getEmailError } from "@/lib/validation";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
@@ -172,6 +173,9 @@ export default function NotificationsConfig() {
                 onChange={(e) => updateField("senderEmail", e.target.value)}
                 placeholder="noreply@example.com"
               />
+              {getEmailError(config.senderEmail) && (
+                <p className="text-sm text-red-500">{getEmailError(config.senderEmail)}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="senderPhone">Sender Phone</Label>
@@ -180,9 +184,12 @@ export default function NotificationsConfig() {
                 data-testid="input-sender-phone"
                 type="tel"
                 value={config.senderPhone}
-                onChange={(e) => updateField("senderPhone", e.target.value)}
-                placeholder="+1 (555) 000-0000"
+                onChange={(e) => updateField("senderPhone", formatPhoneNumber(e.target.value))}
+                placeholder="(555) 000-0000"
               />
+              {getPhoneError(config.senderPhone) && (
+                <p className="text-sm text-red-500">{getPhoneError(config.senderPhone)}</p>
+              )}
             </div>
           </div>
           <div className="grid gap-4">

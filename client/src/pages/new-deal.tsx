@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { formatPhoneNumber, getPhoneError, getEmailError } from "@/lib/validation";
 
 interface QuoteField {
   fieldKey: string;
@@ -368,9 +369,11 @@ export default function NewDeal() {
                   type="email"
                   value={formData.borrowerEmail}
                   onChange={(e) => updateField("borrowerEmail", e.target.value)}
+                  onBlur={() => {}}
                   placeholder="john@example.com"
                   data-testid="input-borrower-email"
                 />
+                {getEmailError(formData.borrowerEmail) && <p className="text-xs text-destructive mt-1">{getEmailError(formData.borrowerEmail)}</p>}
               </div>
             </div>
             <div className="space-y-2">
@@ -379,10 +382,11 @@ export default function NewDeal() {
                 id="borrowerPhone"
                 type="tel"
                 value={formData.borrowerPhone}
-                onChange={(e) => updateField("borrowerPhone", e.target.value)}
+                onChange={(e) => updateField("borrowerPhone", formatPhoneNumber(e.target.value))}
                 placeholder="(555) 123-4567"
                 data-testid="input-borrower-phone"
               />
+              {getPhoneError(formData.borrowerPhone) && <p className="text-xs text-destructive mt-1">{getPhoneError(formData.borrowerPhone)}</p>}
             </div>
           </CardContent>
         </Card>
