@@ -74,6 +74,8 @@ import {
   FileSearch,
   Hand,
   FolderOpen,
+  Save,
+  MessageSquare,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -913,6 +915,11 @@ export default function AdminDealDetail() {
   const [subFilter, setSubFilter] = useState<'all' | 'documents'>('all');
   const [showMemoryPanel, setShowMemoryPanel] = useState(true);
   const [showTasksSidebar, setShowTasksSidebar] = useState(false);
+  const [showAiDraftPanel, setShowAiDraftPanel] = useState(false);
+  const [editingDraftId, setEditingDraftId] = useState<number | null>(null);
+  const [draftEditBody, setDraftEditBody] = useState("");
+  const [draftEditSubject, setDraftEditSubject] = useState("");
+  const [copiedDraftId, setCopiedDraftId] = useState<number | null>(null);
   const [expandedStages, setExpandedStages] = useState<Set<number>>(new Set());
   const [stageExpandInitialized, setStageExpandInitialized] = useState(false);
 
@@ -1214,19 +1221,70 @@ export default function AdminDealDetail() {
     },
     onSuccess: () => {
       setPipelineRunning(false);
-      toast({ title: "AI Pipeline Started", description: "The AI agents are analyzing this deal. Switching to AI Insights view." });
-      setActiveFilter('ai_insights');
+      toast({ title: "AI Pipeline Started", description: "Documents are being analyzed. Draft messages will appear on the right when ready." });
+      setShowAiDraftPanel(true);
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ["/api/projects", linkedProjectId, "story"] });
         queryClient.invalidateQueries({ queryKey: ["/api/projects", linkedProjectId, "findings"] });
         queryClient.invalidateQueries({ queryKey: ["/api/projects", linkedProjectId, "agent-communications"] });
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/projects', linkedProjectId] });
       }, 5000);
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/projects', linkedProjectId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/projects", linkedProjectId, "agent-communications"] });
+      }, 15000);
     },
     onError: (error: any) => {
       setPipelineRunning(false);
       const msg = error?.message?.includes("already running") ? "A pipeline is already running for this deal." : error?.message || "Failed to start pipeline";
       toast({ title: "Pipeline Error", description: msg, variant: "destructive" });
     },
+  });
+
+  const draftCommsQuery = useQuery<any[]>({
+    queryKey: ["/api/projects", linkedProjectId, "agent-communications"],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${linkedProjectId}/agent-communications`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!linkedProjectId && showAiDraftPanel,
+    refetchInterval: showAiDraftPanel ? 8000 : false,
+  });
+  const draftComms = (draftCommsQuery.data || []).filter((c: any) => c.status === 'draft');
+  const parseDraftBody = (comm: any): { subject: string; body: string } => {
+    const rawBody = comm.editedBody || comm.body || "";
+    try {
+      const trimmed = rawBody.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+      const parsed = JSON.parse(trimmed);
+      return { subject: parsed.subject || comm.subject || "No Subject", body: parsed.body || rawBody };
+    } catch {
+      return { subject: comm.subject || "No Subject", body: rawBody };
+    }
+  };
+  const approveDraftComm = useMutation({
+    mutationFn: async (commId: number) => {
+      const res = await apiRequest("POST", `/api/projects/${linkedProjectId}/agent-communications/${commId}/approve`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", linkedProjectId, "agent-communications"] });
+      const digestMsg = data?.digest?.queued ? " Queued for next digest." : "";
+      toast({ title: `Communication approved.${digestMsg}` });
+    },
+    onError: () => toast({ title: "Failed to approve", variant: "destructive" }),
+  });
+  const editDraftComm = useMutation({
+    mutationFn: async ({ commId, body, subject }: { commId: number; body?: string; subject?: string }) => {
+      const res = await apiRequest("PATCH", `/api/projects/${linkedProjectId}/agent-communications/${commId}`, { body, subject });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", linkedProjectId, "agent-communications"] });
+      setEditingDraftId(null);
+      toast({ title: "Communication updated" });
+    },
+    onError: () => toast({ title: "Failed to save changes", variant: "destructive" }),
   });
 
   const createStageTaskMutation = useMutation({
@@ -4372,6 +4430,158 @@ export default function AdminDealDetail() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {showAiDraftPanel && activeFilter !== 'ai_insights' && (
+        <div
+          className="fixed bottom-6 right-[calc(380px+1.5rem)] z-40 w-[420px] max-h-[70vh] flex flex-col bg-background border border-border rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-right-5 duration-300"
+          style={{ right: showMemoryPanel ? 'calc(380px + 1.5rem)' : '4rem' }}
+          data-testid="ai-draft-panel"
+        >
+          <div className="flex items-center justify-between gap-2 px-4 py-3 border-b bg-primary/5">
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center">
+                <MessageSquare className="h-4 w-4 text-primary" />
+              </div>
+              <div>
+                <span className="text-sm font-semibold">AI Draft Messages</span>
+                {pipelineRunning && (
+                  <span className="ml-2 text-xs text-muted-foreground flex items-center gap-1 inline-flex">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Processing...
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-1">
+              {draftComms.length > 0 && (
+                <Badge variant="secondary" className="text-[10px]">{draftComms.length} pending</Badge>
+              )}
+              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setShowAiDraftPanel(false)} data-testid="button-close-draft-panel">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            {draftCommsQuery.isLoading && (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            {!draftCommsQuery.isLoading && draftComms.length === 0 && (
+              <div className="text-center py-8 space-y-2">
+                {pipelineRunning ? (
+                  <>
+                    <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+                    <p className="text-sm text-muted-foreground">AI is reviewing documents...</p>
+                    <p className="text-xs text-muted-foreground">Draft messages will appear here when ready</p>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-8 w-8 text-success mx-auto" />
+                    <p className="text-sm text-muted-foreground">No pending draft messages</p>
+                    <Button size="sm" variant="ghost" onClick={() => setShowAiDraftPanel(false)} data-testid="button-dismiss-drafts">Dismiss</Button>
+                  </>
+                )}
+              </div>
+            )}
+            {draftComms.map((comm: any) => {
+              const parsed = parseDraftBody(comm);
+              const isEditing = editingDraftId === comm.id;
+              return (
+                <div key={comm.id} className="border rounded-lg p-3 space-y-2 bg-muted/20" data-testid={`draft-panel-comm-${comm.id}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      {isEditing ? (
+                        <Input
+                          value={draftEditSubject}
+                          onChange={(e) => setDraftEditSubject(e.target.value)}
+                          className="text-sm font-medium mb-1"
+                          data-testid={`input-draft-subject-${comm.id}`}
+                        />
+                      ) : (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium truncate">{parsed.subject}</span>
+                          <Badge variant="secondary" className="text-[10px]">draft</Badge>
+                        </div>
+                      )}
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        To: {comm.recipientType || 'borrower'}{comm.recipientName ? ` — ${comm.recipientName}` : ''}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {isEditing ? (
+                        <>
+                          <Button
+                            size="icon"
+                            variant="default"
+                            className="h-7 w-7"
+                            onClick={() => editDraftComm.mutate({ commId: comm.id, body: draftEditBody, subject: draftEditSubject })}
+                            disabled={editDraftComm.isPending}
+                            data-testid={`button-save-draft-${comm.id}`}
+                          >
+                            {editDraftComm.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingDraftId(null)} data-testid={`button-cancel-draft-edit-${comm.id}`}>
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setEditingDraftId(comm.id); setDraftEditBody(parsed.body); setDraftEditSubject(parsed.subject); }} data-testid={`button-edit-draft-${comm.id}`}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7"
+                            onClick={() => { navigator.clipboard.writeText(parsed.body); setCopiedDraftId(comm.id); setTimeout(() => setCopiedDraftId(null), 2000); toast({ title: "Copied to clipboard" }); }}
+                            data-testid={`button-copy-draft-${comm.id}`}
+                          >
+                            {copiedDraftId === comm.id ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            onClick={() => approveDraftComm.mutate(comm.id)}
+                            disabled={approveDraftComm.isPending}
+                            data-testid={`button-approve-draft-${comm.id}`}
+                          >
+                            {approveDraftComm.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <CheckCircle2 className="h-3 w-3 mr-1" />}
+                            Approve
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  {isEditing ? (
+                    <Textarea
+                      value={draftEditBody}
+                      onChange={(e) => setDraftEditBody(e.target.value)}
+                      className="text-xs min-h-[80px] resize-y"
+                      data-testid={`textarea-draft-body-${comm.id}`}
+                    />
+                  ) : (
+                    <div className="text-xs text-muted-foreground whitespace-pre-wrap bg-background rounded-md p-2 max-h-40 overflow-y-auto border" data-testid={`draft-body-${comm.id}`}>
+                      {parsed.body}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {draftComms.length > 0 && (
+            <div className="border-t px-3 py-2 bg-muted/30 flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                {draftComms.length} draft{draftComms.length !== 1 ? 's' : ''} awaiting approval
+              </span>
+              <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => setActiveFilter('ai_insights')} data-testid="button-view-all-insights">
+                View AI Insights
+                <Zap className="h-3 w-3 ml-1" />
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className={cn("flex-shrink-0 h-full transition-all duration-200", showMemoryPanel ? "w-[380px]" : "w-10")} data-testid="memory-sidebar">
         <DealMemoryPanel
