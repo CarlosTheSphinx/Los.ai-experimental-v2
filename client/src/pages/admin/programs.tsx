@@ -55,13 +55,11 @@ import {
   Download,
   FileUp,
   Paperclip,
-  Layers,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import ProgramWorkflowEditor from "@/components/ProgramWorkflowEditor";
-import { PricingConfiguration } from "@/components/onboarding/PricingConfiguration";
 import { ProgramCreationWizard } from "@/components/onboarding/ProgramCreationWizard";
 
 interface LoanProgram {
@@ -302,7 +300,6 @@ function getDefaultQuoteFields(loanType: string): QuoteFormField[] {
 
 export default function AdminPrograms() {
   const { toast } = useToast();
-  const [currentStep, setCurrentStep] = useState(1);
   const [selectedProgram, setSelectedProgram] = useState<LoanProgram | null>(null);
   const [showWizard, setShowWizard] = useState(false);
   const [showEditProgram, setShowEditProgram] = useState(false);
@@ -1087,45 +1084,7 @@ export default function AdminPrograms() {
         </p>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6">
-        <div className="lg:w-64 flex-shrink-0">
-          <Card>
-            <CardContent className="p-4 space-y-1">
-              {[
-                { id: 1, label: 'Loan Programs', icon: Layers },
-                { id: 2, label: 'Pricing', icon: DollarSign },
-              ].map((step) => {
-                const StepIcon = step.icon;
-                const isActive = currentStep === step.id;
-                return (
-                  <button
-                    key={step.id}
-                    onClick={() => setCurrentStep(step.id)}
-                    className={`w-full flex items-center gap-3 p-3 rounded-md text-left transition-colors ${
-                      isActive
-                        ? 'bg-primary/10 text-primary font-medium'
-                        : 'hover:bg-muted text-muted-foreground'
-                    }`}
-                    data-testid={`button-step-${step.id}`}
-                  >
-                    <div className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                      isActive
-                        ? 'bg-primary/20 text-primary'
-                        : 'bg-muted text-muted-foreground'
-                    }`}>
-                      <span className="text-sm font-medium">{step.id}</span>
-                    </div>
-                    <span className="text-sm">{step.label}</span>
-                  </button>
-                );
-              })}
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="flex-1 min-w-0">
-          {currentStep === 1 && (
-          <div className="space-y-4">
+      <div className="space-y-4">
           {showWizard ? (
             <ProgramCreationWizard
               onComplete={() => {
@@ -1325,17 +1284,10 @@ export default function AdminPrograms() {
           )}
           </>
           )}
-          </div>
-          )}
-
-          {currentStep === 2 && (
-            <PricingConfiguration hideNavigation />
-          )}
-
-        </div>
       </div>
 
       {/* Edit Program Dialog */}
+
       <Dialog open={showEditProgram} onOpenChange={setShowEditProgram}>
         <DialogContent className="fixed inset-0 max-w-none w-screen h-screen rounded-none translate-x-0 translate-y-0 top-0 left-0 flex flex-col overflow-hidden p-0 border-none [&>button]:hidden" style={{ transform: 'none' }}>
           <div className="flex-shrink-0 z-50 flex items-center justify-between gap-3 px-6 py-3 border-b bg-background">

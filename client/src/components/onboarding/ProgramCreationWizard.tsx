@@ -3,6 +3,7 @@ import { useState, useRef, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { cn } from '@/lib/utils';
+import { PricingConfiguration } from '@/components/onboarding/PricingConfiguration';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -255,7 +256,7 @@ interface RuleEntry {
 
 // ─── Wizard Steps ───────────────────────────────────────────────
 
-type WizardStep = 'credit-policy' | 'program-details' | 'quote-form' | 'stages' | 'documents' | 'tasks' | 'review-rules' | 'summary';
+type WizardStep = 'credit-policy' | 'program-details' | 'quote-form' | 'stages' | 'documents' | 'tasks' | 'review-rules' | 'pricing' | 'summary';
 
 const wizardSteps: { key: WizardStep; label: string; number: number }[] = [
   { key: 'credit-policy', label: 'Credit Policy', number: 1 },
@@ -265,7 +266,8 @@ const wizardSteps: { key: WizardStep; label: string; number: number }[] = [
   { key: 'documents', label: 'Documents', number: 5 },
   { key: 'tasks', label: 'Tasks', number: 6 },
   { key: 'review-rules', label: 'AI Rules', number: 7 },
-  { key: 'summary', label: 'Review & Create', number: 8 },
+  { key: 'pricing', label: 'Pricing', number: 8 },
+  { key: 'summary', label: 'Review & Create', number: 9 },
 ];
 
 // ─── DSCR Example Defaults ───────────────────────────────────────
@@ -613,6 +615,10 @@ export function ProgramCreationWizard({
           stages={stages}
           documents={documents}
         />
+      )}
+
+      {wizardStep === 'pricing' && (
+        <PricingConfiguration hideNavigation />
       )}
 
       {wizardStep === 'summary' && (
@@ -2322,7 +2328,7 @@ function SummaryStep({
         {!programName.trim() && (
           <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 rounded-md">
             <Info className="h-4 w-4 text-amber-600 flex-shrink-0" />
-            <p className="text-xs text-amber-700">Program name is required to create the program. Go back to step 2 to set it.</p>
+            <p className="text-xs text-amber-700">Program name is required to create the program. Go back to Program Details to set it.</p>
           </div>
         )}
       </CardContent>
