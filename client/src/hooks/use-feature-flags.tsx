@@ -10,12 +10,12 @@ export interface FeatureFlags {
 }
 
 const DEFAULT_FLAGS: FeatureFlags = {
-  "phase1.ui": false,
-  "phase1.deals": false,
-  "phase1.dealDetail": false,
-  "phase1.onboarding": false,
-  "phase1.programs": false,
-  "phase1.sidebar": false,
+  "phase1.ui": true,
+  "phase1.deals": true,
+  "phase1.dealDetail": true,
+  "phase1.onboarding": true,
+  "phase1.programs": true,
+  "phase1.sidebar": true,
 };
 
 interface FeatureFlagContextType {
