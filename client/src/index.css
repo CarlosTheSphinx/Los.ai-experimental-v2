@@ -17,8 +17,8 @@
   --background: 220 14% 96%;        /* #F1F3F6 */
   --foreground: 205 35% 21%;        /* #1A3A52 - Primary Navy */
 
-  /* Cards: Clean white with navy text */
-  --card: 0 0% 100%;                /* #FFFFFF */
+  /* Cards: Off-white (per UX playbook — no pure white) */
+  --card: 0 0% 98%;                 /* #FAFAFA */
   --card-foreground: 205 35% 21%;   /* #1A3A52 */
   --card-border: 216 20% 90%;       /* subtle gray border */
 

@@ -66,6 +66,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
+import { useFeatureFlags } from "@/hooks/use-feature-flags";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useBranding } from "@/hooks/use-branding";
 import { InboxBadge } from "@/components/InboxBadge";
@@ -125,6 +126,16 @@ const adminNavItems: NavItem[] = [
   { href: "/admin/commercial/config", label: "Commercial Config", icon: ClipboardEdit, requiredPermission: "commercial.manage" },
   { href: "/admin/settings", label: "Settings", icon: Settings, requiredPermission: "settings.view" },
   { href: "/admin/onboarding", label: "Onboarding", icon: BookOpen, requiredPermission: "onboarding.view" },
+];
+
+// Phase 1 v2 admin nav — cleaner grouping per wireframe (7 items, Miller's Law)
+const adminNavItemsV2: NavItem[] = [
+  { href: "/admin", label: "Pipeline", icon: LayoutDashboard, shortcut: "⌘1" },
+  { href: "/admin/programs", label: "Programs", icon: Settings2, requiredPermission: "programs.view" },
+  { href: "/quotes", label: "Quotes", icon: FileText },
+  { href: "/inbox", label: "Messages", icon: Inbox, showBadge: true, requiredPermission: "messages.view" },
+  { href: "/admin/users", label: "Users", icon: Users, requiredPermission: "users.view", shortcut: "⌘2" },
+  { href: "/admin/settings", label: "Settings", icon: Settings, requiredPermission: "settings.view" },
 ];
 
 // Super admin items — only visible to super_admin role (Lendry platform team)
@@ -203,7 +214,10 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
 
   const showAdminSection = isAdmin && !effectiveViewAsBorrower && !effectiveViewAsLender;
 
-  const filteredAdminItems = adminNavItems.filter(item => {
+  const { isEnabled: isFlagEnabled } = useFeatureFlags();
+  const useV2Nav = isFlagEnabled("phase1.sidebar");
+
+  const filteredAdminItems = (useV2Nav ? adminNavItemsV2 : adminNavItems).filter(item => {
     if (item.superAdminOnly && !isSuperAdmin) return false;
     if (!item.requiredPermission) return true;
     if (isSuperAdmin) return true;
