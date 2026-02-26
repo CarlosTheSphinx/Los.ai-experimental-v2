@@ -3,15 +3,27 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
   Building2, Plug, Layers, DollarSign, FileSearch, Bot, MessageSquare,
-  Users, Shield, Link, CheckCircle2, ChevronRight, ArrowRight, Rocket, Check
+  Users, Shield, Link, Check, Rocket
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
+import { useTenantConfig } from "@/hooks/use-tenant-config";
+import {
+  StepCompanyProfile,
+  StepIntegrations,
+  StepProgramsWorkflow,
+  StepAIAgent,
+  StepCommunications,
+  StepDocumentReview,
+  StepTeamSetup,
+  StepRolePermissions,
+  StepMagicLinks,
+} from "./onboarding-v1";
+import { PricingConfiguration } from "@/components/onboarding/PricingConfiguration";
 
 const STEPS = [
   { id: 1, label: "Company Profile", icon: Building2, group: "Foundation" },
@@ -39,6 +51,7 @@ export default function OnboardingV2() {
     return s >= 1 && s <= STEPS.length ? s : 1;
   })();
   const [currentStep, setCurrentStep] = useState(initialStep);
+  const [hasVisitedStep3, setHasVisitedStep3] = useState(currentStep === 3);
 
   const { data: googleStatusData } = useQuery<{
     connected: boolean;
@@ -48,17 +61,36 @@ export default function OnboardingV2() {
     queryKey: ["/api/google/status"],
   });
 
-  const { data: programsData } = useQuery<{ programs: any[] }>({
+  const { data: programsData, isLoading: programsLoading } = useQuery<{ programs: any[] }>({
     queryKey: ["/api/programs-with-pricing"],
   });
 
-  const { data: teamData } = useQuery<{ users: any[] }>({
+  const { data: teamData, isLoading: teamLoading } = useQuery<{ users: any[] }>({
     queryKey: ["/api/admin/users"],
   });
 
-  const { data: settingsData } = useQuery<{ settings: any[] }>({
+  const { data: settingsData, isLoading: settingsLoading } = useQuery<{ settings: any[] }>({
     queryKey: ["/api/admin/settings"],
   });
+
+  const { data: integrationsData } = useQuery<{ integrations: any }>({
+    queryKey: ["/api/admin/integrations/status"],
+  });
+
+  const tenantConfig = useTenantConfig("tenant_branding", {
+    companyName: "",
+    supportEmail: "",
+    emailSenderName: "",
+    logoLightUrl: "",
+    logoDarkUrl: "",
+  });
+
+  const emailConnected = googleStatusData?.gmail?.connected || false;
+  const resendConnected = integrationsData?.integrations?.resend?.connected || false;
+  const hasPrograms = (programsData?.programs?.length || 0) > 0;
+
+  const driveFolderSetting = settingsData?.settings?.find((s: any) => s.settingKey === "google_drive_parent_folder_id");
+  const oneDriveFolderSetting = settingsData?.settings?.find((s: any) => s.settingKey === "onedrive_parent_folder_path");
 
   const completeOnboardingMutation = useMutation({
     mutationFn: async () => {
@@ -76,13 +108,31 @@ export default function OnboardingV2() {
     },
   });
 
+  const handleNext = () => {
+    if (currentStep < STEPS.length) {
+      const next = currentStep + 1;
+      if (next === 3) setHasVisitedStep3(true);
+      setCurrentStep(next);
+    }
+  };
+
+  const handleBack = () => {
+    if (currentStep > 1) {
+      const prev = currentStep - 1;
+      if (prev === 3) setHasVisitedStep3(true);
+      setCurrentStep(prev);
+    }
+  };
+
+  const handleStepClick = (stepId: number) => {
+    if (stepId === 3) setHasVisitedStep3(true);
+    setCurrentStep(stepId);
+  };
+
   const stepCompletion = useMemo(() => {
     const getSetting = (key: string) =>
       settingsData?.settings?.find((s: any) => s.settingKey === key)?.settingValue;
     const companyName = getSetting("company_name") || getSetting("tenant_branding");
-    const emailConnected = googleStatusData?.gmail?.connected || false;
-    const hasPrograms = (programsData?.programs?.length || 0) > 0;
-    const hasTeam = (teamData?.users?.length || 0) > 1;
 
     return new Map<number, boolean>([
       [1, !!companyName],
@@ -92,11 +142,11 @@ export default function OnboardingV2() {
       [5, false],
       [6, false],
       [7, emailConnected],
-      [8, hasTeam],
+      [8, (teamData?.users?.length || 0) > 1],
       [9, false],
       [10, false],
     ]);
-  }, [googleStatusData, programsData, teamData, settingsData]);
+  }, [googleStatusData, programsData, teamData, settingsData, emailConnected, hasPrograms]);
 
   const completedCount = Array.from(stepCompletion.values()).filter(Boolean).length;
   const progressPct = Math.round((completedCount / STEPS.length) * 100);
@@ -104,7 +154,6 @@ export default function OnboardingV2() {
 
   return (
     <div className="flex min-h-[calc(100vh-64px)]">
-      {/* Left Panel — Setup Progress */}
       <div className="w-[340px] border-r bg-slate-50/50 dark:bg-card shrink-0 flex flex-col">
         <div className="p-6 pb-4">
           <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3" data-testid="text-setup-progress-title">
@@ -129,7 +178,7 @@ export default function OnboardingV2() {
                   return (
                     <button
                       key={step.id}
-                      onClick={() => setCurrentStep(step.id)}
+                      onClick={() => handleStepClick(step.id)}
                       className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left transition-colors ${
                         isActive
                           ? "bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800"
@@ -191,7 +240,6 @@ export default function OnboardingV2() {
         </div>
       </div>
 
-      {/* Main Content Area */}
       <div className="flex-1 p-6 overflow-y-auto">
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center gap-3 mb-6">
@@ -213,86 +261,87 @@ export default function OnboardingV2() {
             </div>
           </div>
 
-          <Card>
-            <CardContent className="py-8 text-center">
-              <activeStep.icon className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
-              <h3 className="text-[15px] font-semibold mb-2">
-                {stepCompletion.get(activeStep.id) ? `${activeStep.label} is configured` : `Configure ${activeStep.label}`}
-              </h3>
-              <p className="text-[13px] text-muted-foreground max-w-md mx-auto mb-4">
-                {getStepDescription(activeStep.id)}
-              </p>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  const configRoutes: Record<number, string> = {
-                    1: "/admin/settings",
-                    2: "/admin/settings",
-                    3: "/admin/programs",
-                    4: "/admin/programs",
-                    7: "/admin/settings",
-                    8: "/admin/users",
-                    9: "/admin/team-permissions",
-                  };
-                  if (configRoutes[activeStep.id]) {
-                    window.location.href = configRoutes[activeStep.id];
-                  }
-                }}
-                data-testid="button-step-action"
-              >
-                {stepCompletion.get(activeStep.id) ? "Review Settings" : "Get Started"}
-                <ArrowRight className="h-4 w-4 ml-1.5" />
-              </Button>
-            </CardContent>
-          </Card>
-
-          <div className="flex justify-between mt-6">
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={currentStep === 1}
-              onClick={() => setCurrentStep((s) => Math.max(1, s - 1))}
-              data-testid="button-step-previous"
-            >
-              Previous
-            </Button>
-            <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setCurrentStep((s) => Math.min(STEPS.length, s + 1))}
-                data-testid="button-step-skip"
-              >
-                Skip
-              </Button>
-              <Button
-                size="sm"
-                disabled={currentStep === STEPS.length}
-                onClick={() => setCurrentStep((s) => Math.min(STEPS.length, s + 1))}
-                data-testid="button-step-next"
-              >
-                Next <ArrowRight className="h-3.5 w-3.5 ml-1" />
-              </Button>
+          {currentStep === 1 && (
+            <StepCompanyProfile
+              userName={user?.fullName || user?.firstName || "there"}
+              tenantConfig={tenantConfig}
+              onNext={handleNext}
+            />
+          )}
+          {currentStep === 2 && (
+            <StepIntegrations
+              driveFolderId={driveFolderSetting?.settingValue || ""}
+              oneDriveFolderPath={oneDriveFolderSetting?.settingValue || ""}
+              isSettingsLoading={settingsLoading}
+              onNext={handleNext}
+              onBack={handleBack}
+            />
+          )}
+          {hasVisitedStep3 && (
+            <div style={{ display: currentStep === 3 ? "block" : "none" }}>
+              <StepProgramsWorkflow
+                hasPrograms={hasPrograms}
+                programCount={programsData?.programs?.length || 0}
+                isLoading={programsLoading}
+                onNext={handleNext}
+                onBack={handleBack}
+                onNavigate={setLocation}
+              />
             </div>
-          </div>
+          )}
+          {currentStep === 4 && (
+            <PricingConfiguration
+              onNext={handleNext}
+              onBack={handleBack}
+            />
+          )}
+          {currentStep === 5 && (
+            <StepDocumentReview
+              onNext={handleNext}
+              onBack={handleBack}
+            />
+          )}
+          {currentStep === 6 && (
+            <StepAIAgent
+              onNext={handleNext}
+              onBack={handleBack}
+            />
+          )}
+          {currentStep === 7 && (
+            <StepCommunications
+              emailConnected={emailConnected}
+              onNext={handleNext}
+              onBack={handleBack}
+              onNavigate={setLocation}
+            />
+          )}
+          {currentStep === 8 && (
+            <StepTeamSetup
+              teamData={teamData?.users || []}
+              isLoading={teamLoading}
+              emailConnected={resendConnected}
+              onNext={handleNext}
+              onBack={handleBack}
+              onNavigate={setLocation}
+            />
+          )}
+          {currentStep === 9 && (
+            <StepRolePermissions
+              onNext={handleNext}
+              onBack={handleBack}
+            />
+          )}
+          {currentStep === 10 && (
+            <StepMagicLinks
+              onboardingCompleted={!!user?.onboardingCompleted}
+              onBack={handleBack}
+              onNavigate={setLocation}
+              onCompleteOnboarding={() => completeOnboardingMutation.mutate()}
+              isCompleting={completeOnboardingMutation.isPending}
+            />
+          )}
         </div>
       </div>
     </div>
   );
-}
-
-function getStepDescription(stepId: number): string {
-  const descriptions: Record<number, string> = {
-    1: "Set up your company name, logo, and branding details.",
-    2: "Connect email, Google Drive, and other integrations.",
-    3: "Create and configure your loan programs (DSCR, RTL, Bridge).",
-    4: "Set up pricing tiers, rate adjusters, and compensation.",
-    5: "Configure document review requirements and AI analysis settings.",
-    6: "Set up the AI agent behavior and automation rules.",
-    7: "Configure email templates, notifications, and communication preferences.",
-    8: "Invite team members and assign their roles.",
-    9: "Define role-based permissions and access levels.",
-    10: "Generate magic links for borrower and broker portals.",
-  };
-  return descriptions[stepId] || "";
 }

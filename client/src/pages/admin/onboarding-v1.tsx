@@ -346,7 +346,7 @@ export default function AdminOnboarding() {
   );
 }
 
-function StepCompanyProfile({
+export function StepCompanyProfile({
   userName,
   tenantConfig,
   onNext,
@@ -482,7 +482,7 @@ function StepCompanyProfile({
   );
 }
 
-function StepTeamSetup({
+export function StepTeamSetup({
   teamData,
   isLoading,
   emailConnected,
@@ -732,7 +732,7 @@ function StepTeamSetup({
   );
 }
 
-function StepIntegrations({
+export function StepIntegrations({
   driveFolderId,
   oneDriveFolderPath,
   isSettingsLoading,
@@ -1231,7 +1231,7 @@ function StepIntegrations({
   );
 }
 
-function StepProgramsWorkflow({
+export function StepProgramsWorkflow({
   hasPrograms,
   programCount,
   isLoading,
@@ -1367,7 +1367,7 @@ function StepProgramsWorkflow({
   );
 }
 
-function StepAIAgent({
+export function StepAIAgent({
   onNext,
   onBack,
 }: {
@@ -1488,7 +1488,7 @@ function StepAIAgent({
   );
 }
 
-function StepCommunications({
+export function StepCommunications({
   emailConnected,
   onNext,
   onBack,
@@ -1604,7 +1604,7 @@ interface PermissionValue {
   scope: string;
 }
 
-function StepDocumentReview({
+export function StepDocumentReview({
   onNext,
   onBack,
 }: {
@@ -1906,7 +1906,7 @@ interface PermissionState {
   };
 }
 
-function StepRolePermissions({
+export function StepRolePermissions({
   onNext,
   onBack,
 }: {
@@ -2100,7 +2100,7 @@ function StepRolePermissions({
   );
 }
 
-function StepMagicLinks({
+export function StepMagicLinks({
   onboardingCompleted,
   onBack,
   onNavigate,
