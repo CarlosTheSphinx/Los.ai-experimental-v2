@@ -1057,6 +1057,13 @@ function CreditPolicyStep({
   const [editingRuleIndex, setEditingRuleIndex] = useState<number | null>(null);
   const [editingRuleData, setEditingRuleData] = useState<{ ruleTitle: string; ruleDescription: string }>({ ruleTitle: '', ruleDescription: '' });
 
+  const selectedPolicy = selectedId ? creditPolicies.find((p: any) => p.id === selectedId) : null;
+
+  const { data: policyDetails } = useQuery<any>({
+    queryKey: [`/api/admin/credit-policies/${selectedId}`],
+    enabled: !!selectedId,
+  });
+
   const createPolicyMutation = useMutation({
     mutationFn: async () => {
       return apiRequest('POST', '/api/admin/credit-policies', {
@@ -1146,304 +1153,298 @@ function CreditPolicyStep({
     return acc;
   }, {});
 
+  const policyRuleCount = selectedPolicy?.ruleCount || policyDetails?.rules?.length || 0;
+
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4" />
-            Credit Policy
-            <Badge className="text-xs bg-blue-500 text-white hover:bg-blue-600">Optional</Badge>
-          </CardTitle>
-          <CardDescription>
-            A credit policy defines your lending guidelines — minimum FICO scores, maximum LTV ratios, allowed property types, and other underwriting criteria. This step is optional and can be added later from your program settings. Upload your policy document and the AI will automatically extract the rules.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {creditPolicies.length > 0 && !showCreateForm && (
-            <div className="space-y-2">
-              <Label className="text-sm">Select an existing credit policy</Label>
-              <Select
-                value={selectedId?.toString() || 'none'}
-                onValueChange={(val) => onSelect(val === 'none' ? null : parseInt(val))}
-              >
-                <SelectTrigger data-testid="select-credit-policy">
-                  <SelectValue placeholder="No credit policy" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No credit policy</SelectItem>
-                  {creditPolicies.map((p: any) => (
-                    <SelectItem key={p.id} value={p.id.toString()}>
-                      {p.name} ({p.ruleCount || 0} rules)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="flex items-center gap-2 pt-1">
-                <Separator className="flex-1" />
-                <span className="text-xs text-muted-foreground">or</span>
-                <Separator className="flex-1" />
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-[26px] font-bold tracking-tight">Link Credit Policy</h2>
+        <p className="text-[16px] text-muted-foreground mt-1">
+          Optionally link this program to an existing credit policy. The policy's guidelines will be imported as AI review rules.
+        </p>
+      </div>
+
+      {creditPolicies.length > 0 && !showCreateForm && (
+        <div className="space-y-2">
+          <Label className="text-[14px] font-medium">Select Credit Policy</Label>
+          <Select
+            value={selectedId?.toString() || 'none'}
+            onValueChange={(val) => onSelect(val === 'none' ? null : parseInt(val))}
+          >
+            <SelectTrigger className="w-full" data-testid="select-credit-policy">
+              <SelectValue placeholder="No credit policy" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">No credit policy</SelectItem>
+              {creditPolicies.map((p: any) => (
+                <SelectItem key={p.id} value={p.id.toString()}>
+                  {p.name} ({p.ruleCount || 0} rules)
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[13px] text-muted-foreground">
+            Credit policies define the underwriting guidelines and eligibility rules for this program.
+          </p>
+        </div>
+      )}
+
+      {selectedPolicy && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-[10px] px-5 py-3" data-testid="linked-policy-bar">
+            <div className="flex items-center gap-2">
+              <Link2 className="h-4 w-4 text-blue-600" />
+              <span className="text-[14px] font-semibold text-blue-700 dark:text-blue-400">Linked: {selectedPolicy.name}</span>
+            </div>
+            <button className="text-[13px] text-blue-600 hover:text-blue-800 font-medium" data-testid="button-view-policy">
+              View Policy →
+            </button>
+          </div>
+
+          <div className="border rounded-[10px] p-5" data-testid="policy-import-summary">
+            <p className="text-[14px] font-bold mb-3">Policy will import:</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+                <span className="text-[13px]">{policyRuleCount} review rules</span>
+              </div>
+              {policyDetails?.rules && (
+                <>
+                  {(() => {
+                    const rules = policyDetails.rules || [];
+                    const categories = new Set(rules.map((r: any) => r.documentType || r.category).filter(Boolean));
+                    return (
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+                        <span className="text-[13px]">{categories.size} rule categories</span>
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!selectedPolicy && !showCreateForm && (
+        <>
+          {creditPolicies.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Separator className="flex-1" />
+              <span className="text-[13px] text-muted-foreground">or create a new policy</span>
+              <Separator className="flex-1" />
+            </div>
+          )}
+
+          <div
+            className={cn(
+              "relative border-2 border-dashed rounded-[10px] p-8 text-center transition-colors cursor-pointer",
+              isDragOver
+                ? 'border-primary bg-primary/5'
+                : 'border-muted-foreground/25 hover:border-muted-foreground/40'
+            )}
+            onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+            onDragLeave={() => setIsDragOver(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            data-testid="dropzone-credit-policy"
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.txt"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleFileUpload(file);
+                e.target.value = '';
+              }}
+              data-testid="input-credit-policy-file"
+            />
+            <Upload className="h-8 w-8 mx-auto text-muted-foreground/60 mb-3" />
+            <p className="text-[14px] font-medium">Upload your credit policy document</p>
+            <p className="text-[13px] text-muted-foreground mt-1">
+              Drop a PDF, Word document, or text file here, or click to browse
+            </p>
+            <p className="text-[13px] text-muted-foreground mt-1">
+              The AI will read your document and extract individual lending rules automatically
+            </p>
+          </div>
+        </>
+      )}
+
+      {showCreateForm && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-[10px]">
+            <FileText className="h-4 w-4 text-primary flex-shrink-0" />
+            <span className="text-[14px] font-medium flex-1 truncate">{uploadedFileName}</span>
+            {isExtracting && (
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <span className="text-[13px] text-muted-foreground">Analyzing document — this may take 60–90 seconds...</span>
+              </div>
+            )}
+            {!isExtracting && extractedRules.length > 0 && (
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                <Badge variant="secondary" className="text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                  {extractedRules.length} rules extracted successfully
+                </Badge>
+              </div>
+            )}
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => {
+                setShowCreateForm(false);
+                setExtractedRules([]);
+                setUploadedFileName('');
+                setNewPolicyName('');
+                setNewPolicyDescription('');
+              }}
+              data-testid="button-remove-uploaded-file"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+
+          {isExtracting && (
+            <div className="flex items-center justify-center gap-3 py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <div>
+                <p className="text-[14px] font-medium">Analyzing your credit policy document...</p>
+                <p className="text-[13px] text-muted-foreground">The AI is reading and extracting individual lending rules</p>
               </div>
             </div>
           )}
 
-          {!showCreateForm ? (
-            <div
-              className={`relative border-2 border-dashed rounded-md p-8 text-center transition-colors cursor-pointer ${
-                isDragOver
-                  ? 'border-primary bg-primary/5'
-                  : 'border-muted-foreground/25 hover:border-muted-foreground/40'
-              }`}
-              onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
-              onDragLeave={() => setIsDragOver(false)}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              data-testid="dropzone-credit-policy"
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.doc,.docx,.txt"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleFileUpload(file);
-                  e.target.value = '';
-                }}
-                data-testid="input-credit-policy-file"
-              />
-              <Upload className="h-8 w-8 mx-auto text-muted-foreground/60 mb-3" />
-              <p className="text-sm font-medium">Upload your credit policy document</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Drop a PDF, Word document, or text file here, or click to browse
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                The AI will read your document and extract individual lending rules automatically
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-md">
-                <FileText className="h-4 w-4 text-primary flex-shrink-0" />
-                <span className="text-sm font-medium flex-1 truncate">{uploadedFileName}</span>
-                {isExtracting && (
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                    <span className="text-xs text-muted-foreground">Analyzing document — this may take 60–90 seconds...</span>
-                  </div>
-                )}
-                {!isExtracting && extractedRules.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
-                    <Badge variant="secondary" className="text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                      {extractedRules.length} rules extracted successfully
-                    </Badge>
-                  </div>
-                )}
+          {!isExtracting && extractedRules.length > 0 && (
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label className="text-[14px] font-medium">Policy Name</Label>
+                <Input
+                  value={newPolicyName}
+                  onChange={(e) => setNewPolicyName(e.target.value)}
+                  placeholder="e.g. DSCR Credit Policy 2026"
+                  data-testid="input-policy-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[14px] font-medium">Description (optional)</Label>
+                <Input
+                  value={newPolicyDescription}
+                  onChange={(e) => setNewPolicyDescription(e.target.value)}
+                  placeholder="Brief description of this policy"
+                  data-testid="input-policy-description"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-[14px] font-medium flex items-center gap-2">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  Extracted Rules
+                </Label>
+                <div className="border rounded-[10px] divide-y max-h-80 overflow-y-auto">
+                  {Object.entries(rulesByGroup).map(([group, groupRules]) => (
+                    <div key={group}>
+                      <button
+                        type="button"
+                        className="flex items-center justify-between gap-2 w-full px-4 py-2.5 text-left hover:bg-muted/30 transition-colors"
+                        onClick={() => setExpandedGroups(prev => ({ ...prev, [group]: !prev[group] }))}
+                        data-testid={`toggle-rule-group-${group}`}
+                      >
+                        <span className="text-[13px] font-medium">{group}</span>
+                        <div className="flex items-center gap-1.5">
+                          <Badge variant="secondary" className="text-xs">{groupRules.length}</Badge>
+                          {expandedGroups[group] ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                        </div>
+                      </button>
+                      {expandedGroups[group] && (
+                        <div className="px-4 pb-3 space-y-1.5">
+                          {groupRules.map(({ rule, globalIndex }) => (
+                              <div key={globalIndex} className="text-[13px] p-2.5 bg-muted/30 rounded-md group relative">
+                                {editingRuleIndex === globalIndex ? (
+                                  <div className="space-y-2">
+                                    <Input
+                                      value={editingRuleData.ruleTitle}
+                                      onChange={(e) => setEditingRuleData(prev => ({ ...prev, ruleTitle: e.target.value }))}
+                                      className="h-7 text-xs"
+                                      placeholder="Rule title"
+                                      data-testid={`input-edit-rule-title-${globalIndex}`}
+                                    />
+                                    <Textarea
+                                      value={editingRuleData.ruleDescription}
+                                      onChange={(e) => setEditingRuleData(prev => ({ ...prev, ruleDescription: e.target.value }))}
+                                      className="text-xs min-h-[60px]"
+                                      placeholder="Rule description"
+                                      data-testid={`input-edit-rule-desc-${globalIndex}`}
+                                    />
+                                    <div className="flex items-center gap-1">
+                                      <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => {
+                                        setExtractedRules(prev => prev.map((r, i) => i === globalIndex ? { ...r, ruleTitle: editingRuleData.ruleTitle, ruleDescription: editingRuleData.ruleDescription } : r));
+                                        setEditingRuleIndex(null);
+                                      }} data-testid={`button-save-rule-${globalIndex}`}>
+                                        <Check className="h-3 w-3 mr-1" /> Save
+                                      </Button>
+                                      <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => setEditingRuleIndex(null)} data-testid={`button-cancel-edit-rule-${globalIndex}`}>
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="flex-1">
+                                        <p className="font-medium">{rule.ruleTitle}</p>
+                                        <p className="text-muted-foreground mt-0.5">{rule.ruleDescription}</p>
+                                      </div>
+                                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                                        <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => {
+                                          setEditingRuleIndex(globalIndex);
+                                          setEditingRuleData({ ruleTitle: rule.ruleTitle, ruleDescription: rule.ruleDescription || '' });
+                                        }} data-testid={`button-edit-rule-${globalIndex}`}>
+                                          <Pencil className="h-3 w-3" />
+                                        </Button>
+                                        <Button size="icon" variant="ghost" className="h-5 w-5 text-destructive" onClick={() => {
+                                          setExtractedRules(prev => prev.filter((_, i) => i !== globalIndex));
+                                        }} data-testid={`button-delete-rule-${globalIndex}`}>
+                                          <Trash2 className="h-3 w-3" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-[13px] text-muted-foreground">
+                  {extractedRules.length} rule{extractedRules.length !== 1 ? 's' : ''} ready to save
+                </p>
                 <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => {
-                    setShowCreateForm(false);
-                    setExtractedRules([]);
-                    setUploadedFileName('');
-                    setNewPolicyName('');
-                    setNewPolicyDescription('');
-                  }}
-                  data-testid="button-remove-uploaded-file"
+                  onClick={() => createPolicyMutation.mutate()}
+                  disabled={!newPolicyName.trim() || extractedRules.length === 0 || createPolicyMutation.isPending}
+                  data-testid="button-save-credit-policy"
                 >
-                  <X className="h-3.5 w-3.5" />
+                  {createPolicyMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Check className="h-4 w-4 mr-2" />
+                  )}
+                  Accept & Save Credit Policy
                 </Button>
               </div>
-
-              {isExtracting && (
-                <div className="flex items-center justify-center gap-3 py-8">
-                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                  <div>
-                    <p className="text-sm font-medium">Analyzing your credit policy document...</p>
-                    <p className="text-xs text-muted-foreground">The AI is reading and extracting individual lending rules</p>
-                  </div>
-                </div>
-              )}
-
-              {!isExtracting && extractedRules.length > 0 && (
-                <div className="space-y-3">
-                  <div className="space-y-2">
-                    <Label className="text-sm">Policy Name</Label>
-                    <Input
-                      value={newPolicyName}
-                      onChange={(e) => setNewPolicyName(e.target.value)}
-                      placeholder="e.g. DSCR Credit Policy 2026"
-                      data-testid="input-policy-name"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm">Description (optional)</Label>
-                    <Input
-                      value={newPolicyDescription}
-                      onChange={(e) => setNewPolicyDescription(e.target.value)}
-                      placeholder="Brief description of this policy"
-                      data-testid="input-policy-description"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-sm flex items-center gap-2">
-                      <Sparkles className="h-3.5 w-3.5 text-primary" />
-                      Extracted Rules
-                    </Label>
-                    <div className="border rounded-md divide-y max-h-80 overflow-y-auto">
-                      {Object.entries(rulesByGroup).map(([group, groupRules]) => (
-                        <div key={group}>
-                          <button
-                            type="button"
-                            className="flex items-center justify-between gap-2 w-full px-3 py-2 text-left hover-elevate"
-                            onClick={() => setExpandedGroups(prev => ({ ...prev, [group]: !prev[group] }))}
-                            data-testid={`toggle-rule-group-${group}`}
-                          >
-                            <span className="text-xs font-medium">{group}</span>
-                            <div className="flex items-center gap-1.5">
-                              <Badge variant="secondary" className="text-xs">{groupRules.length}</Badge>
-                              {expandedGroups[group] ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                            </div>
-                          </button>
-                          {expandedGroups[group] && (
-                            <div className="px-3 pb-2 space-y-1.5">
-                              {groupRules.map(({ rule, globalIndex }) => (
-                                  <div key={globalIndex} className="text-xs p-2 bg-muted/30 rounded group relative">
-                                    {editingRuleIndex === globalIndex ? (
-                                      <div className="space-y-2">
-                                        <Input
-                                          value={editingRuleData.ruleTitle}
-                                          onChange={(e) => setEditingRuleData(prev => ({ ...prev, ruleTitle: e.target.value }))}
-                                          className="h-7 text-xs"
-                                          placeholder="Rule title"
-                                          data-testid={`input-edit-rule-title-${globalIndex}`}
-                                        />
-                                        <Textarea
-                                          value={editingRuleData.ruleDescription}
-                                          onChange={(e) => setEditingRuleData(prev => ({ ...prev, ruleDescription: e.target.value }))}
-                                          className="text-xs min-h-[60px]"
-                                          placeholder="Rule description"
-                                          data-testid={`input-edit-rule-desc-${globalIndex}`}
-                                        />
-                                        <div className="flex items-center gap-1">
-                                          <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => {
-                                            setExtractedRules(prev => prev.map((r, i) => i === globalIndex ? { ...r, ruleTitle: editingRuleData.ruleTitle, ruleDescription: editingRuleData.ruleDescription } : r));
-                                            setEditingRuleIndex(null);
-                                          }} data-testid={`button-save-rule-${globalIndex}`}>
-                                            <Check className="h-3 w-3 mr-1" /> Save
-                                          </Button>
-                                          <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => setEditingRuleIndex(null)} data-testid={`button-cancel-edit-rule-${globalIndex}`}>
-                                            Cancel
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <>
-                                        <div className="flex items-start justify-between gap-2">
-                                          <div className="flex-1">
-                                            <p className="font-medium">{rule.ruleTitle}</p>
-                                            <p className="text-muted-foreground mt-0.5">{rule.ruleDescription}</p>
-                                          </div>
-                                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                                            <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => {
-                                              setEditingRuleIndex(globalIndex);
-                                              setEditingRuleData({ ruleTitle: rule.ruleTitle, ruleDescription: rule.ruleDescription || '' });
-                                            }} data-testid={`button-edit-rule-${globalIndex}`}>
-                                              <Pencil className="h-3 w-3" />
-                                            </Button>
-                                            <Button size="icon" variant="ghost" className="h-5 w-5 text-destructive" onClick={() => {
-                                              setExtractedRules(prev => prev.filter((_, i) => i !== globalIndex));
-                                            }} data-testid={`button-delete-rule-${globalIndex}`}>
-                                              <Trash2 className="h-3 w-3" />
-                                            </Button>
-                                          </div>
-                                        </div>
-                                      </>
-                                    )}
-                                  </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-2">
-                    <p className="text-xs text-muted-foreground">
-                      {extractedRules.length} rule{extractedRules.length !== 1 ? 's' : ''} ready to save
-                    </p>
-                    <Button
-                      onClick={() => createPolicyMutation.mutate()}
-                      disabled={!newPolicyName.trim() || extractedRules.length === 0 || createPolicyMutation.isPending}
-                      data-testid="button-save-credit-policy"
-                    >
-                      {createPolicyMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      ) : (
-                        <Check className="h-4 w-4 mr-2" />
-                      )}
-                      Accept & Save Credit Policy
-                    </Button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="pt-5 space-y-4">
-          <div className="flex items-start gap-3">
-            <Brain className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-sm font-medium">How AI Uses Your Credit Policy</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                When you attach a credit policy, the AI continuously works in the background to protect your lending standards throughout the entire loan lifecycle.
-              </p>
-            </div>
-          </div>
-          <Separator />
-          <div className="grid gap-3">
-            <div className="flex items-start gap-3">
-              <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <Eye className="h-3.5 w-3.5 text-primary" />
-              </div>
-              <div>
-                <p className="text-xs font-medium">Document Review</p>
-                <p className="text-xs text-muted-foreground">
-                  Every document uploaded to a deal is automatically checked against your credit policy rules. The AI flags issues like expired insurance, low FICO scores, or LTV violations before they reach underwriting.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <ClipboardCheck className="h-3.5 w-3.5 text-primary" />
-              </div>
-              <div>
-                <p className="text-xs font-medium">Ongoing Compliance Monitoring</p>
-                <p className="text-xs text-muted-foreground">
-                  As deals progress through stages, the AI re-evaluates new information against your policy. If a borrower's credit report shows a score below your minimum, or a property appraisal reveals an issue, you'll be alerted immediately.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <AlertTriangle className="h-3.5 w-3.5 text-primary" />
-              </div>
-              <div>
-                <p className="text-xs font-medium">Risk Flagging & Exceptions</p>
-                <p className="text-xs text-muted-foreground">
-                  When the AI detects an out-of-policy condition, it creates a visible flag on the deal with a clear explanation. Your team can then decide whether to request updated documents, adjust terms, or approve an exception.
-                </p>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+      )}
     </div>
   );
 }
@@ -3225,42 +3226,42 @@ function SummaryStep({
       </div>
 
       <div className="grid grid-cols-2 gap-4" data-testid="summary-cards-grid">
-        <div className="border rounded-[10px] p-5" data-testid="summary-card-loan-params">
-          <div className="flex items-center justify-between mb-3">
+        <div className="border rounded-[10px] bg-slate-50/80 dark:bg-muted/30 overflow-hidden" data-testid="summary-card-loan-params">
+          <div className="flex items-center justify-between px-5 pt-5 pb-3">
             <h4 className="text-[16px] font-bold">Loan Parameters</h4>
             <button className="text-[13px] text-muted-foreground hover:text-primary" onClick={() => onEditStep('program-details')} data-testid="button-edit-loan-params">Edit</button>
           </div>
-          <div className="space-y-2 text-[14px]">
-            <div className="flex justify-between"><span className="text-muted-foreground">LTV Range</span><span className="font-semibold">{ltvRange}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Min DSCR</span><span className="font-semibold">{minDscr || '—'}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Loan Range</span><span className="font-semibold">{loanRange}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Min FICO</span><span className="font-semibold">{minFico || '—'}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Properties</span><span className="font-semibold">{propertyAbbrevs || '—'}</span></div>
+          <div className="divide-y text-[14px]">
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">LTV Range</span><span className="font-semibold">{ltvRange}</span></div>
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">Min DSCR</span><span className="font-semibold">{minDscr || '—'}</span></div>
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">Loan Range</span><span className="font-semibold">{loanRange}</span></div>
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">Min FICO</span><span className="font-semibold">{minFico || '—'}</span></div>
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">Properties</span><span className="font-semibold">{propertyAbbrevs || '—'}</span></div>
           </div>
         </div>
 
-        <div className="border rounded-[10px] p-5" data-testid="summary-card-quote-form">
-          <div className="flex items-center justify-between mb-3">
+        <div className="border rounded-[10px] bg-slate-50/80 dark:bg-muted/30 overflow-hidden" data-testid="summary-card-quote-form">
+          <div className="flex items-center justify-between px-5 pt-5 pb-3">
             <h4 className="text-[16px] font-bold">Quote Form</h4>
             <button className="text-[13px] text-muted-foreground hover:text-primary" onClick={() => onEditStep('quote-form')} data-testid="button-edit-quote-form">Edit</button>
           </div>
-          <div className="space-y-2 text-[14px]">
-            <div className="flex justify-between"><span className="text-muted-foreground">Required Fields</span><span className="font-semibold">{requiredFields.length}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Optional Fields</span><span className="font-semibold">{optionalFields.length}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Total Fields</span><span className="font-semibold">{visibleFields.length}</span></div>
+          <div className="divide-y text-[14px]">
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">Required Fields</span><span className="font-semibold">{requiredFields.length}</span></div>
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">Optional Fields</span><span className="font-semibold">{optionalFields.length}</span></div>
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">Total Fields</span><span className="font-semibold">{visibleFields.length}</span></div>
           </div>
         </div>
 
-        <div className="border rounded-[10px] p-5" data-testid="summary-card-workflow">
-          <div className="flex items-center justify-between mb-3">
+        <div className="border rounded-[10px] bg-slate-50/80 dark:bg-muted/30 overflow-hidden" data-testid="summary-card-workflow">
+          <div className="flex items-center justify-between px-5 pt-5 pb-3">
             <h4 className="text-[16px] font-bold">Workflow</h4>
             <button className="text-[13px] text-muted-foreground hover:text-primary" onClick={() => onEditStep('stages')} data-testid="button-edit-workflow">Edit</button>
           </div>
-          <div className="space-y-2 text-[14px]">
-            <div className="flex justify-between"><span className="text-muted-foreground">Stages</span><span className="font-semibold">{validStages.length}</span></div>
+          <div className="divide-y text-[14px]">
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">Stages</span><span className="font-semibold">{validStages.length}</span></div>
           </div>
           {validStages.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 mt-3">
+            <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-t">
               {validStages.map((s, i) => (
                 <div key={i} className="flex items-center gap-1.5">
                   <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: STAGE_COLORS[i % STAGE_COLORS.length] }} />
@@ -3271,43 +3272,43 @@ function SummaryStep({
           )}
         </div>
 
-        <div className="border rounded-[10px] p-5" data-testid="summary-card-documents">
-          <div className="flex items-center justify-between mb-3">
+        <div className="border rounded-[10px] bg-slate-50/80 dark:bg-muted/30 overflow-hidden" data-testid="summary-card-documents">
+          <div className="flex items-center justify-between px-5 pt-5 pb-3">
             <h4 className="text-[16px] font-bold">Documents</h4>
             <button className="text-[13px] text-muted-foreground hover:text-primary" onClick={() => onEditStep('documents')} data-testid="button-edit-documents">Edit</button>
           </div>
-          <div className="space-y-2 text-[14px]">
-            <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-semibold">{validDocs.length}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Required</span><span className="font-semibold">{requiredDocs.length}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Optional</span><span className="font-semibold">{optionalDocs.length}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Categories</span><span className="font-semibold">{uniqueCategories.size}</span></div>
+          <div className="divide-y text-[14px]">
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">Total</span><span className="font-semibold">{validDocs.length}</span></div>
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">Required</span><span className="font-semibold">{requiredDocs.length}</span></div>
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">Optional</span><span className="font-semibold">{optionalDocs.length}</span></div>
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">Categories</span><span className="font-semibold">{uniqueCategories.size}</span></div>
           </div>
         </div>
 
-        <div className="border rounded-[10px] p-5" data-testid="summary-card-tasks">
-          <div className="flex items-center justify-between mb-3">
+        <div className="border rounded-[10px] bg-slate-50/80 dark:bg-muted/30 overflow-hidden" data-testid="summary-card-tasks">
+          <div className="flex items-center justify-between px-5 pt-5 pb-3">
             <h4 className="text-[16px] font-bold">Tasks</h4>
             <button className="text-[13px] text-muted-foreground hover:text-primary" onClick={() => onEditStep('tasks')} data-testid="button-edit-tasks">Edit</button>
           </div>
-          <div className="space-y-2 text-[14px]">
-            <div className="flex justify-between"><span className="text-muted-foreground">Total Tasks</span><span className="font-semibold">{validTasks.length}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">High Priority</span><span className="font-semibold">{highPriorityTasks.length}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Medium</span><span className="font-semibold">{mediumTasks.length}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Low</span><span className="font-semibold">{lowTasks.length}</span></div>
+          <div className="divide-y text-[14px]">
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">Total Tasks</span><span className="font-semibold">{validTasks.length}</span></div>
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">High Priority</span><span className="font-semibold text-blue-700">{highPriorityTasks.length}</span></div>
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">Medium</span><span className="font-semibold text-amber-600">{mediumTasks.length}</span></div>
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">Low</span><span className="font-semibold">{lowTasks.length}</span></div>
           </div>
         </div>
 
-        <div className="border rounded-[10px] p-5" data-testid="summary-card-pricing">
-          <div className="flex items-center justify-between mb-3">
+        <div className="border rounded-[10px] bg-slate-50/80 dark:bg-muted/30 overflow-hidden" data-testid="summary-card-pricing">
+          <div className="flex items-center justify-between px-5 pt-5 pb-3">
             <h4 className="text-[16px] font-bold">Pricing</h4>
             <button className="text-[13px] text-muted-foreground hover:text-primary" onClick={() => onEditStep('pricing')} data-testid="button-edit-pricing">Edit</button>
           </div>
-          <div className="space-y-2 text-[14px]">
-            <div className="flex justify-between"><span className="text-muted-foreground">Mode</span><span className="font-semibold">Rule-Based</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Base Rate</span><span className="font-semibold">—</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">YSP</span><span className="font-semibold">—</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Points</span><span className="font-semibold">—</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Adjuster Groups</span><span className="font-semibold">—</span></div>
+          <div className="divide-y text-[14px]">
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">Mode</span><span className="font-semibold">Rule-Based</span></div>
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">Base Rate</span><span className="font-semibold">—</span></div>
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">YSP</span><span className="font-semibold">—</span></div>
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">Points</span><span className="font-semibold">—</span></div>
+            <div className="flex justify-between px-5 py-2.5"><span className="text-muted-foreground">Adjuster Groups</span><span className="font-semibold">—</span></div>
           </div>
         </div>
       </div>
