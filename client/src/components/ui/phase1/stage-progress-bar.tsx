@@ -20,8 +20,8 @@ export function StageProgressBar({ stages, className }: StageProgressBarProps) {
   const progressPercent = stages.length > 0 ? Math.round((completedCount / stages.length) * 100) : 0;
 
   return (
-    <div className={cn("bg-card border rounded-[10px] px-5 py-4", className)}>
-      <div className="flex items-center justify-between mb-3">
+    <div className={cn("bg-card border rounded-[10px] px-5 py-2.5", className)}>
+      <div className="flex items-center justify-between mb-1.5">
         <span className="text-[18px] font-medium text-muted-foreground">
           Stage {currentIndex + 1} of {stages.length}
         </span>
