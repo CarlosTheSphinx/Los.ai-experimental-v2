@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { queryClient } from "@/lib/queryClient";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useRoute, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, FolderOpen, RefreshCw, ExternalLink,
   LayoutDashboard, FileText, CheckSquare, Users, MessageCircle, Sparkles,
-  MoreHorizontal, DollarSign, Percent, TrendingUp, Calculator, Activity
+  MoreHorizontal, DollarSign, Percent, TrendingUp, Calculator, Activity,
+  Loader2, Zap
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
