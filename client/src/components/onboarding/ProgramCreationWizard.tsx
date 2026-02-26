@@ -88,6 +88,8 @@ const simplifiedPropertyTypes = [
   { value: 'multi-family', label: 'Multi-Family (5+)' },
   { value: 'commercial', label: 'Commercial' },
   { value: 'mixed-use', label: 'Mixed Use' },
+  { value: 'other', label: 'Other' },
+  { value: 'special-purpose', label: 'Special Purpose' },
 ];
 
 const templateOptions = [
