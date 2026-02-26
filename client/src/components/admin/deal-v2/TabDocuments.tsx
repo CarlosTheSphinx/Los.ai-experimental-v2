@@ -442,7 +442,7 @@ function StageSection({
               {stageOrder}
             </div>
           )}
-          <span className="text-[16px] font-semibold">
+          <span className="text-[16px] font-semibold text-muted-foreground">
             Stage {stageOrder}: {stageName}
           </span>
         </div>
