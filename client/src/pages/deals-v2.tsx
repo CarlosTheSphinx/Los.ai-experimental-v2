@@ -353,10 +353,9 @@ export default function DealsV2() {
         />
       </SummaryStrip>
 
-      {/* Table Card */}
+      {/* Search & Toolbar Card */}
       <div className="bg-card border rounded-[10px] shadow-sm overflow-hidden">
-        {/* Search & Toolbar */}
-        <div className="px-4 py-3 mb-2 border-b">
+        <div className="px-4 py-3">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="relative max-w-[320px] w-[320px]">
@@ -561,7 +560,10 @@ export default function DealsV2() {
             </div>
           )}
         </div>
+      </div>
 
+      {/* Table Card */}
+      <div className="bg-card border rounded-[10px] shadow-sm overflow-hidden">
         {/* Table */}
         {isLoading ? (
           <div className="p-6 space-y-3">
