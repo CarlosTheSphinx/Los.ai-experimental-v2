@@ -152,6 +152,14 @@ export default function DealsV2() {
   const [showFilters, setShowFilters] = useState(false);
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [viewMode, setViewMode] = useState<"list" | "board" | "compact">("list");
+  const [programFilter, setProgramFilter] = useState<string>("all");
+  const [assignedFilter, setAssignedFilter] = useState<string>("all");
+  const [amountMin, setAmountMin] = useState<string>("");
+  const [amountMax, setAmountMax] = useState<string>("");
+  const [closeDateFilter, setCloseDateFilter] = useState<string>("all");
+  const [stateFilter, setStateFilter] = useState<string>("all");
+  const [brokerFilter, setBrokerFilter] = useState<string>("all");
+  const [daysInStageFilter, setDaysInStageFilter] = useState<string>("all");
 
   const { data: dealsData, isLoading } = useQuery<{ projects: Deal[] }>({
     queryKey: ["/api/deals"],
@@ -163,6 +171,27 @@ export default function DealsV2() {
     refetchInterval: 15000,
   });
   const deals = dealsData?.projects ?? [];
+
+  const uniquePrograms = useMemo(() => {
+    const programs = new Set<string>();
+    deals.forEach((d) => { if (d.programName) programs.add(d.programName); });
+    return Array.from(programs).sort();
+  }, [deals]);
+
+  const uniqueStates = useMemo(() => {
+    const states = new Set<string>();
+    deals.forEach((d) => {
+      const st = d.propertyState || extractState(d.propertyAddress);
+      if (st && st !== "—") states.add(st);
+    });
+    return Array.from(states).sort();
+  }, [deals]);
+
+  const uniqueAssignees = useMemo(() => {
+    const names = new Set<string>();
+    deals.forEach((d) => { if (d.userName) names.add(d.userName); });
+    return Array.from(names).sort();
+  }, [deals]);
 
   // Compute summary metrics
   const metrics = useMemo(() => {
@@ -195,11 +224,67 @@ export default function DealsV2() {
     if (activeFilter === "pending") result = result.filter((d) => ["pending", "submitted", "review"].includes(d.status?.toLowerCase() || ""));
     if (activeFilter === "closed") result = result.filter((d) => ["closed", "funded", "completed"].includes(d.status?.toLowerCase() || ""));
 
-    // Type filter
+    // Loan type filter
     if (typeFilter !== "all") result = result.filter((d) => d.loanType?.toLowerCase() === typeFilter.toLowerCase());
 
     // Status filter
     if (statusFilter !== "all") result = result.filter((d) => d.status?.toLowerCase() === statusFilter.toLowerCase());
+
+    // Program filter
+    if (programFilter !== "all") result = result.filter((d) => d.programName === programFilter);
+
+    // Assigned filter
+    if (assignedFilter !== "all") result = result.filter((d) => d.userName === assignedFilter);
+
+    // Amount range
+    if (amountMin) {
+      const min = parseFloat(amountMin);
+      if (!isNaN(min)) result = result.filter((d) => (d.loanAmount || 0) >= min);
+    }
+    if (amountMax) {
+      const max = parseFloat(amountMax);
+      if (!isNaN(max)) result = result.filter((d) => (d.loanAmount || 0) <= max);
+    }
+
+    // Close date filter
+    if (closeDateFilter !== "all") {
+      const now = new Date();
+      if (closeDateFilter === "overdue") result = result.filter((d) => d.targetCloseDate && new Date(d.targetCloseDate) < now);
+      if (closeDateFilter === "this-week") {
+        const weekEnd = new Date(now); weekEnd.setDate(now.getDate() + 7);
+        result = result.filter((d) => d.targetCloseDate && new Date(d.targetCloseDate) >= now && new Date(d.targetCloseDate) <= weekEnd);
+      }
+      if (closeDateFilter === "this-month") {
+        const monthEnd = new Date(now); monthEnd.setDate(now.getDate() + 30);
+        result = result.filter((d) => d.targetCloseDate && new Date(d.targetCloseDate) >= now && new Date(d.targetCloseDate) <= monthEnd);
+      }
+      if (closeDateFilter === "next-90") {
+        const end = new Date(now); end.setDate(now.getDate() + 90);
+        result = result.filter((d) => d.targetCloseDate && new Date(d.targetCloseDate) >= now && new Date(d.targetCloseDate) <= end);
+      }
+    }
+
+    // Property state filter
+    if (stateFilter !== "all") {
+      result = result.filter((d) => {
+        const st = d.propertyState || extractState(d.propertyAddress);
+        return st === stateFilter;
+      });
+    }
+
+    // Days in stage filter
+    if (daysInStageFilter !== "all") {
+      const now = new Date();
+      result = result.filter((d) => {
+        if (!d.createdAt) return false;
+        const days = Math.floor((now.getTime() - new Date(d.createdAt).getTime()) / (1000 * 60 * 60 * 24));
+        if (daysInStageFilter === "0-7") return days <= 7;
+        if (daysInStageFilter === "8-30") return days > 7 && days <= 30;
+        if (daysInStageFilter === "31-60") return days > 30 && days <= 60;
+        if (daysInStageFilter === "60+") return days > 60;
+        return true;
+      });
+    }
 
     // Sort
     result.sort((a, b) => {
@@ -209,7 +294,7 @@ export default function DealsV2() {
     });
 
     return result;
-  }, [deals, searchQuery, activeFilter, typeFilter, statusFilter, sortOrder]);
+  }, [deals, searchQuery, activeFilter, typeFilter, statusFilter, sortOrder, programFilter, assignedFilter, amountMin, amountMax, closeDateFilter, stateFilter, brokerFilter, daysInStageFilter]);
 
   const isAdmin = user?.role && ["admin", "staff", "super_admin"].includes(user.role);
 
@@ -334,39 +419,145 @@ export default function DealsV2() {
           </div>
 
           {showFilters && (
-            <div className="flex items-center gap-3 mt-3 pt-3 border-t border-border/50 animate-in slide-in-from-top-1 duration-200">
-              <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-              <select
-                className="h-8 px-3 text-[13px] border rounded-md bg-white text-foreground"
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
-                data-testid="select-type-filter"
-              >
-                <option value="all">All Programs</option>
-                <option value="dscr">DSCR</option>
-                <option value="rtl">RTL</option>
-                <option value="bridge">Bridge</option>
-              </select>
-              <select
-                className="h-8 px-3 text-[13px] border rounded-md bg-white text-foreground"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                data-testid="select-status-filter"
-              >
-                <option value="all">All Status</option>
-                <option value="active">Active</option>
-                <option value="pending">Pending</option>
-                <option value="closed">Closed</option>
-              </select>
-              {(typeFilter !== "all" || statusFilter !== "all") && (
+            <div className="mt-3 pt-3 border-t border-border/50 animate-in slide-in-from-top-1 duration-200">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[13px] font-semibold">Filter Deals</span>
                 <button
-                  onClick={() => { setTypeFilter("all"); setStatusFilter("all"); }}
-                  className="text-[12px] text-muted-foreground hover:text-foreground transition-colors"
-                  data-testid="button-clear-filters"
+                  onClick={() => {
+                    setProgramFilter("all"); setTypeFilter("all"); setAssignedFilter("all");
+                    setAmountMin(""); setAmountMax(""); setCloseDateFilter("all");
+                    setStateFilter("all"); setBrokerFilter("all"); setDaysInStageFilter("all");
+                    setStatusFilter("all");
+                  }}
+                  className="text-[12px] text-blue-600 hover:text-blue-700 transition-colors"
+                  data-testid="button-clear-all-filters"
                 >
-                  Clear filters
+                  Clear all
                 </button>
-              )}
+              </div>
+              <div className="grid grid-cols-4 gap-x-4 gap-y-3">
+                <div>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">Loan Program</label>
+                  <select
+                    className="w-full h-9 px-3 text-[13px] border rounded-md bg-white text-foreground"
+                    value={programFilter}
+                    onChange={(e) => setProgramFilter(e.target.value)}
+                    data-testid="select-program-filter"
+                  >
+                    <option value="all">All Programs</option>
+                    {uniquePrograms.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">Loan Type</label>
+                  <select
+                    className="w-full h-9 px-3 text-[13px] border rounded-md bg-white text-foreground"
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value)}
+                    data-testid="select-type-filter"
+                  >
+                    <option value="all">All Types</option>
+                    <option value="dscr">DSCR</option>
+                    <option value="rtl">RTL Fix & Flip</option>
+                    <option value="bridge">Bridge</option>
+                    <option value="purchase">Purchase</option>
+                    <option value="refinance">Refinance</option>
+                    <option value="ground-up">Ground Up</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">Assigned To</label>
+                  <select
+                    className="w-full h-9 px-3 text-[13px] border rounded-md bg-white text-foreground"
+                    value={assignedFilter}
+                    onChange={(e) => setAssignedFilter(e.target.value)}
+                    data-testid="select-assigned-filter"
+                  >
+                    <option value="all">Anyone</option>
+                    {uniqueAssignees.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">Amount Range</label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      placeholder="Min"
+                      value={amountMin}
+                      onChange={(e) => setAmountMin(e.target.value)}
+                      className="h-9 text-[13px] w-1/2"
+                      data-testid="input-amount-min"
+                    />
+                    <Input
+                      type="number"
+                      placeholder="Max"
+                      value={amountMax}
+                      onChange={(e) => setAmountMax(e.target.value)}
+                      className="h-9 text-[13px] w-1/2"
+                      data-testid="input-amount-max"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">Close Date</label>
+                  <select
+                    className="w-full h-9 px-3 text-[13px] border rounded-md bg-white text-foreground"
+                    value={closeDateFilter}
+                    onChange={(e) => setCloseDateFilter(e.target.value)}
+                    data-testid="select-close-date-filter"
+                  >
+                    <option value="all">Any time</option>
+                    <option value="overdue">Overdue</option>
+                    <option value="this-week">This week</option>
+                    <option value="this-month">This month</option>
+                    <option value="next-90">Next 90 days</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">Property State</label>
+                  <select
+                    className="w-full h-9 px-3 text-[13px] border rounded-md bg-white text-foreground"
+                    value={stateFilter}
+                    onChange={(e) => setStateFilter(e.target.value)}
+                    data-testid="select-state-filter"
+                  >
+                    <option value="all">All States</option>
+                    {uniqueStates.map((st) => (
+                      <option key={st} value={st}>{st}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">Broker / Partner</label>
+                  <select
+                    className="w-full h-9 px-3 text-[13px] border rounded-md bg-white text-foreground"
+                    value={brokerFilter}
+                    onChange={(e) => setBrokerFilter(e.target.value)}
+                    data-testid="select-broker-filter"
+                  >
+                    <option value="all">All</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1 block">Days in Stage</label>
+                  <select
+                    className="w-full h-9 px-3 text-[13px] border rounded-md bg-white text-foreground"
+                    value={daysInStageFilter}
+                    onChange={(e) => setDaysInStageFilter(e.target.value)}
+                    data-testid="select-days-in-stage-filter"
+                  >
+                    <option value="all">Any</option>
+                    <option value="0-7">0–7 days</option>
+                    <option value="8-30">8–30 days</option>
+                    <option value="31-60">31–60 days</option>
+                    <option value="60+">60+ days</option>
+                  </select>
+                </div>
+              </div>
             </div>
           )}
         </div>
