@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 import { useRoute, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -108,8 +109,7 @@ export default function DealDetailV2() {
 
   const apiBase = isAdmin ? `/api/admin/deals` : `/api/deals`;
 
-  // Main deal query — endpoint returns { deal, stages, activity, processors }
-  const { data: dealData, isLoading } = useQuery<{
+  const { data: dealData, isLoading, error: dealError } = useQuery<{
     deal: any;
     stages: any[];
     activity: any[];
@@ -122,6 +122,7 @@ export default function DealDetailV2() {
       return res.json();
     },
     enabled: !!dealId,
+    retry: 2,
   });
 
   const deal = dealData?.deal;
@@ -169,13 +170,22 @@ export default function DealDetailV2() {
   if (!deal) {
     return (
       <div className="p-6 max-w-7xl mx-auto text-center py-20">
-        <h2 className="text-lg font-semibold mb-2">Deal not found</h2>
-        <p className="text-muted-foreground text-sm mb-4">This deal may have been deleted or you don't have access.</p>
-        <Link href={isAdmin ? "/admin" : "/deals"}>
-          <Button variant="outline" size="sm">
-            <ArrowLeft className="h-4 w-4 mr-2" /> Back to Pipeline
-          </Button>
-        </Link>
+        <h2 className="text-lg font-semibold mb-2">{dealError ? "Failed to load deal" : "Deal not found"}</h2>
+        <p className="text-muted-foreground text-sm mb-4">
+          {dealError ? "There was an error loading this deal. Please try again." : "This deal may have been deleted or you don't have access."}
+        </p>
+        <div className="flex items-center justify-center gap-3">
+          {dealError && (
+            <Button variant="default" size="sm" onClick={() => queryClient.invalidateQueries({ queryKey: [apiBase, dealId] })} data-testid="button-retry-deal">
+              Retry
+            </Button>
+          )}
+          <Link href={isAdmin ? "/admin" : "/deals"}>
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="h-4 w-4 mr-2" /> Back to Pipeline
+            </Button>
+          </Link>
+        </div>
       </div>
     );
   }
