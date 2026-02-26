@@ -180,12 +180,12 @@ export default function DealDetailV2() {
     );
   }
 
-  // Build stages from deal data (dealData.stages from the API, or fallback)
-  const stages = (dealData?.stages || deal.stages || DEFAULT_STAGES).map((s: any, i: number) => ({
+  const rawStages = dealData?.stages || deal.stages || DEFAULT_STAGES;
+  const stages = rawStages.map((s: any, i: number) => ({
     id: s.id || s.stepId || `stage-${i}`,
-    label: s.label || s.name || s.stepName || `Stage ${i + 1}`,
-    completed: s.completed || false,
-    current: s.current || deal.stage?.toLowerCase() === (s.label || s.name || "").toLowerCase(),
+    label: s.label || s.name || s.stepName || s.stageName || `Stage ${i + 1}`,
+    completed: s.completed || s.status === "completed" || false,
+    current: s.current || s.status === "in_progress" || deal.stage?.toLowerCase() === (s.label || s.name || s.stageName || "").toLowerCase(),
   }));
 
   return (

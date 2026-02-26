@@ -6755,7 +6755,12 @@ export async function registerRoutes(
         if (newProp) props = [newProp];
       }
       
-      res.json({ deal, documents: docs, project, properties: props });
+      const dealStages = await db.select()
+        .from(projectStages)
+        .where(eq(projectStages.projectId, projectId))
+        .orderBy(asc(projectStages.stageOrder));
+
+      res.json({ deal, documents: docs, project, properties: props, stages: dealStages });
     } catch (error) {
       console.error('Admin get deal error:', error);
       res.status(500).json({ error: 'Failed to load deal' });

@@ -190,12 +190,12 @@ export default function TabDocuments({
     .sort((a: any, b: any) => (a.stageOrder ?? 0) - (b.stageOrder ?? 0))
     .map((s: any) => s.id);
   stageIds.forEach((id: number) => {
-    if (docsByStage.has(id)) sortedStageKeys.push(id);
+    sortedStageKeys.push(id);
+  });
+  docsByStage.forEach((_, key) => {
+    if (key !== null && !sortedStageKeys.includes(key)) sortedStageKeys.push(key);
   });
   if (docsByStage.has(null)) sortedStageKeys.push(null);
-  docsByStage.forEach((_, key) => {
-    if (!sortedStageKeys.includes(key)) sortedStageKeys.push(key);
-  });
 
   const uploaded = documents.filter((d) => d.filePath || d.fileName).length;
 
@@ -292,7 +292,7 @@ export default function TabDocuments({
           const stageDocs = docsByStage.get(stageId) || [];
           const stage = stageId !== null ? stageMap.get(stageId) : null;
           const stageOrder = stage?.stageOrder ?? idx + 1;
-          const stageName = stage?.stageName || "General Documents";
+          const stageName = stage?.stageName || stage?.label || stage?.name || (stageId === null ? "General Documents" : `Stage ${stageOrder}`);
           const completedCount = stageDocs.filter(
             (d) => d.status === "approved" || d.status === "accepted"
           ).length;
