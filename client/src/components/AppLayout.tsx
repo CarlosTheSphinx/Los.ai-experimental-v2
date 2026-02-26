@@ -74,6 +74,7 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { CommandPalette } from "@/components/CommandPalette";
 import { ProcessorAssistant } from "@/components/admin/ProcessorAssistant";
 import { TrainingChecklist } from "@/components/TrainingChecklist";
+import MessagesPage from "@/pages/messages";
 import type { PermissionKey } from "@shared/schema";
 
 interface AppLayoutProps {
@@ -160,12 +161,20 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
   const sidebarPinned = sidebarPinnedProp ?? false;
   const setSidebarPinned = setSidebarPinnedProp ?? (() => {});
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [messagesOpen, setMessagesOpen] = useState(false);
   const [sidebarHovered, setSidebarHovered] = useState(false);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setOpen(sidebarPinned);
   }, [sidebarPinned, setOpen]);
+
+  useEffect(() => {
+    if (!messagesOpen) return;
+    const handleEsc = (e: KeyboardEvent) => { if (e.key === "Escape") setMessagesOpen(false); };
+    document.addEventListener("keydown", handleEsc);
+    return () => document.removeEventListener("keydown", handleEsc);
+  }, [messagesOpen]);
 
   const handleSidebarMouseEnter = () => {
     if (isMobile || sidebarPinned) return;
@@ -528,12 +537,10 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
           </div>
         )}
         <div className="flex items-center justify-end gap-1 px-3 py-1.5 border-b shrink-0">
-          <Link href="/inbox">
-            <Button size="icon" className="relative h-10 w-10 rounded-full bg-primary hover:bg-primary/90 text-white" data-testid="button-header-messages">
-              <MessageSquare className="!h-6 !w-6" />
-              <InboxBadge />
-            </Button>
-          </Link>
+          <Button size="icon" className="relative h-10 w-10 rounded-full bg-primary hover:bg-primary/90 text-white" data-testid="button-header-messages" onClick={() => setMessagesOpen(!messagesOpen)}>
+            <MessageSquare className="!h-6 !w-6" />
+            <InboxBadge />
+          </Button>
           <NotificationBell />
         </div>
         <main className="flex-1 overflow-auto">
@@ -542,6 +549,23 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
       </div>
 
       <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} />
+
+      {messagesOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" data-testid="messages-modal-overlay">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setMessagesOpen(false)} />
+          <div className="relative z-10 bg-card rounded-xl shadow-2xl w-full max-w-4xl max-h-[80vh] overflow-hidden flex flex-col" data-testid="messages-modal">
+            <div className="flex items-center justify-between px-5 py-3 border-b shrink-0">
+              <h2 className="text-lg font-semibold">Messages</h2>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setMessagesOpen(false)} data-testid="button-close-messages-modal">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-auto">
+              <MessagesPage />
+            </div>
+          </div>
+        </div>
+      )}
 
       {isAdmin && !isPreviewingOtherRole && <ProcessorAssistant isOpen={assistantOpen} onOpenChange={setAssistantOpen} />}
 
