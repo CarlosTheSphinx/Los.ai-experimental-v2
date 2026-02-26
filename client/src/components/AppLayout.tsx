@@ -128,13 +128,13 @@ const adminNavItems: NavItem[] = [
   { href: "/admin/onboarding", label: "Onboarding", icon: BookOpen, requiredPermission: "onboarding.view" },
 ];
 
-// Phase 1 v2 admin nav — cleaner grouping per wireframe (7 items, Miller's Law)
 const adminNavItemsV2: NavItem[] = [
   { href: "/admin", label: "Pipeline", icon: LayoutDashboard, shortcut: "⌘1" },
   { href: "/admin/programs", label: "Programs", icon: Settings2, requiredPermission: "programs.view" },
   { href: "/quotes", label: "Quotes", icon: FileText },
   { href: "/inbox", label: "Messages", icon: Inbox, showBadge: true, requiredPermission: "messages.view" },
   { href: "/admin/users", label: "Users", icon: Users, requiredPermission: "users.view", shortcut: "⌘2" },
+  { href: "/admin/onboarding", label: "Onboarding", icon: BookOpen, requiredPermission: "onboarding.view" },
   { href: "/admin/settings", label: "Settings", icon: Settings, requiredPermission: "settings.view" },
 ];
 
