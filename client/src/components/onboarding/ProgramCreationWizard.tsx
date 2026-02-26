@@ -2126,24 +2126,35 @@ function StagesStep({
     setStages(updated);
   };
 
+  const requiredCount = stages.filter((s) => s.isRequired).length;
+  const optionalCount = stages.length - requiredCount;
+
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <Layers className="h-4 w-4" />
-          Workflow Stages
-        </CardTitle>
-        <CardDescription>
-          Define the stages each deal goes through from application to closing. Drag to reorder. Documents and tasks will be linked to these stages in the next steps.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-2">
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-[26px] font-bold leading-tight">Workflow Stages</h2>
+        <p className="text-[16px] text-muted-foreground mt-1">
+          Define the stages each deal goes through from application to closing. Drag to reorder.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <span className="text-[14px] text-muted-foreground">
+          {stages.length} stages configured &mdash; {requiredCount} required, {optionalCount} optional
+        </span>
+        <Button variant="outline" onClick={addStage} data-testid="button-add-stage">
+          <Plus className="h-4 w-4 mr-1.5" />
+          Add Stage
+        </Button>
+      </div>
+
+      <div className="rounded-[10px] border bg-white overflow-hidden">
         {stages.map((stage, i) => (
           <div
             key={i}
             className={cn(
-              "flex items-center gap-2 p-2 rounded-md border transition-colors",
-              dragIdx === i ? "border-primary bg-primary/5" : "border-transparent bg-muted/40"
+              "flex items-center gap-3 py-3 px-4 border-b border-border/60 transition-colors",
+              dragIdx === i && "bg-primary/5 border-primary"
             )}
             draggable
             onDragStart={() => setDragIdx(i)}
@@ -2152,34 +2163,95 @@ function StagesStep({
             onDragEnd={() => setDragIdx(null)}
             data-testid={`stage-row-${i}`}
           >
-            <GripVertical className="h-4 w-4 text-muted-foreground flex-shrink-0 cursor-grab active:cursor-grabbing" />
-            <Badge variant="outline" className="text-xs w-6 h-6 flex items-center justify-center p-0 flex-shrink-0">
+            <GripVertical className="h-4 w-4 text-muted-foreground/50 cursor-grab flex-shrink-0" />
+
+            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-[13px] font-semibold text-muted-foreground flex-shrink-0">
               {i + 1}
-            </Badge>
-            <Input
-              className="h-8 text-sm flex-1"
-              placeholder="Stage name"
-              value={stage.stepName}
-              onChange={(e) => updateStage(i, 'stepName', e.target.value)}
-              data-testid={`input-stage-name-${i}`}
-            />
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-destructive flex-shrink-0"
-              onClick={() => removeStage(i)}
-              data-testid={`button-remove-stage-${i}`}
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
+            </div>
+
+            <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+              <Input
+                className="h-8 text-[15px] font-semibold border-0 shadow-none px-0 focus-visible:ring-0"
+                placeholder="Stage name"
+                value={stage.stepName}
+                onChange={(e) => updateStage(i, 'stepName', e.target.value)}
+                data-testid={`input-stage-name-${i}`}
+              />
+              <span className={cn(
+                "text-[12px] font-medium",
+                stage.isRequired ? "text-red-500" : "text-muted-foreground"
+              )}>
+                {stage.isRequired ? 'Required' : 'Optional'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <div className="flex items-center gap-0.5">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => i > 0 && moveStage(i, i - 1)}
+                  disabled={i === 0}
+                  data-testid={`button-move-up-stage-${i}`}
+                >
+                  <ArrowUp className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => i < stages.length - 1 && moveStage(i, i + 1)}
+                  disabled={i === stages.length - 1}
+                  data-testid={`button-move-down-stage-${i}`}
+                >
+                  <ArrowDown className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+
+              <Select
+                value={stage.isRequired ? 'required' : 'optional'}
+                onValueChange={(v) => updateStage(i, 'isRequired', v === 'required')}
+              >
+                <SelectTrigger
+                  className={cn(
+                    "w-[120px] h-9 text-[13px]",
+                    stage.isRequired && "border-primary/40 text-primary"
+                  )}
+                  data-testid={`select-stage-status-${i}`}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="required">Required</SelectItem>
+                  <SelectItem value="optional">Optional</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-destructive flex-shrink-0"
+                onClick={() => removeStage(i)}
+                data-testid={`button-remove-stage-${i}`}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
         ))}
-        <Button variant="outline" size="sm" onClick={addStage} data-testid="button-add-stage">
-          <Plus className="h-3.5 w-3.5 mr-1" />
-          Add Stage
-        </Button>
-      </CardContent>
-    </Card>
+      </div>
+
+      <div className="rounded-[10px] border border-blue-200 bg-blue-50/60 p-4 flex gap-3">
+        <Lightbulb className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
+        <div>
+          <span className="text-[14px] font-semibold text-blue-700">Tip: </span>
+          <span className="text-[14px] text-blue-800">
+            Stages define your deal workflow from application to closing. Documents and tasks in the next steps will be linked to these stages. Required stages must be completed before a deal can advance.
+          </span>
+        </div>
+      </div>
+    </div>
   );
 }
 
