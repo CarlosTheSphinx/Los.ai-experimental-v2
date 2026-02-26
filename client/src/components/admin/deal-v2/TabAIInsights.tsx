@@ -23,16 +23,16 @@ function InsightCard({ insight }: { insight: any }) {
     <div className="flex items-start gap-3 py-3 px-4 rounded-lg border bg-card">
       <div className="mt-0.5">{getIcon()}</div>
       <div className="flex-1 min-w-0">
-        <p className="text-[13px] font-medium">{insight.title || insight.message}</p>
+        <p className="text-[16px] font-medium">{insight.title || insight.message}</p>
         {insight.description && (
-          <p className="text-[12px] text-muted-foreground mt-1">{insight.description}</p>
+          <p className="text-[14px] text-muted-foreground mt-1">{insight.description}</p>
         )}
         {insight.recommendation && (
-          <p className="text-[12px] text-primary mt-1.5">{insight.recommendation}</p>
+          <p className="text-[14px] text-primary mt-1.5">{insight.recommendation}</p>
         )}
       </div>
       {insight.category && (
-        <Badge variant="secondary" className="text-[10px] shrink-0">{insight.category}</Badge>
+        <Badge variant="secondary" className="text-[12px] shrink-0">{insight.category}</Badge>
       )}
     </div>
   );
@@ -63,7 +63,7 @@ export default function TabAIInsights({
     return (
       <div className="flex items-center justify-center py-12 text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin mr-2" />
-        <span className="text-[13px]">Analyzing deal...</span>
+        <span className="text-[16px]">Analyzing deal...</span>
       </div>
     );
   }
@@ -87,7 +87,7 @@ export default function TabAIInsights({
     <div className="space-y-5">
       {risks.length > 0 && (
         <div>
-          <h4 className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+          <h4 className="text-[14px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">
             Risk Flags ({risks.length})
           </h4>
           <div className="space-y-2">
@@ -99,7 +99,7 @@ export default function TabAIInsights({
       )}
       {recommendations.length > 0 && (
         <div>
-          <h4 className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+          <h4 className="text-[14px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">
             Recommendations ({recommendations.length})
           </h4>
           <div className="space-y-2">

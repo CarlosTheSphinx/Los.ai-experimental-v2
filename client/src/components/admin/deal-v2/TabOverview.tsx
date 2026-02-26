@@ -32,18 +32,18 @@ function daysBetween(start: string | Date | null | undefined): string {
 function Field({ label, value, tooltip }: { label: string; value: string; tooltip?: string }) {
   const labelEl = tooltip ? (
     <Tooltip>
-      <TooltipTrigger className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-dashed border-muted-foreground/40 cursor-help">
+      <TooltipTrigger className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-dashed border-muted-foreground/40 cursor-help">
         {label} <span className="text-muted-foreground/50">?</span>
       </TooltipTrigger>
       <TooltipContent side="top" className="max-w-[220px] text-xs">{tooltip}</TooltipContent>
     </Tooltip>
   ) : (
-    <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
+    <span className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
   );
   return (
     <div>
       {labelEl}
-      <p className="text-[14px] font-bold mt-0.5">{value}</p>
+      <p className="text-[17px] font-bold mt-0.5">{value}</p>
     </div>
   );
 }
@@ -51,12 +51,12 @@ function Field({ label, value, tooltip }: { label: string; value: string; toolti
 function EditField({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (v: string) => void; type?: string }) {
   return (
     <div>
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
+      <span className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
       <Input
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-8 text-[13px] mt-0.5"
+        className="h-8 text-[16px] mt-0.5"
         data-testid={`input-edit-${label.toLowerCase().replace(/\s+/g, "-")}`}
       />
     </div>
@@ -256,7 +256,7 @@ export default function TabOverview({
         {/* Loan Details */}
         <Card>
           <CardHeader className="pb-0 flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-[18px] flex items-center gap-2">
+            <CardTitle className="text-[22px] flex items-center gap-2">
               <DollarSign className="h-5 w-5 text-muted-foreground" />
               Loan Details
             </CardTitle>
@@ -315,7 +315,7 @@ export default function TabOverview({
         {/* Property Details */}
         <Card>
           <CardHeader className="pb-0 flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-[18px] flex items-center gap-2">
+            <CardTitle className="text-[22px] flex items-center gap-2">
               <Building2 className="h-5 w-5 text-muted-foreground" />
               Property Details
             </CardTitle>
@@ -389,7 +389,7 @@ export default function TabOverview({
         {/* Borrower Details */}
         <Card>
           <CardHeader className="pb-0 flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-[18px] flex items-center gap-2">
+            <CardTitle className="text-[22px] flex items-center gap-2">
               <User className="h-5 w-5 text-muted-foreground" />
               Borrower Details
             </CardTitle>
@@ -445,7 +445,7 @@ export default function TabOverview({
         {/* Deal Controls */}
         <Card>
           <CardHeader className="pb-0">
-            <CardTitle className="text-[18px] flex items-center gap-2">
+            <CardTitle className="text-[22px] flex items-center gap-2">
               <Settings2 className="h-5 w-5 text-muted-foreground" />
               Deal Controls
             </CardTitle>
@@ -454,12 +454,12 @@ export default function TabOverview({
           <CardContent>
             <div className="grid grid-cols-2 gap-x-8 gap-y-2.5">
               <div>
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Deal Status</span>
+                <span className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">Deal Status</span>
                 <Select
                   value={deal.projectStatus || deal.status || "active"}
                   onValueChange={(v) => saveControlMutation.mutate({ status: v })}
                 >
-                  <SelectTrigger className="h-9 mt-1 text-[13px]" data-testid="select-deal-status">
+                  <SelectTrigger className="h-9 mt-1 text-[16px]" data-testid="select-deal-status">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -470,12 +470,12 @@ export default function TabOverview({
                 </Select>
               </div>
               <div>
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Current Stage</span>
+                <span className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">Current Stage</span>
                 <Select
                   value={deal.stage || deal.currentStage || "application"}
                   onValueChange={(v) => saveControlMutation.mutate({ currentStage: v })}
                 >
-                  <SelectTrigger className="h-9 mt-1 text-[13px]" data-testid="select-current-stage">
+                  <SelectTrigger className="h-9 mt-1 text-[16px]" data-testid="select-current-stage">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -486,13 +486,13 @@ export default function TabOverview({
                 </Select>
               </div>
               <div>
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Loan Program</span>
+                <span className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">Loan Program</span>
                 <Select
                   value={deal.programId ? String(deal.programId) : "none"}
                   onValueChange={(v) => convertProgramMutation.mutate(v === "none" ? null : Number(v))}
                   disabled={convertProgramMutation.isPending}
                 >
-                  <SelectTrigger className="h-9 mt-1 text-[13px]" data-testid="select-loan-program">
+                  <SelectTrigger className="h-9 mt-1 text-[16px]" data-testid="select-loan-program">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -504,8 +504,8 @@ export default function TabOverview({
                 </Select>
               </div>
               <div>
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Created</span>
-                <p className="text-[14px] font-bold mt-2.5">{fmtDate(deal.createdAt)}</p>
+                <span className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">Created</span>
+                <p className="text-[17px] font-bold mt-2.5">{fmtDate(deal.createdAt)}</p>
               </div>
             </div>
           </CardContent>

@@ -133,24 +133,24 @@ export default function TabTasks({
           data-testid={`checkbox-task-${task.id}`}
         />
         <div className="flex-1 min-w-0">
-          <p className={`text-[13px] font-medium ${task.status === "completed" || task.status === "done" ? "line-through text-muted-foreground" : ""}`}>
+          <p className={`text-[16px] font-medium ${task.status === "completed" || task.status === "done" ? "line-through text-muted-foreground" : ""}`}>
             {task.taskTitle || task.taskName || task.title}
           </p>
           {assignee && (
-            <p className="text-[11px] text-muted-foreground">Assigned to: {assignee}</p>
+            <p className="text-[13px] text-muted-foreground">Assigned to: {assignee}</p>
           )}
           {task.dueDate && !isNaN(new Date(task.dueDate).getTime()) && (
-            <p className="text-[11px] text-muted-foreground">Due: {format(new Date(task.dueDate), "MMM d, yyyy")}</p>
+            <p className="text-[13px] text-muted-foreground">Due: {format(new Date(task.dueDate), "MMM d, yyyy")}</p>
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {task.priority && (
-            <Badge variant="secondary" className={`text-[10px] ${getPriorityColor(task.priority)}`}>
+            <Badge variant="secondary" className={`text-[12px] ${getPriorityColor(task.priority)}`}>
               {task.priority}
             </Badge>
           )}
           {task.borrowerActionRequired && (
-            <Badge variant="outline" className="text-[10px] text-blue-600 border-blue-200">
+            <Badge variant="outline" className="text-[12px] text-blue-600 border-blue-200">
               Borrower
             </Badge>
           )}

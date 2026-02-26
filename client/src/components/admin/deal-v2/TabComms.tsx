@@ -214,7 +214,7 @@ export default function TabComms({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <Card>
           <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-[14px] flex items-center gap-2">
+            <CardTitle className="text-[17px] flex items-center gap-2">
               <Mail className="h-4 w-4 text-muted-foreground" />
               Email Digests
             </CardTitle>
@@ -242,8 +242,8 @@ export default function TabComms({
                     <div key={entry.id || idx} className="flex items-start gap-3 py-3 border-b last:border-0">
                       <div className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 ${getDigestDotColor(entry.activityType)}`} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-semibold text-foreground leading-snug">{title}</p>
-                        <p className="text-[12px] text-muted-foreground mt-0.5">
+                        <p className="text-[16px] font-semibold text-foreground leading-snug">{title}</p>
+                        <p className="text-[14px] text-muted-foreground mt-0.5">
                           {formatDateTime(entry.createdAt)}
                           {subtitle && ` — ${subtitle}`}
                         </p>
@@ -258,7 +258,7 @@ export default function TabComms({
 
         <Card>
           <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-[14px] flex items-center gap-2">
+            <CardTitle className="text-[17px] flex items-center gap-2">
               <StickyNote className="h-4 w-4 text-muted-foreground" />
               Notes & Activity
             </CardTitle>
@@ -280,7 +280,7 @@ export default function TabComms({
                   placeholder="Write a note..."
                   value={noteContent}
                   onChange={(e) => setNoteContent(e.target.value)}
-                  className="text-[13px] min-h-[70px] resize-none bg-white"
+                  className="text-[16px] min-h-[70px] resize-none bg-white"
                   data-testid="input-note-content"
                 />
                 <div className="flex justify-end gap-2">
@@ -318,8 +318,8 @@ export default function TabComms({
                   <div key={entry.id} className="flex items-start gap-3 py-3 border-b last:border-0">
                     <div className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 ${entry.dotColor}`} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-semibold text-foreground leading-snug">{entry.content}</p>
-                      <p className="text-[12px] text-muted-foreground mt-0.5">
+                      <p className="text-[16px] font-semibold text-foreground leading-snug">{entry.content}</p>
+                      <p className="text-[14px] text-muted-foreground mt-0.5">
                         {formatDateTime(entry.createdAt)}
                       </p>
                     </div>
@@ -334,7 +334,7 @@ export default function TabComms({
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-[14px] flex items-center gap-2">
+            <CardTitle className="text-[17px] flex items-center gap-2">
               <MessageSquare className="h-4 w-4 text-muted-foreground" />
               Messages
             </CardTitle>
@@ -365,17 +365,17 @@ export default function TabComms({
                     className={`flex ${msg.senderId === user?.id ? "justify-end" : "justify-start"}`}
                   >
                     <div
-                      className={`max-w-[75%] rounded-lg px-3 py-2 text-[13px] ${
+                      className={`max-w-[75%] rounded-lg px-3 py-2 text-[16px] ${
                         msg.senderId === user?.id
                           ? "bg-primary text-primary-foreground"
                           : "bg-muted"
                       }`}
                     >
                       {msg.senderName && msg.senderId !== user?.id && (
-                        <p className="text-[11px] font-medium mb-0.5 opacity-70">{msg.senderName}</p>
+                        <p className="text-[13px] font-medium mb-0.5 opacity-70">{msg.senderName}</p>
                       )}
                       <p>{msg.body}</p>
-                      <p className="text-[10px] mt-1 opacity-60">
+                      <p className="text-[12px] mt-1 opacity-60">
                         {formatDateTime(msg.createdAt)}
                       </p>
                     </div>
@@ -389,7 +389,7 @@ export default function TabComms({
                 placeholder="Type a message..."
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                className="text-[13px] min-h-[60px] resize-none"
+                className="text-[16px] min-h-[60px] resize-none"
                 data-testid="input-message-content"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
