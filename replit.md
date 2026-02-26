@@ -29,6 +29,8 @@ The application is built on a modern web stack, utilizing React 18 with TypeScri
 -   **Deal Memory System**: A persistent right sidebar on the deal detail page (replacing "Deal Story") that serves as the AI communication agent's historical context, populating from `deal_memory_entries` and `deal_notes`. This system injects relevant context into AI interactions.
 -   **Gmail Integration**: Opt-in email integration allowing lenders to connect Gmail accounts for syncing threads, messages, and attachments, with features like in-app inbox, deal linking, and notifications.
 -   **Terminology**: While the database uses `projects`, the UI consistently refers to entities as "Deals" or "Loans". Loan numbers are auto-generated based on street names and sequential digits.
+-   **Pipeline Design System**: A documented visual language (`references/pipeline-design-system.md`) extracted from the Pipeline page (deals-v2.tsx) applied across admin pages. Key patterns: `text-[26px]` page titles, `text-[16px]` body text, `rounded-[10px] shadow-sm` card containers, `text-[13px] uppercase tracking-wider` column headers, color-coded initials avatars, status pill badges.
+-   **Loan Programs Page (programs-v2.tsx)**: Restyled to Pipeline design system with expanded table columns (Program, LTV Range, Min DSCR, Property Types pills, Status badge, Active toggle, Edit button), toolbar with search + status/property-type filter dropdowns, rich expanded row details (Key Metrics, Workflow stats, Term Options/Loan Purpose), and action bar (Edit/Duplicate/View Deals/Export). Duplicate program API at `POST /api/admin/programs/:id/duplicate`.
 
 ## External Dependencies
 

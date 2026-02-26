@@ -383,6 +383,118 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
     }
   });
 
+  // Duplicate loan program
+  app.post('/api/admin/programs/:id/duplicate', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const programId = parseInt(id);
+
+      const [sourceProgram] = await db.select().from(loanPrograms).where(eq(loanPrograms.id, programId));
+      if (!sourceProgram) {
+        return res.status(404).json({ error: 'Program not found' });
+      }
+
+      const user = await storage.getUserById(req.user!.id);
+      if (user?.role !== 'super_admin' && sourceProgram.createdBy !== req.user!.id) {
+        return res.status(403).json({ error: 'Not authorized to duplicate this program' });
+      }
+
+      const sourceDocs = await db.select().from(programDocumentTemplates)
+        .where(eq(programDocumentTemplates.programId, programId))
+        .orderBy(programDocumentTemplates.sortOrder);
+
+      const sourceTasks = await db.select().from(programTaskTemplates)
+        .where(eq(programTaskTemplates.programId, programId))
+        .orderBy(programTaskTemplates.sortOrder);
+
+      const sourceSteps = await db.select().from(programWorkflowSteps)
+        .where(eq(programWorkflowSteps.programId, programId))
+        .orderBy(programWorkflowSteps.stepOrder);
+
+      const result = await db.transaction(async (tx) => {
+        const [newProgram] = await tx.insert(loanPrograms).values({
+          name: `${sourceProgram.name} (Copy)`,
+          description: sourceProgram.description,
+          loanType: sourceProgram.loanType,
+          minLoanAmount: sourceProgram.minLoanAmount,
+          maxLoanAmount: sourceProgram.maxLoanAmount,
+          minLtv: sourceProgram.minLtv,
+          maxLtv: sourceProgram.maxLtv,
+          minInterestRate: sourceProgram.minInterestRate,
+          maxInterestRate: sourceProgram.maxInterestRate,
+          minUnits: sourceProgram.minUnits,
+          maxUnits: sourceProgram.maxUnits,
+          termOptions: sourceProgram.termOptions,
+          eligiblePropertyTypes: sourceProgram.eligiblePropertyTypes,
+          quoteFormFields: sourceProgram.quoteFormFields,
+          yspEnabled: sourceProgram.yspEnabled,
+          yspBrokerCanToggle: sourceProgram.yspBrokerCanToggle,
+          yspFixedAmount: sourceProgram.yspFixedAmount,
+          yspMin: sourceProgram.yspMin,
+          yspMax: sourceProgram.yspMax,
+          yspStep: sourceProgram.yspStep,
+          basePoints: sourceProgram.basePoints,
+          basePointsMin: sourceProgram.basePointsMin,
+          basePointsMax: sourceProgram.basePointsMax,
+          brokerPointsEnabled: sourceProgram.brokerPointsEnabled,
+          brokerPointsMax: sourceProgram.brokerPointsMax,
+          brokerPointsStep: sourceProgram.brokerPointsStep,
+          isActive: false,
+          creditPolicyId: sourceProgram.creditPolicyId,
+          createdBy: req.user!.id,
+          reviewGuidelines: sourceProgram.reviewGuidelines,
+        }).returning();
+
+        const stepIdMap = new Map<number, number>();
+        for (const step of sourceSteps) {
+          const [newStep] = await tx.insert(programWorkflowSteps).values({
+            programId: newProgram.id,
+            stepDefinitionId: step.stepDefinitionId,
+            stepOrder: step.stepOrder,
+            isRequired: step.isRequired,
+            estimatedDays: step.estimatedDays,
+          }).returning();
+          stepIdMap.set(step.id, newStep.id);
+        }
+
+        for (const doc of sourceDocs) {
+          await tx.insert(programDocumentTemplates).values({
+            programId: newProgram.id,
+            documentName: doc.documentName,
+            documentCategory: doc.documentCategory,
+            documentDescription: doc.documentDescription,
+            isRequired: doc.isRequired,
+            sortOrder: doc.sortOrder,
+            stepId: doc.stepId ? (stepIdMap.get(doc.stepId) || null) : null,
+            assignedTo: doc.assignedTo,
+            visibility: doc.visibility,
+            templateUrl: doc.templateUrl,
+            templateFileName: doc.templateFileName,
+          });
+        }
+
+        for (const task of sourceTasks) {
+          await tx.insert(programTaskTemplates).values({
+            programId: newProgram.id,
+            taskName: task.taskName,
+            taskDescription: task.taskDescription,
+            taskCategory: task.taskCategory,
+            priority: task.priority,
+            sortOrder: task.sortOrder,
+            stepId: task.stepId ? (stepIdMap.get(task.stepId) || null) : null,
+          });
+        }
+
+        return newProgram;
+      });
+
+      res.json({ program: result });
+    } catch (error) {
+      console.error('Duplicate program error:', error);
+      res.status(500).json({ error: 'Failed to duplicate program' });
+    }
+  });
+
   // ==================== PROGRAM DOCUMENT TEMPLATES ROUTES ====================
 
   // Get lender's document library (all unique documents across their programs, with AI rules)
