@@ -53,6 +53,7 @@ import {
   FileIcon,
   ArrowLeft,
   ArrowRight,
+  Lightbulb,
 } from 'lucide-react';
 
 // ─── Constants ──────────────────────────────────────────────────
@@ -1721,337 +1722,374 @@ function QuoteFormBuilderStep({
   const getFieldTypeLabel = (type: QuoteFormField['fieldType']) =>
     FIELD_TYPE_OPTIONS.find((o) => o.value === type)?.label || type;
 
+  const getFieldTypeDescription = (field: QuoteFormField) => {
+    const base = getFieldTypeLabel(field.fieldType);
+    if (field.fieldType === 'select' && field.options?.length) {
+      return `${base} (${field.options.join(' / ')})`;
+    }
+    if (field.fieldType === 'number' && field.fieldKey === 'ficoScore') {
+      return 'Number (min: 300, max: 850)';
+    }
+    if (field.fieldType === 'percentage' && field.fieldKey === 'dscr') {
+      return 'Decimal';
+    }
+    return base;
+  };
+
+  const getFieldStatus = (field: QuoteFormField): 'required' | 'optional' | 'hidden' => {
+    if (!field.visible) return 'hidden';
+    return field.required ? 'required' : 'optional';
+  };
+
+  const handleStatusChange = (fieldKey: string, status: string) => {
+    switch (status) {
+      case 'required':
+        updateField(fieldKey, { visible: true, required: true });
+        break;
+      case 'optional':
+        updateField(fieldKey, { visible: true, required: false });
+        break;
+      case 'hidden':
+        updateField(fieldKey, { visible: false, required: false });
+        break;
+    }
+  };
+
   const availableConditionalFields = quoteFormFields.filter(
     (f) => f.visible && (f.fieldType === 'select' || f.fieldType === 'yes_no')
   );
 
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <FormInput className="h-4 w-4" />
-          Quote Form Fields
-        </CardTitle>
-        <CardDescription>
-          Configure the fields borrowers and brokers will fill out when requesting a quote for this program. Set field types, required status, and conditional logic.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div>
-          <Label className="text-xs font-medium text-muted-foreground">Contact Information (always included)</Label>
-          <div className="space-y-1.5 mt-2">
-            {contactFields.map((field) => (
-              <div
-                key={field.fieldKey}
-                className="flex items-center justify-between gap-3 py-2 px-3 bg-muted/30 rounded-md border border-dashed"
-              >
-                <div className="flex items-center gap-2 flex-1">
-                  <span className="text-sm">{field.label}</span>
-                  <Badge variant="outline" className="text-[10px]">{getFieldTypeLabel(field.fieldType)}</Badge>
-                </div>
-                <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-1.5 text-xs">
-                    <Switch
-                      checked={field.visible}
-                      onCheckedChange={(checked) => updateField(field.fieldKey, { visible: checked, required: checked ? field.required : false })}
-                      className="scale-75"
-                      data-testid={`switch-visible-${field.fieldKey}`}
-                    />
-                    Visible
-                  </label>
-                  <label className="flex items-center gap-1.5 text-xs">
-                    <Switch
-                      checked={field.required}
-                      disabled={!field.visible}
-                      onCheckedChange={(checked) => updateField(field.fieldKey, { required: checked })}
-                      className="scale-75"
-                      data-testid={`switch-required-${field.fieldKey}`}
-                    />
-                    Required
-                  </label>
-                </div>
+  const allFields = [...contactFields, ...programFields];
+  const requiredCount = allFields.filter((f) => f.required && f.visible).length;
+  const optionalCount = allFields.filter((f) => !f.required && f.visible).length;
+  const [showAddField, setShowAddField] = useState(false);
+
+  const renderFieldRow = (field: QuoteFormField, pIdx: number, isDraggable: boolean) => {
+    const isConfiguring = configuringIndex === pIdx;
+    const condField = field.conditionalOn
+      ? quoteFormFields.find((f) => f.fieldKey === field.conditionalOn)
+      : null;
+    const status = getFieldStatus(field);
+
+    return (
+      <div key={field.fieldKey}>
+        <div
+          draggable={isDraggable}
+          onDragStart={isDraggable ? () => handleDragStart(pIdx) : undefined}
+          onDragOver={isDraggable ? handleDragOver : undefined}
+          onDrop={isDraggable ? () => handleDrop(pIdx) : undefined}
+          className={cn(
+            "flex items-center gap-3 py-3 px-4 border-b border-border/60 transition-colors",
+            dragIndex === pIdx && "bg-primary/5 border-primary",
+            field.conditionalOn && "ml-6 border-l-2 border-l-primary/40"
+          )}
+          data-testid={`field-row-${field.fieldKey}`}
+        >
+          <GripVertical className="h-4 w-4 text-muted-foreground/50 cursor-grab flex-shrink-0" />
+
+          <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+            <span className="text-[15px] font-semibold truncate">{field.label}</span>
+            <div className="flex items-center gap-2">
+              <span className={cn(
+                "text-[12px] font-medium",
+                status === 'required' && "text-red-500",
+                status === 'optional' && "text-muted-foreground",
+                status === 'hidden' && "text-muted-foreground/50"
+              )}>
+                {status === 'required' ? 'Required' : status === 'optional' ? 'Optional' : 'Hidden'}
+              </span>
+              <span className="text-[12px] text-muted-foreground">
+                Type: {getFieldTypeDescription(field)}
+              </span>
+              {field.conditionalOn && condField && (
+                <span className="text-[11px] text-primary/70">
+                  if {condField.label} = {field.conditionalValue}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {isDraggable && (
+              <div className="flex items-center gap-0.5">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => pIdx > 0 && moveField(pIdx, pIdx - 1)}
+                  disabled={pIdx === 0}
+                  data-testid={`button-move-up-${field.fieldKey}`}
+                >
+                  <ArrowUp className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => pIdx < programFields.length - 1 && moveField(pIdx, pIdx + 1)}
+                  disabled={pIdx === programFields.length - 1}
+                  data-testid={`button-move-down-${field.fieldKey}`}
+                >
+                  <ArrowDown className="h-3.5 w-3.5" />
+                </Button>
               </div>
-            ))}
-          </div>
-        </div>
+            )}
 
-        <Separator />
-
-        <div>
-          <Label className="text-xs font-medium text-muted-foreground">Program-Specific Fields (drag to reorder)</Label>
-          <div className="space-y-1.5 mt-2">
-            {programFields.map((field, pIdx) => {
-              const isConfiguring = configuringIndex === pIdx;
-              const condField = field.conditionalOn
-                ? quoteFormFields.find((f) => f.fieldKey === field.conditionalOn)
-                : null;
-              return (
-                <div key={field.fieldKey}>
-                  <div
-                    draggable
-                    onDragStart={() => handleDragStart(pIdx)}
-                    onDragOver={handleDragOver}
-                    onDrop={() => handleDrop(pIdx)}
-                    className={`flex items-center gap-2 py-2 px-3 rounded-md border transition-colors ${
-                      dragIndex === pIdx ? 'border-primary bg-primary/5' : 'bg-muted/40'
-                    } ${field.conditionalOn ? 'ml-6 border-l-2 border-l-primary/40' : ''}`}
-                    data-testid={`field-row-${field.fieldKey}`}
-                  >
-                    <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab flex-shrink-0" />
-
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="text-sm truncate">{field.label}</span>
-                      <Badge variant="outline" className="text-[10px] flex-shrink-0">{getFieldTypeLabel(field.fieldType)}</Badge>
-                      {field.conditionalOn && condField && (
-                        <Badge variant="secondary" className="text-[10px] flex-shrink-0">
-                          if {condField.label} = {field.conditionalValue}
-                        </Badge>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <div className="flex items-center gap-0.5">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => pIdx > 0 && moveField(pIdx, pIdx - 1)}
-                          disabled={pIdx === 0}
-                          data-testid={`button-move-up-${field.fieldKey}`}
-                        >
-                          <ArrowUp className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => pIdx < programFields.length - 1 && moveField(pIdx, pIdx + 1)}
-                          disabled={pIdx === programFields.length - 1}
-                          data-testid={`button-move-down-${field.fieldKey}`}
-                        >
-                          <ArrowDown className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-
-                      <label className="flex items-center gap-1.5 text-xs">
-                        <Switch
-                          checked={field.visible}
-                          onCheckedChange={(checked) => updateField(field.fieldKey, { visible: checked, required: checked ? field.required : false })}
-                          className="scale-75"
-                          data-testid={`switch-visible-${field.fieldKey}`}
-                        />
-                        Visible
-                      </label>
-                      <label className="flex items-center gap-1.5 text-xs">
-                        <Switch
-                          checked={field.required}
-                          disabled={!field.visible}
-                          onCheckedChange={(checked) => updateField(field.fieldKey, { required: checked })}
-                          className="scale-75"
-                          data-testid={`switch-required-${field.fieldKey}`}
-                        />
-                        Required
-                      </label>
-
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setConfiguringIndex(isConfiguring ? null : pIdx)}
-                        data-testid={`button-configure-${field.fieldKey}`}
-                      >
-                        <Settings2 className="h-3.5 w-3.5" />
-                      </Button>
-
-                      {!field.isDefault && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeField(field.fieldKey)}
-                          data-testid={`button-remove-field-${field.fieldKey}`}
-                        >
-                          <X className="h-3.5 w-3.5 text-muted-foreground" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-
-                  {isConfiguring && (
-                    <div className="ml-6 mt-1 p-3 bg-muted/20 rounded-md border space-y-3">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <Label className="text-xs">Field Label</Label>
-                          <Input
-                            value={field.label}
-                            onChange={(e) => updateField(field.fieldKey, { label: e.target.value })}
-                            data-testid={`input-label-${field.fieldKey}`}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Field Type</Label>
-                          <Select
-                            value={field.fieldType}
-                            onValueChange={(v) => updateField(field.fieldKey, {
-                              fieldType: v as QuoteFormField['fieldType'],
-                              options: v === 'select' ? (field.options?.length ? field.options : ['Option 1']) : undefined,
-                            })}
-                          >
-                            <SelectTrigger data-testid={`select-field-type-${field.fieldKey}`}>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {FIELD_TYPE_OPTIONS.map((opt) => (
-                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Display Section</Label>
-                          <Select
-                            value={field.displayGroup || 'application_details'}
-                            onValueChange={(v) => updateField(field.fieldKey, { displayGroup: v as DisplayGroup })}
-                          >
-                            <SelectTrigger data-testid={`select-display-group-${field.fieldKey}`}>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {DISPLAY_GROUP_OPTIONS.map((opt) => (
-                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <p className="text-[10px] text-muted-foreground">Where this field appears on the deal detail page</p>
-                        </div>
-                      </div>
-
-                      {field.fieldType === 'select' && (
-                        <div className="space-y-1">
-                          <Label className="text-xs">Dropdown Options (one per line)</Label>
-                          <Textarea
-                            value={(field.options || []).join('\n')}
-                            onChange={(e) => updateField(field.fieldKey, { options: e.target.value.split('\n').filter(Boolean) })}
-                            rows={3}
-                            placeholder="Option 1&#10;Option 2&#10;Option 3"
-                            data-testid={`textarea-options-${field.fieldKey}`}
-                          />
-                        </div>
-                      )}
-
-                      <div className="space-y-1">
-                        <Label className="text-xs">Conditional Logic</Label>
-                        <p className="text-[11px] text-muted-foreground mb-1">
-                          Only show this field when another field has a specific answer.
-                        </p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <Select
-                            value={field.conditionalOn || '__none__'}
-                            onValueChange={(v) => updateField(field.fieldKey, {
-                              conditionalOn: v === '__none__' ? undefined : v,
-                              conditionalValue: v === '__none__' ? undefined : field.conditionalValue,
-                            })}
-                          >
-                            <SelectTrigger data-testid={`select-conditional-on-${field.fieldKey}`}>
-                              <SelectValue placeholder="Show when..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__none__">Always show</SelectItem>
-                              {availableConditionalFields
-                                .filter((f) => f.fieldKey !== field.fieldKey)
-                                .map((f) => (
-                                  <SelectItem key={f.fieldKey} value={f.fieldKey}>{f.label}</SelectItem>
-                                ))}
-                            </SelectContent>
-                          </Select>
-
-                          {field.conditionalOn && (() => {
-                            const parentField = quoteFormFields.find((f) => f.fieldKey === field.conditionalOn);
-                            if (!parentField) return null;
-                            if (parentField.fieldType === 'yes_no') {
-                              return (
-                                <Select
-                                  value={field.conditionalValue || ''}
-                                  onValueChange={(v) => updateField(field.fieldKey, { conditionalValue: v })}
-                                >
-                                  <SelectTrigger data-testid={`select-conditional-value-${field.fieldKey}`}>
-                                    <SelectValue placeholder="equals..." />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="Yes">Yes</SelectItem>
-                                    <SelectItem value="No">No</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              );
-                            }
-                            if (parentField.fieldType === 'select' && parentField.options) {
-                              return (
-                                <Select
-                                  value={field.conditionalValue || ''}
-                                  onValueChange={(v) => updateField(field.fieldKey, { conditionalValue: v })}
-                                >
-                                  <SelectTrigger data-testid={`select-conditional-value-${field.fieldKey}`}>
-                                    <SelectValue placeholder="equals..." />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {parentField.options.map((opt) => (
-                                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              );
-                            }
-                            return (
-                              <Input
-                                value={field.conditionalValue || ''}
-                                onChange={(e) => updateField(field.fieldKey, { conditionalValue: e.target.value })}
-                                placeholder="equals..."
-                                data-testid={`input-conditional-value-${field.fieldKey}`}
-                              />
-                            );
-                          })()}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <Separator />
-
-        <div>
-          <Label className="text-xs font-medium text-muted-foreground">Add Custom Field</Label>
-          <div className="flex items-center gap-2 mt-2">
-            <Input
-              className="flex-1"
-              placeholder="Field name..."
-              value={newFieldName}
-              onChange={(e) => setNewFieldName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomField(); } }}
-              data-testid="input-new-quote-field"
-            />
-            <Select value={newFieldType} onValueChange={(v) => setNewFieldType(v as QuoteFormField['fieldType'])}>
-              <SelectTrigger className="w-36" data-testid="select-new-field-type">
+            <Select
+              value={getFieldStatus(field)}
+              onValueChange={(v) => handleStatusChange(field.fieldKey, v)}
+            >
+              <SelectTrigger
+                className={cn(
+                  "w-[120px] h-9 text-[13px]",
+                  status === 'required' && "border-primary/40 text-primary"
+                )}
+                data-testid={`select-status-${field.fieldKey}`}
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {FIELD_TYPE_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
+                <SelectItem value="required">Required</SelectItem>
+                <SelectItem value="optional">Optional</SelectItem>
+                <SelectItem value="hidden">Hidden</SelectItem>
               </SelectContent>
             </Select>
+
             <Button
-              variant="outline"
-              onClick={addCustomField}
-              disabled={!newFieldName.trim()}
-              data-testid="button-add-quote-field"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setConfiguringIndex(isConfiguring ? null : pIdx)}
+              data-testid={`button-configure-${field.fieldKey}`}
             >
-              <Plus className="h-3.5 w-3.5 mr-1" />
-              Add Field
+              <Settings2 className="h-3.5 w-3.5" />
             </Button>
+
+            {!field.isDefault && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => removeField(field.fieldKey)}
+                data-testid={`button-remove-field-${field.fieldKey}`}
+              >
+                <X className="h-3.5 w-3.5 text-muted-foreground" />
+              </Button>
+            )}
           </div>
         </div>
-      </CardContent>
-    </Card>
+
+        {isConfiguring && (
+          <div className="ml-6 mt-1 mb-2 p-3 bg-muted/20 rounded-md border space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Field Label</Label>
+                <Input
+                  value={field.label}
+                  onChange={(e) => updateField(field.fieldKey, { label: e.target.value })}
+                  data-testid={`input-label-${field.fieldKey}`}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Field Type</Label>
+                <Select
+                  value={field.fieldType}
+                  onValueChange={(v) => updateField(field.fieldKey, {
+                    fieldType: v as QuoteFormField['fieldType'],
+                    options: v === 'select' ? (field.options?.length ? field.options : ['Option 1']) : undefined,
+                  })}
+                >
+                  <SelectTrigger data-testid={`select-field-type-${field.fieldKey}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FIELD_TYPE_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Display Section</Label>
+                <Select
+                  value={field.displayGroup || 'application_details'}
+                  onValueChange={(v) => updateField(field.fieldKey, { displayGroup: v as DisplayGroup })}
+                >
+                  <SelectTrigger data-testid={`select-display-group-${field.fieldKey}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DISPLAY_GROUP_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground">Where this field appears on the deal detail page</p>
+              </div>
+            </div>
+
+            {field.fieldType === 'select' && (
+              <div className="space-y-1">
+                <Label className="text-xs">Dropdown Options (one per line)</Label>
+                <Textarea
+                  value={(field.options || []).join('\n')}
+                  onChange={(e) => updateField(field.fieldKey, { options: e.target.value.split('\n').filter(Boolean) })}
+                  rows={3}
+                  placeholder="Option 1&#10;Option 2&#10;Option 3"
+                  data-testid={`textarea-options-${field.fieldKey}`}
+                />
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <Label className="text-xs">Conditional Logic</Label>
+              <p className="text-[11px] text-muted-foreground mb-1">
+                Only show this field when another field has a specific answer.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Select
+                  value={field.conditionalOn || '__none__'}
+                  onValueChange={(v) => updateField(field.fieldKey, {
+                    conditionalOn: v === '__none__' ? undefined : v,
+                    conditionalValue: v === '__none__' ? undefined : field.conditionalValue,
+                  })}
+                >
+                  <SelectTrigger data-testid={`select-conditional-on-${field.fieldKey}`}>
+                    <SelectValue placeholder="Show when..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Always show</SelectItem>
+                    {availableConditionalFields
+                      .filter((f) => f.fieldKey !== field.fieldKey)
+                      .map((f) => (
+                        <SelectItem key={f.fieldKey} value={f.fieldKey}>{f.label}</SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+
+                {field.conditionalOn && (() => {
+                  const parentField = quoteFormFields.find((f) => f.fieldKey === field.conditionalOn);
+                  if (!parentField) return null;
+                  if (parentField.fieldType === 'yes_no') {
+                    return (
+                      <Select
+                        value={field.conditionalValue || ''}
+                        onValueChange={(v) => updateField(field.fieldKey, { conditionalValue: v })}
+                      >
+                        <SelectTrigger data-testid={`select-conditional-value-${field.fieldKey}`}>
+                          <SelectValue placeholder="equals..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Yes">Yes</SelectItem>
+                          <SelectItem value="No">No</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    );
+                  }
+                  if (parentField.fieldType === 'select' && parentField.options) {
+                    return (
+                      <Select
+                        value={field.conditionalValue || ''}
+                        onValueChange={(v) => updateField(field.fieldKey, { conditionalValue: v })}
+                      >
+                        <SelectTrigger data-testid={`select-conditional-value-${field.fieldKey}`}>
+                          <SelectValue placeholder="equals..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {parentField.options.map((opt) => (
+                            <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    );
+                  }
+                  return (
+                    <Input
+                      value={field.conditionalValue || ''}
+                      onChange={(e) => updateField(field.fieldKey, { conditionalValue: e.target.value })}
+                      placeholder="equals..."
+                      data-testid={`input-conditional-value-${field.fieldKey}`}
+                    />
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-[26px] font-bold leading-tight">Quote Form Fields</h2>
+        <p className="text-[16px] text-muted-foreground mt-1">
+          Configure which fields brokers see when requesting a quote for this program. Drag to reorder.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <span className="text-[14px] text-muted-foreground">
+          {allFields.length} fields configured &mdash; {requiredCount} required, {optionalCount} optional
+        </span>
+        <Button
+          variant="outline"
+          onClick={() => setShowAddField(!showAddField)}
+          data-testid="button-toggle-add-field"
+        >
+          <Plus className="h-4 w-4 mr-1.5" />
+          Add Custom Field
+        </Button>
+      </div>
+
+      {showAddField && (
+        <div className="flex items-center gap-2 p-3 bg-muted/30 rounded-[10px] border">
+          <Input
+            className="flex-1"
+            placeholder="Field name..."
+            value={newFieldName}
+            onChange={(e) => setNewFieldName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomField(); setShowAddField(false); } }}
+            data-testid="input-new-quote-field"
+          />
+          <Select value={newFieldType} onValueChange={(v) => setNewFieldType(v as QuoteFormField['fieldType'])}>
+            <SelectTrigger className="w-36" data-testid="select-new-field-type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {FIELD_TYPE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="default"
+            onClick={() => { addCustomField(); setShowAddField(false); }}
+            disabled={!newFieldName.trim()}
+            data-testid="button-add-quote-field"
+          >
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            Add
+          </Button>
+        </div>
+      )}
+
+      <div className="rounded-[10px] border bg-white overflow-hidden">
+        {contactFields.map((field, cIdx) => renderFieldRow(field, cIdx, false))}
+        {programFields.map((field, pIdx) => renderFieldRow(field, pIdx, true))}
+      </div>
+
+      <div className="rounded-[10px] border border-blue-200 bg-blue-50/60 p-4 flex gap-3">
+        <Lightbulb className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
+        <div>
+          <span className="text-[14px] font-semibold text-blue-700">Tip: </span>
+          <span className="text-[14px] text-blue-800">
+            The quote form is what brokers fill out to request pricing on a deal. Required fields must be filled before a quote can be generated. Hidden fields won't appear on the form but can still be used in pricing rules.
+          </span>
+        </div>
+      </div>
+    </div>
   );
 }
 
