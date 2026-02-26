@@ -6,8 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  DollarSign, Percent, TrendingUp, Calculator, Activity,
-  Pencil, Building2, User, Settings2, Plus
+  Pencil, Building2, User, Settings2, Plus, DollarSign
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -64,33 +63,6 @@ function EditField({ label, value, onChange, type = "text" }: { label: string; v
   );
 }
 
-function KpiCard({
-  label, value, subtitle, tooltip, icon: Icon, valueColor,
-}: {
-  label: string; value: string; subtitle?: string; tooltip?: string; icon: any; valueColor?: string;
-}) {
-  const labelEl = tooltip ? (
-    <Tooltip>
-      <TooltipTrigger className="flex items-center gap-1 border-b border-dashed border-muted-foreground/40 cursor-help text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        {label} <span className="text-muted-foreground/60">?</span>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-[220px] text-xs">{tooltip}</TooltipContent>
-    </Tooltip>
-  ) : (
-    <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
-  );
-  return (
-    <div className="bg-card border rounded-[10px] p-4">
-      <div className="flex items-center gap-2 mb-2">
-        <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-        {labelEl}
-      </div>
-      <div className={`text-2xl font-bold ${valueColor || ""}`}>{value}</div>
-      {subtitle && <p className="text-[12px] text-muted-foreground mt-1">{subtitle}</p>}
-    </div>
-  );
-}
-
 export default function TabOverview({
   deal,
   properties,
@@ -109,25 +81,13 @@ export default function TabOverview({
   const dscr = deal.dscr || deal.loanData?.dscr;
   const interestRate = deal.interestRate;
   const termMonths = deal.termMonths || deal.loanTermMonths || deal.loanData?.loanTerm;
-  const purpose = deal.loanPurpose || deal.loanData?.loanPurpose || deal.loanType;
-  const progress = deal.progressPercentage || deal.completionPercentage || 0;
-  const totalDocs = deal.totalDocuments || 0;
-  const completedDocs = deal.completedDocuments || 0;
-  const totalTasks = deal.totalTasks || 0;
-  const completedTasks = deal.completedTasks || 0;
-  const totalItems = totalDocs + totalTasks;
-  const completedItems = completedDocs + completedTasks;
-  const ltvSubtitle = propertyValue ? `of ${fmt(propertyValue)}` : undefined;
   const dscrValue = dscr ? `${dscr}` : "—";
-  const dscrSubtitle = dscr ? (parseFloat(dscr) >= 1.2 ? "Above threshold (1.20)" : "Below threshold (1.20)") : "Pending";
   const rateDisplay = interestRate && interestRate !== "—" ? (String(interestRate).includes("%") ? interestRate : `${interestRate}%`) : "—";
   const termLabel = termMonths
     ? (typeof termMonths === "string" && termMonths.includes("month")
         ? (parseInt(termMonths) >= 12 ? `${Math.round(parseInt(termMonths) / 12)}-year` : termMonths)
         : (Number(termMonths) >= 12 ? `${Math.round(Number(termMonths) / 12)}-year` : `${termMonths} months`))
     : "";
-  const rateSubtitle = termLabel ? `${termLabel} fixed` : undefined;
-  const purposeLabel = purpose ? purpose.charAt(0).toUpperCase() + purpose.slice(1).replace(/_/g, " ") : undefined;
 
   const primaryProp = properties.find((p: any) => p.isPrimary) || properties[0];
 
@@ -279,20 +239,12 @@ export default function TabOverview({
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <KpiCard icon={DollarSign} label="Loan Amount" value={fmt(loanAmount)} subtitle={purposeLabel} />
-        <KpiCard icon={Percent} label="LTV" value={ltv ? `${ltv}%` : "—"} subtitle={ltvSubtitle} tooltip="Loan-to-Value — the loan amount as a percentage of the property's appraised value." />
-        <KpiCard icon={TrendingUp} label="DSCR" value={dscrValue} subtitle={dscrSubtitle} tooltip="Debt Service Coverage Ratio — net operating income divided by total debt service. Above 1.0 means the property generates enough income to cover the loan." />
-        <KpiCard icon={Calculator} label="Interest Rate" value={rateDisplay} subtitle={rateSubtitle} />
-        <KpiCard icon={Activity} label="Progress" value={`${progress}%`} subtitle={totalItems > 0 ? `${completedItems} of ${totalItems} items` : undefined} valueColor={progress >= 70 ? "text-green-600" : progress >= 40 ? "text-blue-600" : ""} />
-      </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Loan Details */}
         <Card>
-          <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-[14px] flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="pb-0 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-[18px] flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-muted-foreground" />
               Loan Details
             </CardTitle>
             {!editLoan ? (
@@ -315,6 +267,7 @@ export default function TabOverview({
               </div>
             )}
           </CardHeader>
+          <div className="mx-6 mt-2 mb-3 border-b border-muted" />
           <CardContent>
             {!editLoan ? (
               <div className="grid grid-cols-2 gap-x-8 gap-y-4">
@@ -348,9 +301,9 @@ export default function TabOverview({
 
         {/* Property Details */}
         <Card>
-          <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-[14px] flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="pb-0 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-[18px] flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-muted-foreground" />
               Property Details
             </CardTitle>
             <div className="flex gap-1">
@@ -385,6 +338,7 @@ export default function TabOverview({
               )}
             </div>
           </CardHeader>
+          <div className="mx-6 mt-2 mb-3 border-b border-muted" />
           <CardContent>
             {!editProperty ? (
               <div className="grid grid-cols-2 gap-x-8 gap-y-4">
@@ -421,9 +375,9 @@ export default function TabOverview({
 
         {/* Borrower Details */}
         <Card>
-          <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-[14px] flex items-center gap-2">
-              <User className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="pb-0 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-[18px] flex items-center gap-2">
+              <User className="h-5 w-5 text-muted-foreground" />
               Borrower Details
             </CardTitle>
             {!editBorrower ? (
@@ -445,12 +399,14 @@ export default function TabOverview({
               </div>
             )}
           </CardHeader>
+          <div className="mx-6 mt-2 mb-3 border-b border-muted" />
           <CardContent>
             {!editBorrower ? (
               <div className="grid grid-cols-2 gap-x-8 gap-y-4">
                 <Field label="Full Name" value={deal.borrowerName || `${deal.customerFirstName || ""} ${deal.customerLastName || ""}`.trim() || "—"} />
                 <Field label="Email" value={deal.borrowerEmail || deal.customerEmail || "—"} />
                 <Field label="Phone" value={deal.borrowerPhone || deal.customerPhone || "—"} />
+                <Field label="Credit Score" value={appData.creditScore || deal.creditScore || "—"} />
                 <Field label="Employer" value={appData.employer || appData.employerName || "—"} />
                 <Field label="Title" value={appData.title || appData.borrowerTitle || "—"} />
                 <Field label="Annual Income" value={appData.annualIncome ? fmt(appData.annualIncome) : "—"} />
@@ -462,6 +418,7 @@ export default function TabOverview({
                 <EditField label="Full Name" value={borrowerForm.fullName} onChange={(v) => setBorrowerForm({ ...borrowerForm, fullName: v })} />
                 <EditField label="Email" value={borrowerForm.email} onChange={(v) => setBorrowerForm({ ...borrowerForm, email: v })} type="email" />
                 <EditField label="Phone" value={borrowerForm.phone} onChange={(v) => setBorrowerForm({ ...borrowerForm, phone: v })} type="tel" />
+                <Field label="Credit Score" value={appData.creditScore || deal.creditScore || "—"} />
                 <Field label="Employer" value={appData.employer || appData.employerName || "—"} />
                 <Field label="Title" value={appData.title || appData.borrowerTitle || "—"} />
                 <Field label="Annual Income" value={appData.annualIncome ? fmt(appData.annualIncome) : "—"} />
@@ -474,12 +431,13 @@ export default function TabOverview({
 
         {/* Deal Controls */}
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-[14px] flex items-center gap-2">
-              <Settings2 className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="pb-0">
+            <CardTitle className="text-[18px] flex items-center gap-2">
+              <Settings2 className="h-5 w-5 text-muted-foreground" />
               Deal Controls
             </CardTitle>
           </CardHeader>
+          <div className="mx-6 mt-2 mb-3 border-b border-muted" />
           <CardContent>
             <div className="grid grid-cols-2 gap-x-8 gap-y-5">
               <div>

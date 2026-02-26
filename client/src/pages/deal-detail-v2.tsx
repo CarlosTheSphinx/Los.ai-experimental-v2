@@ -5,10 +5,11 @@ import { useAuth } from "@/hooks/use-auth";
 import {
   ArrowLeft, FolderOpen, RefreshCw, ExternalLink,
   LayoutDashboard, FileText, CheckSquare, Users, MessageCircle, Sparkles,
-  MoreHorizontal
+  MoreHorizontal, DollarSign, Percent, TrendingUp, Calculator, Activity
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { StageProgressBar } from "@/components/ui/phase1/stage-progress-bar";
 import { StatusBadge } from "@/components/ui/phase1/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,6 +23,71 @@ import TabAIInsights from "@/components/admin/deal-v2/TabAIInsights";
 function formatCurrency(amount: number | undefined): string {
   if (!amount) return "$0";
   return "$" + amount.toLocaleString();
+}
+
+function KpiCard({
+  label, value, subtitle, tooltip, icon: Icon, valueColor,
+}: {
+  label: string; value: string; subtitle?: string; tooltip?: string; icon: any; valueColor?: string;
+}) {
+  const labelEl = tooltip ? (
+    <Tooltip>
+      <TooltipTrigger className="flex items-center gap-1 border-b border-dashed border-muted-foreground/40 cursor-help text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label} <span className="text-muted-foreground/60">?</span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[220px] text-xs">{tooltip}</TooltipContent>
+    </Tooltip>
+  ) : (
+    <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
+  );
+  return (
+    <div className="bg-card border rounded-[10px] p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+        {labelEl}
+      </div>
+      <div className={`text-2xl font-bold ${valueColor || ""}`}>{value}</div>
+      {subtitle && <p className="text-[12px] text-muted-foreground mt-1">{subtitle}</p>}
+    </div>
+  );
+}
+
+function KpiRow({ deal, documents, tasks }: { deal: any; documents: any[]; tasks: any[] }) {
+  const propertyValue = deal.propertyValue || deal.loanData?.propertyValue;
+  const loanAmount = deal.loanAmount || deal.loanData?.loanAmount;
+  const ltv = deal.ltv || deal.loanData?.ltv;
+  const dscr = deal.dscr || deal.loanData?.dscr;
+  const interestRate = deal.interestRate;
+  const termMonths = deal.termMonths || deal.loanTermMonths || deal.loanData?.loanTerm;
+  const purpose = deal.loanPurpose || deal.loanData?.loanPurpose || deal.loanType;
+  const progress = deal.progressPercentage || deal.completionPercentage || 0;
+  const totalDocs = deal.totalDocuments || documents.length || 0;
+  const completedDocs = deal.completedDocuments || documents.filter((d: any) => d.status === "approved" || d.status === "ai_reviewed").length || 0;
+  const totalTasks = deal.totalTasks || tasks.length || 0;
+  const completedTasks = deal.completedTasks || tasks.filter((t: any) => t.status === "completed").length || 0;
+  const totalItems = totalDocs + totalTasks;
+  const completedItems = completedDocs + completedTasks;
+  const ltvSubtitle = propertyValue ? `of ${formatCurrency(propertyValue)}` : undefined;
+  const dscrValue = dscr ? `${dscr}` : "\u2014";
+  const dscrSubtitle = dscr ? (parseFloat(dscr) >= 1.2 ? "Above threshold (1.20)" : "Below threshold (1.20)") : "Pending";
+  const rateDisplay = interestRate && interestRate !== "\u2014" ? (String(interestRate).includes("%") ? interestRate : `${interestRate}%`) : "\u2014";
+  const termLabel = termMonths
+    ? (typeof termMonths === "string" && termMonths.includes("month")
+        ? (parseInt(termMonths) >= 12 ? `${Math.round(parseInt(termMonths) / 12)}-year` : termMonths)
+        : (Number(termMonths) >= 12 ? `${Math.round(Number(termMonths) / 12)}-year` : `${termMonths} months`))
+    : "";
+  const rateSubtitle = termLabel ? `${termLabel} fixed` : undefined;
+  const purposeLabel = purpose ? purpose.charAt(0).toUpperCase() + purpose.slice(1).replace(/_/g, " ") : undefined;
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <KpiCard icon={DollarSign} label="Loan Amount" value={formatCurrency(loanAmount)} subtitle={purposeLabel} />
+      <KpiCard icon={Percent} label="LTV" value={ltv ? `${ltv}%` : "\u2014"} subtitle={ltvSubtitle} tooltip="Loan-to-Value \u2014 the loan amount as a percentage of the property\u2019s appraised value." />
+      <KpiCard icon={TrendingUp} label="DSCR" value={dscrValue} subtitle={dscrSubtitle} tooltip="Debt Service Coverage Ratio \u2014 net operating income divided by total debt service." />
+      <KpiCard icon={Calculator} label="Interest Rate" value={rateDisplay} subtitle={rateSubtitle} />
+      <KpiCard icon={Activity} label="Progress" value={`${progress}%`} subtitle={totalItems > 0 ? `${completedItems} of ${totalItems} items` : undefined} valueColor={progress >= 70 ? "text-green-600" : progress >= 40 ? "text-blue-600" : ""} />
+    </div>
+  );
 }
 
 const DEFAULT_STAGES = [
@@ -180,34 +246,38 @@ export default function DealDetailV2() {
         <StageProgressBar stages={stages} />
       </div>
 
-      {/* Tabbed Content */}
+      {/* KPI Cards + Tabs */}
       <div className="px-6 py-5">
+        <KpiRow deal={deal} documents={documents} tasks={tasks} />
+
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="bg-transparent border-b rounded-none w-full justify-start gap-0 p-0 h-auto">
-            {[
-              { value: "overview", label: "Overview", icon: LayoutDashboard, badge: null },
-              { value: "documents", label: "Documents", icon: FileText, badge: documents.filter((d: any) => d.status === 'pending').length > 0 ? `${documents.filter((d: any) => d.status === 'pending').length} pending` : String(documents.length) },
-              { value: "tasks", label: "Tasks", icon: CheckSquare, badge: String(tasks.length) },
-              { value: "people", label: "People", icon: Users, badge: null },
-              { value: "communications", label: "Communications", icon: MessageCircle, badge: null },
-              { value: "ai-insights", label: "AI Insights", icon: Sparkles, badge: null },
-            ].map((tab) => (
-              <TabsTrigger
-                key={tab.value}
-                value={tab.value}
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-5 py-2.5 text-[13px] font-medium gap-1.5"
-                data-testid={`tab-${tab.value}`}
-              >
-                <tab.icon className="h-3.5 w-3.5" />
-                {tab.label}
-                {tab.badge && (
-                  <span className={`text-[11px] ml-0.5 ${tab.badge.includes('pending') ? 'text-amber-600 font-semibold' : 'text-muted-foreground'}`}>
-                    {tab.badge}
-                  </span>
-                )}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+          <div className="border rounded-lg mt-5 mb-5">
+            <TabsList className="bg-transparent rounded-none w-full justify-between p-0 h-auto">
+              {[
+                { value: "overview", label: "Overview", icon: LayoutDashboard, badge: null },
+                { value: "documents", label: "Documents", icon: FileText, badge: documents.filter((d: any) => d.status === 'pending').length > 0 ? `${documents.filter((d: any) => d.status === 'pending').length} pending` : String(documents.length) },
+                { value: "tasks", label: "Tasks", icon: CheckSquare, badge: String(tasks.length) },
+                { value: "people", label: "People", icon: Users, badge: null },
+                { value: "communications", label: "Communications", icon: MessageCircle, badge: null },
+                { value: "ai-insights", label: "AI Insights", icon: Sparkles, badge: null },
+              ].map((tab) => (
+                <TabsTrigger
+                  key={tab.value}
+                  value={tab.value}
+                  className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-3 text-[18px] font-semibold gap-2"
+                  data-testid={`tab-${tab.value}`}
+                >
+                  <tab.icon className="h-4.5 w-4.5" />
+                  {tab.label}
+                  {tab.badge && (
+                    <span className={`text-[13px] ml-0.5 ${tab.badge.includes('pending') ? 'text-amber-600 font-semibold' : 'text-muted-foreground'}`}>
+                      {tab.badge}
+                    </span>
+                  )}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
 
           <div className="mt-5">
             <TabsContent value="overview" className="m-0">
