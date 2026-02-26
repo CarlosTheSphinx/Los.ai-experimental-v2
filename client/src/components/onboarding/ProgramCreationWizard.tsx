@@ -14,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Progress } from '@/components/ui/progress';
 import {
   Layers,
   Plus,
@@ -43,6 +45,14 @@ import {
   FormInput,
   Pencil,
   Check,
+  Home,
+  RefreshCw,
+  Landmark,
+  HardHat,
+  Building2,
+  FileIcon,
+  ArrowLeft,
+  ArrowRight,
 } from 'lucide-react';
 
 // ─── Constants ──────────────────────────────────────────────────
@@ -67,6 +77,26 @@ const propertyTypeOptions = [
   { value: 'medical', label: 'Medical' },
   { value: 'agricultural', label: 'Agricultural' },
   { value: 'special-purpose', label: 'Special Purpose' },
+];
+
+const simplifiedPropertyTypes = [
+  { value: 'single-family', label: 'SFR' },
+  { value: '2-4-unit', label: '2-4 Unit' },
+  { value: 'condo', label: 'Condo' },
+  { value: 'townhouse', label: 'Townhouse' },
+  { value: 'pud', label: 'PUD' },
+  { value: 'multi-family', label: 'Multi-Family (5+)' },
+  { value: 'commercial', label: 'Commercial' },
+  { value: 'mixed-use', label: 'Mixed Use' },
+];
+
+const templateOptions = [
+  { id: 'dscr-residential', title: 'DSCR Residential', description: 'Standard rental investment loan program based on debt service coverage ratio.', icon: Home },
+  { id: 'bridge-fix-flip', title: 'Bridge / Fix & Flip', description: 'Short-term financing for property acquisition and renovation projects.', icon: RefreshCw },
+  { id: 'bank-statement', title: 'Bank Statement', description: 'Income verified through bank statement analysis instead of tax returns.', icon: Landmark },
+  { id: 'construction', title: 'Construction', description: 'Ground-up construction financing with draw schedules and inspections.', icon: HardHat },
+  { id: 'commercial', title: 'Commercial', description: 'Commercial real estate lending for office, retail, and industrial properties.', icon: Building2 },
+  { id: 'blank', title: 'Blank Template', description: 'Start from scratch with an empty program configuration.', icon: FileIcon },
 ];
 
 const documentCategories = [
@@ -266,18 +296,19 @@ interface RuleEntry {
 
 // ─── Wizard Steps ───────────────────────────────────────────────
 
-type WizardStep = 'credit-policy' | 'program-details' | 'quote-form' | 'stages' | 'documents' | 'tasks' | 'review-rules' | 'pricing' | 'summary';
+type WizardStep = 'template' | 'credit-policy' | 'program-details' | 'quote-form' | 'stages' | 'documents' | 'tasks' | 'review-rules' | 'pricing' | 'summary';
 
 const wizardSteps: { key: WizardStep; label: string; number: number }[] = [
-  { key: 'credit-policy', label: 'Credit Policy', number: 1 },
-  { key: 'program-details', label: 'Program Details', number: 2 },
-  { key: 'quote-form', label: 'Quote Form', number: 3 },
-  { key: 'stages', label: 'Stages', number: 4 },
-  { key: 'documents', label: 'Documents', number: 5 },
-  { key: 'tasks', label: 'Tasks', number: 6 },
-  { key: 'review-rules', label: 'AI Rules', number: 7 },
-  { key: 'pricing', label: 'Pricing', number: 8 },
-  { key: 'summary', label: 'Review & Create', number: 9 },
+  { key: 'template', label: 'Template', number: 1 },
+  { key: 'credit-policy', label: 'Credit Policy', number: 2 },
+  { key: 'program-details', label: 'Program Details', number: 3 },
+  { key: 'quote-form', label: 'Quote Form', number: 4 },
+  { key: 'stages', label: 'Stages', number: 5 },
+  { key: 'documents', label: 'Documents', number: 6 },
+  { key: 'tasks', label: 'Tasks', number: 7 },
+  { key: 'review-rules', label: 'AI Rules', number: 8 },
+  { key: 'pricing', label: 'Pricing', number: 9 },
+  { key: 'summary', label: 'Review & Create', number: 10 },
 ];
 
 // ─── DSCR Example Defaults ───────────────────────────────────────
@@ -364,10 +395,13 @@ export function ProgramCreationWizard({
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [wizardStep, setWizardStep] = useState<WizardStep>('credit-policy');
+  const [wizardStep, setWizardStep] = useState<WizardStep>('template');
   const [editDataLoaded, setEditDataLoaded] = useState(false);
 
   const isEditMode = !!editProgram;
+
+  // Template selection
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('dscr-residential');
 
   // Credit policy
   const [selectedCreditPolicyId, setSelectedCreditPolicyId] = useState<number | null>(null);
@@ -383,8 +417,10 @@ export function ProgramCreationWizard({
   const [minInterestRate, setMinInterestRate] = useState('');
   const [maxInterestRate, setMaxInterestRate] = useState('');
   const [termOptions, setTermOptions] = useState('');
+  const [minDscr, setMinDscr] = useState('');
+  const [minFico, setMinFico] = useState('');
   const [eligiblePropertyTypes, setEligiblePropertyTypes] = useState<string[]>([
-    'single-family-residence', '2-4-unit', 'multifamily-5-plus', 'rental-portfolio', 'mixed-use',
+    'single-family', '2-4-unit', 'multi-family', 'mixed-use',
   ]);
   const [quoteFormFields, setQuoteFormFields] = useState<QuoteFormField[]>(getDefaultQuoteFields('dscr'));
 
@@ -428,6 +464,8 @@ export function ProgramCreationWizard({
     setMinInterestRate(p.minInterestRate != null ? String(p.minInterestRate) : '');
     setMaxInterestRate(p.maxInterestRate != null ? String(p.maxInterestRate) : '');
     setTermOptions(p.termOptions || '');
+    setMinDscr(p.minDscr != null ? String(p.minDscr) : '');
+    setMinFico(p.minFico != null ? String(p.minFico) : '');
     setEligiblePropertyTypes(p.eligiblePropertyTypes || []);
     setQuoteFormFields((p.quoteFormFields as QuoteFormField[]) || getDefaultQuoteFields(p.loanType || 'dscr'));
     setSelectedCreditPolicyId(p.creditPolicyId || null);
@@ -576,6 +614,8 @@ export function ProgramCreationWizard({
       minInterestRate,
       maxInterestRate,
       termOptions,
+      minDscr: minDscr ? parseFloat(minDscr) : null,
+      minFico: minFico ? parseInt(minFico) : null,
       eligiblePropertyTypes,
       quoteFormFields,
       creditPolicyId: selectedCreditPolicyId,
@@ -600,47 +640,59 @@ export function ProgramCreationWizard({
     });
   };
 
+  const handleTemplateSelect = (templateId: string) => {
+    setSelectedTemplate(templateId);
+  };
+
+  const applyTemplateDefaults = () => {
+    switch (selectedTemplate) {
+      case 'dscr-residential':
+        handleLoanTypeChange('dscr');
+        break;
+      case 'bridge-fix-flip':
+        handleLoanTypeChange('rtl');
+        break;
+      case 'bank-statement':
+        handleLoanTypeChange('dscr');
+        break;
+      case 'construction':
+        handleLoanTypeChange('rtl');
+        break;
+      case 'commercial':
+        handleLoanTypeChange('dscr');
+        break;
+      case 'blank':
+        setProgramName('');
+        setProgramDescription('');
+        setLoanType('dscr');
+        setMinLoanAmount('');
+        setMaxLoanAmount('');
+        setMinLtv('');
+        setMaxLtv('');
+        setMinDscr('');
+        setMinFico('');
+        setEligiblePropertyTypes([]);
+        setStages([...defaultStages]);
+        setDocuments([]);
+        setTasks([]);
+        setReviewRules([]);
+        break;
+    }
+  };
+
+  const progressPercent = Math.round(((currentStepIndex + 1) / wizardSteps.length) * 100);
+
   // ─── Render ─────────────────────────────────────────────────
 
-  return (
-    <div className="space-y-4">
-      {onCancel && (
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={onCancel} data-testid="button-back-from-wizard">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div>
-              <h2 className="text-lg font-semibold leading-tight">{isEditMode ? 'Edit Loan Program' : 'Add New Loan Program'}</h2>
-              <p className="text-xs text-muted-foreground">{isEditMode ? 'Update your loan program configuration' : 'Configure a new loan program for your borrowers'}</p>
-            </div>
-          </div>
-        </div>
+  const stepContent = (
+    <>
+      {wizardStep === 'template' && (
+        <TemplateSelectionStep
+          selectedTemplate={selectedTemplate}
+          onSelect={handleTemplateSelect}
+        />
       )}
-      {/* Progress bar */}
-      <div className="flex items-center gap-1 text-xs">
-        {wizardSteps.map((step, i) => (
-          <div key={step.key} className="flex items-center gap-1">
-            <button
-              onClick={() => setWizardStep(step.key)}
-              className={`px-2 py-1 rounded-md transition-colors ${
-                step.key === wizardStep
-                  ? 'bg-primary text-primary-foreground font-medium'
-                  : i < currentStepIndex
-                  ? 'bg-primary/10 text-primary cursor-pointer hover:bg-primary/20'
-                  : 'bg-muted text-muted-foreground'
-              }`}
-            >
-              {step.number}. {step.label}
-            </button>
-            {i < wizardSteps.length - 1 && (
-              <ChevronRight className="h-3 w-3 text-muted-foreground" />
-            )}
-          </div>
-        ))}
-      </div>
 
-      {/* Step content */}
       {wizardStep === 'credit-policy' && (
         <CreditPolicyStep
           creditPolicies={creditPoliciesData?.policies || []}
@@ -665,6 +717,10 @@ export function ProgramCreationWizard({
           setMinLtv={setMinLtv}
           maxLtv={maxLtv}
           setMaxLtv={setMaxLtv}
+          minDscr={minDscr}
+          setMinDscr={setMinDscr}
+          minFico={minFico}
+          setMinFico={setMinFico}
           minInterestRate={minInterestRate}
           setMinInterestRate={setMinInterestRate}
           maxInterestRate={maxInterestRate}
@@ -730,43 +786,207 @@ export function ProgramCreationWizard({
           creditPolicies={creditPoliciesData?.policies || []}
         />
       )}
+    </>
+  );
 
-      {/* Navigation */}
-      <div className="flex items-center justify-between pt-2">
-        <Button variant="outline" size="sm" onClick={goBack} disabled={currentStepIndex === 0}>
-          <ChevronLeft className="h-4 w-4 mr-1" />
-          Back
-        </Button>
-        {wizardStep === 'summary' ? (
-          <Button
-            size="sm"
-            onClick={handleCreate}
-            disabled={createProgramMutation.isPending || !programName.trim()}
-          >
-            {createProgramMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                {isEditMode ? 'Updating...' : 'Creating...'}
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="h-4 w-4 mr-1" />
-                {isEditMode ? 'Update Program' : 'Create Program'}
-              </>
-            )}
-          </Button>
-        ) : (
-          <Button size="sm" onClick={goNext}>
-            Next
-            <ChevronRight className="h-4 w-4 ml-1" />
-          </Button>
-        )}
+  return (
+    <div className="space-y-4">
+      {onCancel && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={onCancel} data-testid="button-back-from-wizard">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <h2 className="text-lg font-semibold leading-tight">{isEditMode ? 'Edit Loan Program' : 'Add New Loan Program'}</h2>
+              <p className="text-xs text-muted-foreground">{isEditMode ? 'Update your loan program configuration' : 'Configure a new loan program for your borrowers'}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-6">
+        <div className="w-72 min-w-[288px] shrink-0 flex flex-col">
+          <h3 className="text-[16px] font-semibold mb-4">
+            {isEditMode ? 'Edit Program' : 'New Program'}
+          </h3>
+
+          <div className="space-y-1 flex-1">
+            {wizardSteps.map((step, i) => {
+              const isCompleted = i < currentStepIndex;
+              const isCurrent = i === currentStepIndex;
+              return (
+                <button
+                  key={step.key}
+                  onClick={() => setWizardStep(step.key)}
+                  className="flex items-center gap-3 w-full py-2 px-1 rounded-md transition-colors text-left"
+                  data-testid={`sidebar-step-${step.key}`}
+                >
+                  <div
+                    className={cn(
+                      "w-7 h-7 rounded-full flex items-center justify-center text-[13px] font-semibold shrink-0 transition-colors",
+                      isCompleted && "bg-emerald-500 text-white",
+                      isCurrent && "bg-primary text-white",
+                      !isCompleted && !isCurrent && "border-2 border-muted-foreground/30 text-muted-foreground"
+                    )}
+                  >
+                    {isCompleted ? (
+                      <Check className="h-3.5 w-3.5" />
+                    ) : (
+                      step.number
+                    )}
+                  </div>
+                  <span
+                    className={cn(
+                      "text-[14px]",
+                      isCurrent && "font-medium text-foreground",
+                      !isCurrent && "text-muted-foreground"
+                    )}
+                  >
+                    {step.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-6 pt-4 border-t">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[13px] font-medium text-muted-foreground">Progress</span>
+              <span className="text-[13px] text-muted-foreground">
+                {currentStepIndex + 1} of {wizardSteps.length} steps
+              </span>
+            </div>
+            <Progress value={progressPercent} className="h-2" />
+          </div>
+        </div>
+
+        <div className="flex-1 min-w-0 space-y-4">
+          {stepContent}
+
+          <div className="flex items-center justify-between pt-2 gap-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (currentStepIndex === 0 && onCancel) {
+                  onCancel();
+                } else {
+                  goBack();
+                }
+              }}
+              disabled={currentStepIndex === 0 && !onCancel}
+              className="text-[16px]"
+              data-testid="button-wizard-back"
+            >
+              <ArrowLeft className="h-4 w-4 mr-1.5" />
+              Back
+            </Button>
+
+            <div className="flex items-center gap-3">
+              {wizardStep !== 'summary' && (
+                <Button
+                  variant="ghost"
+                  onClick={goNext}
+                  className="text-[14px] text-muted-foreground"
+                  data-testid="button-wizard-skip"
+                >
+                  Skip this step
+                </Button>
+              )}
+
+              {wizardStep === 'summary' ? (
+                <Button
+                  onClick={handleCreate}
+                  disabled={createProgramMutation.isPending || !programName.trim()}
+                  className="text-[16px]"
+                  data-testid="button-wizard-create"
+                >
+                  {createProgramMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                      {isEditMode ? 'Updating...' : 'Creating...'}
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                      {isEditMode ? 'Update Program' : 'Create Program'}
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => {
+                    if (wizardStep === 'template') {
+                      applyTemplateDefaults();
+                    }
+                    goNext();
+                  }}
+                  className="text-[16px]"
+                  data-testid="button-wizard-continue"
+                >
+                  Continue
+                  <ArrowRight className="h-4 w-4 ml-1.5" />
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-// ─── Step 1: Credit Policy ──────────────────────────────────────
+// ─── Step 1: Template Selection ─────────────────────────────────
+
+function TemplateSelectionStep({
+  selectedTemplate,
+  onSelect,
+}: {
+  selectedTemplate: string;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div>
+      <h2 className="text-[26px] font-bold" data-testid="text-template-title">Choose a Template</h2>
+      <p className="text-[16px] text-muted-foreground mt-0.5 mb-5">
+        Select a starting template for your loan program. You can customize everything in the following steps.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {templateOptions.map((tmpl) => {
+          const isSelected = selectedTemplate === tmpl.id;
+          const IconComp = tmpl.icon;
+          return (
+            <button
+              key={tmpl.id}
+              type="button"
+              onClick={() => onSelect(tmpl.id)}
+              className={cn(
+                "rounded-[10px] border p-5 text-left transition-all",
+                isSelected
+                  ? "border-primary bg-blue-50/50 shadow-sm dark:bg-blue-950/20"
+                  : "border-border hover:border-primary/50"
+              )}
+              data-testid={`template-card-${tmpl.id}`}
+            >
+              <div className="flex items-center gap-3 mb-2">
+                <div className={cn(
+                  "w-9 h-9 rounded-md flex items-center justify-center",
+                  isSelected ? "bg-primary/10" : "bg-muted"
+                )}>
+                  <IconComp className={cn("h-5 w-5", isSelected ? "text-primary" : "text-muted-foreground")} />
+                </div>
+              </div>
+              <p className="text-[16px] font-bold">{tmpl.title}</p>
+              <p className="text-[13px] text-muted-foreground mt-1">{tmpl.description}</p>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Step 2: Credit Policy ──────────────────────────────────────
 
 function CreditPolicyStep({
   creditPolicies,
@@ -1182,7 +1402,7 @@ function CreditPolicyStep({
   );
 }
 
-// ─── Step 2: Program Details ───────────────────────────────────
+// ─── Step 3: Program Details ───────────────────────────────────
 
 function ProgramDetailsStep({
   programName,
@@ -1199,6 +1419,10 @@ function ProgramDetailsStep({
   setMinLtv,
   maxLtv,
   setMaxLtv,
+  minDscr,
+  setMinDscr,
+  minFico,
+  setMinFico,
   minInterestRate,
   setMinInterestRate,
   maxInterestRate,
@@ -1222,6 +1446,10 @@ function ProgramDetailsStep({
   setMinLtv: (v: string) => void;
   maxLtv: string;
   setMaxLtv: (v: string) => void;
+  minDscr: string;
+  setMinDscr: (v: string) => void;
+  minFico: string;
+  setMinFico: (v: string) => void;
   minInterestRate: string;
   setMinInterestRate: (v: string) => void;
   maxInterestRate: string;
@@ -1231,110 +1459,117 @@ function ProgramDetailsStep({
   eligiblePropertyTypes: string[];
   onPropertyTypeToggle: (type: string) => void;
 }) {
+  const formatCurrency = (val: string) => {
+    const num = parseInt(val.replace(/[^0-9]/g, ''));
+    if (isNaN(num)) return val;
+    return `$${num.toLocaleString()}`;
+  };
+
+  const parseCurrency = (val: string) => {
+    return val.replace(/[^0-9]/g, '');
+  };
+
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <Layers className="h-4 w-4" />
-          Program Details
-        </CardTitle>
-        <CardDescription>
-          Define your loan program type and parameters.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="space-y-1 sm:col-span-2">
-            <Label className="text-xs">Program Name (borrowers will see this) *</Label>
-            <Input
-              placeholder="ex. 30-Year Rental Loan"
-              value={programName}
-              onChange={(e) => setProgramName(e.target.value)}
-              data-testid="input-program-name"
-            />
-            <p className="text-xs text-muted-foreground">
-              This name appears on quotes and borrower-facing pages. Choose something clear and professional.
-            </p>
-          </div>
-          <div className="space-y-1 sm:col-span-2">
-            <Label className="text-xs">Internal Description</Label>
-            <Textarea
-              placeholder="ex. Standard DSCR program for investment rentals — internal team reference"
-              value={programDescription}
-              onChange={(e) => setProgramDescription(e.target.value)}
-              rows={2}
-              data-testid="input-program-description"
-            />
-            <p className="text-xs text-muted-foreground">
-              For your team only. Use this to note internal naming or guidelines.
-            </p>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Loan Type *</Label>
-            <LoanTypeSelector value={loanType} onChange={onLoanTypeChange} />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Term Options (months)</Label>
-            <Input
-              placeholder="ex. 12, 24, 36, 60"
-              value={termOptions}
-              onChange={(e) => setTermOptions(e.target.value)}
-            />
-          </div>
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-[26px] font-bold" data-testid="text-program-details-title">Program Details</h2>
+        <p className="text-[16px] text-muted-foreground mt-0.5">
+          Configure the core lending parameters for this program.
+        </p>
+      </div>
+
+      <div className="flex items-start gap-4">
+        <div className="flex-1 space-y-1.5">
+          <Label className="text-[14px] underline decoration-muted-foreground/30">Program Name *</Label>
+          <Input
+            className="h-11"
+            placeholder="ex. 30-Year Rental Loan"
+            value={programName}
+            onChange={(e) => setProgramName(e.target.value)}
+            data-testid="input-program-name"
+          />
         </div>
-
-        <Separator />
-
-        <div>
-          <Label className="text-xs font-medium">Loan Parameters</Label>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-2">
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Min Loan ($)</Label>
-              <Input placeholder="ex. 150000" value={minLoanAmount} onChange={(e) => setMinLoanAmount(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Max Loan ($)</Label>
-              <Input placeholder="ex. 2000000" value={maxLoanAmount} onChange={(e) => setMaxLoanAmount(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Min LTV (%)</Label>
-              <Input placeholder="ex. 50%" value={minLtv} onChange={(e) => setMinLtv(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Max LTV (%)</Label>
-              <Input placeholder="ex. 80%" value={maxLtv} onChange={(e) => setMaxLtv(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Min Rate (%)</Label>
-              <Input placeholder="ex. 7%" value={minInterestRate} onChange={(e) => setMinInterestRate(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Max Rate (%)</Label>
-              <Input placeholder="ex. 12%" value={maxInterestRate} onChange={(e) => setMaxInterestRate(e.target.value)} />
-            </div>
-          </div>
+        <div className="w-[200px] space-y-1.5">
+          <Label className="text-[14px] underline decoration-muted-foreground/30">Program Type</Label>
+          <LoanTypeSelector value={loanType} onChange={onLoanTypeChange} />
         </div>
+      </div>
 
-        <Separator />
+      <div className="space-y-1.5">
+        <Label className="text-[14px] underline decoration-muted-foreground/30">Description</Label>
+        <Textarea
+          className="min-h-[80px]"
+          placeholder="Brief description of this loan product..."
+          value={programDescription}
+          onChange={(e) => setProgramDescription(e.target.value)}
+          rows={3}
+          data-testid="input-program-description"
+        />
+      </div>
 
-        <div>
-          <Label className="text-xs font-medium">Eligible Property Types</Label>
-          <div className="flex flex-wrap gap-2 mt-2">
-            {propertyTypeOptions.map((pt) => (
-              <Badge
-                key={pt.value}
-                variant={eligiblePropertyTypes.includes(pt.value) ? 'default' : 'outline'}
-                className="cursor-pointer"
-                onClick={() => onPropertyTypeToggle(pt.value)}
-              >
-                {pt.label}
-              </Badge>
-            ))}
-          </div>
+      <div className="grid grid-cols-3 gap-4">
+        <div className="space-y-1.5">
+          <Label className="text-[14px] underline decoration-muted-foreground/30">Min LTV</Label>
+          <Input className="h-11" placeholder="50%" value={minLtv} onChange={(e) => setMinLtv(e.target.value)} data-testid="input-min-ltv" />
         </div>
+        <div className="space-y-1.5">
+          <Label className="text-[14px] underline decoration-muted-foreground/30">Max LTV</Label>
+          <Input className="h-11" placeholder="80%" value={maxLtv} onChange={(e) => setMaxLtv(e.target.value)} data-testid="input-max-ltv" />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-[14px] underline decoration-muted-foreground/30">Min DSCR</Label>
+          <Input className="h-11" placeholder="1.0" value={minDscr} onChange={(e) => setMinDscr(e.target.value)} data-testid="input-min-dscr" />
+        </div>
+      </div>
 
-      </CardContent>
-    </Card>
+      <div className="grid grid-cols-3 gap-4">
+        <div className="space-y-1.5">
+          <Label className="text-[14px] underline decoration-muted-foreground/30">Min Loan Amount</Label>
+          <Input
+            className="h-11"
+            placeholder="$100,000"
+            value={minLoanAmount ? formatCurrency(minLoanAmount) : ''}
+            onChange={(e) => setMinLoanAmount(parseCurrency(e.target.value))}
+            data-testid="input-min-loan-amount"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-[14px] underline decoration-muted-foreground/30">Max Loan Amount</Label>
+          <Input
+            className="h-11"
+            placeholder="$2,000,000"
+            value={maxLoanAmount ? formatCurrency(maxLoanAmount) : ''}
+            onChange={(e) => setMaxLoanAmount(parseCurrency(e.target.value))}
+            data-testid="input-max-loan-amount"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-[14px] underline decoration-muted-foreground/30">Min FICO</Label>
+          <Input className="h-11" placeholder="660" value={minFico} onChange={(e) => setMinFico(e.target.value)} data-testid="input-min-fico" />
+        </div>
+      </div>
+
+      <div>
+        <p className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+          Property Types
+        </p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {simplifiedPropertyTypes.map((pt) => (
+            <label
+              key={pt.value}
+              className="flex items-center gap-2.5 cursor-pointer"
+              data-testid={`checkbox-property-${pt.value}`}
+            >
+              <Checkbox
+                checked={eligiblePropertyTypes.includes(pt.value)}
+                onCheckedChange={() => onPropertyTypeToggle(pt.value)}
+              />
+              <span className="text-[14px]">{pt.label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 

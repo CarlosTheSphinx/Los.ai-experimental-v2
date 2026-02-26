@@ -977,6 +977,9 @@ export const loanPrograms = pgTable("loan_programs", {
   minInterestRate: real("min_interest_rate").default(8),
   maxInterestRate: real("max_interest_rate").default(15),
 
+  minDscr: real("min_dscr"),
+  minFico: integer("min_fico"),
+
   minUnits: integer("min_units"),
   maxUnits: integer("max_units"),
 

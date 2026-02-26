@@ -123,6 +123,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         minLoanAmount, maxLoanAmount,
         minLtv, maxLtv,
         minInterestRate, maxInterestRate,
+        minDscr, minFico,
         minUnits, maxUnits,
         termOptions, eligiblePropertyTypes,
         isActive,
@@ -149,6 +150,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
           maxLtv: maxLtv ? parseFloat(maxLtv) : 80,
           minInterestRate: minInterestRate ? parseFloat(minInterestRate) : 8,
           maxInterestRate: maxInterestRate ? parseFloat(maxInterestRate) : 15,
+          minDscr: minDscr ? parseFloat(minDscr) : null,
+          minFico: minFico ? parseInt(minFico) : null,
           minUnits: minUnits ? parseInt(minUnits) : null,
           maxUnits: maxUnits ? parseInt(maxUnits) : null,
           termOptions,
@@ -299,6 +302,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         minLoanAmount, maxLoanAmount,
         minLtv, maxLtv,
         minInterestRate, maxInterestRate,
+        minDscr, minFico,
         minUnits, maxUnits,
         termOptions, eligiblePropertyTypes,
         isActive, quoteFormFields, reviewGuidelines, creditPolicyId
@@ -314,6 +318,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
       if (maxLtv !== undefined) updateData.maxLtv = parseFloat(maxLtv);
       if (minInterestRate !== undefined) updateData.minInterestRate = parseFloat(minInterestRate);
       if (maxInterestRate !== undefined) updateData.maxInterestRate = parseFloat(maxInterestRate);
+      if (minDscr !== undefined) updateData.minDscr = minDscr ? parseFloat(minDscr) : null;
+      if (minFico !== undefined) updateData.minFico = minFico ? parseInt(minFico) : null;
       if (minUnits !== undefined) updateData.minUnits = minUnits ? parseInt(minUnits) : null;
       if (maxUnits !== undefined) updateData.maxUnits = maxUnits ? parseInt(maxUnits) : null;
       if (termOptions !== undefined) updateData.termOptions = termOptions;
@@ -422,6 +428,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
           maxLtv: sourceProgram.maxLtv,
           minInterestRate: sourceProgram.minInterestRate,
           maxInterestRate: sourceProgram.maxInterestRate,
+          minDscr: sourceProgram.minDscr,
+          minFico: sourceProgram.minFico,
           minUnits: sourceProgram.minUnits,
           maxUnits: sourceProgram.maxUnits,
           termOptions: sourceProgram.termOptions,
