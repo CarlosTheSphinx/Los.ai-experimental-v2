@@ -233,7 +233,7 @@ export default function TabDocuments({
                   {mode.label}
                 </Button>
               ))}
-              <span className="text-[12px] text-muted-foreground ml-2">
+              <span className="text-[14px] text-muted-foreground ml-2">
                 {REVIEW_MODE_DESCRIPTIONS[currentMode] || REVIEW_MODE_DESCRIPTIONS.manual}
               </span>
             </div>
@@ -256,7 +256,7 @@ export default function TabDocuments({
           {currentMode === "automatic" && (
             <div className="border-t pt-3 flex items-center gap-4 flex-wrap" data-testid="panel-automatic-settings">
               <div className="flex items-center gap-2">
-                <Label className="text-[12px] text-muted-foreground whitespace-nowrap">Update message frequency</Label>
+                <Label className="text-[14px] text-muted-foreground whitespace-nowrap">Update message frequency</Label>
                 <Select
                   value={String(reviewData?.communicationFrequencyMinutes ?? "30")}
                   onValueChange={(val) =>
@@ -266,7 +266,7 @@ export default function TabDocuments({
                     })
                   }
                 >
-                  <SelectTrigger className="w-[140px] h-8 text-[12px]" data-testid="select-comm-frequency">
+                  <SelectTrigger className="w-[140px] h-8 text-[14px]" data-testid="select-comm-frequency">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -287,7 +287,7 @@ export default function TabDocuments({
           {currentMode === "timed" && (
             <div className="border-t pt-3 flex items-center gap-4 flex-wrap" data-testid="panel-timed-settings">
               <div className="flex items-center gap-2">
-                <Label className="text-[12px] text-muted-foreground whitespace-nowrap">Review frequency</Label>
+                <Label className="text-[14px] text-muted-foreground whitespace-nowrap">Review frequency</Label>
                 <Select
                   value={String(reviewData?.dealIntervalMinutes ?? "60")}
                   onValueChange={(val) =>
@@ -299,7 +299,7 @@ export default function TabDocuments({
                     })
                   }
                 >
-                  <SelectTrigger className="w-[140px] h-8 text-[12px]" data-testid="select-review-frequency">
+                  <SelectTrigger className="w-[140px] h-8 text-[14px]" data-testid="select-review-frequency">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -314,10 +314,10 @@ export default function TabDocuments({
                 </Select>
               </div>
               <div className="flex items-center gap-2">
-                <Label className="text-[12px] text-muted-foreground whitespace-nowrap">Scheduled time</Label>
+                <Label className="text-[14px] text-muted-foreground whitespace-nowrap">Scheduled time</Label>
                 <Input
                   type="time"
-                  className="w-[120px] h-8 text-[12px]"
+                  className="w-[120px] h-8 text-[14px]"
                   value={reviewData?.scheduledTime || ""}
                   onChange={(e) =>
                     updateReviewMode.mutate({
@@ -338,7 +338,7 @@ export default function TabDocuments({
       <Card>
         <CardContent className="py-3 px-4">
           <div className="flex items-center justify-between">
-            <div className="text-[13px]">
+            <div className="text-[16px]">
               <span className="font-medium">{uploaded}</span>
               <span className="text-muted-foreground"> of {documents.length} documents uploaded</span>
             </div>
@@ -357,7 +357,7 @@ export default function TabDocuments({
           {uploadingFiles.length > 0 && (
             <div className="mt-3 space-y-1.5">
               {uploadingFiles.map((f) => (
-                <div key={f} className="flex items-center gap-2 text-[12px] text-muted-foreground">
+                <div key={f} className="flex items-center gap-2 text-[14px] text-muted-foreground">
                   <Loader2 className="h-3 w-3 animate-spin" /> Uploading {f}...
                 </div>
               ))}
@@ -438,16 +438,16 @@ function StageSection({
           {allComplete ? (
             <CheckCircle2 className="h-5 w-5 text-emerald-500" />
           ) : (
-            <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/40 flex items-center justify-center text-[10px] font-bold text-muted-foreground">
+            <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/40 flex items-center justify-center text-[12px] font-bold text-muted-foreground">
               {stageOrder}
             </div>
           )}
-          <span className="text-[13px] font-semibold">
+          <span className="text-[16px] font-semibold">
             Stage {stageOrder}: {stageName}
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[12px] text-muted-foreground">
+          <span className="text-[14px] text-muted-foreground">
             {completedCount}/{totalCount} complete
           </span>
           <ChevronDown
@@ -461,9 +461,9 @@ function StageSection({
 
       {isOpen && (
         <div className="border-t border-border/50">
-          <table className="w-full text-[13px]">
+          <table className="w-full text-[16px]">
             <thead>
-              <tr className="border-b border-border/30 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <tr className="border-b border-border/30 text-left text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">
                 <th className="px-4 py-2">Document</th>
                 <th className="px-4 py-2">Status</th>
                 <th className="px-4 py-2">Files</th>
@@ -488,7 +488,7 @@ function StageSection({
                           {doc.documentName || doc.fileName || "Untitled"}
                         </span>
                         {doc.isRequired && (
-                          <Badge variant="destructive" className="text-[9px] px-1.5 py-0 shrink-0">
+                          <Badge variant="destructive" className="text-[11px] px-1.5 py-0 shrink-0">
                             REQ
                           </Badge>
                         )}
@@ -497,10 +497,10 @@ function StageSection({
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-1.5">
                         <span className={cn("w-2 h-2 rounded-full shrink-0", dot)} />
-                        <span className="text-[12px]">{label}</span>
+                        <span className="text-[14px]">{label}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-2.5 text-muted-foreground text-[12px]">
+                    <td className="px-4 py-2.5 text-muted-foreground text-[14px]">
                       {fileCountLabel(doc)}
                     </td>
                     <td className="px-4 py-2.5 text-right">
