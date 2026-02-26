@@ -356,7 +356,7 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
                           onClick={handleNavClick}
                         >
                           <Icon className="h-5 w-5 shrink-0" />
-                          <span className="flex items-center gap-1 flex-1">
+                          <span className="flex items-center gap-1 flex-1 text-[15px]">
                             {item.label}
                             {'showBadge' in item && item.showBadge && <InboxBadge />}
                           </span>
@@ -400,7 +400,7 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
                             onClick={handleNavClick}
                           >
                             <Icon className="h-5 w-5 shrink-0" />
-                            <span className="flex items-center gap-1 flex-1">
+                            <span className="flex items-center gap-1 flex-1 text-[15px]">
                               {item.label}
                               {'showBadge' in item && item.showBadge && <InboxBadge />}
                             </span>
@@ -446,7 +446,7 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
                             onClick={handleNavClick}
                           >
                             <Icon className="h-5 w-5 shrink-0" />
-                            <span className="flex items-center gap-1 flex-1">
+                            <span className="flex items-center gap-1 flex-1 text-[15px]">
                               {item.label}
                             </span>
                           </Link>
