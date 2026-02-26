@@ -283,7 +283,7 @@ export default function TabOverview({
           <div className="mx-6 mt-2 mb-3 border-b border-muted" />
           <CardContent>
             {!editLoan ? (
-              <div className="grid grid-cols-2 gap-x-8 gap-y-3.5">
+              <div className="grid grid-cols-2 gap-x-8 gap-y-2.5">
                 <Field label="Loan Amount" value={fmt(loanAmount)} />
                 <Field label="Property Value" value={fmt(propertyValue)} />
                 <Field label="LTV" value={ltv ? `${ltv}%` : "—"} tooltip="Loan-to-Value ratio" />
@@ -354,7 +354,7 @@ export default function TabOverview({
           <div className="mx-6 mt-2 mb-3 border-b border-muted" />
           <CardContent>
             {!editProperty ? (
-              <div className="grid grid-cols-2 gap-x-8 gap-y-3.5">
+              <div className="grid grid-cols-2 gap-x-8 gap-y-2.5">
                 <Field label="Address" value={primaryProp?.address || deal.propertyAddress || "—"} />
                 <Field label="City / State" value={
                   primaryProp
@@ -415,7 +415,7 @@ export default function TabOverview({
           <div className="mx-6 mt-2 mb-3 border-b border-muted" />
           <CardContent>
             {!editBorrower ? (
-              <div className="grid grid-cols-2 gap-x-8 gap-y-3.5">
+              <div className="grid grid-cols-2 gap-x-8 gap-y-2.5">
                 <Field label="Full Name" value={deal.borrowerName || `${deal.customerFirstName || ""} ${deal.customerLastName || ""}`.trim() || "—"} />
                 <Field label="Email" value={deal.borrowerEmail || deal.customerEmail || "—"} />
                 <Field label="Phone" value={deal.borrowerPhone || deal.customerPhone || "—"} />
@@ -452,7 +452,7 @@ export default function TabOverview({
           </CardHeader>
           <div className="mx-6 mt-2 mb-3 border-b border-muted" />
           <CardContent>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+            <div className="grid grid-cols-2 gap-x-8 gap-y-2.5">
               <div>
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Deal Status</span>
                 <Select

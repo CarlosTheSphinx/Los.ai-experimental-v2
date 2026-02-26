@@ -217,9 +217,17 @@ export default function DealDetailV2() {
                   ? `${deal.propertyAddress}${deal.propertyCity ? `, ${deal.propertyCity}` : ""}${deal.propertyState ? `, ${deal.propertyState}` : ""}${deal.propertyZip ? ` ${deal.propertyZip}` : ""}`
                   : deal.dealNumber || `Deal #${deal.id}`}
               </h1>
-              <p className="text-[13px] text-muted-foreground mt-0.5" data-testid="text-borrower-info">
-                {[deal.borrowerName, deal.borrowerEmail, deal.borrowerPhone].filter(Boolean).join(" \u00B7 ")}
-              </p>
+              {(() => {
+                const contactName = deal.borrowerName || [deal.customerFirstName, deal.customerLastName].filter(Boolean).join(" ");
+                const contactEmail = deal.borrowerEmail || deal.customerEmail;
+                const contactPhone = deal.borrowerPhone || deal.customerPhone;
+                const contactParts = [contactName, contactEmail, contactPhone].filter(Boolean);
+                return contactParts.length > 0 ? (
+                  <p className="text-[12px] text-muted-foreground mt-0.5" data-testid="text-borrower-info">
+                    {contactParts.join(" \u00B7 ")}
+                  </p>
+                ) : null;
+              })()}
             </div>
           </div>
 
@@ -230,13 +238,13 @@ export default function DealDetailV2() {
                 Review Mode
               </div>
             )}
-            <Button variant="outline" size="sm" data-testid="button-drive">
+            <Button variant="ghost" size="sm" className="h-9 px-4 text-[13px] font-medium" data-testid="button-drive">
               <FolderOpen className="h-3.5 w-3.5 mr-1.5" /> Drive
             </Button>
-            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="button-auto-process">
+            <Button size="sm" className="h-9 px-4 text-[13px] font-medium bg-emerald-600 hover:bg-emerald-700 text-white border-0 shadow-md shadow-emerald-600/30" data-testid="button-auto-process">
               <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Auto Process
             </Button>
-            <Button variant="outline" size="icon" className="h-8 w-8" data-testid="button-more-actions">
+            <Button variant="ghost" size="icon" className="h-9 w-9" data-testid="button-more-actions">
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </div>
