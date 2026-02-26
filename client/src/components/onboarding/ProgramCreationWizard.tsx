@@ -2108,18 +2108,18 @@ function StagesStep({
   setStages: (s: StageEntry[]) => void;
 }) {
   const [dragIdx, setDragIdx] = useState<number | null>(null);
-  const [editIdx, setEditIdx] = useState<number | null>(null);
+  const [dropTargetIdx, setDropTargetIdx] = useState<number | null>(null);
+  const nameRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const addStage = () => {
-    const newIdx = stages.length;
     setStages([...stages, { stepName: '', isRequired: true, description: '' }]);
-    setEditIdx(newIdx);
+    setTimeout(() => {
+      nameRefs.current[stages.length]?.focus();
+    }, 50);
   };
 
   const removeStage = (i: number) => {
     setStages(stages.filter((_, idx) => idx !== i));
-    if (editIdx === i) setEditIdx(null);
-    else if (editIdx !== null && editIdx > i) setEditIdx(editIdx - 1);
   };
 
   const updateStage = (i: number, field: keyof StageEntry, value: any) => {
@@ -2134,11 +2134,6 @@ function StagesStep({
     const [moved] = updated.splice(from, 1);
     updated.splice(to, 0, moved);
     setStages(updated);
-    if (editIdx === from) setEditIdx(to);
-    else if (editIdx !== null) {
-      if (from < editIdx && to >= editIdx) setEditIdx(editIdx - 1);
-      else if (from > editIdx && to <= editIdx) setEditIdx(editIdx + 1);
-    }
   };
 
   return (
@@ -2171,17 +2166,32 @@ function StagesStep({
         <div className="space-y-0">
           {stages.map((stage, i) => {
             const color = STAGE_COLORS[i % STAGE_COLORS.length];
-            const isEditing = editIdx === i;
 
             return (
               <div
                 key={i}
                 className="relative"
                 draggable
-                onDragStart={() => setDragIdx(i)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => { if (dragIdx !== null) { moveStage(dragIdx, i); setDragIdx(null); } }}
-                onDragEnd={() => setDragIdx(null)}
+                onDragStart={(e) => {
+                  setDragIdx(i);
+                  e.dataTransfer.effectAllowed = 'move';
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  setDropTargetIdx(i);
+                }}
+                onDragLeave={() => {
+                  if (dropTargetIdx === i) setDropTargetIdx(null);
+                }}
+                onDrop={() => {
+                  if (dragIdx !== null) {
+                    moveStage(dragIdx, i);
+                    setDragIdx(null);
+                  }
+                  setDropTargetIdx(null);
+                }}
+                onDragEnd={() => { setDragIdx(null); setDropTargetIdx(null); }}
                 data-testid={`stage-row-${i}`}
               >
                 <div
@@ -2191,81 +2201,70 @@ function StagesStep({
 
                 <div
                   className={cn(
-                    "ml-4 rounded-[10px] border bg-white py-3.5 px-5 mb-3 transition-all cursor-grab",
-                    dragIdx === i && "border-blue-400 shadow-md bg-blue-50/30"
+                    "ml-4 rounded-[10px] border bg-white py-3 px-4 mb-3 transition-all group",
+                    dragIdx === i && "border-blue-400 shadow-md bg-blue-50/30 opacity-60",
+                    dropTargetIdx === i && dragIdx !== i && "border-blue-300 bg-blue-50/20"
                   )}
                 >
-                  {isEditing ? (
-                    <div className="flex items-start gap-3">
-                      <div className="flex flex-col gap-2 flex-1 min-w-0">
-                        <Input
-                          className="h-9 text-[15px] font-bold"
+                  <div className="flex items-start gap-3">
+                    <div className="pt-1.5 cursor-grab active:cursor-grabbing flex-shrink-0">
+                      <GripVertical className="h-5 w-5 text-muted-foreground/40 group-hover:text-muted-foreground/70 transition-colors" />
+                    </div>
+
+                    <div className="flex-1 min-w-0 space-y-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <span style={{ color }} className="text-[14px] flex-shrink-0">●</span>
+                        <span className="text-[13px] text-muted-foreground/60 flex-shrink-0 font-medium">{i + 1}.</span>
+                        <input
+                          ref={(el) => { nameRefs.current[i] = el; }}
+                          className="text-[15px] font-bold text-foreground bg-transparent border-0 outline-none w-full placeholder:text-muted-foreground/40 focus:bg-muted/30 focus:px-2 rounded transition-all -ml-0.5 px-0"
                           placeholder="Stage name"
                           value={stage.stepName}
                           onChange={(e) => updateStage(i, 'stepName', e.target.value)}
-                          autoFocus
                           data-testid={`input-stage-name-${i}`}
                         />
-                        <Input
-                          className="h-8 text-[13px] text-muted-foreground"
-                          placeholder="Stage description (optional)"
+                      </div>
+                      <div className="ml-6">
+                        <input
+                          className="text-[13px] text-muted-foreground bg-transparent border-0 outline-none w-full placeholder:text-muted-foreground/30 focus:bg-muted/30 focus:px-2 rounded transition-all px-0"
+                          placeholder="Add a description..."
                           value={stage.description || ''}
                           onChange={(e) => updateStage(i, 'description', e.target.value)}
                           data-testid={`input-stage-desc-${i}`}
                         />
-                        <label className="flex items-center gap-2 text-[13px] text-muted-foreground cursor-pointer">
-                          <Checkbox
-                            checked={stage.isRequired}
-                            onCheckedChange={(v) => updateStage(i, 'isRequired', !!v)}
-                            data-testid={`checkbox-stage-required-${i}`}
-                          />
-                          Required stage
-                        </label>
                       </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 flex-shrink-0 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button
                         variant="ghost"
-                        size="sm"
-                        className="text-[13px] text-primary h-8 mt-0.5"
-                        onClick={() => setEditIdx(null)}
-                        data-testid={`button-done-stage-${i}`}
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => i > 0 && moveStage(i, i - 1)}
+                        disabled={i === 0}
+                        data-testid={`button-move-up-stage-${i}`}
                       >
-                        <Check className="h-3.5 w-3.5 mr-1" />
-                        Done
+                        <ArrowUp className="h-3.5 w-3.5" />
                       </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => i < stages.length - 1 && moveStage(i, i + 1)}
+                        disabled={i === stages.length - 1}
+                        data-testid={`button-move-down-stage-${i}`}
+                      >
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      </Button>
+                      <button
+                        className="text-red-400 hover:text-red-600 transition-colors p-1"
+                        onClick={() => removeStage(i)}
+                        data-testid={`button-remove-stage-${i}`}
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
                     </div>
-                  ) : (
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        <div>
-                          <span className="text-[15px] font-bold text-foreground flex items-center gap-1.5">
-                            <span style={{ color }} className="text-[15px]">●</span>
-                            {i + 1}. {stage.stepName || 'Untitled Stage'}
-                          </span>
-                          <p className="text-[13px] text-muted-foreground mt-0.5 ml-5">
-                            {stage.description || 'No description'}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-[13px] text-muted-foreground hover:text-foreground h-8"
-                          onClick={() => setEditIdx(i)}
-                          data-testid={`button-edit-stage-${i}`}
-                        >
-                          Edit
-                        </Button>
-                        <button
-                          className="text-red-400 hover:text-red-600 transition-colors p-1"
-                          onClick={() => removeStage(i)}
-                          data-testid={`button-remove-stage-${i}`}
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  </div>
                 </div>
               </div>
             );
