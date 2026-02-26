@@ -271,7 +271,7 @@ export default function DealsV2() {
       {/* Table Card */}
       <div className="bg-card border rounded-[10px] shadow-sm overflow-hidden">
         {/* Search & Toolbar */}
-        <div className="px-4 py-3 border-b">
+        <div className="px-4 py-3 mb-2 border-b">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="relative max-w-[320px] w-[320px]">
