@@ -5328,16 +5328,32 @@ export async function registerRoutes(
   app.patch('/api/admin/projects/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const projectId = parseInt(req.params.id);
-      const { targetCloseDate } = req.body;
 
       if (!projectId) {
         return res.status(400).json({ error: 'Project ID is required' });
       }
 
-      const updateData: Record<string, any> = {};
+      const allowedFields: Record<string, (v: any) => any> = {
+        loanAmount: (v) => v !== null && v !== '' ? Number(v) : null,
+        interestRate: (v) => v !== null && v !== '' ? Number(v) : null,
+        loanTermMonths: (v) => v !== null && v !== '' ? Number(v) : null,
+        loanType: (v) => v || null,
+        status: (v) => v || null,
+        targetCloseDate: (v) => v ? new Date(v) : null,
+        borrowerName: (v) => v || null,
+        borrowerEmail: (v) => v || null,
+        borrowerPhone: (v) => v || null,
+        programId: (v) => v !== null && v !== '' ? Number(v) : null,
+        propertyAddress: (v) => v || null,
+        propertyType: (v) => v || null,
+        currentStage: (v) => v || null,
+      };
 
-      if (targetCloseDate !== undefined) {
-        updateData.targetCloseDate = targetCloseDate ? new Date(targetCloseDate) : null;
+      const updateData: Record<string, any> = {};
+      for (const [field, transform] of Object.entries(allowedFields)) {
+        if (req.body[field] !== undefined) {
+          updateData[field] = transform(req.body[field]);
+        }
       }
 
       if (Object.keys(updateData).length === 0) {

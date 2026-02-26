@@ -60,6 +60,7 @@ export default function DealDetailV2() {
 
   const deal = dealData?.deal;
   const activities = dealData?.activity ?? [];
+  const properties = (dealData as any)?.properties ?? [];
 
   // Tasks (separate endpoint, may or may not exist)
   const { data: tasksData } = useQuery<any[]>({
@@ -210,7 +211,7 @@ export default function DealDetailV2() {
 
           <div className="mt-5">
             <TabsContent value="overview" className="m-0">
-              <TabOverview deal={deal} />
+              <TabOverview deal={deal} properties={properties} dealId={dealId!} />
             </TabsContent>
             <TabsContent value="documents" className="m-0">
               <TabDocuments deal={deal} documents={documents} dealId={dealId!} />
