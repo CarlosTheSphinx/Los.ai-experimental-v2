@@ -133,6 +133,8 @@ export default function MessagesPage() {
   const [digestDate, setDigestDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
   const [editingDraft, setEditingDraft] = useState<any>(null);
   const messageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
   
   const isAdmin = user?.role && ['admin', 'staff', 'super_admin'].includes(user.role);
 
@@ -543,6 +545,63 @@ export default function MessagesPage() {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeThreadId) return;
+
+    setIsUploading(true);
+    try {
+      const urlRes = await apiRequest("POST", "/api/uploads/request-url", {
+        name: file.name,
+        size: file.size,
+        contentType: file.type,
+      });
+      const urlData = await urlRes.json();
+
+      let objectPath = urlData.objectPath;
+
+      if (urlData.useDirectUpload) {
+        const formData = new FormData();
+        formData.append("file", file);
+        const uploadRes = await fetch(urlData.uploadURL, {
+          method: "POST",
+          body: formData,
+        });
+        const uploadData = await uploadRes.json();
+        objectPath = uploadData.objectPath || objectPath;
+      } else {
+        await fetch(urlData.uploadURL, {
+          method: "PUT",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+      }
+
+      const fileSizeStr = file.size < 1024 * 1024
+        ? `${Math.round(file.size / 1024)} KB`
+        : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+
+      await sendMessage(activeThreadId, `📎 ${file.name}`, "message", {
+        fileName: file.name,
+        fileType: file.type.includes("pdf") ? "PDF" : file.type.split("/")[1]?.toUpperCase() || "File",
+        fileSize: fileSizeStr,
+        objectPath,
+        uploadedAt: new Date().toISOString(),
+        status: "received",
+      });
+
+      refetchThread();
+      refetchThreads();
+      toast({ title: "File uploaded successfully" });
+    } catch (err) {
+      console.error("File upload error:", err);
+      toast({ title: "Failed to upload file", variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -1435,15 +1494,31 @@ export default function MessagesPage() {
               )}
 
               <div className="px-4 pb-4 pt-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.csv,.txt,.zip"
+                  data-testid="input-file-upload"
+                />
                 <div className="flex items-center gap-1.5">
-                  <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground" title="Attach file" data-testid="button-attach-file">
-                    <Paperclip className="h-4 w-4" />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-[42px] w-[42px] shrink-0 text-muted-foreground hover:text-foreground"
+                    title="Attach file"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={!activeThreadId || isUploading}
+                    data-testid="button-attach-file"
+                  >
+                    {isUploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Paperclip className="h-5 w-5" />}
                   </Button>
 
                   <Popover open={isTemplatePopoverOpen} onOpenChange={setIsTemplatePopoverOpen}>
                     <PopoverTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground" title="Message templates" data-testid="button-templates">
-                        <FileText className="h-4 w-4" />
+                      <Button variant="ghost" size="icon" className="h-[42px] w-[42px] shrink-0 text-muted-foreground hover:text-foreground" title="Message templates" data-testid="button-templates">
+                        <FileText className="h-5 w-5" />
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent align="start" className="w-64 p-2">
@@ -1470,8 +1545,8 @@ export default function MessagesPage() {
 
                   <Popover open={isMergeTagPopoverOpen} onOpenChange={setIsMergeTagPopoverOpen}>
                     <PopoverTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground" title="Insert merge tag" data-testid="button-merge-tags">
-                        <Tags className="h-4 w-4" />
+                      <Button variant="ghost" size="icon" className="h-[42px] w-[42px] shrink-0 text-muted-foreground hover:text-foreground" title="Insert merge tag" data-testid="button-merge-tags">
+                        <Tags className="h-5 w-5" />
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent align="start" className="w-60 p-2">
@@ -1490,8 +1565,8 @@ export default function MessagesPage() {
                   {draft.trim() && (
                     <Popover open={isSaveTemplateOpen} onOpenChange={setIsSaveTemplateOpen}>
                       <PopoverTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground" title="Save as template" data-testid="button-save-template">
-                          <Save className="h-4 w-4" />
+                        <Button variant="ghost" size="icon" className="h-[42px] w-[42px] shrink-0 text-muted-foreground hover:text-foreground" title="Save as template" data-testid="button-save-template">
+                          <Save className="h-5 w-5" />
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent align="start" className="w-64 p-3">
