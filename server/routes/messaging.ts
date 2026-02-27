@@ -50,20 +50,23 @@ export function registerMessagingRoutes(app: Express, deps: RouteDeps) {
         let dealName = null;
         let dealIdentifier = null;
         let propertyAddress = null;
+        let currentStage = null;
         if (thread.dealId) {
           const deal = await db.select({
             projectName: projects.projectName,
             propertyAddress: projects.propertyAddress,
             loanNumber: projects.loanNumber,
+            currentStage: projects.currentStage,
           }).from(projects).where(eq(projects.id, thread.dealId)).limit(1);
           if (deal[0]) {
             dealName = deal[0].projectName;
             dealIdentifier = deal[0].loanNumber || `DEAL-${thread.dealId}`;
             propertyAddress = deal[0].propertyAddress;
+            currentStage = deal[0].currentStage || null;
           }
         }
 
-        const lastMsg = await db.select({ body: messages.body, createdAt: messages.createdAt })
+        const lastMsg = await db.select({ body: messages.body, createdAt: messages.createdAt, senderId: messages.senderId })
           .from(messages)
           .where(eq(messages.threadId, thread.id))
           .orderBy(desc(messages.createdAt))
@@ -96,7 +99,9 @@ export function registerMessagingRoutes(app: Express, deps: RouteDeps) {
           dealName,
           dealIdentifier,
           propertyAddress,
+          currentStage,
           lastMessagePreview: lastMsg[0]?.body?.substring(0, 100) || null,
+          lastMessageSenderId: lastMsg[0]?.senderId || null,
           unreadCount,
         };
       }));

@@ -43,6 +43,8 @@ import {
   Pencil,
   Eye,
   MapPin,
+  Sparkles,
+  File,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useBranding } from "@/hooks/use-branding";
@@ -112,6 +114,8 @@ export default function MessagesPage() {
   const [isTemplatePopoverOpen, setIsTemplatePopoverOpen] = useState(false);
   const [inboxTab, setInboxTab] = useState<'messages' | 'email' | 'digests' | 'team'>(urlTab === 'email' ? 'email' : urlTab === 'team' ? 'team' : 'messages');
   const [activeTeamChatId, setActiveTeamChatId] = useState<number | null>(null);
+  const [statFilter, setStatFilter] = useState<'all' | 'unread' | 'needs_reply'>('all');
+  const [channelFilter, setChannelFilter] = useState<'all' | 'in-app' | 'email' | 'team'>('all');
   const [activeEmailThreadId, setActiveEmailThreadId] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
@@ -151,6 +155,28 @@ export default function MessagesPage() {
       .toUpperCase()
       .slice(0, 2);
   };
+
+  const AVATAR_COLORS = [
+    "bg-blue-500", "bg-emerald-500", "bg-amber-500", "bg-violet-500",
+    "bg-rose-500", "bg-cyan-500", "bg-orange-500", "bg-teal-500",
+  ];
+
+  const getAvatarColor = (id: number) => AVATAR_COLORS[id % AVATAR_COLORS.length];
+
+  const STAGE_COLORS: Record<string, string> = {
+    "lead": "bg-slate-400",
+    "application": "bg-blue-400",
+    "processing": "bg-amber-400",
+    "underwriting": "bg-purple-400",
+    "conditional_approval": "bg-cyan-400",
+    "clear_to_close": "bg-emerald-400",
+    "closing": "bg-green-500",
+    "funded": "bg-green-600",
+    "dead": "bg-red-400",
+  };
+
+  const formatStageName = (stage: string) =>
+    stage.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 
   const insertTemplate = (templateContent: string) => {
     setDraft(templateContent);
@@ -400,16 +426,29 @@ export default function MessagesPage() {
   }, [urlDealId, openNew, setLocation, quotesData]);
 
   const threads = threadsData?.threads || [];
-  const filteredThreads = inboxSearchQuery.trim()
-    ? threads.filter((t: any) => {
-        const q = inboxSearchQuery.toLowerCase();
-        return (t.subject?.toLowerCase().includes(q)) ||
-          (t.userName?.toLowerCase().includes(q)) ||
-          (t.dealName?.toLowerCase().includes(q)) ||
-          (t.propertyAddress?.toLowerCase().includes(q)) ||
-          (t.lastMessagePreview?.toLowerCase().includes(q));
-      })
-    : threads;
+
+  const unreadThreadCount = threads.filter((t: any) => t.unreadCount > 0).length;
+  const needsReplyCount = threads.filter((t: any) => {
+    if (!t.lastMessageSenderId) return false;
+    return t.lastMessageSenderId !== user?.id && t.unreadCount > 0;
+  }).length;
+
+  const filteredThreads = threads.filter((t: any) => {
+    if (inboxSearchQuery.trim()) {
+      const q = inboxSearchQuery.toLowerCase();
+      const matchesSearch = (t.subject?.toLowerCase().includes(q)) ||
+        (t.userName?.toLowerCase().includes(q)) ||
+        (t.dealName?.toLowerCase().includes(q)) ||
+        (t.propertyAddress?.toLowerCase().includes(q)) ||
+        (t.lastMessagePreview?.toLowerCase().includes(q));
+      if (!matchesSearch) return false;
+    }
+    if (statFilter === 'unread' && t.unreadCount <= 0) return false;
+    if (statFilter === 'needs_reply') {
+      if (!t.lastMessageSenderId || t.lastMessageSenderId === user?.id || t.unreadCount <= 0) return false;
+    }
+    return true;
+  });
 
   const filteredEmailThreads = emailThreads.filter((t: any) => {
     if (emailSearchQuery.trim()) {
@@ -428,7 +467,14 @@ export default function MessagesPage() {
   });
 
   const activeThread = activeThreadData?.thread;
-  const messages = activeThreadData?.messages || [];
+  const activeMessages = activeThreadData?.messages || [];
+
+  const activeThreadMeta = activeThread ? threads.find((t: any) => t.id === activeThread.id) : null;
+  const headerAddress = activeThreadMeta?.propertyAddress?.split(',')[0] || (activeThread as any)?.userName || "Conversation";
+  const headerStage = activeThreadMeta?.currentStage;
+  const headerIdentifier = activeThreadMeta?.dealIdentifier;
+  const headerUserType = activeThreadMeta?.userType;
+  const headerUserName = (activeThread as any)?.userName || activeThreadMeta?.userName;
 
   useEffect(() => {
     if (threads.length && !activeThreadId) {
@@ -440,16 +486,16 @@ export default function MessagesPage() {
     if (activeThreadId) {
       markRead(activeThreadId).catch(() => {});
     }
-  }, [activeThreadId, messages.length]);
+  }, [activeThreadId, activeMessages.length]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [activeMessages]);
 
   const sendMutation = useMutation({
     mutationFn: async () => {
       if (!activeThreadId || !draft.trim()) return;
-      return sendMessage(activeThreadId, draft.trim(), "message");
+      return sendMessage(activeThreadId, draft.trim());
     },
     onSuccess: () => {
       setDraft("");
@@ -498,22 +544,19 @@ export default function MessagesPage() {
   };
 
   return (
-    <div className="p-6 h-full" data-testid="messages-page">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Inbox className="h-8 w-8 text-primary" />
-          <div>
-            <h1 className="text-2xl font-bold">Inbox</h1>
-            <p className="text-sm text-muted-foreground">
-              {isAdmin ? "Communicate with borrowers and partners" : `Messages from ${branding.companyName}`}
-            </p>
-          </div>
+    <div className="p-4 md:p-6 h-full" data-testid="messages-page">
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h1 className="text-[26px] font-bold tracking-tight" data-testid="text-inbox-title">Inbox</h1>
+          <p className="text-[16px] text-muted-foreground mt-0.5">
+            {isAdmin ? "Communicate with borrowers and partners" : `Messages from ${branding.companyName}`}
+          </p>
         </div>
         
         <Dialog open={isNewThreadDialogOpen} onOpenChange={setIsNewThreadDialogOpen}>
           <DialogTrigger asChild>
-            <Button data-testid="button-new-thread">
-              <Plus className="h-4 w-4 mr-2" />
+            <Button className="rounded-full h-10 px-5 text-[15px] gap-2 shadow-md" data-testid="button-new-thread">
+              <Plus className="h-4 w-4" />
               {isAdmin ? "New Conversation" : "Message Lender"}
             </Button>
           </DialogTrigger>
@@ -604,67 +647,71 @@ export default function MessagesPage() {
         </Dialog>
       </div>
 
-      <div className="flex h-[calc(100vh-200px)] gap-4">
-        <Card className="w-[504px] shrink-0 flex flex-col overflow-hidden">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <MessageCircle className="h-5 w-5" />
-              Inbox
-            </CardTitle>
+      <div className="flex h-[calc(100vh-180px)] gap-4">
+        <Card className="w-[504px] shrink-0 flex flex-col overflow-hidden rounded-[10px] shadow-sm">
+          <div className="px-4 pt-4 pb-3 space-y-3">
+            <div className="grid grid-cols-3 gap-2" data-testid="inbox-stat-counters">
+              {([
+                { key: 'all' as const, label: 'All', count: threads.length },
+                { key: 'unread' as const, label: 'Unread', count: unreadThreadCount },
+                { key: 'needs_reply' as const, label: 'Needs Reply', count: needsReplyCount },
+              ]).map((stat) => (
+                <button
+                  key={stat.key}
+                  onClick={() => setStatFilter(stat.key)}
+                  className={`flex flex-col items-center py-2.5 rounded-lg transition-colors cursor-pointer ${
+                    statFilter === stat.key
+                      ? "bg-primary/10 border border-primary/30"
+                      : "bg-muted/50 hover:bg-muted border border-transparent"
+                  }`}
+                  data-testid={`stat-${stat.key}`}
+                >
+                  <span className={`text-[20px] font-bold leading-tight ${statFilter === stat.key ? 'text-primary' : ''}`}>{stat.count}</span>
+                  <span className="text-[13px] text-muted-foreground mt-0.5">{stat.label}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search conversations..."
+                value={inboxSearchQuery}
+                onChange={(e) => setInboxSearchQuery(e.target.value)}
+                className="h-8 pl-8 text-xs"
+                data-testid="input-inbox-search"
+              />
+            </div>
+
             {isAdmin && (
-              <div className="flex items-center gap-1 mt-2 p-1 rounded-md bg-muted">
-                <Button
-                  variant={inboxTab === 'messages' ? 'default' : 'ghost'}
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={() => { setInboxTab('messages'); setActiveEmailThreadId(null); }}
-                  data-testid="tab-messages"
-                >
-                  <MessageSquare className="h-3 w-3 mr-1" />
-                  In-App
-                  {threads.filter((t: any) => t.isUnread).length > 0 && (
-                    <Badge variant={inboxTab === 'messages' ? 'secondary' : 'outline'} className="ml-1 h-4 min-w-[16px] px-1 text-[10px] leading-none">{threads.filter((t: any) => t.isUnread).length}</Badge>
-                  )}
-                </Button>
-                <Button
-                  variant={inboxTab === 'email' ? 'default' : 'ghost'}
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={() => { setInboxTab('email'); }}
-                  data-testid="tab-email"
-                >
-                  <Mail className="h-3 w-3 mr-1" />
-                  Email
-                  {emailThreads.filter((t: any) => t.unreadCount > 0).length > 0 && (
-                    <Badge variant={inboxTab === 'email' ? 'secondary' : 'outline'} className="ml-1 h-4 min-w-[16px] px-1 text-[10px] leading-none">{emailThreads.filter((t: any) => t.unreadCount > 0).length}</Badge>
-                  )}
-                </Button>
-                <Button
-                  variant={inboxTab === 'team' ? 'default' : 'ghost'}
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={() => { setInboxTab('team'); setActiveTeamChatId(null); }}
-                  data-testid="tab-team"
-                >
-                  <Users className="h-3 w-3 mr-1" />
-                  Team
-                  {(teamChatUnreadData?.unreadCount || 0) > 0 && (
-                    <Badge variant={inboxTab === 'team' ? 'secondary' : 'outline'} className="ml-1 h-4 min-w-[16px] px-1 text-[10px] leading-none">{teamChatUnreadData?.unreadCount}</Badge>
-                  )}
-                </Button>
-                <Button
-                  variant={inboxTab === 'digests' ? 'default' : 'ghost'}
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={() => { setInboxTab('digests'); }}
-                  data-testid="tab-digests"
-                >
-                  <Bell className="h-3 w-3 mr-1" />
-                  Updates
-                </Button>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {([
+                  { key: 'all' as const, label: 'All', icon: null },
+                  { key: 'in-app' as const, label: 'In-App', icon: MessageSquare },
+                  { key: 'email' as const, label: 'Email', icon: Mail },
+                  { key: 'team' as const, label: 'Team', icon: Users },
+                ] as const).map((ch) => (
+                  <Button
+                    key={ch.key}
+                    variant={channelFilter === ch.key ? 'default' : 'outline'}
+                    size="sm"
+                    className={`rounded-full text-[13px] h-7 px-3 gap-1.5 ${channelFilter === ch.key ? '' : 'text-muted-foreground'}`}
+                    onClick={() => {
+                      setChannelFilter(ch.key);
+                      if (ch.key === 'email') { setInboxTab('email'); }
+                      else if (ch.key === 'team') { setInboxTab('team'); setActiveTeamChatId(null); }
+                      else if (ch.key === 'in-app') { setInboxTab('messages'); setActiveEmailThreadId(null); }
+                      else { setInboxTab('messages'); }
+                    }}
+                    data-testid={`filter-${ch.key}`}
+                  >
+                    {ch.icon && <ch.icon className="h-3 w-3" />}
+                    {ch.label}
+                  </Button>
+                ))}
               </div>
             )}
-          </CardHeader>
+          </div>
           <Separator />
           <ScrollArea className="flex-1">
             {inboxTab === 'email' && isAdmin ? (
@@ -955,119 +1002,75 @@ export default function MessagesPage() {
               </div>
             ) : threadsLoading ? (
               <div className="p-4 text-center text-muted-foreground">Loading...</div>
+            ) : filteredThreads.length === 0 ? (
+              <div className="p-4 text-center text-muted-foreground">
+                <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>{inboxSearchQuery ? 'No matching conversations' : 'No conversations yet'}</p>
+                {isAdmin && !inboxSearchQuery && <p className="text-xs mt-1">Start a new conversation above</p>}
+              </div>
             ) : (
-              <>
-                <div className="px-3 py-2 border-b">
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                    <Input
-                      placeholder="Search conversations..."
-                      value={inboxSearchQuery}
-                      onChange={(e) => setInboxSearchQuery(e.target.value)}
-                      className="h-8 pl-8 text-xs"
-                      data-testid="input-inbox-search"
-                    />
-                  </div>
-                </div>
-                {filteredThreads.length === 0 ? (
-                  <div className="p-4 text-center text-muted-foreground">
-                    <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                    <p>{inboxSearchQuery ? 'No matching conversations' : 'No conversations yet'}</p>
-                    {isAdmin && !inboxSearchQuery && <p className="text-xs mt-1">Start a new conversation above</p>}
-                  </div>
-                ) : (
               <div className="p-2">
                 {filteredThreads.map((thread: any) => {
                   const t = thread;
                   return (
-                    <div
+                    <button
                       key={thread.id}
-                      className={`group w-full text-left p-3 rounded-lg mb-1 transition-colors ${
+                      onClick={() => { setActiveThreadId(thread.id); setInboxTab('messages'); }}
+                      className={`group w-full text-left p-3 rounded-lg mb-1 transition-colors cursor-pointer ${
                         thread.id === activeThreadId
-                          ? "bg-primary/10 border border-primary/20"
-                          : "hover:bg-muted"
+                          ? "bg-primary/5 border-l-[3px] border-l-primary border border-primary/20"
+                          : "hover:bg-muted border-l-[3px] border-l-transparent border border-transparent"
                       }`}
                       data-testid={`thread-item-${thread.id}`}
                     >
-                      <button
-                        onClick={() => setActiveThreadId(thread.id)}
-                        className="w-full text-left"
-                      >
-                        <div className="flex items-start justify-between gap-2 mb-1">
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <div className="flex items-center justify-center h-8 w-8 rounded-full bg-muted text-xs font-semibold shrink-0">
-                              {getInitials(t.propertyAddress || t.userName)}
+                      <div className="flex items-start gap-2.5">
+                        <div className={`flex items-center justify-center h-9 w-9 rounded-full text-white text-[13px] font-semibold shrink-0 ${getAvatarColor(thread.id)}`}>
+                          {getInitials(t.propertyAddress || t.userName)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className={`text-[14px] truncate ${t.unreadCount > 0 ? 'font-bold' : 'font-semibold'}`}>
+                              {t.propertyAddress?.split(',')[0] || t.subject || "General"}
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <div className={`text-sm truncate ${t.unreadCount > 0 ? 'font-bold' : 'font-semibold'}`}>
-                                {t.propertyAddress || t.subject || "General"}
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                {t.dealIdentifier && (
-                                  <Badge variant="outline" className="text-[10px] h-4 px-1.5">
-                                    {t.dealIdentifier}
-                                  </Badge>
-                                )}
-                                <span className="text-xs text-muted-foreground truncate">
-                                  {t.userName || "User"}
-                                </span>
-                                {t.userType && (
-                                  <Badge variant="secondary" className="text-[10px] h-4 px-1.5 shrink-0">
-                                    {t.userType === 'borrower' ? 'Borrower' : 'Broker'}
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
+                            <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
+                              {format(new Date(thread.lastMessageAt), "h:mm a")}
+                            </span>
                           </div>
-                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {t.dealIdentifier && (
+                              <span className="text-[11px] font-medium text-muted-foreground">{t.dealIdentifier}</span>
+                            )}
+                            {t.userType && (
+                              <Badge variant={t.userType === 'borrower' ? 'default' : 'secondary'} className={`text-[10px] h-4 px-1.5 shrink-0 ${t.userType === 'borrower' ? 'bg-blue-500 hover:bg-blue-500' : 'bg-emerald-500 hover:bg-emerald-500 text-white'}`}>
+                                {t.userType === 'borrower' ? 'Borrower' : 'Broker'}
+                              </Badge>
+                            )}
+                            <span className="text-[12px] text-muted-foreground truncate">
+                              {t.userName || "User"}
+                            </span>
                             {t.unreadCount > 0 && (
-                              <span className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
+                              <span className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none ml-auto shrink-0">
                                 {t.unreadCount}
                               </span>
                             )}
-                            <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                              {format(new Date(thread.lastMessageAt), "MMM d")}
+                          </div>
+                          <div className="flex items-center gap-1 mt-1">
+                            <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />
+                            <span className="text-[12px] text-muted-foreground line-clamp-1">
+                              {t.lastMessagePreview || "No messages yet"}
                             </span>
                           </div>
                         </div>
-                        <div className="text-xs text-muted-foreground line-clamp-1 ml-10">
-                          {t.lastMessagePreview || "No messages yet"}
-                        </div>
-                      </button>
-
-                      <div className="flex items-center gap-1 mt-1.5 ml-10 invisible group-hover:visible">
-                        <button
-                          onClick={(e) => toggleStarred(thread.id, e)}
-                          className="p-1 rounded transition-colors"
-                        >
-                          <Star
-                            className={`h-3.5 w-3.5 ${
-                              starredThreadIds.has(thread.id)
-                                ? "fill-yellow-500 text-yellow-500"
-                                : "text-muted-foreground"
-                            }`}
-                          />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                          }}
-                          className="p-1 rounded transition-colors"
-                        >
-                          <Archive className="h-3.5 w-3.5 text-muted-foreground" />
-                        </button>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
-                )}
-              </>
             )}
           </ScrollArea>
         </Card>
 
-        <Card className="flex-1 flex flex-col">
+        <Card className="flex-1 flex flex-col rounded-[10px] shadow-sm">
           {inboxTab === 'team' ? (
             <TeamChatDetail activeChatId={activeTeamChatId} />
           ) : inboxTab === 'email' && activeEmailThreadId && emailThreadDetail ? (
@@ -1238,21 +1241,28 @@ export default function MessagesPage() {
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="flex items-center justify-center h-10 w-10 rounded-full bg-muted text-sm font-semibold shrink-0">
-                      {getInitials((activeThread as any).userName)}
+                    <div className={`flex items-center justify-center h-10 w-10 rounded-full text-white text-sm font-semibold shrink-0 ${getAvatarColor(activeThread.id)}`}>
+                      {getInitials(headerAddress)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <CardTitle className="text-lg truncate">
-                        {(activeThread as any).userName || "User"}
+                      <CardTitle className="text-[18px] truncate" data-testid="text-conversation-title">
+                        {headerAddress}
                       </CardTitle>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-xs text-muted-foreground">
-                          {activeThread.subject || "Conversation"}
-                        </p>
-                        {activeThread.dealId && (
-                          <Badge variant="outline" className="text-[10px] h-4 px-1.5">
-                            DEAL-{activeThread.dealId}
+                      <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                        {headerIdentifier && (
+                          <span className="text-[12px] font-medium text-muted-foreground">{headerIdentifier}</span>
+                        )}
+                        {headerUserType && (
+                          <Badge variant="secondary" className={`text-[10px] h-4 px-1.5 shrink-0 ${headerUserType === 'borrower' ? 'bg-blue-500 hover:bg-blue-500 text-white' : 'bg-emerald-500 hover:bg-emerald-500 text-white'}`}>
+                            {headerUserType === 'borrower' ? 'Borrower' : 'Broker'}
                           </Badge>
+                        )}
+                        <span className="text-[12px] text-muted-foreground">{headerUserName}</span>
+                        {headerStage && (
+                          <span className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                            <span className={`w-2 h-2 rounded-full ${STAGE_COLORS[headerStage] || 'bg-slate-400'}`} />
+                            {formatStageName(headerStage)}
+                          </span>
                         )}
                       </div>
                     </div>
@@ -1260,19 +1270,21 @@ export default function MessagesPage() {
                   <div className="flex items-center gap-1 shrink-0">
                     {isAdmin && activeThread.dealId && (
                       <Button
-                        variant="ghost"
-                        size="icon"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-[13px] gap-1.5"
                         onClick={() => setLocation(`/admin/deals/${activeThread.dealId}`)}
                         title="Go to deal"
                         data-testid="button-go-to-deal"
                       >
-                        <Briefcase className="h-4 w-4" />
+                        <Briefcase className="h-3.5 w-3.5" />
+                        Deal
                       </Button>
                     )}
-                    <Button variant="ghost" size="icon">
+                    <Button variant="ghost" size="icon" data-testid="button-call">
                       <Phone className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon">
+                    <Button variant="ghost" size="icon" data-testid="button-more">
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>
                   </div>
@@ -1282,39 +1294,104 @@ export default function MessagesPage() {
               <ScrollArea className="flex-1 p-4">
                 {threadLoading ? (
                   <div className="text-center text-muted-foreground">Loading messages...</div>
-                ) : messages.length === 0 ? (
+                ) : activeMessages.length === 0 ? (
                   <div className="text-center text-muted-foreground py-8">
                     <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-50" />
                     <p>No messages yet</p>
                     <p className="text-xs mt-1">Send the first message below</p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {messages.filter((msg) => msg.type !== "notification").map((msg) => {
+                  <div className="space-y-3">
+                    {activeMessages.map((msg, idx) => {
                       const isOwnMessage = msg.senderId === user?.id;
-                      
+                      const isSystemNotification = msg.type === 'notification';
+                      const isAiInsight = msg.senderRole === 'system' && msg.type === 'message';
+                      const hasMeta = msg.meta && typeof msg.meta === 'object';
+                      const fileAttachment = hasMeta && (msg.meta as any).fileName ? (msg.meta as any) : null;
+
+                      const prevMsg = idx > 0 ? activeMessages[idx - 1] : null;
+                      const showDateHeader = !prevMsg || format(new Date(msg.createdAt), 'yyyy-MM-dd') !== format(new Date(prevMsg.createdAt), 'yyyy-MM-dd');
+
                       return (
-                        <div
-                          key={msg.id}
-                          className={`flex ${isOwnMessage ? "justify-end" : "justify-start"}`}
-                          data-testid={`message-${msg.id}`}
-                        >
-                          <div
-                            className={`max-w-[70%] rounded-lg p-3 ${
-                              isOwnMessage
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-xs opacity-70">
-                                {msg.senderName || (msg.senderRole === 'system' ? 'System' : msg.senderRole)}
-                                {" · "}
-                                {format(new Date(msg.createdAt), "MMM d, h:mm a")}
+                        <div key={msg.id}>
+                          {showDateHeader && (
+                            <div className="flex items-center justify-center py-3" data-testid={`date-header-${msg.id}`}>
+                              <span className="text-[13px] text-muted-foreground font-medium">
+                                {format(new Date(msg.createdAt), "MMMM d, yyyy")}
                               </span>
                             </div>
-                            <p className="text-sm whitespace-pre-wrap">{msg.body}</p>
-                          </div>
+                          )}
+
+                          {isSystemNotification ? (
+                            <div className="flex items-center justify-center py-1.5" data-testid={`notification-${msg.id}`}>
+                              <span className="text-[13px] text-muted-foreground bg-muted/50 px-3 py-1 rounded-full">
+                                {msg.body}
+                              </span>
+                            </div>
+                          ) : isAiInsight ? (
+                            <div className="flex justify-start" data-testid={`ai-insight-${msg.id}`}>
+                              <div className="max-w-[80%] rounded-lg p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50">
+                                <div className="flex items-center gap-1.5 mb-1.5">
+                                  <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                  <span className="text-[13px] font-semibold text-emerald-700 dark:text-emerald-400">AI Insight:</span>
+                                  <span className="text-[11px] text-emerald-600/70 dark:text-emerald-400/60 ml-auto">
+                                    {format(new Date(msg.createdAt), "h:mm a")}
+                                  </span>
+                                </div>
+                                <p className="text-[14px] text-emerald-900 dark:text-emerald-100 whitespace-pre-wrap">{msg.body}</p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div
+                              className={`flex ${isOwnMessage ? "justify-end" : "justify-start"} gap-2`}
+                              data-testid={`message-${msg.id}`}
+                            >
+                              {!isOwnMessage && (
+                                <div className={`flex items-center justify-center h-8 w-8 rounded-full text-white text-[12px] font-semibold shrink-0 mt-1 ${getAvatarColor(msg.senderId || 0)}`}>
+                                  {getInitials(msg.senderName)}
+                                </div>
+                              )}
+                              <div className="flex flex-col max-w-[70%]">
+                                <div
+                                  className={`rounded-lg p-3 ${
+                                    isOwnMessage
+                                      ? "bg-primary text-primary-foreground"
+                                      : "bg-muted"
+                                  }`}
+                                >
+                                  <p className="text-sm whitespace-pre-wrap">{msg.body}</p>
+                                  {fileAttachment && (
+                                    <div className="mt-2 flex items-center gap-2 p-2 rounded-md border bg-background/50">
+                                      <div className="flex items-center justify-center h-9 w-9 rounded bg-red-100 dark:bg-red-900/30 shrink-0">
+                                        <File className="h-4 w-4 text-red-600 dark:text-red-400" />
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <div className="text-[13px] font-medium truncate">{fileAttachment.fileName}</div>
+                                        <div className="text-[11px] text-muted-foreground">
+                                          {fileAttachment.fileType || 'PDF'} {fileAttachment.fileSize ? `${fileAttachment.fileSize}` : ''}
+                                          {fileAttachment.uploadedAt ? ` · Uploaded ${format(new Date(fileAttachment.uploadedAt), "h:mm a")}` : ''}
+                                        </div>
+                                      </div>
+                                      {fileAttachment.status === 'received' && (
+                                        <Badge className="bg-emerald-500 hover:bg-emerald-500 text-white text-[10px] h-5 shrink-0">Received</Badge>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                                <span className={`text-[11px] text-muted-foreground mt-1 ${isOwnMessage ? 'text-right' : ''}`}>
+                                  {format(new Date(msg.createdAt), "h:mm a")}
+                                </span>
+                              </div>
+                              {isOwnMessage && (
+                                <div className="flex flex-col items-center shrink-0 mt-1">
+                                  <div className={`flex items-center justify-center h-8 w-8 rounded-full text-white text-[12px] font-semibold ${getAvatarColor(user?.id || 0)}`}>
+                                    {getInitials(user?.fullName || user?.email)}
+                                  </div>
+                                  <span className="text-[11px] font-medium text-muted-foreground mt-0.5">Me</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -1324,7 +1401,7 @@ export default function MessagesPage() {
               </ScrollArea>
               <Separator />
 
-              {messages.length > 0 && (
+              {activeMessages.length > 0 && (
                 <>
                   <div className="px-4 pt-3 pb-0">
                     <div className="flex gap-2 flex-wrap">
