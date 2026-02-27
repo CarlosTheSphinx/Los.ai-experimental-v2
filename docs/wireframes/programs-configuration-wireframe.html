@@ -1,0 +1,2811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Programs Configuration — Comprehensive Wireframe</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #F1F3F6; --card: #FAFAFA; --navy: #1A3A52; --blue: #2E7FD6;
+    --blue-light: #EBF3FC; --emerald: #10B981; --emerald-light: #ECFDF5;
+    --amber: #F59E0B; --amber-light: #FFFBEB; --red: #EF4444; --red-light: #FEF2F2;
+    --gray-50: #F8FAFC; --gray-100: #F1F5F9; --gray-200: #E2E8F0; --gray-300: #CBD5E1;
+    --gray-400: #94A3B8; --gray-500: #64748B; --gray-600: #475569; --gray-700: #334155;
+    --border: #E2E6EB; --radius: 10px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08);
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  body { font-family: var(--font); background: var(--bg); color: var(--navy); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+
+  /* ── DESIGN NOTES BANNER ── */
+  .design-notes { background: linear-gradient(135deg, #1E1E2E, #2D2D44); color: #F8F8F2; padding: 16px 24px; font-size: 13px; line-height: 1.6; border-bottom: 2px solid var(--blue); position: fixed; top: 0; left: 0; right: 0; z-index: 1000; }
+  .design-notes h2 { font-size: 15px; margin-bottom: 8px; color: #A78BFA; }
+  .design-notes ul { padding-left: 20px; columns: 2; column-gap: 32px; }
+  .design-notes li { margin-bottom: 4px; break-inside: avoid; }
+  .design-notes em { color: var(--amber); font-style: normal; font-weight: 500; }
+  .design-notes code { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+
+  /* ── VIEW SWITCHER ── */
+  .view-switcher { position: fixed; bottom: 20px; right: 20px; z-index: 999; display: flex; gap: 6px; background: white; padding: 6px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); border: 1px solid var(--border); }
+  .view-btn { padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; background: none; color: var(--gray-500); transition: all 0.15s; }
+  .view-btn.active { background: var(--blue); color: white; }
+  .view-btn:hover:not(.active) { background: var(--gray-100); color: var(--navy); }
+
+  /* ── LAYOUT ── */
+  .app-layout { display: flex; width: 100%; min-height: 100vh; }
+  .sidebar { width: 240px; min-height: 100vh; background: #0F2438; color: #E2E8EF; display: flex; flex-direction: column; flex-shrink: 0; position: fixed; top: 0; left: 0; bottom: 0; z-index: 50; }
+  .sidebar-logo { padding: 20px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 10px; }
+  .sidebar-logo .logo-icon { width: 32px; height: 32px; background: var(--blue); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 14px; }
+  .sidebar-logo span { font-weight: 600; font-size: 15px; }
+  .sidebar-nav { padding: 12px 8px; flex: 1; }
+  .nav-group-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255,255,255,0.35); padding: 16px 12px 6px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; font-size: 13.5px; color: rgba(255,255,255,0.65); cursor: pointer; transition: all 0.15s; font-weight: 500; }
+  .nav-item:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.9); }
+  .nav-item.active { background: rgba(46,127,214,0.15); color: #4A9EFF; }
+  .nav-item .icon { width: 18px; text-align: center; opacity: 0.7; font-size: 15px; }
+
+  .main { margin-left: 240px; flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .topbar { background: white; border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 10; }
+  .breadcrumb { font-size: 13px; color: var(--gray-500); }
+  .breadcrumb a { color: var(--gray-500); text-decoration: none; }
+  .breadcrumb a:hover { color: var(--blue); }
+  .breadcrumb .sep { margin: 0 6px; }
+  .breadcrumb .current { color: var(--navy); font-weight: 500; }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+  .content { padding: 24px; flex: 1; overflow-y: auto; }
+
+  /* ── BUTTONS ── */
+  .btn { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+  .btn-primary { background: var(--blue); color: white; }
+  .btn-primary:hover { background: #2570C0; }
+  .btn-secondary { background: white; border: 1px solid var(--border); color: var(--navy); }
+  .btn-secondary:hover { background: var(--gray-50); }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn-ghost { background: none; border: none; color: var(--gray-500); }
+  .btn-ghost:hover { color: var(--navy); background: var(--gray-100); }
+  .btn-danger { background: none; border: none; color: var(--red); font-size: 12px; }
+  .btn-danger:hover { background: var(--red-light); }
+  .btn-outline-blue { background: white; border: 1px solid var(--blue); color: var(--blue); }
+  .btn-outline-blue:hover { background: var(--blue-light); }
+
+  /* ── CARDS ── */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
+
+  /* ── BADGES ── */
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 12px; font-size: 11.5px; font-weight: 500; }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .badge-green { background: var(--emerald-light); color: #047857; }
+  .badge-green .dot { background: var(--emerald); }
+  .badge-amber { background: var(--amber-light); color: #B45309; }
+  .badge-amber .dot { background: var(--amber); }
+  .badge-gray { background: var(--gray-100); color: var(--gray-500); }
+  .badge-gray .dot { background: var(--gray-400); }
+  .badge-blue { background: var(--blue-light); color: var(--blue); }
+  .badge-blue .dot { background: var(--blue); }
+  .badge-red { background: var(--red-light); color: var(--red); }
+  .badge-red .dot { background: var(--red); }
+
+  /* ── SUMMARY STRIP ── */
+  .summary-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .summary-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; cursor: pointer; transition: all 0.15s; }
+  .summary-card:hover { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+  .summary-card.active { border-color: var(--blue); background: var(--blue-light); }
+  .summary-card .label { font-size: 12px; color: var(--gray-500); font-weight: 500; margin-bottom: 4px; }
+  .summary-card .value { font-size: 22px; font-weight: 700; }
+  .summary-card .sub { font-size: 11px; color: var(--gray-400); margin-top: 2px; }
+
+  /* ── TABLE ── */
+  .program-table { width: 100%; border-collapse: collapse; }
+  .program-table th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 2px solid var(--border); background: var(--gray-50); }
+  .program-table td { padding: 12px 14px; font-size: 13.5px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .program-table tbody tr { cursor: pointer; transition: background 0.1s; }
+  .program-table tbody tr:hover { background: var(--blue-light); }
+  .program-table tbody tr.expanded { background: var(--blue-light); }
+  .program-name { font-weight: 600; color: var(--navy); }
+  .program-desc { font-size: 12px; color: var(--gray-400); margin-top: 2px; max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ── SWITCH ── */
+  .switch { width: 36px; height: 20px; border-radius: 10px; background: var(--gray-300); position: relative; cursor: pointer; transition: background 0.2s; display: inline-block; flex-shrink: 0; }
+  .switch.on { background: var(--emerald); }
+  .switch::after { content: ''; width: 16px; height: 16px; border-radius: 50%; background: white; position: absolute; top: 2px; left: 2px; transition: left 0.2s; }
+  .switch.on::after { left: 18px; }
+
+  /* ── PROPERTY TAGS ── */
+  .property-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+  .property-tag { font-size: 10.5px; padding: 2px 7px; border-radius: 4px; background: var(--gray-100); color: var(--gray-600); }
+
+  /* ── EXPAND ROW ── */
+  .expand-content { padding: 16px 14px; background: var(--gray-50); border-bottom: 1px solid var(--border); }
+  .expand-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .expand-section h4 { font-size: 11px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; }
+  .expand-metric { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12.5px; border-bottom: 1px solid var(--gray-200); }
+  .expand-metric .metric-label { color: var(--gray-500); }
+  .expand-metric .metric-value { font-weight: 600; }
+  .expand-actions { display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--gray-200); }
+
+  /* ── TABS ── */
+  .tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 20px; }
+  .tab { padding: 10px 20px; font-size: 13px; font-weight: 500; color: var(--gray-500); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s; }
+  .tab:hover { color: var(--navy); }
+  .tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+
+  /* ── SLIDE-OVER PANEL ── */
+  .edit-overlay { position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: rgba(0,0,0,0.4); z-index: 100; display: none; }
+  .edit-overlay.open { display: flex; justify-content: flex-end; }
+  .edit-panel { width: 760px; background: white; height: 100vh; overflow-y: auto; box-shadow: -4px 0 24px rgba(0,0,0,0.15); display: flex; flex-direction: column; }
+  .edit-header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; position: sticky; top: 0; background: white; z-index: 5; }
+  .edit-header h2 { font-size: 16px; font-weight: 600; flex: 1; }
+  .edit-body { padding: 24px; flex: 1; overflow-y: auto; }
+  .edit-section { margin-bottom: 24px; }
+  .edit-section-title { font-size: 13px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+
+  /* ── FORMS ── */
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .form-row.three { grid-template-columns: 1fr 1fr 1fr; }
+  .form-row.four { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  .form-row.full { grid-template-columns: 1fr; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-label { font-size: 12px; font-weight: 500; color: var(--gray-600); }
+  .form-input { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; background: white; color: var(--navy); }
+  .form-input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 2px rgba(46,127,214,0.15); }
+  .form-select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; background: white; color: var(--navy); appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748B' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; }
+  .form-textarea { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; resize: vertical; min-height: 60px; }
+  .form-hint { font-size: 11px; color: var(--gray-400); }
+  .form-checkbox { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+  .form-checkbox input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--blue); }
+
+  /* ── TOOLTIP ── */
+  .tooltip-trigger { border-bottom: 1px dashed var(--gray-400); cursor: help; position: relative; }
+  .tooltip-trigger:hover::after { content: attr(data-tooltip); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: var(--navy); color: white; padding: 6px 10px; border-radius: 6px; font-size: 11px; white-space: nowrap; z-index: 50; margin-bottom: 4px; max-width: 280px; white-space: normal; line-height: 1.4; }
+
+  /* ── AUTOSAVE ── */
+  .autosave { font-size: 11.5px; color: var(--emerald); display: flex; align-items: center; gap: 4px; }
+
+  /* ── EMPTY STATE ── */
+  .empty-state { text-align: center; padding: 40px 24px; }
+  .empty-icon { font-size: 32px; opacity: 0.3; margin-bottom: 12px; }
+  .empty-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .empty-desc { font-size: 13px; color: var(--gray-500); margin-bottom: 16px; }
+
+  /* ── WORKFLOW TIMELINE ── */
+  .workflow-stages { position: relative; padding-left: 24px; }
+  .workflow-stages::before { content: ''; position: absolute; left: 10px; top: 16px; bottom: 16px; width: 2px; background: var(--gray-200); }
+  .stage-card { position: relative; margin-bottom: 12px; padding: 14px 16px; background: white; border: 1px solid var(--border); border-radius: 8px; transition: all 0.15s; }
+  .stage-card:hover { border-color: var(--blue); }
+  .stage-card::before { content: ''; position: absolute; left: -18px; top: 18px; width: 10px; height: 10px; border-radius: 50%; background: var(--blue); border: 2px solid white; box-shadow: 0 0 0 1px var(--border); }
+  .stage-name { font-size: 13.5px; font-weight: 600; margin-bottom: 4px; }
+  .stage-meta { display: flex; gap: 16px; font-size: 11.5px; color: var(--gray-500); }
+  .stage-actions { display: flex; gap: 6px; margin-top: 8px; }
+
+  /* ── DOCUMENT LIST ── */
+  .doc-list { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .doc-item { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 13px; transition: background 0.1s; }
+  .doc-item:last-child { border-bottom: none; }
+  .doc-item:hover { background: var(--gray-50); }
+  .doc-icon { width: 32px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  .doc-icon.required { background: var(--blue-light); }
+  .doc-icon.optional { background: var(--gray-100); }
+  .doc-info { flex: 1; min-width: 0; }
+  .doc-name { font-weight: 500; }
+  .doc-meta { font-size: 11px; color: var(--gray-500); display: flex; gap: 8px; margin-top: 2px; }
+  .doc-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
+  /* ── TASK LIST ── */
+  .task-item { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .task-item:last-child { border-bottom: none; }
+  .task-priority { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .task-priority.high { background: var(--red); }
+  .task-priority.medium { background: var(--amber); }
+  .task-priority.low { background: var(--gray-400); }
+  .task-info { flex: 1; }
+  .task-name { font-weight: 500; }
+  .task-meta { font-size: 11px; color: var(--gray-500); margin-top: 1px; }
+
+  /* ── PRICING RULE ROWS ── */
+  .pricing-rule { display: grid; grid-template-columns: 1fr 120px 120px 40px; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); align-items: center; font-size: 13px; }
+  .pricing-rule:last-child { border-bottom: none; }
+  .pricing-category { font-weight: 600; font-size: 12px; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.04em; padding: 12px 0 6px; border-bottom: 1px solid var(--border); margin-top: 8px; }
+
+  /* ── CREATION WIZARD ── */
+  .wizard-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: none; align-items: center; justify-content: center; }
+  .wizard-overlay.open { display: flex; }
+  .wizard-container { width: 920px; max-height: 85vh; background: white; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); display: flex; overflow: hidden; }
+  .wizard-sidebar { width: 240px; background: var(--gray-50); border-right: 1px solid var(--border); padding: 24px 0; flex-shrink: 0; }
+  .wizard-sidebar h3 { font-size: 14px; font-weight: 600; padding: 0 20px; margin-bottom: 16px; }
+  .wizard-step { display: flex; align-items: center; gap: 10px; padding: 10px 20px; font-size: 13px; color: var(--gray-500); cursor: pointer; transition: all 0.15s; }
+  .wizard-step:hover { background: var(--gray-100); }
+  .wizard-step.active { color: var(--blue); background: var(--blue-light); font-weight: 500; }
+  .wizard-step.completed { color: var(--emerald); }
+  .wizard-step .step-num { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--gray-300); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+  .wizard-step.active .step-num { border-color: var(--blue); background: var(--blue); color: white; }
+  .wizard-step.completed .step-num { border-color: var(--emerald); background: var(--emerald); color: white; }
+  .wizard-main { flex: 1; display: flex; flex-direction: column; }
+  .wizard-header { padding: 20px 24px; border-bottom: 1px solid var(--border); }
+  .wizard-header h2 { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+  .wizard-header p { font-size: 13px; color: var(--gray-500); }
+  .wizard-body { flex: 1; padding: 24px; overflow-y: auto; }
+  .wizard-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+
+  /* ── TEMPLATE CARDS ── */
+  .template-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .template-card { padding: 16px; border: 2px solid var(--border); border-radius: var(--radius); cursor: pointer; transition: all 0.15s; }
+  .template-card:hover { border-color: var(--blue); }
+  .template-card.selected { border-color: var(--blue); background: var(--blue-light); }
+  .template-card .template-icon { font-size: 24px; margin-bottom: 8px; }
+  .template-card .template-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .template-card .template-desc { font-size: 12px; color: var(--gray-500); line-height: 1.4; }
+
+  /* ── REVIEW RULES / AI ── */
+  .rule-card { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 8px; }
+  .rule-card .rule-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .rule-name { font-size: 13px; font-weight: 600; }
+  .rule-condition { font-size: 12px; color: var(--gray-500); font-family: 'SF Mono', 'Fira Code', monospace; background: var(--gray-50); padding: 4px 8px; border-radius: 4px; margin-top: 4px; }
+
+  /* ── CREDIT POLICY INDICATOR ── */
+  .policy-link { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--blue-light); border-radius: 8px; font-size: 13px; color: var(--blue); font-weight: 500; cursor: pointer; transition: all 0.15s; }
+  .policy-link:hover { background: #DBE8F9; }
+
+  /* ── SECTION VIEWS ── */
+  .view-section { display: none; }
+  .view-section.active { display: block; }
+
+  /* ── SEARCH BAR ── */
+  .search-bar { display: flex; gap: 12px; margin-bottom: 20px; }
+  .search-input { flex: 1; padding: 9px 14px 9px 36px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='M21 21l-4.35-4.35'/%3E%3C/svg%3E") no-repeat 12px center; }
+  .search-input:focus { outline: none; border-color: var(--blue); }
+
+  /* ── COLLAPSIBLE ── */
+  .collapsible { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+  .collapsible-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--gray-50); cursor: pointer; font-size: 13px; font-weight: 600; }
+  .collapsible-header .count { font-size: 11px; background: var(--gray-200); color: var(--gray-600); padding: 1px 8px; border-radius: 10px; font-weight: 500; }
+  .collapsible-header .chevron { margin-left: auto; color: var(--gray-400); transition: transform 0.2s; }
+  .collapsible-body { padding: 0; }
+
+  /* ── YSP/POINTS CONFIG ── */
+  .config-panel { background: var(--gray-50); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-top: 12px; }
+  .config-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .config-row label { font-size: 12px; font-weight: 500; color: var(--gray-600); min-width: 140px; }
+  .config-row .form-input { flex: 1; }
+  .range-display { display: flex; align-items: center; gap: 8px; }
+  .range-display input { width: 80px; }
+  .range-display span { color: var(--gray-400); font-size: 12px; }
+
+  /* ── VOICE RECORDING ── */
+  .voice-recorder { display: flex; align-items: center; gap: 12px; padding: 16px; background: var(--gray-50); border: 2px dashed var(--border); border-radius: 8px; margin-top: 12px; }
+  .voice-btn { width: 48px; height: 48px; border-radius: 50%; background: var(--red); color: white; border: none; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .voice-info { flex: 1; }
+  .voice-info .voice-title { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+  .voice-info .voice-desc { font-size: 12px; color: var(--gray-500); }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════ DESIGN NOTES BANNER ═══════════════════ -->
+<div class="design-notes" id="designNotes">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+    <div>
+      <h2>Programs Configuration — Comprehensive Wireframe v2</h2>
+      <ul>
+        <li><em>3-Level Progressive Disclosure</em>: L1 = Summary strip + scannable table. L2 = Expandable rows with metrics, property types, quick actions. L3 = Slide-over panel (760px) with 5 tabs for full program editing.</li>
+        <li><em>Slide-over panel</em> has 5 tabs: Details, Workflow, Documents, Pricing, AI Rules — replacing the old modal with context-preserving drawer.</li>
+        <li><em>Creation Wizard</em>: 9-step sidebar wizard with template selection first. Non-linear navigation. Steps: Template → Credit Policy → Details → Quote Form → Stages → Documents → Tasks → Pricing → Review.</li>
+        <li><em>Financial tooltips</em>: LTV, DSCR, YSP, Points, NOI, Base Rate all show plain-English explanations on hover (dashed underline affordance).</li>
+        <li><em>Auto-save</em>: Green indicator in panel header replaces manual Save button. Every field change persists automatically.</li>
+        <li><em>Workflow timeline</em>: Vertical stage visualization with doc/task counts per stage, drag-to-reorder hint, color-coded stage dots.</li>
+        <li><em>Document management</em>: Categorized (Borrower, Entity, Property, Financial, Closing), with required/optional badges, visibility controls (Admin/Broker/All), stage assignment.</li>
+        <li><em>Pricing engine</em>: 4 modes — None, Rule-based (base rate + FICO/LTV/property/amount/DSCR/purpose adjusters + disqualifiers), AI Upload, External URL. YSP and Points configurable with broker toggle.</li>
+        <li><em>AI Review Rules</em>: Voice-to-rule recording, condition builder, severity levels. Integrates credit policy rules.</li>
+        <li><em>Empty states</em>: Meaningful CTAs when no programs/docs/tasks exist. Never a blank screen.</li>
+      </ul>
+    </div>
+    <button onclick="document.getElementById('designNotes').style.display='none'; document.getElementById('appLayout').style.marginTop='0'" style="background: rgba(255,255,255,0.15); border: none; color: white; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; flex-shrink: 0; margin-left: 16px;">Close ✕</button>
+  </div>
+</div>
+
+<!-- ═══════════════════ VIEW SWITCHER ═══════════════════ -->
+<div class="view-switcher">
+  <button class="view-btn active" onclick="showView('list')">Program List</button>
+  <button class="view-btn" onclick="showView('panel')">Edit Panel</button>
+  <button class="view-btn" onclick="showView('wizard')">Creation Wizard</button>
+  <button class="view-btn" onclick="showView('empty')">Empty State</button>
+</div>
+
+<!-- ═══════════════════ APP LAYOUT ═══════════════════ -->
+<div class="app-layout" id="appLayout" style="margin-top: 200px;">
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">L</div>
+      <span>Lendry AI</span>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-group-label">Main</div>
+      <div class="nav-item"><span class="icon">📊</span> Pipeline</div>
+      <div class="nav-item active"><span class="icon">📦</span> Programs</div>
+      <div class="nav-item"><span class="icon">📝</span> Quotes</div>
+      <div class="nav-item"><span class="icon">💬</span> Messages</div>
+      <div class="nav-group-label">Admin</div>
+      <div class="nav-item"><span class="icon">👥</span> Users</div>
+      <div class="nav-item"><span class="icon">⚙️</span> Settings</div>
+    </div>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <div class="main">
+    <div class="topbar">
+      <div class="breadcrumb">
+        <a href="#">Admin</a> <span class="sep">›</span> <span class="current">Loan Programs</span>
+      </div>
+      <div class="topbar-right">
+        <span style="font-size: 12px; color: var(--gray-400);">Last synced 2 min ago</span>
+        <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--blue); display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: 600;">CV</div>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- ════════════════ VIEW 1: PROGRAM LIST ════════════════ -->
+      <div class="view-section active" id="view-list">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <div>
+            <h1 style="font-size: 22px; font-weight: 700;">Loan Programs</h1>
+            <p style="font-size: 13px; color: var(--gray-500); margin-top: 4px;">Configure lending products, workflows, and pricing rules</p>
+          </div>
+          <button class="btn btn-primary" onclick="showView('wizard')">＋ New Program</button>
+        </div>
+
+        <!-- Summary Strip (L1 — clickable filters) -->
+        <div class="summary-strip">
+          <div class="summary-card active">
+            <div class="label">Total Programs</div>
+            <div class="value">6</div>
+            <div class="sub">All program types</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Active</div>
+            <div class="value" style="color: var(--emerald);">4</div>
+            <div class="sub">Accepting applications</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Total Documents</div>
+            <div class="value">47</div>
+            <div class="sub">Across all programs</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Avg. Processing</div>
+            <div class="value">12d</div>
+            <div class="sub">Application to close</div>
+          </div>
+        </div>
+
+        <!-- Search + Filters -->
+        <div class="search-bar">
+          <input class="search-input" placeholder="Search programs by name, type, or property..." />
+          <select class="form-select" style="width: 160px;">
+            <option>All Statuses</option>
+            <option>Active</option>
+            <option>Draft</option>
+            <option>Archived</option>
+          </select>
+          <select class="form-select" style="width: 180px;">
+            <option>All Property Types</option>
+            <option>Single Family</option>
+            <option>Multi-Family</option>
+            <option>Commercial</option>
+            <option>Mixed Use</option>
+          </select>
+        </div>
+
+        <!-- Programs Table -->
+        <div class="card" style="padding: 0; overflow: hidden;">
+          <table class="program-table">
+            <thead>
+              <tr>
+                <th style="width: 28px;"></th>
+                <th>Program</th>
+                <th><span class="tooltip-trigger" data-tooltip="Loan-to-Value: Loan amount as a percentage of property value">LTV Range</span></th>
+                <th><span class="tooltip-trigger" data-tooltip="Debt Service Coverage Ratio: Net income ÷ total debt service">Min DSCR</span></th>
+                <th>Property Types</th>
+                <th>Status</th>
+                <th>Active</th>
+                <th style="width: 80px;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Row 1 -->
+              <tr class="expanded" onclick="toggleExpand('row1')">
+                <td style="font-size: 10px; color: var(--gray-400);">▼</td>
+                <td>
+                  <div class="program-name">DSCR Standard</div>
+                  <div class="program-desc">Investor 30-year fixed rate — primary DSCR product</div>
+                </td>
+                <td>65% – 80%</td>
+                <td>1.20</td>
+                <td>
+                  <div class="property-tags">
+                    <span class="property-tag">SFR</span>
+                    <span class="property-tag">2-4 Unit</span>
+                    <span class="property-tag">Condo</span>
+                    <span class="property-tag">+2</span>
+                  </div>
+                </td>
+                <td><span class="badge badge-green"><span class="dot"></span> Active</span></td>
+                <td><span class="switch on"></span></td>
+                <td>
+                  <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); showView('panel')">Edit</button>
+                </td>
+              </tr>
+              <!-- Expanded Row 1 (L2 — inline details) -->
+              <tr id="row1">
+                <td colspan="8" style="padding: 0;">
+                  <div class="expand-content">
+                    <div class="expand-grid">
+                      <div class="expand-section">
+                        <h4>Key Metrics</h4>
+                        <div class="expand-metric">
+                          <span class="metric-label"><span class="tooltip-trigger" data-tooltip="The interest rate before broker/borrower adjustments">Base Rate</span></span>
+                          <span class="metric-value">7.125%</span>
+                        </div>
+                        <div class="expand-metric">
+                          <span class="metric-label"><span class="tooltip-trigger" data-tooltip="Yield Spread Premium — compensation to the broker">YSP</span></span>
+                          <span class="metric-value">0.50% – 2.00%</span>
+                        </div>
+                        <div class="expand-metric">
+                          <span class="metric-label"><span class="tooltip-trigger" data-tooltip="Upfront fees expressed as % of loan amount">Points</span></span>
+                          <span class="metric-value">1.00 – 3.00</span>
+                        </div>
+                        <div class="expand-metric">
+                          <span class="metric-label">Min Loan</span>
+                          <span class="metric-value">$100,000</span>
+                        </div>
+                        <div class="expand-metric">
+                          <span class="metric-label">Max Loan</span>
+                          <span class="metric-value">$2,500,000</span>
+                        </div>
+                      </div>
+                      <div class="expand-section">
+                        <h4>Workflow</h4>
+                        <div class="expand-metric">
+                          <span class="metric-label">Stages</span>
+                          <span class="metric-value">5</span>
+                        </div>
+                        <div class="expand-metric">
+                          <span class="metric-label">Documents</span>
+                          <span class="metric-value">12 required, 4 optional</span>
+                        </div>
+                        <div class="expand-metric">
+                          <span class="metric-label">Tasks</span>
+                          <span class="metric-value">8 tasks</span>
+                        </div>
+                        <div class="expand-metric">
+                          <span class="metric-label">Review Rules</span>
+                          <span class="metric-value">6 active</span>
+                        </div>
+                        <div class="expand-metric">
+                          <span class="metric-label">Credit Policy</span>
+                          <span class="metric-value" style="color: var(--blue);">DSCR Standard ↗</span>
+                        </div>
+                      </div>
+                      <div class="expand-section">
+                        <h4>Term Options</h4>
+                        <div class="property-tags" style="margin-bottom: 8px;">
+                          <span class="property-tag">30-Year Fixed</span>
+                          <span class="property-tag">5/1 ARM</span>
+                          <span class="property-tag">7/1 ARM</span>
+                        </div>
+                        <h4 style="margin-top: 12px;">Loan Purpose</h4>
+                        <div class="property-tags">
+                          <span class="property-tag">Purchase</span>
+                          <span class="property-tag">Rate/Term Refi</span>
+                          <span class="property-tag">Cash-Out Refi</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="expand-actions">
+                      <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); showView('panel')">✏️ Edit Program</button>
+                      <button class="btn btn-secondary btn-sm">📋 Duplicate</button>
+                      <button class="btn btn-secondary btn-sm">📊 View Deals (14)</button>
+                      <button class="btn btn-secondary btn-sm">📤 Export</button>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+
+              <!-- Row 2 -->
+              <tr onclick="toggleExpand('row2')">
+                <td style="font-size: 10px; color: var(--gray-400);">▶</td>
+                <td>
+                  <div class="program-name">Bridge Loan</div>
+                  <div class="program-desc">Short-term bridge for fix & flip investors</div>
+                </td>
+                <td>60% – 75%</td>
+                <td>N/A</td>
+                <td>
+                  <div class="property-tags">
+                    <span class="property-tag">SFR</span>
+                    <span class="property-tag">Multi-Family</span>
+                  </div>
+                </td>
+                <td><span class="badge badge-green"><span class="dot"></span> Active</span></td>
+                <td><span class="switch on"></span></td>
+                <td>
+                  <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); showView('panel')">Edit</button>
+                </td>
+              </tr>
+              <tr id="row2" style="display: none;"><td colspan="8"></td></tr>
+
+              <!-- Row 3 -->
+              <tr onclick="toggleExpand('row3')">
+                <td style="font-size: 10px; color: var(--gray-400);">▶</td>
+                <td>
+                  <div class="program-name">Bank Statement</div>
+                  <div class="program-desc">Self-employed borrowers — 12/24 month bank statements</div>
+                </td>
+                <td>70% – 80%</td>
+                <td>1.00</td>
+                <td>
+                  <div class="property-tags">
+                    <span class="property-tag">SFR</span>
+                    <span class="property-tag">Condo</span>
+                    <span class="property-tag">Townhouse</span>
+                  </div>
+                </td>
+                <td><span class="badge badge-green"><span class="dot"></span> Active</span></td>
+                <td><span class="switch on"></span></td>
+                <td>
+                  <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); showView('panel')">Edit</button>
+                </td>
+              </tr>
+              <tr id="row3" style="display: none;"><td colspan="8"></td></tr>
+
+              <!-- Row 4 -->
+              <tr onclick="toggleExpand('row4')">
+                <td style="font-size: 10px; color: var(--gray-400);">▶</td>
+                <td>
+                  <div class="program-name">Commercial Mixed-Use</div>
+                  <div class="program-desc">Mixed-use properties with commercial tenants</div>
+                </td>
+                <td>55% – 70%</td>
+                <td>1.25</td>
+                <td>
+                  <div class="property-tags">
+                    <span class="property-tag">Mixed Use</span>
+                    <span class="property-tag">Commercial</span>
+                  </div>
+                </td>
+                <td><span class="badge badge-amber"><span class="dot"></span> Draft</span></td>
+                <td><span class="switch"></span></td>
+                <td>
+                  <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); showView('panel')">Edit</button>
+                </td>
+              </tr>
+              <tr id="row4" style="display: none;"><td colspan="8"></td></tr>
+
+              <!-- Row 5 -->
+              <tr onclick="toggleExpand('row5')">
+                <td style="font-size: 10px; color: var(--gray-400);">▶</td>
+                <td>
+                  <div class="program-name">Ground-Up Construction</div>
+                  <div class="program-desc">New construction financing for residential builders</div>
+                </td>
+                <td>60% – 70%</td>
+                <td>N/A</td>
+                <td>
+                  <div class="property-tags">
+                    <span class="property-tag">SFR</span>
+                    <span class="property-tag">Multi-Family</span>
+                  </div>
+                </td>
+                <td><span class="badge badge-green"><span class="dot"></span> Active</span></td>
+                <td><span class="switch on"></span></td>
+                <td>
+                  <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); showView('panel')">Edit</button>
+                </td>
+              </tr>
+              <tr id="row5" style="display: none;"><td colspan="8"></td></tr>
+
+              <!-- Row 6 -->
+              <tr onclick="toggleExpand('row6')">
+                <td style="font-size: 10px; color: var(--gray-400);">▶</td>
+                <td>
+                  <div class="program-name">Foreign National</div>
+                  <div class="program-desc">ITIN / Foreign National investor program</div>
+                </td>
+                <td>50% – 65%</td>
+                <td>1.30</td>
+                <td>
+                  <div class="property-tags">
+                    <span class="property-tag">SFR</span>
+                    <span class="property-tag">Condo</span>
+                  </div>
+                </td>
+                <td><span class="badge badge-gray"><span class="dot"></span> Archived</span></td>
+                <td><span class="switch"></span></td>
+                <td>
+                  <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); showView('panel')">Edit</button>
+                </td>
+              </tr>
+              <tr id="row6" style="display: none;"><td colspan="8"></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ════════════════ VIEW 2: EDIT PANEL (Slide-Over) ════════════════ -->
+      <div class="view-section" id="view-panel">
+        <div style="display: flex; gap: 24px; height: calc(100vh - 100px);">
+          <!-- Background table preview (dimmed) -->
+          <div style="flex: 1; opacity: 0.3; pointer-events: none;">
+            <h1 style="font-size: 22px; font-weight: 700; margin-bottom: 16px;">Loan Programs</h1>
+            <div class="card" style="padding: 12px;">
+              <div style="height: 200px; background: var(--gray-100); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--gray-400);">Programs table visible behind panel</div>
+            </div>
+          </div>
+
+          <!-- Slide-over Panel -->
+          <div style="width: 760px; background: white; border-radius: 12px; box-shadow: -4px 0 24px rgba(0,0,0,0.12); display: flex; flex-direction: column; overflow: hidden;">
+            <!-- Panel Header -->
+            <div style="padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px;">
+              <button class="btn btn-ghost btn-sm" onclick="showView('list')">← Back</button>
+              <h2 style="font-size: 16px; font-weight: 600; flex: 1;">DSCR Standard</h2>
+              <div class="autosave">✓ All changes saved</div>
+              <button class="btn btn-ghost btn-sm" style="color: var(--red);">Archive</button>
+            </div>
+
+            <!-- Panel Tabs -->
+            <div class="tabs" style="padding: 0 24px;">
+              <div class="tab active" onclick="showPanelTab('details')">Details</div>
+              <div class="tab" onclick="showPanelTab('workflow')">Workflow</div>
+              <div class="tab" onclick="showPanelTab('documents')">Documents (16)</div>
+              <div class="tab" onclick="showPanelTab('pricing')">Pricing</div>
+              <div class="tab" onclick="showPanelTab('rules')">AI Rules (6)</div>
+            </div>
+
+            <!-- Panel Body -->
+            <div style="flex: 1; overflow-y: auto; padding: 24px;">
+
+              <!-- ──── TAB: DETAILS ──── -->
+              <div class="panel-tab active" id="tab-details">
+                <!-- Credit Policy Link -->
+                <div class="policy-link" style="margin-bottom: 20px;">
+                  <span>🔗</span>
+                  <span>Linked to credit policy: <strong>DSCR Standard Policy</strong></span>
+                  <span style="margin-left: auto; font-size: 11px;">View Policy →</span>
+                </div>
+
+                <div class="edit-section">
+                  <div class="edit-section-title">Program Information</div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label class="form-label">Program Name</label>
+                      <input class="form-input" value="DSCR Standard" />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Program Type</label>
+                      <select class="form-select">
+                        <option selected>DSCR</option>
+                        <option>Bridge</option>
+                        <option>Bank Statement</option>
+                        <option>Construction</option>
+                        <option>Commercial</option>
+                        <option>Foreign National</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="form-row full">
+                    <div class="form-group">
+                      <label class="form-label">Description</label>
+                      <textarea class="form-textarea">Investor 30-year fixed rate — primary DSCR product for residential investment properties.</textarea>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="edit-section">
+                  <div class="edit-section-title">Loan Parameters</div>
+                  <div class="form-row three">
+                    <div class="form-group">
+                      <label class="form-label"><span class="tooltip-trigger" data-tooltip="Minimum Loan-to-Value ratio accepted">Min LTV</span></label>
+                      <input class="form-input" value="65%" />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label"><span class="tooltip-trigger" data-tooltip="Maximum Loan-to-Value ratio accepted">Max LTV</span></label>
+                      <input class="form-input" value="80%" />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label"><span class="tooltip-trigger" data-tooltip="Minimum Debt Service Coverage Ratio required">Min DSCR</span></label>
+                      <input class="form-input" value="1.20" />
+                    </div>
+                  </div>
+                  <div class="form-row three">
+                    <div class="form-group">
+                      <label class="form-label">Min Loan Amount</label>
+                      <input class="form-input" value="$100,000" />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Max Loan Amount</label>
+                      <input class="form-input" value="$2,500,000" />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Min FICO</label>
+                      <input class="form-input" value="660" />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="edit-section">
+                  <div class="edit-section-title">Property Types</div>
+                  <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+                    <label class="form-checkbox"><input type="checkbox" checked /> SFR</label>
+                    <label class="form-checkbox"><input type="checkbox" checked /> 2-4 Unit</label>
+                    <label class="form-checkbox"><input type="checkbox" checked /> Condo</label>
+                    <label class="form-checkbox"><input type="checkbox" checked /> Townhouse</label>
+                    <label class="form-checkbox"><input type="checkbox" checked /> PUD</label>
+                    <label class="form-checkbox"><input type="checkbox" /> Multi-Family (5+)</label>
+                    <label class="form-checkbox"><input type="checkbox" /> Commercial</label>
+                    <label class="form-checkbox"><input type="checkbox" /> Mixed Use</label>
+                    <label class="form-checkbox"><input type="checkbox" /> Industrial</label>
+                    <label class="form-checkbox"><input type="checkbox" /> Retail</label>
+                    <label class="form-checkbox"><input type="checkbox" /> Office</label>
+                    <label class="form-checkbox"><input type="checkbox" /> Special Purpose</label>
+                  </div>
+                </div>
+
+                <div class="edit-section">
+                  <div class="edit-section-title">Term Options</div>
+                  <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+                    <label class="form-checkbox"><input type="checkbox" checked /> 30-Year Fixed</label>
+                    <label class="form-checkbox"><input type="checkbox" checked /> 5/1 ARM</label>
+                    <label class="form-checkbox"><input type="checkbox" checked /> 7/1 ARM</label>
+                    <label class="form-checkbox"><input type="checkbox" /> 10/1 ARM</label>
+                    <label class="form-checkbox"><input type="checkbox" /> 15-Year Fixed</label>
+                    <label class="form-checkbox"><input type="checkbox" /> Interest Only</label>
+                  </div>
+                </div>
+
+                <div class="edit-section">
+                  <div class="edit-section-title">Loan Purpose</div>
+                  <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+                    <label class="form-checkbox"><input type="checkbox" checked /> Purchase</label>
+                    <label class="form-checkbox"><input type="checkbox" checked /> Rate/Term Refi</label>
+                    <label class="form-checkbox"><input type="checkbox" checked /> Cash-Out Refi</label>
+                    <label class="form-checkbox"><input type="checkbox" /> Delayed Financing</label>
+                  </div>
+                </div>
+
+                <div class="edit-section">
+                  <div class="edit-section-title"><span class="tooltip-trigger" data-tooltip="Yield Spread Premium — compensation paid to the broker on the secondary market side">YSP Configuration</span></div>
+                  <div class="config-panel">
+                    <div class="config-row">
+                      <label>YSP Enabled</label>
+                      <span class="switch on"></span>
+                    </div>
+                    <div class="config-row">
+                      <label>Broker Can Adjust</label>
+                      <span class="switch on"></span>
+                    </div>
+                    <div class="config-row">
+                      <label>Range</label>
+                      <div class="range-display">
+                        <input class="form-input" value="0.50" style="width: 80px;" /> <span>%</span>
+                        <span style="margin: 0 4px;">to</span>
+                        <input class="form-input" value="2.00" style="width: 80px;" /> <span>%</span>
+                      </div>
+                    </div>
+                    <div class="config-row">
+                      <label>Step Increment</label>
+                      <input class="form-input" value="0.125" style="width: 80px;" /> <span style="font-size: 12px; color: var(--gray-400);">%</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="edit-section">
+                  <div class="edit-section-title"><span class="tooltip-trigger" data-tooltip="Upfront fees expressed as a percentage of the loan amount, paid at closing">Points Configuration</span></div>
+                  <div class="config-panel">
+                    <div class="config-row">
+                      <label>Base Points</label>
+                      <input class="form-input" value="1.00" style="width: 80px;" />
+                    </div>
+                    <div class="config-row">
+                      <label>Broker Points Enabled</label>
+                      <span class="switch on"></span>
+                    </div>
+                    <div class="config-row">
+                      <label>Range</label>
+                      <div class="range-display">
+                        <input class="form-input" value="1.00" style="width: 80px;" />
+                        <span>to</span>
+                        <input class="form-input" value="3.00" style="width: 80px;" />
+                      </div>
+                    </div>
+                    <div class="config-row">
+                      <label>Step Increment</label>
+                      <input class="form-input" value="0.25" style="width: 80px;" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ──── TAB: WORKFLOW ──── -->
+              <div class="panel-tab" id="tab-workflow" style="display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                  <div>
+                    <h3 style="font-size: 15px; font-weight: 600;">Workflow Stages</h3>
+                    <p style="font-size: 12px; color: var(--gray-500);">Define the pipeline stages for this program. Drag to reorder.</p>
+                  </div>
+                  <button class="btn btn-secondary btn-sm">＋ Add Stage</button>
+                </div>
+
+                <div class="workflow-stages">
+                  <div class="stage-card">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                      <div>
+                        <div class="stage-name">1. Application</div>
+                        <div class="stage-meta">
+                          <span>📄 4 documents</span>
+                          <span>✅ 2 tasks</span>
+                          <span>⏱ ~2 days</span>
+                        </div>
+                      </div>
+                      <div style="display: flex; gap: 4px;">
+                        <button class="btn btn-ghost btn-sm" style="font-size: 10px; cursor: grab;">⋮⋮</button>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="stage-card">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                      <div>
+                        <div class="stage-name">2. Processing</div>
+                        <div class="stage-meta">
+                          <span>📄 6 documents</span>
+                          <span>✅ 3 tasks</span>
+                          <span>⏱ ~5 days</span>
+                        </div>
+                      </div>
+                      <div style="display: flex; gap: 4px;">
+                        <button class="btn btn-ghost btn-sm" style="font-size: 10px; cursor: grab;">⋮⋮</button>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="stage-card">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                      <div>
+                        <div class="stage-name">3. Underwriting</div>
+                        <div class="stage-meta">
+                          <span>📄 3 documents</span>
+                          <span>✅ 2 tasks</span>
+                          <span>⏱ ~3 days</span>
+                        </div>
+                      </div>
+                      <div style="display: flex; gap: 4px;">
+                        <button class="btn btn-ghost btn-sm" style="font-size: 10px; cursor: grab;">⋮⋮</button>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="stage-card">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                      <div>
+                        <div class="stage-name">4. Appraisal & Title</div>
+                        <div class="stage-meta">
+                          <span>📄 2 documents</span>
+                          <span>✅ 1 task</span>
+                          <span>⏱ ~7 days</span>
+                        </div>
+                      </div>
+                      <div style="display: flex; gap: 4px;">
+                        <button class="btn btn-ghost btn-sm" style="font-size: 10px; cursor: grab;">⋮⋮</button>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="stage-card">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                      <div>
+                        <div class="stage-name">5. Closing</div>
+                        <div class="stage-meta">
+                          <span>📄 1 document</span>
+                          <span>✅ 0 tasks</span>
+                          <span>⏱ ~2 days</span>
+                        </div>
+                      </div>
+                      <div style="display: flex; gap: 4px;">
+                        <button class="btn btn-ghost btn-sm" style="font-size: 10px; cursor: grab;">⋮⋮</button>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style="margin-top: 20px; padding: 16px; background: var(--gray-50); border-radius: 8px; border: 1px dashed var(--border);">
+                  <h4 style="font-size: 12px; font-weight: 600; color: var(--gray-500); margin-bottom: 8px;">STAGE LIBRARY</h4>
+                  <p style="font-size: 12px; color: var(--gray-400); margin-bottom: 12px;">Drag a pre-built stage into the workflow above, or create a custom stage.</p>
+                  <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <span class="property-tag" style="padding: 6px 12px; cursor: grab; border: 1px dashed var(--gray-300);">📋 Due Diligence</span>
+                    <span class="property-tag" style="padding: 6px 12px; cursor: grab; border: 1px dashed var(--gray-300);">🔍 QC Review</span>
+                    <span class="property-tag" style="padding: 6px 12px; cursor: grab; border: 1px dashed var(--gray-300);">📊 Compliance</span>
+                    <span class="property-tag" style="padding: 6px 12px; cursor: grab; border: 1px dashed var(--gray-300);">🏗️ Construction Draw</span>
+                    <span class="property-tag" style="padding: 6px 12px; cursor: grab; border: 1px dashed var(--gray-300);">📝 Post-Close</span>
+                    <button class="btn btn-ghost btn-sm">＋ Custom Stage</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ──── TAB: DOCUMENTS ──── -->
+              <div class="panel-tab" id="tab-documents" style="display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                  <div>
+                    <h3 style="font-size: 15px; font-weight: 600;">Program Documents</h3>
+                    <p style="font-size: 12px; color: var(--gray-500);">16 documents configured across 5 categories</p>
+                  </div>
+                  <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-secondary btn-sm">📥 Bulk Add Standard</button>
+                    <button class="btn btn-primary btn-sm">＋ Add Document</button>
+                  </div>
+                </div>
+
+                <!-- Borrower Documents -->
+                <div class="collapsible">
+                  <div class="collapsible-header">
+                    <span>👤</span> Borrower Documents <span class="count">4</span>
+                    <span class="chevron">▾</span>
+                  </div>
+                  <div class="collapsible-body">
+                    <div class="doc-list" style="border: none; border-radius: 0;">
+                      <div class="doc-item">
+                        <div class="doc-icon required">📄</div>
+                        <div class="doc-info">
+                          <div class="doc-name">Government-Issued ID</div>
+                          <div class="doc-meta">
+                            <span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span>
+                            <span>Stage: Application</span>
+                            <span>Visibility: All</span>
+                          </div>
+                        </div>
+                        <div class="doc-actions">
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px; color: var(--red);">✕</button>
+                        </div>
+                      </div>
+                      <div class="doc-item">
+                        <div class="doc-icon required">📄</div>
+                        <div class="doc-info">
+                          <div class="doc-name">Credit Authorization</div>
+                          <div class="doc-meta">
+                            <span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span>
+                            <span>Stage: Application</span>
+                            <span>Visibility: Admin</span>
+                          </div>
+                        </div>
+                        <div class="doc-actions">
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px; color: var(--red);">✕</button>
+                        </div>
+                      </div>
+                      <div class="doc-item">
+                        <div class="doc-icon required">📄</div>
+                        <div class="doc-info">
+                          <div class="doc-name">Personal Financial Statement</div>
+                          <div class="doc-meta">
+                            <span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span>
+                            <span>Stage: Processing</span>
+                            <span>Visibility: Admin</span>
+                          </div>
+                        </div>
+                        <div class="doc-actions">
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px; color: var(--red);">✕</button>
+                        </div>
+                      </div>
+                      <div class="doc-item">
+                        <div class="doc-icon optional">📄</div>
+                        <div class="doc-info">
+                          <div class="doc-name">Background Check Authorization</div>
+                          <div class="doc-meta">
+                            <span class="badge badge-gray" style="font-size: 10px; padding: 1px 6px;">Optional</span>
+                            <span>Stage: Processing</span>
+                            <span>Visibility: Admin</span>
+                          </div>
+                        </div>
+                        <div class="doc-actions">
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px; color: var(--red);">✕</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Entity Documents -->
+                <div class="collapsible">
+                  <div class="collapsible-header">
+                    <span>🏢</span> Entity Documents <span class="count">3</span>
+                    <span class="chevron">▾</span>
+                  </div>
+                  <div class="collapsible-body">
+                    <div class="doc-list" style="border: none; border-radius: 0;">
+                      <div class="doc-item">
+                        <div class="doc-icon required">📄</div>
+                        <div class="doc-info">
+                          <div class="doc-name">Articles of Organization / Incorporation</div>
+                          <div class="doc-meta">
+                            <span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span>
+                            <span>Stage: Application</span>
+                          </div>
+                        </div>
+                        <div class="doc-actions">
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                        </div>
+                      </div>
+                      <div class="doc-item">
+                        <div class="doc-icon required">📄</div>
+                        <div class="doc-info">
+                          <div class="doc-name">Operating Agreement</div>
+                          <div class="doc-meta">
+                            <span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span>
+                            <span>Stage: Application</span>
+                          </div>
+                        </div>
+                        <div class="doc-actions">
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                        </div>
+                      </div>
+                      <div class="doc-item">
+                        <div class="doc-icon required">📄</div>
+                        <div class="doc-info">
+                          <div class="doc-name">Certificate of Good Standing</div>
+                          <div class="doc-meta">
+                            <span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span>
+                            <span>Stage: Processing</span>
+                          </div>
+                        </div>
+                        <div class="doc-actions">
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Property Documents -->
+                <div class="collapsible">
+                  <div class="collapsible-header">
+                    <span>🏠</span> Property Documents <span class="count">4</span>
+                    <span class="chevron">▾</span>
+                  </div>
+                  <div class="collapsible-body">
+                    <div class="doc-list" style="border: none; border-radius: 0;">
+                      <div class="doc-item">
+                        <div class="doc-icon required">📄</div>
+                        <div class="doc-info">
+                          <div class="doc-name">Purchase Contract / Agreement</div>
+                          <div class="doc-meta"><span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span> <span>Stage: Application</span></div>
+                        </div>
+                        <div class="doc-actions"><button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button></div>
+                      </div>
+                      <div class="doc-item">
+                        <div class="doc-icon required">📄</div>
+                        <div class="doc-info">
+                          <div class="doc-name">Appraisal Report</div>
+                          <div class="doc-meta"><span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span> <span>Stage: Appraisal & Title</span></div>
+                        </div>
+                        <div class="doc-actions"><button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button></div>
+                      </div>
+                      <div class="doc-item">
+                        <div class="doc-icon required">📄</div>
+                        <div class="doc-info">
+                          <div class="doc-name">Title Report / Commitment</div>
+                          <div class="doc-meta"><span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span> <span>Stage: Appraisal & Title</span></div>
+                        </div>
+                        <div class="doc-actions"><button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button></div>
+                      </div>
+                      <div class="doc-item">
+                        <div class="doc-icon optional">📄</div>
+                        <div class="doc-info">
+                          <div class="doc-name">Property Insurance Declaration</div>
+                          <div class="doc-meta"><span class="badge badge-gray" style="font-size: 10px; padding: 1px 6px;">Optional</span> <span>Stage: Underwriting</span></div>
+                        </div>
+                        <div class="doc-actions"><button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Financial Documents -->
+                <div class="collapsible">
+                  <div class="collapsible-header">
+                    <span>💰</span> Financial Documents <span class="count">3</span>
+                    <span class="chevron">▾</span>
+                  </div>
+                  <div class="collapsible-body">
+                    <div class="doc-list" style="border: none; border-radius: 0;">
+                      <div class="doc-item">
+                        <div class="doc-icon required">📄</div>
+                        <div class="doc-info">
+                          <div class="doc-name">Rent Roll / Lease Agreements</div>
+                          <div class="doc-meta"><span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span> <span>Stage: Processing</span></div>
+                        </div>
+                        <div class="doc-actions"><button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button></div>
+                      </div>
+                      <div class="doc-item">
+                        <div class="doc-icon required">📄</div>
+                        <div class="doc-info">
+                          <div class="doc-name">Proof of Funds / Reserves</div>
+                          <div class="doc-meta"><span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span> <span>Stage: Processing</span></div>
+                        </div>
+                        <div class="doc-actions"><button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button></div>
+                      </div>
+                      <div class="doc-item">
+                        <div class="doc-icon optional">📄</div>
+                        <div class="doc-info">
+                          <div class="doc-name">Tax Returns (2 years)</div>
+                          <div class="doc-meta"><span class="badge badge-gray" style="font-size: 10px; padding: 1px 6px;">Optional</span> <span>Stage: Underwriting</span></div>
+                        </div>
+                        <div class="doc-actions"><button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Closing Documents -->
+                <div class="collapsible">
+                  <div class="collapsible-header">
+                    <span>✍️</span> Closing Documents <span class="count">2</span>
+                    <span class="chevron">▾</span>
+                  </div>
+                  <div class="collapsible-body">
+                    <div class="doc-list" style="border: none; border-radius: 0;">
+                      <div class="doc-item">
+                        <div class="doc-icon required">📄</div>
+                        <div class="doc-info">
+                          <div class="doc-name">Closing Disclosure</div>
+                          <div class="doc-meta"><span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span> <span>Stage: Closing</span></div>
+                        </div>
+                        <div class="doc-actions"><button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button></div>
+                      </div>
+                      <div class="doc-item">
+                        <div class="doc-icon required">📄</div>
+                        <div class="doc-info">
+                          <div class="doc-name">Promissory Note</div>
+                          <div class="doc-meta"><span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span> <span>Stage: Closing</span></div>
+                        </div>
+                        <div class="doc-actions"><button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ──── TAB: PRICING ──── -->
+              <div class="panel-tab" id="tab-pricing" style="display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                  <div>
+                    <h3 style="font-size: 15px; font-weight: 600;">Pricing Configuration</h3>
+                    <p style="font-size: 12px; color: var(--gray-500);">Rule-based pricing with rate adjusters and disqualifiers</p>
+                  </div>
+                  <div style="display: flex; gap: 8px;">
+                    <select class="form-select" style="width: 180px;">
+                      <option selected>Rule-Based Pricing</option>
+                      <option>No Pricing</option>
+                      <option>AI Upload</option>
+                      <option>External URL</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Base Rate -->
+                <div class="edit-section">
+                  <div class="edit-section-title">Base Rate</div>
+                  <div class="form-row three">
+                    <div class="form-group">
+                      <label class="form-label"><span class="tooltip-trigger" data-tooltip="Starting interest rate before any adjustments">Base Rate</span></label>
+                      <input class="form-input" value="7.125%" />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Floor Rate</label>
+                      <input class="form-input" value="6.500%" />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Ceiling Rate</label>
+                      <input class="form-input" value="10.000%" />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Rate Adjusters -->
+                <div class="edit-section">
+                  <div class="edit-section-title">Rate Adjusters</div>
+                  <p style="font-size: 12px; color: var(--gray-500); margin-bottom: 12px;">These adjustments are added to or subtracted from the base rate based on deal characteristics.</p>
+
+                  <div class="pricing-category">FICO Score Adjustments</div>
+                  <div class="pricing-rule">
+                    <span>FICO ≥ 760</span>
+                    <input class="form-input" value="-0.250%" style="color: var(--emerald);" />
+                    <span style="font-size: 12px; color: var(--gray-400);">Discount</span>
+                    <button class="btn btn-ghost btn-sm" style="color: var(--red); font-size: 11px;">✕</button>
+                  </div>
+                  <div class="pricing-rule">
+                    <span>FICO 720 – 759</span>
+                    <input class="form-input" value="0.000%" />
+                    <span style="font-size: 12px; color: var(--gray-400);">Base</span>
+                    <button class="btn btn-ghost btn-sm" style="color: var(--red); font-size: 11px;">✕</button>
+                  </div>
+                  <div class="pricing-rule">
+                    <span>FICO 680 – 719</span>
+                    <input class="form-input" value="+0.250%" style="color: var(--amber);" />
+                    <span style="font-size: 12px; color: var(--gray-400);">Premium</span>
+                    <button class="btn btn-ghost btn-sm" style="color: var(--red); font-size: 11px;">✕</button>
+                  </div>
+                  <div class="pricing-rule">
+                    <span>FICO 660 – 679</span>
+                    <input class="form-input" value="+0.500%" style="color: var(--amber);" />
+                    <span style="font-size: 12px; color: var(--gray-400);">Premium</span>
+                    <button class="btn btn-ghost btn-sm" style="color: var(--red); font-size: 11px;">✕</button>
+                  </div>
+                  <div class="pricing-rule">
+                    <span>FICO &lt; 660</span>
+                    <input class="form-input" value="DISQUALIFIED" style="color: var(--red); font-weight: 600; font-size: 11px;" readonly />
+                    <span style="font-size: 12px; color: var(--red);">Disqualifier</span>
+                    <button class="btn btn-ghost btn-sm" style="color: var(--red); font-size: 11px;">✕</button>
+                  </div>
+                  <button class="btn btn-ghost btn-sm" style="margin-top: 4px;">＋ Add FICO tier</button>
+
+                  <div class="pricing-category">LTV Adjustments</div>
+                  <div class="pricing-rule">
+                    <span>LTV ≤ 65%</span>
+                    <input class="form-input" value="-0.125%" style="color: var(--emerald);" />
+                    <span style="font-size: 12px; color: var(--gray-400);">Discount</span>
+                    <button class="btn btn-ghost btn-sm" style="color: var(--red); font-size: 11px;">✕</button>
+                  </div>
+                  <div class="pricing-rule">
+                    <span>LTV 65.01% – 75%</span>
+                    <input class="form-input" value="0.000%" />
+                    <span style="font-size: 12px; color: var(--gray-400);">Base</span>
+                    <button class="btn btn-ghost btn-sm" style="color: var(--red); font-size: 11px;">✕</button>
+                  </div>
+                  <div class="pricing-rule">
+                    <span>LTV 75.01% – 80%</span>
+                    <input class="form-input" value="+0.375%" style="color: var(--amber);" />
+                    <span style="font-size: 12px; color: var(--gray-400);">Premium</span>
+                    <button class="btn btn-ghost btn-sm" style="color: var(--red); font-size: 11px;">✕</button>
+                  </div>
+                  <button class="btn btn-ghost btn-sm" style="margin-top: 4px;">＋ Add LTV tier</button>
+
+                  <div class="pricing-category">Property Type Adjustments</div>
+                  <div class="pricing-rule">
+                    <span>Condo / Townhouse</span>
+                    <input class="form-input" value="+0.125%" style="color: var(--amber);" />
+                    <span style="font-size: 12px; color: var(--gray-400);">Premium</span>
+                    <button class="btn btn-ghost btn-sm" style="color: var(--red); font-size: 11px;">✕</button>
+                  </div>
+                  <div class="pricing-rule">
+                    <span>2-4 Unit</span>
+                    <input class="form-input" value="+0.250%" style="color: var(--amber);" />
+                    <span style="font-size: 12px; color: var(--gray-400);">Premium</span>
+                    <button class="btn btn-ghost btn-sm" style="color: var(--red); font-size: 11px;">✕</button>
+                  </div>
+                  <button class="btn btn-ghost btn-sm" style="margin-top: 4px;">＋ Add property adjuster</button>
+
+                  <div class="pricing-category">Loan Purpose Adjustments</div>
+                  <div class="pricing-rule">
+                    <span>Cash-Out Refinance</span>
+                    <input class="form-input" value="+0.250%" style="color: var(--amber);" />
+                    <span style="font-size: 12px; color: var(--gray-400);">Premium</span>
+                    <button class="btn btn-ghost btn-sm" style="color: var(--red); font-size: 11px;">✕</button>
+                  </div>
+                  <button class="btn btn-ghost btn-sm" style="margin-top: 4px;">＋ Add purpose adjuster</button>
+
+                  <div class="pricing-category">DSCR Adjustments</div>
+                  <div class="pricing-rule">
+                    <span>DSCR ≥ 1.50</span>
+                    <input class="form-input" value="-0.125%" style="color: var(--emerald);" />
+                    <span style="font-size: 12px; color: var(--gray-400);">Discount</span>
+                    <button class="btn btn-ghost btn-sm" style="color: var(--red); font-size: 11px;">✕</button>
+                  </div>
+                  <div class="pricing-rule">
+                    <span>DSCR 1.20 – 1.49</span>
+                    <input class="form-input" value="0.000%" />
+                    <span style="font-size: 12px; color: var(--gray-400);">Base</span>
+                    <button class="btn btn-ghost btn-sm" style="color: var(--red); font-size: 11px;">✕</button>
+                  </div>
+                  <div class="pricing-rule">
+                    <span>DSCR &lt; 1.20</span>
+                    <input class="form-input" value="DISQUALIFIED" style="color: var(--red); font-weight: 600; font-size: 11px;" readonly />
+                    <span style="font-size: 12px; color: var(--red);">Disqualifier</span>
+                    <button class="btn btn-ghost btn-sm" style="color: var(--red); font-size: 11px;">✕</button>
+                  </div>
+                  <button class="btn btn-ghost btn-sm" style="margin-top: 4px;">＋ Add DSCR tier</button>
+                </div>
+
+                <!-- Rate Preview -->
+                <div class="edit-section">
+                  <div class="edit-section-title">Rate Preview Calculator</div>
+                  <div class="config-panel" style="background: white; border: 2px solid var(--blue-light);">
+                    <p style="font-size: 12px; color: var(--gray-500); margin-bottom: 12px;">Enter deal characteristics to preview the calculated rate:</p>
+                    <div class="form-row four">
+                      <div class="form-group">
+                        <label class="form-label">FICO</label>
+                        <input class="form-input" value="740" />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">LTV</label>
+                        <input class="form-input" value="72%" />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">Property</label>
+                        <select class="form-select"><option>SFR</option></select>
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">DSCR</label>
+                        <input class="form-input" value="1.35" />
+                      </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 16px; margin-top: 12px; padding: 12px; background: var(--emerald-light); border-radius: 8px;">
+                      <div>
+                        <div style="font-size: 11px; color: var(--gray-500);">Calculated Rate</div>
+                        <div style="font-size: 24px; font-weight: 700; color: var(--emerald);">7.125%</div>
+                      </div>
+                      <div style="font-size: 12px; color: var(--gray-500); flex: 1;">
+                        Base 7.125% + FICO adj. 0.000% + LTV adj. 0.000% + Property adj. 0.000% = <strong>7.125%</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ──── TAB: AI RULES ──── -->
+              <div class="panel-tab" id="tab-rules" style="display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                  <div>
+                    <h3 style="font-size: 15px; font-weight: 600;">AI Review Rules</h3>
+                    <p style="font-size: 12px; color: var(--gray-500);">Automated checks applied during deal processing. 6 active rules.</p>
+                  </div>
+                  <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-secondary btn-sm">🔗 Import from Credit Policy</button>
+                    <button class="btn btn-primary btn-sm">＋ Add Rule</button>
+                  </div>
+                </div>
+
+                <!-- Voice Recorder -->
+                <div class="voice-recorder">
+                  <button class="voice-btn">🎙</button>
+                  <div class="voice-info">
+                    <div class="voice-title">Voice-to-Rule</div>
+                    <div class="voice-desc">Describe a rule in plain English and AI will convert it to a structured review rule. Example: "Flag any deal where LTV exceeds 75% and DSCR is below 1.25"</div>
+                  </div>
+                </div>
+
+                <!-- Rules List -->
+                <div style="margin-top: 16px;">
+                  <div class="rule-card">
+                    <div class="rule-header">
+                      <div>
+                        <div class="rule-name">🔴 High LTV + Low DSCR Flag</div>
+                        <span class="badge badge-red" style="font-size: 10px; margin-top: 4px;">Critical</span>
+                      </div>
+                      <div style="display: flex; gap: 6px; align-items: center;">
+                        <span class="switch on"></span>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                      </div>
+                    </div>
+                    <div class="rule-condition">IF ltv > 75% AND dscr < 1.25 THEN flag("Review Required: High-risk LTV/DSCR combination")</div>
+                  </div>
+
+                  <div class="rule-card">
+                    <div class="rule-header">
+                      <div>
+                        <div class="rule-name">🟡 Low FICO Warning</div>
+                        <span class="badge badge-amber" style="font-size: 10px; margin-top: 4px;">Warning</span>
+                      </div>
+                      <div style="display: flex; gap: 6px; align-items: center;">
+                        <span class="switch on"></span>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                      </div>
+                    </div>
+                    <div class="rule-condition">IF fico < 700 THEN warn("Below-average FICO score — manual underwriting recommended")</div>
+                  </div>
+
+                  <div class="rule-card">
+                    <div class="rule-header">
+                      <div>
+                        <div class="rule-name">🔴 Max Loan Amount Exceeded</div>
+                        <span class="badge badge-red" style="font-size: 10px; margin-top: 4px;">Critical</span>
+                      </div>
+                      <div style="display: flex; gap: 6px; align-items: center;">
+                        <span class="switch on"></span>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                      </div>
+                    </div>
+                    <div class="rule-condition">IF loan_amount > 2500000 THEN reject("Loan amount exceeds program maximum of $2,500,000")</div>
+                  </div>
+
+                  <div class="rule-card">
+                    <div class="rule-header">
+                      <div>
+                        <div class="rule-name">🟡 Cash-Out Refi LTV Cap</div>
+                        <span class="badge badge-amber" style="font-size: 10px; margin-top: 4px;">Warning</span>
+                      </div>
+                      <div style="display: flex; gap: 6px; align-items: center;">
+                        <span class="switch on"></span>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                      </div>
+                    </div>
+                    <div class="rule-condition">IF loan_purpose == "cash_out" AND ltv > 70% THEN flag("Cash-out refi LTV exceeds 70% guideline")</div>
+                  </div>
+
+                  <div class="rule-card">
+                    <div class="rule-header">
+                      <div>
+                        <div class="rule-name">🟢 Missing Rent Roll Check</div>
+                        <span class="badge badge-green" style="font-size: 10px; margin-top: 4px;">Info</span>
+                      </div>
+                      <div style="display: flex; gap: 6px; align-items: center;">
+                        <span class="switch on"></span>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                      </div>
+                    </div>
+                    <div class="rule-condition">IF property_type IN ["2-4 Unit", "Multi-Family"] AND !has_document("Rent Roll") THEN remind("Rent roll required for multi-unit properties")</div>
+                  </div>
+
+                  <div class="rule-card">
+                    <div class="rule-header">
+                      <div>
+                        <div class="rule-name">🟡 Foreign Entity Review</div>
+                        <span class="badge badge-amber" style="font-size: 10px; margin-top: 4px;">Warning</span>
+                      </div>
+                      <div style="display: flex; gap: 6px; align-items: center;">
+                        <span class="switch"></span>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                      </div>
+                    </div>
+                    <div class="rule-condition">IF entity_type == "foreign" THEN flag("Foreign entity — additional compliance review required")</div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════ VIEW 3: CREATION WIZARD ════════════════ -->
+      <div class="view-section" id="view-wizard">
+        <div style="display: flex; justify-content: center; padding: 40px 0;">
+          <div class="wizard-container" style="position: relative; max-height: none; height: auto;">
+            <!-- Wizard Sidebar -->
+            <div class="wizard-sidebar" style="position: sticky; top: 0; align-self: flex-start;">
+              <h3>New Program</h3>
+              <div class="wizard-step completed" onclick="showWizardStep(1)" style="cursor:pointer;">
+                <div class="step-num">✓</div>
+                <span>Template</span>
+              </div>
+              <div class="wizard-step completed" onclick="showWizardStep(2)" style="cursor:pointer;">
+                <div class="step-num">✓</div>
+                <span>Credit Policy</span>
+              </div>
+              <div class="wizard-step completed" onclick="showWizardStep(3)" style="cursor:pointer;">
+                <div class="step-num">✓</div>
+                <span>Program Details</span>
+              </div>
+              <div class="wizard-step active" onclick="showWizardStep(4)" style="cursor:pointer;">
+                <div class="step-num">4</div>
+                <span>Quote Form</span>
+              </div>
+              <div class="wizard-step" onclick="showWizardStep(5)" style="cursor:pointer;">
+                <div class="step-num">5</div>
+                <span>Stages</span>
+              </div>
+              <div class="wizard-step" onclick="showWizardStep(6)" style="cursor:pointer;">
+                <div class="step-num">6</div>
+                <span>Documents</span>
+              </div>
+              <div class="wizard-step" onclick="showWizardStep(7)" style="cursor:pointer;">
+                <div class="step-num">7</div>
+                <span>Tasks</span>
+              </div>
+              <div class="wizard-step" onclick="showWizardStep(8)" style="cursor:pointer;">
+                <div class="step-num">8</div>
+                <span>Pricing</span>
+              </div>
+              <div class="wizard-step" onclick="showWizardStep(9)" style="cursor:pointer;">
+                <div class="step-num">9</div>
+                <span>Review & Create</span>
+              </div>
+              <div style="padding: 16px 20px; margin-top: auto;">
+                <div style="font-size: 11px; color: var(--gray-400); margin-bottom: 6px;">Progress</div>
+                <div style="height: 4px; background: var(--gray-200); border-radius: 2px;">
+                  <div id="wizardProgress" style="width: 44%; height: 100%; background: var(--blue); border-radius: 2px; transition: width 0.3s;"></div>
+                </div>
+                <div id="wizardProgressText" style="font-size: 11px; color: var(--gray-400); margin-top: 4px;">4 of 9 steps</div>
+              </div>
+            </div>
+
+            <!-- Wizard Main -->
+            <div class="wizard-main">
+
+              <!-- ═══ STEP 1: TEMPLATE ═══ -->
+              <div class="wizard-step-content" id="wiz-step-1" style="display: none;">
+                <div class="wizard-header">
+                  <h2>Choose a Template</h2>
+                  <p>Select a starting template to pre-fill your program configuration, or start from scratch.</p>
+                </div>
+                <div class="wizard-body">
+                  <div class="template-grid">
+                    <div class="template-card selected">
+                      <div class="template-icon">🏠</div>
+                      <div class="template-name">DSCR Residential</div>
+                      <div class="template-desc">Investment property loans based on rental income. Pre-configured with standard DSCR stages, docs, and pricing.</div>
+                    </div>
+                    <div class="template-card">
+                      <div class="template-icon">🔄</div>
+                      <div class="template-name">Bridge / Fix & Flip</div>
+                      <div class="template-desc">Short-term bridge loans for property investors. Includes rehab budget tracking and draw schedule stages.</div>
+                    </div>
+                    <div class="template-card">
+                      <div class="template-icon">🏦</div>
+                      <div class="template-name">Bank Statement</div>
+                      <div class="template-desc">Self-employed borrower programs using 12/24 month bank statements. Pre-configured doc requirements.</div>
+                    </div>
+                    <div class="template-card">
+                      <div class="template-icon">🏗️</div>
+                      <div class="template-name">Construction</div>
+                      <div class="template-desc">Ground-up construction financing with draw schedules, inspection stages, and builder verification.</div>
+                    </div>
+                    <div class="template-card">
+                      <div class="template-icon">🏢</div>
+                      <div class="template-name">Commercial</div>
+                      <div class="template-desc">Commercial and mixed-use property lending with enhanced underwriting and environmental requirements.</div>
+                    </div>
+                    <div class="template-card">
+                      <div class="template-icon">📋</div>
+                      <div class="template-name">Blank Template</div>
+                      <div class="template-desc">Start from scratch with no pre-filled configuration. Full control over every detail.</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="wizard-footer">
+                  <button class="btn btn-secondary" onclick="showView('list')">Cancel</button>
+                  <button class="btn btn-primary" onclick="showWizardStep(2)">Continue →</button>
+                </div>
+              </div>
+
+              <!-- ═══ STEP 2: CREDIT POLICY ═══ -->
+              <div class="wizard-step-content" id="wiz-step-2" style="display: none;">
+                <div class="wizard-header">
+                  <h2>Link Credit Policy</h2>
+                  <p>Optionally link this program to an existing credit policy. The policy's guidelines will be imported as AI review rules.</p>
+                </div>
+                <div class="wizard-body">
+                  <div class="form-row full">
+                    <div class="form-group">
+                      <label class="form-label">Select Credit Policy</label>
+                      <select class="form-select" style="width: 100%;">
+                        <option>— None (configure manually) —</option>
+                        <option selected>DSCR Standard Policy</option>
+                        <option>Bridge Loan Policy</option>
+                        <option>Bank Statement Policy</option>
+                        <option>Commercial Lending Policy</option>
+                      </select>
+                      <div class="form-hint">Credit policies define the underwriting guidelines and eligibility rules for this program.</div>
+                    </div>
+                  </div>
+                  <div class="policy-link" style="margin-top: 16px;">
+                    <span>🔗</span>
+                    <span>Linked: <strong>DSCR Standard Policy</strong></span>
+                    <span style="margin-left: auto; font-size: 11px;">View Policy →</span>
+                  </div>
+                  <div style="margin-top: 20px; padding: 16px; background: var(--gray-50); border-radius: 8px; border: 1px solid var(--border);">
+                    <h4 style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Policy will import:</h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; color: var(--gray-600);">
+                      <div>✅ LTV limits: 65% – 80%</div>
+                      <div>✅ Min DSCR: 1.20</div>
+                      <div>✅ Min FICO: 660</div>
+                      <div>✅ Max loan: $2,500,000</div>
+                      <div>✅ 4 review rules</div>
+                      <div>✅ 5 property types</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="wizard-footer">
+                  <button class="btn btn-secondary" onclick="showWizardStep(1)">← Back</button>
+                  <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-ghost" style="font-size: 12px;" onclick="showWizardStep(3)">Skip</button>
+                    <button class="btn btn-primary" onclick="showWizardStep(3)">Continue →</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ═══ STEP 3: PROGRAM DETAILS ═══ -->
+              <div class="wizard-step-content" id="wiz-step-3" style="display: none;">
+                <div class="wizard-header">
+                  <h2>Program Details</h2>
+                  <p>Configure the core lending parameters for this program.</p>
+                </div>
+                <div class="wizard-body">
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label class="form-label">Program Name *</label>
+                      <input class="form-input" value="DSCR Standard" />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Program Type</label>
+                      <select class="form-select">
+                        <option selected>DSCR</option>
+                        <option>Bridge</option>
+                        <option>Bank Statement</option>
+                        <option>Construction</option>
+                        <option>Commercial</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="form-row full">
+                    <div class="form-group">
+                      <label class="form-label">Description</label>
+                      <textarea class="form-textarea">Investor 30-year fixed rate — primary DSCR product</textarea>
+                    </div>
+                  </div>
+                  <div class="form-row three">
+                    <div class="form-group">
+                      <label class="form-label"><span class="tooltip-trigger" data-tooltip="Minimum Loan-to-Value ratio">Min LTV</span></label>
+                      <input class="form-input" value="65%" />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label"><span class="tooltip-trigger" data-tooltip="Maximum Loan-to-Value ratio">Max LTV</span></label>
+                      <input class="form-input" value="80%" />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label"><span class="tooltip-trigger" data-tooltip="Minimum Debt Service Coverage Ratio">Min DSCR</span></label>
+                      <input class="form-input" value="1.20" />
+                    </div>
+                  </div>
+                  <div class="form-row three">
+                    <div class="form-group">
+                      <label class="form-label">Min Loan Amount</label>
+                      <input class="form-input" value="$100,000" />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Max Loan Amount</label>
+                      <input class="form-input" value="$2,500,000" />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Min FICO</label>
+                      <input class="form-input" value="660" />
+                    </div>
+                  </div>
+                  <div style="margin-top: 20px;">
+                    <div class="edit-section-title">Property Types</div>
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+                      <label class="form-checkbox"><input type="checkbox" checked /> SFR</label>
+                      <label class="form-checkbox"><input type="checkbox" checked /> 2-4 Unit</label>
+                      <label class="form-checkbox"><input type="checkbox" checked /> Condo</label>
+                      <label class="form-checkbox"><input type="checkbox" checked /> Townhouse</label>
+                      <label class="form-checkbox"><input type="checkbox" checked /> PUD</label>
+                      <label class="form-checkbox"><input type="checkbox" /> Multi-Family (5+)</label>
+                      <label class="form-checkbox"><input type="checkbox" /> Commercial</label>
+                      <label class="form-checkbox"><input type="checkbox" /> Mixed Use</label>
+                    </div>
+                  </div>
+                </div>
+                <div class="wizard-footer">
+                  <button class="btn btn-secondary" onclick="showWizardStep(2)">← Back</button>
+                  <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-ghost" style="font-size: 12px;" onclick="showWizardStep(4)">Skip</button>
+                    <button class="btn btn-primary" onclick="showWizardStep(4)">Continue →</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ═══ STEP 4: QUOTE FORM ═══ -->
+              <div class="wizard-step-content" id="wiz-step-4">
+                <div class="wizard-header">
+                  <h2>Quote Form Fields</h2>
+                  <p>Configure which fields brokers see when requesting a quote for this program. Drag to reorder.</p>
+                </div>
+                <div class="wizard-body">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <span style="font-size: 13px; color: var(--gray-500);">12 fields configured — 8 required, 4 optional</span>
+                    <button class="btn btn-secondary btn-sm">＋ Add Custom Field</button>
+                  </div>
+
+                  <!-- Quote form field list -->
+                  <div class="doc-list">
+                    <div class="doc-item" style="background: var(--blue-light);">
+                      <span style="cursor: grab; color: var(--gray-400); font-size: 12px;">⋮⋮</span>
+                      <div class="doc-info">
+                        <div class="doc-name">Loan Amount</div>
+                        <div class="doc-meta"><span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span> <span>Type: Currency</span></div>
+                      </div>
+                      <select class="form-select" style="width: 110px; font-size: 11px;">
+                        <option selected>Required</option>
+                        <option>Optional</option>
+                        <option>Hidden</option>
+                      </select>
+                      <button class="btn btn-ghost btn-sm" style="font-size: 11px;">⚙</button>
+                    </div>
+                    <div class="doc-item">
+                      <span style="cursor: grab; color: var(--gray-400); font-size: 12px;">⋮⋮</span>
+                      <div class="doc-info">
+                        <div class="doc-name">Property Value</div>
+                        <div class="doc-meta"><span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span> <span>Type: Currency</span></div>
+                      </div>
+                      <select class="form-select" style="width: 110px; font-size: 11px;">
+                        <option selected>Required</option>
+                        <option>Optional</option>
+                        <option>Hidden</option>
+                      </select>
+                      <button class="btn btn-ghost btn-sm" style="font-size: 11px;">⚙</button>
+                    </div>
+                    <div class="doc-item">
+                      <span style="cursor: grab; color: var(--gray-400); font-size: 12px;">⋮⋮</span>
+                      <div class="doc-info">
+                        <div class="doc-name">Property Type</div>
+                        <div class="doc-meta"><span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span> <span>Type: Dropdown</span></div>
+                      </div>
+                      <select class="form-select" style="width: 110px; font-size: 11px;">
+                        <option selected>Required</option>
+                        <option>Optional</option>
+                        <option>Hidden</option>
+                      </select>
+                      <button class="btn btn-ghost btn-sm" style="font-size: 11px;">⚙</button>
+                    </div>
+                    <div class="doc-item">
+                      <span style="cursor: grab; color: var(--gray-400); font-size: 12px;">⋮⋮</span>
+                      <div class="doc-info">
+                        <div class="doc-name">Loan Purpose</div>
+                        <div class="doc-meta"><span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span> <span>Type: Dropdown (Purchase / Rate-Term Refi / Cash-Out)</span></div>
+                      </div>
+                      <select class="form-select" style="width: 110px; font-size: 11px;">
+                        <option selected>Required</option>
+                        <option>Optional</option>
+                        <option>Hidden</option>
+                      </select>
+                      <button class="btn btn-ghost btn-sm" style="font-size: 11px;">⚙</button>
+                    </div>
+                    <div class="doc-item">
+                      <span style="cursor: grab; color: var(--gray-400); font-size: 12px;">⋮⋮</span>
+                      <div class="doc-info">
+                        <div class="doc-name">FICO Score</div>
+                        <div class="doc-meta"><span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span> <span>Type: Number (min: 300, max: 850)</span></div>
+                      </div>
+                      <select class="form-select" style="width: 110px; font-size: 11px;">
+                        <option selected>Required</option>
+                        <option>Optional</option>
+                        <option>Hidden</option>
+                      </select>
+                      <button class="btn btn-ghost btn-sm" style="font-size: 11px;">⚙</button>
+                    </div>
+                    <div class="doc-item">
+                      <span style="cursor: grab; color: var(--gray-400); font-size: 12px;">⋮⋮</span>
+                      <div class="doc-info">
+                        <div class="doc-name"><span class="tooltip-trigger" data-tooltip="Debt Service Coverage Ratio: net rental income ÷ total debt payments">DSCR</span></div>
+                        <div class="doc-meta"><span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span> <span>Type: Decimal</span></div>
+                      </div>
+                      <select class="form-select" style="width: 110px; font-size: 11px;">
+                        <option selected>Required</option>
+                        <option>Optional</option>
+                        <option>Hidden</option>
+                      </select>
+                      <button class="btn btn-ghost btn-sm" style="font-size: 11px;">⚙</button>
+                    </div>
+                    <div class="doc-item">
+                      <span style="cursor: grab; color: var(--gray-400); font-size: 12px;">⋮⋮</span>
+                      <div class="doc-info">
+                        <div class="doc-name">Borrower Experience</div>
+                        <div class="doc-meta"><span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span> <span>Type: Dropdown (0, 1-3, 4-10, 10+)</span></div>
+                      </div>
+                      <select class="form-select" style="width: 110px; font-size: 11px;">
+                        <option selected>Required</option>
+                        <option>Optional</option>
+                        <option>Hidden</option>
+                      </select>
+                      <button class="btn btn-ghost btn-sm" style="font-size: 11px;">⚙</button>
+                    </div>
+                    <div class="doc-item">
+                      <span style="cursor: grab; color: var(--gray-400); font-size: 12px;">⋮⋮</span>
+                      <div class="doc-info">
+                        <div class="doc-name">Property State</div>
+                        <div class="doc-meta"><span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span> <span>Type: State Dropdown</span></div>
+                      </div>
+                      <select class="form-select" style="width: 110px; font-size: 11px;">
+                        <option selected>Required</option>
+                        <option>Optional</option>
+                        <option>Hidden</option>
+                      </select>
+                      <button class="btn btn-ghost btn-sm" style="font-size: 11px;">⚙</button>
+                    </div>
+                    <div class="doc-item" style="opacity: 0.7;">
+                      <span style="cursor: grab; color: var(--gray-400); font-size: 12px;">⋮⋮</span>
+                      <div class="doc-info">
+                        <div class="doc-name">Rental Income (Monthly)</div>
+                        <div class="doc-meta"><span class="badge badge-gray" style="font-size: 10px; padding: 1px 6px;">Optional</span> <span>Type: Currency</span></div>
+                      </div>
+                      <select class="form-select" style="width: 110px; font-size: 11px;">
+                        <option>Required</option>
+                        <option selected>Optional</option>
+                        <option>Hidden</option>
+                      </select>
+                      <button class="btn btn-ghost btn-sm" style="font-size: 11px;">⚙</button>
+                    </div>
+                    <div class="doc-item" style="opacity: 0.7;">
+                      <span style="cursor: grab; color: var(--gray-400); font-size: 12px;">⋮⋮</span>
+                      <div class="doc-info">
+                        <div class="doc-name">Entity Type</div>
+                        <div class="doc-meta"><span class="badge badge-gray" style="font-size: 10px; padding: 1px 6px;">Optional</span> <span>Type: Dropdown (LLC / Corp / Trust / Individual)</span></div>
+                      </div>
+                      <select class="form-select" style="width: 110px; font-size: 11px;">
+                        <option>Required</option>
+                        <option selected>Optional</option>
+                        <option>Hidden</option>
+                      </select>
+                      <button class="btn btn-ghost btn-sm" style="font-size: 11px;">⚙</button>
+                    </div>
+                    <div class="doc-item" style="opacity: 0.7;">
+                      <span style="cursor: grab; color: var(--gray-400); font-size: 12px;">⋮⋮</span>
+                      <div class="doc-info">
+                        <div class="doc-name">Prepayment Preference</div>
+                        <div class="doc-meta"><span class="badge badge-gray" style="font-size: 10px; padding: 1px 6px;">Optional</span> <span>Type: Dropdown (None / 3yr / 5yr)</span></div>
+                      </div>
+                      <select class="form-select" style="width: 110px; font-size: 11px;">
+                        <option>Required</option>
+                        <option selected>Optional</option>
+                        <option>Hidden</option>
+                      </select>
+                      <button class="btn btn-ghost btn-sm" style="font-size: 11px;">⚙</button>
+                    </div>
+                    <div class="doc-item" style="opacity: 0.7;">
+                      <span style="cursor: grab; color: var(--gray-400); font-size: 12px;">⋮⋮</span>
+                      <div class="doc-info">
+                        <div class="doc-name">Notes / Comments</div>
+                        <div class="doc-meta"><span class="badge badge-gray" style="font-size: 10px; padding: 1px 6px;">Optional</span> <span>Type: Text Area</span></div>
+                      </div>
+                      <select class="form-select" style="width: 110px; font-size: 11px;">
+                        <option>Required</option>
+                        <option selected>Optional</option>
+                        <option>Hidden</option>
+                      </select>
+                      <button class="btn btn-ghost btn-sm" style="font-size: 11px;">⚙</button>
+                    </div>
+                  </div>
+
+                  <div style="margin-top: 16px; padding: 14px; background: var(--blue-light); border-radius: 8px; font-size: 12px; color: var(--blue);">
+                    <strong>💡 Tip:</strong> The quote form is what brokers fill out to request pricing on a deal. Required fields must be filled before a quote can be generated. Hidden fields won't appear on the form but can still be used in pricing rules.
+                  </div>
+                </div>
+                <div class="wizard-footer">
+                  <button class="btn btn-secondary" onclick="showWizardStep(3)">← Back</button>
+                  <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-ghost" style="font-size: 12px;" onclick="showWizardStep(5)">Skip</button>
+                    <button class="btn btn-primary" onclick="showWizardStep(5)">Continue →</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ═══ STEP 5: STAGES ═══ -->
+              <div class="wizard-step-content" id="wiz-step-5" style="display: none;">
+                <div class="wizard-header">
+                  <h2>Workflow Stages</h2>
+                  <p>Define the pipeline stages a deal moves through. Pre-filled from your template — customize as needed.</p>
+                </div>
+                <div class="wizard-body">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <span style="font-size: 13px; color: var(--gray-500);">5 stages configured</span>
+                    <button class="btn btn-secondary btn-sm">＋ Add Stage</button>
+                  </div>
+
+                  <div class="workflow-stages">
+                    <div class="stage-card">
+                      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                          <span style="cursor: grab; color: var(--gray-400); font-size: 12px;">⋮⋮</span>
+                          <div>
+                            <div class="stage-name" style="display: flex; align-items: center; gap: 8px;">
+                              <span style="width: 10px; height: 10px; border-radius: 50%; background: #3B82F6;"></span>
+                              1. Application
+                            </div>
+                            <div class="stage-meta">
+                              <span>Default stage for new deals</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div style="display: flex; gap: 4px;">
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px; color: var(--red);">✕</button>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="stage-card">
+                      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                          <span style="cursor: grab; color: var(--gray-400); font-size: 12px;">⋮⋮</span>
+                          <div>
+                            <div class="stage-name" style="display: flex; align-items: center; gap: 8px;">
+                              <span style="width: 10px; height: 10px; border-radius: 50%; background: #8B5CF6;"></span>
+                              2. Processing
+                            </div>
+                            <div class="stage-meta">
+                              <span>Document collection and verification</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div style="display: flex; gap: 4px;">
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px; color: var(--red);">✕</button>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="stage-card">
+                      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                          <span style="cursor: grab; color: var(--gray-400); font-size: 12px;">⋮⋮</span>
+                          <div>
+                            <div class="stage-name" style="display: flex; align-items: center; gap: 8px;">
+                              <span style="width: 10px; height: 10px; border-radius: 50%; background: #F59E0B;"></span>
+                              3. Underwriting
+                            </div>
+                            <div class="stage-meta">
+                              <span>Credit and risk analysis</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div style="display: flex; gap: 4px;">
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px; color: var(--red);">✕</button>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="stage-card">
+                      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                          <span style="cursor: grab; color: var(--gray-400); font-size: 12px;">⋮⋮</span>
+                          <div>
+                            <div class="stage-name" style="display: flex; align-items: center; gap: 8px;">
+                              <span style="width: 10px; height: 10px; border-radius: 50%; background: #10B981;"></span>
+                              4. Appraisal & Title
+                            </div>
+                            <div class="stage-meta">
+                              <span>Third-party valuation and title search</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div style="display: flex; gap: 4px;">
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px; color: var(--red);">✕</button>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="stage-card">
+                      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                          <span style="cursor: grab; color: var(--gray-400); font-size: 12px;">⋮⋮</span>
+                          <div>
+                            <div class="stage-name" style="display: flex; align-items: center; gap: 8px;">
+                              <span style="width: 10px; height: 10px; border-radius: 50%; background: #EF4444;"></span>
+                              5. Closing
+                            </div>
+                            <div class="stage-meta">
+                              <span>Final documents and funding</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div style="display: flex; gap: 4px;">
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px; color: var(--red);">✕</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Stage Library -->
+                  <div style="margin-top: 20px; padding: 16px; background: var(--gray-50); border-radius: 8px; border: 1px dashed var(--border);">
+                    <h4 style="font-size: 12px; font-weight: 600; color: var(--gray-500); margin-bottom: 8px;">STAGE LIBRARY — drag into workflow above</h4>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                      <span class="property-tag" style="padding: 6px 12px; cursor: grab; border: 1px dashed var(--gray-300);">📋 Due Diligence</span>
+                      <span class="property-tag" style="padding: 6px 12px; cursor: grab; border: 1px dashed var(--gray-300);">🔍 QC Review</span>
+                      <span class="property-tag" style="padding: 6px 12px; cursor: grab; border: 1px dashed var(--gray-300);">📊 Compliance</span>
+                      <span class="property-tag" style="padding: 6px 12px; cursor: grab; border: 1px dashed var(--gray-300);">🏗️ Construction Draw</span>
+                      <span class="property-tag" style="padding: 6px 12px; cursor: grab; border: 1px dashed var(--gray-300);">📝 Post-Close</span>
+                      <span class="property-tag" style="padding: 6px 12px; cursor: grab; border: 1px dashed var(--gray-300);">⚖️ Legal Review</span>
+                      <button class="btn btn-ghost btn-sm">＋ Custom Stage</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="wizard-footer">
+                  <button class="btn btn-secondary" onclick="showWizardStep(4)">← Back</button>
+                  <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-ghost" style="font-size: 12px;" onclick="showWizardStep(6)">Skip</button>
+                    <button class="btn btn-primary" onclick="showWizardStep(6)">Continue →</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ═══ STEP 6: DOCUMENTS ═══ -->
+              <div class="wizard-step-content" id="wiz-step-6" style="display: none;">
+                <div class="wizard-header">
+                  <h2>Required Documents</h2>
+                  <p>Configure which documents are needed at each stage. Pre-filled from template — add, remove, or customize.</p>
+                </div>
+                <div class="wizard-body">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <span style="font-size: 13px; color: var(--gray-500);">16 documents across 5 categories</span>
+                    <div style="display: flex; gap: 8px;">
+                      <button class="btn btn-secondary btn-sm">📥 Add Standard Docs</button>
+                      <button class="btn btn-primary btn-sm">＋ Custom Document</button>
+                    </div>
+                  </div>
+
+                  <!-- Borrower Docs -->
+                  <div class="collapsible">
+                    <div class="collapsible-header">
+                      <span>👤</span> Borrower Documents <span class="count">4</span>
+                      <span class="chevron">▾</span>
+                    </div>
+                    <div class="collapsible-body">
+                      <div class="doc-list" style="border: none; border-radius: 0;">
+                        <div class="doc-item">
+                          <div class="doc-icon required">📄</div>
+                          <div class="doc-info">
+                            <div class="doc-name">Government-Issued ID</div>
+                            <div class="doc-meta">
+                              <span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span>
+                              <span>Stage: Application</span>
+                              <span>👁 All</span>
+                            </div>
+                          </div>
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px; color: var(--red);">✕</button>
+                        </div>
+                        <div class="doc-item">
+                          <div class="doc-icon required">📄</div>
+                          <div class="doc-info">
+                            <div class="doc-name">Credit Authorization</div>
+                            <div class="doc-meta">
+                              <span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span>
+                              <span>Stage: Application</span>
+                              <span>👁 Admin</span>
+                            </div>
+                          </div>
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px; color: var(--red);">✕</button>
+                        </div>
+                        <div class="doc-item">
+                          <div class="doc-icon required">📄</div>
+                          <div class="doc-info">
+                            <div class="doc-name">Personal Financial Statement</div>
+                            <div class="doc-meta">
+                              <span class="badge badge-red" style="font-size: 10px; padding: 1px 6px;">Required</span>
+                              <span>Stage: Processing</span>
+                              <span>👁 Admin</span>
+                            </div>
+                          </div>
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px; color: var(--red);">✕</button>
+                        </div>
+                        <div class="doc-item">
+                          <div class="doc-icon optional">📄</div>
+                          <div class="doc-info">
+                            <div class="doc-name">Background Check Auth</div>
+                            <div class="doc-meta">
+                              <span class="badge badge-gray" style="font-size: 10px; padding: 1px 6px;">Optional</span>
+                              <span>Stage: Processing</span>
+                              <span>👁 Admin</span>
+                            </div>
+                          </div>
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px; color: var(--red);">✕</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Entity Docs -->
+                  <div class="collapsible">
+                    <div class="collapsible-header">
+                      <span>🏢</span> Entity Documents <span class="count">3</span>
+                      <span class="chevron">▾</span>
+                    </div>
+                    <div class="collapsible-body" style="display: none;">
+                      <div style="padding: 12px 16px; font-size: 12px; color: var(--gray-500);">Articles of Organization, Operating Agreement, Certificate of Good Standing</div>
+                    </div>
+                  </div>
+
+                  <!-- Property Docs -->
+                  <div class="collapsible">
+                    <div class="collapsible-header">
+                      <span>🏠</span> Property Documents <span class="count">4</span>
+                      <span class="chevron">▾</span>
+                    </div>
+                    <div class="collapsible-body" style="display: none;">
+                      <div style="padding: 12px 16px; font-size: 12px; color: var(--gray-500);">Purchase Contract, Appraisal Report, Title Report, Insurance Declaration</div>
+                    </div>
+                  </div>
+
+                  <!-- Financial Docs -->
+                  <div class="collapsible">
+                    <div class="collapsible-header">
+                      <span>💰</span> Financial Documents <span class="count">3</span>
+                      <span class="chevron">▾</span>
+                    </div>
+                    <div class="collapsible-body" style="display: none;">
+                      <div style="padding: 12px 16px; font-size: 12px; color: var(--gray-500);">Rent Roll / Leases, Proof of Funds, Tax Returns (2yr)</div>
+                    </div>
+                  </div>
+
+                  <!-- Closing Docs -->
+                  <div class="collapsible">
+                    <div class="collapsible-header">
+                      <span>✍️</span> Closing Documents <span class="count">2</span>
+                      <span class="chevron">▾</span>
+                    </div>
+                    <div class="collapsible-body" style="display: none;">
+                      <div style="padding: 12px 16px; font-size: 12px; color: var(--gray-500);">Closing Disclosure, Promissory Note</div>
+                    </div>
+                  </div>
+
+                  <!-- Add Document Form Inline -->
+                  <div style="margin-top: 16px; padding: 16px; border: 2px dashed var(--border); border-radius: 8px; background: var(--gray-50);">
+                    <h4 style="font-size: 12px; font-weight: 600; color: var(--gray-500); margin-bottom: 12px;">QUICK ADD DOCUMENT</h4>
+                    <div class="form-row four">
+                      <div class="form-group">
+                        <label class="form-label">Document Name</label>
+                        <input class="form-input" placeholder="e.g., W-2 Forms" />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">Category</label>
+                        <select class="form-select">
+                          <option>Borrower</option>
+                          <option>Entity</option>
+                          <option>Property</option>
+                          <option>Financial</option>
+                          <option>Closing</option>
+                        </select>
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">Stage</label>
+                        <select class="form-select">
+                          <option>Application</option>
+                          <option>Processing</option>
+                          <option>Underwriting</option>
+                          <option>Appraisal</option>
+                          <option>Closing</option>
+                        </select>
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">&nbsp;</label>
+                        <button class="btn btn-primary" style="width: 100%;">Add</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="wizard-footer">
+                  <button class="btn btn-secondary" onclick="showWizardStep(5)">← Back</button>
+                  <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-ghost" style="font-size: 12px;" onclick="showWizardStep(7)">Skip</button>
+                    <button class="btn btn-primary" onclick="showWizardStep(7)">Continue →</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ═══ STEP 7: TASKS ═══ -->
+              <div class="wizard-step-content" id="wiz-step-7" style="display: none;">
+                <div class="wizard-header">
+                  <h2>Workflow Tasks</h2>
+                  <p>Define the tasks that need to be completed at each stage. Assign roles and set priorities.</p>
+                </div>
+                <div class="wizard-body">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <span style="font-size: 13px; color: var(--gray-500);">8 tasks across 5 stages</span>
+                    <button class="btn btn-primary btn-sm">＋ Add Task</button>
+                  </div>
+
+                  <!-- Tasks grouped by stage -->
+                  <div class="collapsible">
+                    <div class="collapsible-header">
+                      <span style="width: 10px; height: 10px; border-radius: 50%; background: #3B82F6;"></span>
+                      Application <span class="count">2</span>
+                      <span class="chevron">▾</span>
+                    </div>
+                    <div class="collapsible-body">
+                      <div class="task-item">
+                        <div class="task-priority high"></div>
+                        <div class="task-info">
+                          <div class="task-name">Review loan application</div>
+                          <div class="task-meta">Assigned to: Processor · Priority: High · Category: Application Review</div>
+                        </div>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px; color: var(--red);">✕</button>
+                      </div>
+                      <div class="task-item">
+                        <div class="task-priority medium"></div>
+                        <div class="task-info">
+                          <div class="task-name">Pull credit report</div>
+                          <div class="task-meta">Assigned to: Processor · Priority: Medium · Category: Credit Check</div>
+                        </div>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px; color: var(--red);">✕</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="collapsible">
+                    <div class="collapsible-header">
+                      <span style="width: 10px; height: 10px; border-radius: 50%; background: #8B5CF6;"></span>
+                      Processing <span class="count">3</span>
+                      <span class="chevron">▾</span>
+                    </div>
+                    <div class="collapsible-body">
+                      <div class="task-item">
+                        <div class="task-priority high"></div>
+                        <div class="task-info">
+                          <div class="task-name">Verify all borrower documents</div>
+                          <div class="task-meta">Assigned to: Processor · Priority: High · Category: Application Review</div>
+                        </div>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px; color: var(--red);">✕</button>
+                      </div>
+                      <div class="task-item">
+                        <div class="task-priority medium"></div>
+                        <div class="task-info">
+                          <div class="task-name">Validate entity documentation</div>
+                          <div class="task-meta">Assigned to: Processor · Priority: Medium · Category: Application Review</div>
+                        </div>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px; color: var(--red);">✕</button>
+                      </div>
+                      <div class="task-item">
+                        <div class="task-priority low"></div>
+                        <div class="task-info">
+                          <div class="task-name">Request missing documents from broker</div>
+                          <div class="task-meta">Assigned to: Processor · Priority: Low · Category: Application Review</div>
+                        </div>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px; color: var(--red);">✕</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="collapsible">
+                    <div class="collapsible-header">
+                      <span style="width: 10px; height: 10px; border-radius: 50%; background: #F59E0B;"></span>
+                      Underwriting <span class="count">2</span>
+                      <span class="chevron">▾</span>
+                    </div>
+                    <div class="collapsible-body">
+                      <div class="task-item">
+                        <div class="task-priority high"></div>
+                        <div class="task-info">
+                          <div class="task-name">Complete underwriting analysis</div>
+                          <div class="task-meta">Assigned to: Underwriter · Priority: High · Category: Underwriting</div>
+                        </div>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px; color: var(--red);">✕</button>
+                      </div>
+                      <div class="task-item">
+                        <div class="task-priority medium"></div>
+                        <div class="task-info">
+                          <div class="task-name">Issue conditional approval</div>
+                          <div class="task-meta">Assigned to: Underwriter · Priority: Medium · Category: Underwriting</div>
+                        </div>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px; color: var(--red);">✕</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="collapsible">
+                    <div class="collapsible-header">
+                      <span style="width: 10px; height: 10px; border-radius: 50%; background: #10B981;"></span>
+                      Appraisal & Title <span class="count">1</span>
+                      <span class="chevron">▾</span>
+                    </div>
+                    <div class="collapsible-body">
+                      <div class="task-item">
+                        <div class="task-priority high"></div>
+                        <div class="task-info">
+                          <div class="task-name">Order appraisal</div>
+                          <div class="task-meta">Assigned to: Processor · Priority: High · Category: Appraisal</div>
+                        </div>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;">Edit</button>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px; color: var(--red);">✕</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Quick Add Task -->
+                  <div style="margin-top: 16px; padding: 16px; border: 2px dashed var(--border); border-radius: 8px; background: var(--gray-50);">
+                    <h4 style="font-size: 12px; font-weight: 600; color: var(--gray-500); margin-bottom: 12px;">QUICK ADD TASK</h4>
+                    <div class="form-row four">
+                      <div class="form-group">
+                        <label class="form-label">Task Name</label>
+                        <input class="form-input" placeholder="e.g., Verify insurance" />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">Stage</label>
+                        <select class="form-select">
+                          <option>Application</option>
+                          <option>Processing</option>
+                          <option>Underwriting</option>
+                          <option>Appraisal</option>
+                          <option>Closing</option>
+                        </select>
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">Assign To</label>
+                        <select class="form-select">
+                          <option>Processor</option>
+                          <option>Underwriter</option>
+                          <option>Closer</option>
+                          <option>Manager</option>
+                        </select>
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">Priority</label>
+                        <select class="form-select">
+                          <option>High</option>
+                          <option>Medium</option>
+                          <option>Low</option>
+                        </select>
+                      </div>
+                    </div>
+                    <button class="btn btn-primary btn-sm" style="margin-top: 8px;">Add Task</button>
+                  </div>
+                </div>
+                <div class="wizard-footer">
+                  <button class="btn btn-secondary" onclick="showWizardStep(6)">← Back</button>
+                  <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-ghost" style="font-size: 12px;" onclick="showWizardStep(8)">Skip</button>
+                    <button class="btn btn-primary" onclick="showWizardStep(8)">Continue →</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ═══ STEP 8: PRICING ═══ -->
+              <div class="wizard-step-content" id="wiz-step-8" style="display: none;">
+                <div class="wizard-header">
+                  <h2>Pricing Configuration</h2>
+                  <p>Set up how rates are calculated for this program. Choose a pricing mode and configure rate adjusters.</p>
+                </div>
+                <div class="wizard-body">
+                  <!-- Pricing Mode Selector -->
+                  <div class="edit-section">
+                    <div class="edit-section-title">Pricing Mode</div>
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;">
+                      <div class="template-card" style="padding: 12px; text-align: center;">
+                        <div style="font-size: 20px; margin-bottom: 4px;">🚫</div>
+                        <div style="font-size: 12px; font-weight: 600;">No Pricing</div>
+                        <div style="font-size: 11px; color: var(--gray-400);">Manual quotes only</div>
+                      </div>
+                      <div class="template-card selected" style="padding: 12px; text-align: center;">
+                        <div style="font-size: 20px; margin-bottom: 4px;">📊</div>
+                        <div style="font-size: 12px; font-weight: 600;">Rule-Based</div>
+                        <div style="font-size: 11px; color: var(--gray-400);">Base rate + adjusters</div>
+                      </div>
+                      <div class="template-card" style="padding: 12px; text-align: center;">
+                        <div style="font-size: 20px; margin-bottom: 4px;">🤖</div>
+                        <div style="font-size: 12px; font-weight: 600;">AI Upload</div>
+                        <div style="font-size: 11px; color: var(--gray-400);">Upload rate sheet PDF</div>
+                      </div>
+                      <div class="template-card" style="padding: 12px; text-align: center;">
+                        <div style="font-size: 20px; margin-bottom: 4px;">🔗</div>
+                        <div style="font-size: 12px; font-weight: 600;">External URL</div>
+                        <div style="font-size: 11px; color: var(--gray-400);">Link to pricing API</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Base Rate Config -->
+                  <div class="edit-section">
+                    <div class="edit-section-title"><span class="tooltip-trigger" data-tooltip="The starting interest rate before any adjustments are applied based on deal characteristics">Base Rate</span></div>
+                    <div class="form-row three">
+                      <div class="form-group">
+                        <label class="form-label">Base Rate</label>
+                        <input class="form-input" placeholder="7.125%" />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">Floor (Min)</label>
+                        <input class="form-input" placeholder="6.500%" />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">Ceiling (Max)</label>
+                        <input class="form-input" placeholder="10.000%" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Rate Adjusters -->
+                  <div class="edit-section">
+                    <div class="edit-section-title">Rate Adjusters</div>
+                    <p style="font-size: 12px; color: var(--gray-500); margin-bottom: 16px;">Add or subtract from base rate based on deal characteristics. Mark tiers as "Disqualified" to reject deals that don't meet criteria.</p>
+
+                    <!-- FICO -->
+                    <div class="collapsible">
+                      <div class="collapsible-header">
+                        FICO Score Adjustments <span class="count">5 tiers</span>
+                        <span style="margin-left: auto; display: flex; gap: 4px;">
+                          <button class="btn btn-ghost btn-sm" style="font-size: 11px;">＋ Add Tier</button>
+                          <span class="chevron">▾</span>
+                        </span>
+                      </div>
+                      <div class="collapsible-body" style="padding: 12px;">
+                        <div class="pricing-rule">
+                          <span>FICO ≥ 760</span>
+                          <input class="form-input" value="-0.250%" style="color: var(--emerald);" />
+                          <span style="font-size: 12px; color: var(--gray-400);">Discount</span>
+                          <button class="btn btn-ghost btn-sm" style="color: var(--red); font-size: 11px;">✕</button>
+                        </div>
+                        <div class="pricing-rule">
+                          <span>FICO 720 – 759</span>
+                          <input class="form-input" value="0.000%" />
+                          <span style="font-size: 12px; color: var(--gray-400);">Base</span>
+                          <button class="btn btn-ghost btn-sm" style="color: var(--red); font-size: 11px;">✕</button>
+                        </div>
+                        <div class="pricing-rule">
+                          <span>FICO 680 – 719</span>
+                          <input class="form-input" value="+0.250%" style="color: var(--amber);" />
+                          <span style="font-size: 12px; color: var(--gray-400);">Premium</span>
+                          <button class="btn btn-ghost btn-sm" style="color: var(--red); font-size: 11px;">✕</button>
+                        </div>
+                        <div class="pricing-rule">
+                          <span>FICO 660 – 679</span>
+                          <input class="form-input" value="+0.500%" style="color: var(--amber);" />
+                          <span style="font-size: 12px; color: var(--gray-400);">Premium</span>
+                          <button class="btn btn-ghost btn-sm" style="color: var(--red); font-size: 11px;">✕</button>
+                        </div>
+                        <div class="pricing-rule">
+                          <span>FICO &lt; 660</span>
+                          <input class="form-input" value="DISQUALIFIED" style="color: var(--red); font-weight: 600; font-size: 11px;" readonly />
+                          <span style="font-size: 12px; color: var(--red);">Reject</span>
+                          <button class="btn btn-ghost btn-sm" style="color: var(--red); font-size: 11px;">✕</button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- LTV -->
+                    <div class="collapsible">
+                      <div class="collapsible-header">
+                        <span class="tooltip-trigger" data-tooltip="Loan-to-Value adjustments">LTV Adjustments</span> <span class="count">3 tiers</span>
+                        <span style="margin-left: auto;"><span class="chevron">▾</span></span>
+                      </div>
+                      <div class="collapsible-body" style="display: none; padding: 12px; font-size: 12px; color: var(--gray-500);">
+                        ≤65% → -0.125% · 65-75% → Base · 75-80% → +0.375%
+                      </div>
+                    </div>
+
+                    <!-- Property Type -->
+                    <div class="collapsible">
+                      <div class="collapsible-header">
+                        Property Type Adjustments <span class="count">2 tiers</span>
+                        <span style="margin-left: auto;"><span class="chevron">▾</span></span>
+                      </div>
+                      <div class="collapsible-body" style="display: none; padding: 12px; font-size: 12px; color: var(--gray-500);">
+                        Condo/Townhouse → +0.125% · 2-4 Unit → +0.250%
+                      </div>
+                    </div>
+
+                    <!-- Loan Purpose -->
+                    <div class="collapsible">
+                      <div class="collapsible-header">
+                        Loan Purpose Adjustments <span class="count">1 tier</span>
+                        <span style="margin-left: auto;"><span class="chevron">▾</span></span>
+                      </div>
+                      <div class="collapsible-body" style="display: none; padding: 12px; font-size: 12px; color: var(--gray-500);">
+                        Cash-Out Refi → +0.250%
+                      </div>
+                    </div>
+
+                    <!-- DSCR -->
+                    <div class="collapsible">
+                      <div class="collapsible-header">
+                        <span class="tooltip-trigger" data-tooltip="Debt Service Coverage Ratio adjustments">DSCR Adjustments</span> <span class="count">3 tiers</span>
+                        <span style="margin-left: auto;"><span class="chevron">▾</span></span>
+                      </div>
+                      <div class="collapsible-body" style="display: none; padding: 12px; font-size: 12px; color: var(--gray-500);">
+                        ≥1.50 → -0.125% · 1.20-1.49 → Base · &lt;1.20 → DISQUALIFIED
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- YSP & Points -->
+                  <div class="edit-section">
+                    <div class="edit-section-title"><span class="tooltip-trigger" data-tooltip="Yield Spread Premium — compensation paid to the broker">YSP</span> & <span class="tooltip-trigger" data-tooltip="Upfront fees as a percentage of the loan amount">Points</span></div>
+                    <div class="form-row">
+                      <div class="config-panel">
+                        <h4 style="font-size: 12px; font-weight: 600; margin-bottom: 8px;">YSP</h4>
+                        <div class="config-row">
+                          <label>Enabled</label>
+                          <span class="switch on"></span>
+                        </div>
+                        <div class="config-row">
+                          <label>Range</label>
+                          <div class="range-display">
+                            <input class="form-input" value="0.50" style="width: 60px;" /> <span>to</span>
+                            <input class="form-input" value="2.00" style="width: 60px;" /> <span>%</span>
+                          </div>
+                        </div>
+                        <div class="config-row">
+                          <label>Step</label>
+                          <input class="form-input" value="0.125" style="width: 60px;" /> <span style="font-size: 11px; color: var(--gray-400);">%</span>
+                        </div>
+                        <div class="config-row">
+                          <label>Broker Adjustable</label>
+                          <span class="switch on"></span>
+                        </div>
+                      </div>
+                      <div class="config-panel">
+                        <h4 style="font-size: 12px; font-weight: 600; margin-bottom: 8px;">Points</h4>
+                        <div class="config-row">
+                          <label>Base Points</label>
+                          <input class="form-input" value="1.00" style="width: 60px;" />
+                        </div>
+                        <div class="config-row">
+                          <label>Range</label>
+                          <div class="range-display">
+                            <input class="form-input" value="1.00" style="width: 60px;" /> <span>to</span>
+                            <input class="form-input" value="3.00" style="width: 60px;" />
+                          </div>
+                        </div>
+                        <div class="config-row">
+                          <label>Step</label>
+                          <input class="form-input" value="0.25" style="width: 60px;" />
+                        </div>
+                        <div class="config-row">
+                          <label>Broker Adjustable</label>
+                          <span class="switch on"></span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="wizard-footer">
+                  <button class="btn btn-secondary" onclick="showWizardStep(7)">← Back</button>
+                  <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-ghost" style="font-size: 12px;" onclick="showWizardStep(9)">Skip</button>
+                    <button class="btn btn-primary" onclick="showWizardStep(9)">Continue →</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ═══ STEP 9: REVIEW & CREATE ═══ -->
+              <div class="wizard-step-content" id="wiz-step-9" style="display: none;">
+                <div class="wizard-header">
+                  <h2>Review & Create</h2>
+                  <p>Review your program configuration before creating. You can edit any section after creation.</p>
+                </div>
+                <div class="wizard-body">
+                  <!-- Program Summary -->
+                  <div class="card" style="margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                      <div>
+                        <h3 style="font-size: 18px; font-weight: 700;">DSCR Standard</h3>
+                        <p style="font-size: 13px; color: var(--gray-500);">Investor 30-year fixed rate — primary DSCR product</p>
+                      </div>
+                      <span class="badge badge-amber"><span class="dot"></span> Draft</span>
+                    </div>
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                      <span class="property-tag">DSCR</span>
+                      <span class="property-tag">Template: DSCR Residential</span>
+                      <span class="property-tag">Policy: DSCR Standard</span>
+                    </div>
+                  </div>
+
+                  <!-- Review Grid -->
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+
+                    <!-- Loan Parameters -->
+                    <div class="card" style="padding: 16px;">
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h4 style="font-size: 13px; font-weight: 600;">Loan Parameters</h4>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;" onclick="showWizardStep(3)">Edit</button>
+                      </div>
+                      <div class="expand-metric"><span class="metric-label">LTV Range</span><span class="metric-value">65% – 80%</span></div>
+                      <div class="expand-metric"><span class="metric-label">Min DSCR</span><span class="metric-value">1.20</span></div>
+                      <div class="expand-metric"><span class="metric-label">Loan Range</span><span class="metric-value">$100K – $2.5M</span></div>
+                      <div class="expand-metric"><span class="metric-label">Min FICO</span><span class="metric-value">660</span></div>
+                      <div class="expand-metric" style="border: none;"><span class="metric-label">Properties</span><span class="metric-value">SFR, 2-4, Condo, TH, PUD</span></div>
+                    </div>
+
+                    <!-- Quote Form -->
+                    <div class="card" style="padding: 16px;">
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h4 style="font-size: 13px; font-weight: 600;">Quote Form</h4>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;" onclick="showWizardStep(4)">Edit</button>
+                      </div>
+                      <div class="expand-metric"><span class="metric-label">Required Fields</span><span class="metric-value">8</span></div>
+                      <div class="expand-metric"><span class="metric-label">Optional Fields</span><span class="metric-value">4</span></div>
+                      <div class="expand-metric" style="border: none;"><span class="metric-label">Total Fields</span><span class="metric-value">12</span></div>
+                    </div>
+
+                    <!-- Workflow -->
+                    <div class="card" style="padding: 16px;">
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h4 style="font-size: 13px; font-weight: 600;">Workflow</h4>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;" onclick="showWizardStep(5)">Edit</button>
+                      </div>
+                      <div class="expand-metric"><span class="metric-label">Stages</span><span class="metric-value">5</span></div>
+                      <div style="display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap;">
+                        <span class="property-tag" style="display: flex; align-items: center; gap: 4px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #3B82F6;"></span>Application</span>
+                        <span class="property-tag" style="display: flex; align-items: center; gap: 4px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #8B5CF6;"></span>Processing</span>
+                        <span class="property-tag" style="display: flex; align-items: center; gap: 4px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #F59E0B;"></span>Underwriting</span>
+                        <span class="property-tag" style="display: flex; align-items: center; gap: 4px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #10B981;"></span>Appraisal</span>
+                        <span class="property-tag" style="display: flex; align-items: center; gap: 4px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #EF4444;"></span>Closing</span>
+                      </div>
+                    </div>
+
+                    <!-- Documents -->
+                    <div class="card" style="padding: 16px;">
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h4 style="font-size: 13px; font-weight: 600;">Documents</h4>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;" onclick="showWizardStep(6)">Edit</button>
+                      </div>
+                      <div class="expand-metric"><span class="metric-label">Total</span><span class="metric-value">16</span></div>
+                      <div class="expand-metric"><span class="metric-label">Required</span><span class="metric-value">12</span></div>
+                      <div class="expand-metric"><span class="metric-label">Optional</span><span class="metric-value">4</span></div>
+                      <div class="expand-metric" style="border: none;"><span class="metric-label">Categories</span><span class="metric-value">5</span></div>
+                    </div>
+
+                    <!-- Tasks -->
+                    <div class="card" style="padding: 16px;">
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h4 style="font-size: 13px; font-weight: 600;">Tasks</h4>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;" onclick="showWizardStep(7)">Edit</button>
+                      </div>
+                      <div class="expand-metric"><span class="metric-label">Total Tasks</span><span class="metric-value">8</span></div>
+                      <div class="expand-metric"><span class="metric-label">High Priority</span><span class="metric-value" style="color: var(--red);">4</span></div>
+                      <div class="expand-metric"><span class="metric-label">Medium</span><span class="metric-value" style="color: var(--amber);">3</span></div>
+                      <div class="expand-metric" style="border: none;"><span class="metric-label">Low</span><span class="metric-value">1</span></div>
+                    </div>
+
+                    <!-- Pricing -->
+                    <div class="card" style="padding: 16px;">
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h4 style="font-size: 13px; font-weight: 600;">Pricing</h4>
+                        <button class="btn btn-ghost btn-sm" style="font-size: 11px;" onclick="showWizardStep(8)">Edit</button>
+                      </div>
+                      <div class="expand-metric"><span class="metric-label">Mode</span><span class="metric-value">Rule-Based</span></div>
+                      <div class="expand-metric"><span class="metric-label">Base Rate</span><span class="metric-value">7.125%</span></div>
+                      <div class="expand-metric"><span class="metric-label">YSP</span><span class="metric-value">0.50 – 2.00%</span></div>
+                      <div class="expand-metric"><span class="metric-label">Points</span><span class="metric-value">1.00 – 3.00</span></div>
+                      <div class="expand-metric" style="border: none;"><span class="metric-label">Adjuster Groups</span><span class="metric-value">5</span></div>
+                    </div>
+                  </div>
+
+                  <!-- Activation Options -->
+                  <div style="margin-top: 20px; padding: 16px; background: var(--gray-50); border-radius: 8px; border: 1px solid var(--border);">
+                    <h4 style="font-size: 13px; font-weight: 600; margin-bottom: 12px;">Activation</h4>
+                    <div style="display: flex; gap: 24px;">
+                      <label class="form-checkbox" style="font-size: 14px;">
+                        <input type="radio" name="activation" checked style="accent-color: var(--blue);" />
+                        <div>
+                          <div style="font-weight: 500;">Save as Draft</div>
+                          <div style="font-size: 11px; color: var(--gray-500); margin-top: 1px;">Program will not be visible to brokers</div>
+                        </div>
+                      </label>
+                      <label class="form-checkbox" style="font-size: 14px;">
+                        <input type="radio" name="activation" style="accent-color: var(--blue);" />
+                        <div>
+                          <div style="font-weight: 500;">Activate Immediately</div>
+                          <div style="font-size: 11px; color: var(--gray-500); margin-top: 1px;">Program will be live and accepting quotes</div>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <div class="wizard-footer">
+                  <button class="btn btn-secondary" onclick="showWizardStep(8)">← Back</button>
+                  <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-secondary">Save as Draft</button>
+                    <button class="btn btn-primary" style="padding: 10px 24px; font-size: 14px;">✨ Create Program</button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════ VIEW 4: EMPTY STATE ════════════════ -->
+      <div class="view-section" id="view-empty">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <div>
+            <h1 style="font-size: 22px; font-weight: 700;">Loan Programs</h1>
+            <p style="font-size: 13px; color: var(--gray-500); margin-top: 4px;">Configure lending products, workflows, and pricing rules</p>
+          </div>
+        </div>
+
+        <div class="card" style="text-align: center; padding: 80px 40px;">
+          <div style="font-size: 48px; opacity: 0.25; margin-bottom: 16px;">📦</div>
+          <h2 style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">No loan programs yet</h2>
+          <p style="font-size: 14px; color: var(--gray-500); max-width: 480px; margin: 0 auto 24px; line-height: 1.5;">Create your first loan program to start accepting applications. Choose from pre-built templates for DSCR, Bridge, Bank Statement, and more — or start from scratch.</p>
+          <div style="display: flex; gap: 12px; justify-content: center;">
+            <button class="btn btn-primary" style="padding: 10px 24px;" onclick="showView('wizard')">＋ Create Your First Program</button>
+            <button class="btn btn-secondary" style="padding: 10px 24px;">📥 Import from Template</button>
+          </div>
+          <div style="margin-top: 32px; display: flex; justify-content: center; gap: 24px;">
+            <div style="text-align: left; max-width: 200px;">
+              <div style="font-size: 20px; margin-bottom: 4px;">⚡</div>
+              <div style="font-size: 13px; font-weight: 600; margin-bottom: 2px;">Quick Setup</div>
+              <div style="font-size: 12px; color: var(--gray-500);">Templates pre-fill stages, documents, and pricing rules.</div>
+            </div>
+            <div style="text-align: left; max-width: 200px;">
+              <div style="font-size: 20px; margin-bottom: 4px;">🤖</div>
+              <div style="font-size: 13px; font-weight: 600; margin-bottom: 2px;">AI-Powered Rules</div>
+              <div style="font-size: 12px; color: var(--gray-500);">Describe rules in plain English — AI converts them automatically.</div>
+            </div>
+            <div style="text-align: left; max-width: 200px;">
+              <div style="font-size: 20px; margin-bottom: 4px;">📊</div>
+              <div style="font-size: 13px; font-weight: 600; margin-bottom: 2px;">Flexible Pricing</div>
+              <div style="font-size: 12px; color: var(--gray-500);">Rule-based rate adjusters, YSP, points, and disqualifiers.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+function showView(view) {
+  document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('view-' + view).classList.add('active');
+  // Update view switcher buttons
+  document.querySelectorAll('.view-btn').forEach(b => {
+    if (b.textContent.toLowerCase().includes(view === 'list' ? 'list' : view === 'panel' ? 'edit' : view === 'wizard' ? 'creation' : 'empty')) {
+      b.classList.add('active');
+    }
+  });
+}
+
+function showPanelTab(tab) {
+  document.querySelectorAll('.panel-tab').forEach(t => t.style.display = 'none');
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + tab).style.display = 'block';
+  event.target.classList.add('active');
+}
+
+function toggleExpand(id) {
+  const row = document.getElementById(id);
+  if (row.style.display === 'none' || !row.style.display) {
+    row.style.display = 'table-row';
+  } else {
+    row.style.display = 'none';
+  }
+}
+
+const stepNames = ['', 'Template', 'Credit Policy', 'Program Details', 'Quote Form', 'Stages', 'Documents', 'Tasks', 'Pricing', 'Review & Create'];
+
+function showWizardStep(num) {
+  // Make sure wizard view is active
+  if (!document.getElementById('view-wizard').classList.contains('active')) {
+    showView('wizard');
+  }
+  // Hide all step content
+  document.querySelectorAll('.wizard-step-content').forEach(s => s.style.display = 'none');
+  // Show target step
+  const target = document.getElementById('wiz-step-' + num);
+  if (target) target.style.display = 'flex';
+  // Also handle non-flex display for wizard-main children
+  if (target) target.style.display = '';
+  // Update sidebar steps
+  const steps = document.querySelectorAll('.wizard-sidebar .wizard-step');
+  steps.forEach((step, i) => {
+    step.classList.remove('active', 'completed');
+    if (i + 1 < num) step.classList.add('completed');
+    if (i + 1 === num) step.classList.add('active');
+    // Update step number
+    const numEl = step.querySelector('.step-num');
+    if (numEl) numEl.textContent = i + 1 < num ? '✓' : (i + 1);
+  });
+  // Update progress bar
+  const pct = Math.round((num / 9) * 100);
+  document.getElementById('wizardProgress').style.width = pct + '%';
+  document.getElementById('wizardProgressText').textContent = num + ' of 9 steps';
+}
+</script>
+
+</body>
+</html>

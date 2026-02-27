@@ -1,0 +1,1747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phase 2 Wireframes — Dashboard · Credit Policy · Quotes · Rate Sheets · Settings</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #F1F3F6; --card: #FAFAFA; --navy: #1A3A52; --blue: #2E7FD6;
+    --blue-light: #EBF3FC; --emerald: #10B981; --emerald-light: #ECFDF5;
+    --amber: #F59E0B; --amber-light: #FFFBEB; --red: #EF4444; --red-light: #FEF2F2;
+    --gray-50: #F8FAFC; --gray-100: #F1F5F9; --gray-200: #E2E8F0; --gray-300: #CBD5E1;
+    --gray-400: #94A3B8; --gray-500: #64748B; --gray-600: #475569; --gray-700: #334155;
+    --border: #E2E6EB; --radius: 10px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08);
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  body { font-family: var(--font); background: var(--bg); color: var(--navy); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+
+  /* ── DESIGN NOTES BANNER ── */
+  .design-notes { background: linear-gradient(135deg, #1E1E2E, #2D2D44); color: #F8F8F2; padding: 16px 24px; font-size: 13px; line-height: 1.6; border-bottom: 2px solid var(--blue); position: fixed; top: 0; left: 0; right: 0; z-index: 1000; }
+  .design-notes h2 { font-size: 15px; margin-bottom: 8px; color: #A78BFA; }
+  .design-notes ul { padding-left: 20px; columns: 2; column-gap: 32px; }
+  .design-notes li { margin-bottom: 4px; break-inside: avoid; }
+  .design-notes em { color: var(--amber); font-style: normal; font-weight: 500; }
+  .design-notes code { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+
+  /* ── VIEW SWITCHER ── */
+  .view-switcher { position: fixed; bottom: 20px; right: 20px; z-index: 999; display: flex; gap: 6px; background: white; padding: 6px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); border: 1px solid var(--border); }
+  .view-btn { padding: 8px 14px; border-radius: 8px; font-size: 11px; font-weight: 600; cursor: pointer; border: none; background: none; color: var(--gray-500); transition: all 0.15s; white-space: nowrap; }
+  .view-btn.active { background: var(--blue); color: white; }
+  .view-btn:hover:not(.active) { background: var(--gray-100); color: var(--navy); }
+
+  /* ── LAYOUT ── */
+  .app-layout { display: flex; width: 100%; min-height: 100vh; }
+  .sidebar { width: 240px; min-height: 100vh; background: #0F2438; color: #E2E8EF; display: flex; flex-direction: column; flex-shrink: 0; position: fixed; top: 0; left: 0; bottom: 0; z-index: 50; }
+  .sidebar-logo { padding: 20px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 10px; }
+  .sidebar-logo .logo-icon { width: 32px; height: 32px; background: var(--blue); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 14px; }
+  .sidebar-logo span { font-weight: 600; font-size: 15px; }
+  .sidebar-nav { padding: 12px 8px; flex: 1; }
+  .nav-group-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255,255,255,0.35); padding: 16px 12px 6px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; font-size: 13.5px; color: rgba(255,255,255,0.65); cursor: pointer; transition: all 0.15s; font-weight: 500; }
+  .nav-item:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.9); }
+  .nav-item.active { background: rgba(46,127,214,0.15); color: #4A9EFF; }
+  .nav-item .icon { width: 18px; text-align: center; opacity: 0.7; font-size: 15px; }
+
+  .main { margin-left: 240px; flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .topbar { background: white; border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 10; }
+  .breadcrumb { font-size: 13px; color: var(--gray-500); }
+  .breadcrumb .current { color: var(--navy); font-weight: 500; }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+  .content { padding: 24px; flex: 1; overflow-y: auto; }
+
+  /* ── BUTTONS ── */
+  .btn { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+  .btn-primary { background: var(--blue); color: white; }
+  .btn-primary:hover { background: #2570C0; }
+  .btn-secondary { background: white; border: 1px solid var(--border); color: var(--navy); }
+  .btn-secondary:hover { background: var(--gray-50); }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn-ghost { background: none; border: none; color: var(--gray-500); }
+  .btn-ghost:hover { color: var(--navy); background: var(--gray-100); }
+
+  /* ── CARDS ── */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
+
+  /* ── BADGES ── */
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 12px; font-size: 11.5px; font-weight: 500; }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .badge-green { background: var(--emerald-light); color: #047857; }
+  .badge-green .dot { background: var(--emerald); }
+  .badge-amber { background: var(--amber-light); color: #B45309; }
+  .badge-amber .dot { background: var(--amber); }
+  .badge-gray { background: var(--gray-100); color: var(--gray-500); }
+  .badge-gray .dot { background: var(--gray-400); }
+  .badge-blue { background: var(--blue-light); color: var(--blue); }
+  .badge-blue .dot { background: var(--blue); }
+  .badge-red { background: var(--red-light); color: var(--red); }
+  .badge-red .dot { background: var(--red); }
+
+  /* ── SUMMARY STRIP ── */
+  .summary-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .summary-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; cursor: pointer; transition: all 0.15s; }
+  .summary-card:hover { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+  .summary-card.active { border-color: var(--blue); background: var(--blue-light); }
+  .summary-card .label { font-size: 12px; color: var(--gray-500); font-weight: 500; margin-bottom: 4px; }
+  .summary-card .value { font-size: 22px; font-weight: 700; }
+  .summary-card .sub { font-size: 11px; color: var(--gray-400); margin-top: 2px; }
+  .summary-card .trend { font-size: 11px; margin-top: 4px; }
+  .summary-card .trend.up { color: var(--emerald); }
+  .summary-card .trend.down { color: var(--red); }
+
+  /* ── TABLE ── */
+  table.data-table { width: 100%; border-collapse: collapse; }
+  table.data-table th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 2px solid var(--border); background: var(--gray-50); }
+  table.data-table td { padding: 12px 14px; font-size: 13.5px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  table.data-table tbody tr { transition: background 0.1s; }
+  table.data-table tbody tr:hover { background: var(--blue-light); }
+
+  /* ── INPUTS ── */
+  .input { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; font-family: var(--font); color: var(--navy); background: white; outline: none; transition: border-color 0.15s; width: 100%; }
+  .input:focus { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(46,127,214,0.15); }
+  .input-group { margin-bottom: 16px; }
+  .input-group label { display: block; font-size: 12px; font-weight: 600; color: var(--gray-600); margin-bottom: 6px; }
+  select.input { cursor: pointer; }
+  textarea.input { resize: vertical; min-height: 80px; }
+
+  /* ── TABS ── */
+  .tab-bar { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 20px; }
+  .tab-item { padding: 10px 20px; font-size: 13px; font-weight: 500; color: var(--gray-500); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s; }
+  .tab-item:hover { color: var(--navy); }
+  .tab-item.active { color: var(--blue); border-bottom-color: var(--blue); }
+
+  /* ── SWITCH ── */
+  .switch { width: 36px; height: 20px; border-radius: 10px; background: var(--gray-300); position: relative; cursor: pointer; transition: background 0.2s; display: inline-block; flex-shrink: 0; }
+  .switch.on { background: var(--emerald); }
+  .switch::after { content: ''; width: 16px; height: 16px; border-radius: 50%; background: white; position: absolute; top: 2px; left: 2px; transition: left 0.2s; }
+  .switch.on::after { left: 18px; }
+
+  /* ── SPARKLINE ── */
+  .sparkline { display: inline-flex; align-items: flex-end; gap: 2px; height: 28px; }
+  .sparkline .bar { width: 4px; border-radius: 2px; background: var(--blue); opacity: 0.6; }
+
+  /* ── TASK BOARD ── */
+  .task-board { display: flex; flex-direction: column; gap: 8px; }
+  .task-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: white; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: all 0.15s; }
+  .task-row:hover { border-color: var(--blue); }
+  .task-checkbox { width: 18px; height: 18px; border: 2px solid var(--gray-300); border-radius: 4px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .task-checkbox.done { background: var(--emerald); border-color: var(--emerald); color: white; font-size: 10px; }
+  .task-info { flex: 1; min-width: 0; }
+  .task-title { font-size: 13px; font-weight: 500; }
+  .task-meta { font-size: 11px; color: var(--gray-400); margin-top: 2px; }
+  .priority-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .priority-high { background: var(--red); }
+  .priority-medium { background: var(--amber); }
+  .priority-low { background: var(--emerald); }
+
+  /* ── POLICY CARD ── */
+  .policy-card { background: white; border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; transition: all 0.15s; cursor: pointer; }
+  .policy-card:hover { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+  .policy-card .policy-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+  .policy-card .policy-name { font-size: 15px; font-weight: 600; }
+  .policy-card .policy-stats { display: flex; gap: 16px; margin-top: 8px; }
+  .policy-card .policy-stat { font-size: 12px; color: var(--gray-500); }
+  .policy-card .policy-stat strong { color: var(--navy); }
+
+  /* ── RULE ROW ── */
+  .rule-row { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: white; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; }
+  .rule-row .rule-text { flex: 1; font-size: 13px; }
+  .confidence { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase; }
+  .confidence-high { background: var(--emerald-light); color: #047857; }
+  .confidence-medium { background: var(--amber-light); color: #B45309; }
+  .confidence-low { background: var(--red-light); color: #B91C1C; }
+
+  /* ── QUOTE CARD ── */
+  .quote-card { background: white; border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 12px; }
+  .quote-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+  .quote-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .quote-field { }
+  .quote-field .qf-label { font-size: 11px; color: var(--gray-400); font-weight: 500; margin-bottom: 2px; }
+  .quote-field .qf-value { font-size: 14px; font-weight: 600; }
+
+  /* ── SETTINGS ── */
+  .settings-layout { display: flex; gap: 24px; }
+  .settings-sidebar { width: 200px; flex-shrink: 0; }
+  .settings-sidebar .settings-nav-item { display: block; padding: 8px 12px; font-size: 13px; border-radius: 6px; cursor: pointer; color: var(--gray-600); margin-bottom: 2px; transition: all 0.15s; }
+  .settings-sidebar .settings-nav-item:hover { background: var(--gray-100); }
+  .settings-sidebar .settings-nav-item.active { background: var(--blue-light); color: var(--blue); font-weight: 600; }
+  .settings-body { flex: 1; min-width: 0; }
+
+  /* ── INTEGRATION CARD ── */
+  .integration-card { display: flex; align-items: center; gap: 16px; padding: 16px; background: white; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; }
+  .integration-icon { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+  .integration-info { flex: 1; }
+  .integration-name { font-size: 14px; font-weight: 600; }
+  .integration-desc { font-size: 12px; color: var(--gray-500); margin-top: 2px; }
+
+  /* ── DRAG HANDLE ── */
+  .drag-handle { color: var(--gray-300); cursor: grab; font-size: 14px; flex-shrink: 0; }
+
+  /* ── STAGE CHIP ── */
+  .stage-chip { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; border: 1px solid var(--border); background: white; }
+  .stage-color { width: 12px; height: 12px; border-radius: 3px; }
+
+  /* ── VIEWS ── */
+  .page-view { display: none; }
+  .page-view.active { display: block; }
+
+  /* ── DATE NAV ── */
+  .date-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; }
+  .date-chip { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: white; color: var(--gray-600); transition: all 0.15s; }
+  .date-chip.active { background: var(--blue); color: white; border-color: var(--blue); }
+  .date-chip:hover:not(.active) { background: var(--gray-100); }
+
+  /* ── DROPZONE ── */
+  .dropzone { border: 2px dashed var(--gray-300); border-radius: var(--radius); padding: 32px; text-align: center; color: var(--gray-400); transition: all 0.15s; cursor: pointer; }
+  .dropzone:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-light); }
+  .dropzone .dz-icon { font-size: 28px; margin-bottom: 8px; }
+  .dropzone .dz-text { font-size: 13px; }
+
+  /* ── COLLAPSIBLE ── */
+  .collapsible-header { display: flex; align-items: center; gap: 10px; padding: 12px 0; cursor: pointer; font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--border); }
+  .collapsible-header .arrow { transition: transform 0.15s; font-size: 12px; color: var(--gray-400); }
+  .collapsible-header .arrow.open { transform: rotate(90deg); }
+  .collapsible-body { padding: 12px 0; }
+
+  /* ── RATE TABLE ── */
+  .rate-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  .rate-table th { text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; background: var(--gray-50); border-bottom: 1px solid var(--border); }
+  .rate-table td { padding: 8px 12px; font-size: 13px; border-bottom: 1px solid var(--border); }
+  .rate-table tr:hover { background: var(--blue-light); }
+
+  /* ── BILLING ── */
+  .plan-card { border: 2px solid var(--border); border-radius: var(--radius); padding: 24px; text-align: center; transition: all 0.15s; }
+  .plan-card.current { border-color: var(--blue); background: var(--blue-light); }
+  .plan-name { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .plan-price { font-size: 28px; font-weight: 700; color: var(--blue); }
+  .plan-price span { font-size: 14px; font-weight: 400; color: var(--gray-500); }
+</style>
+</head>
+<body>
+
+<!-- ══════ DESIGN NOTES ══════ -->
+<div class="design-notes">
+  <h2>Phase 2 Wireframes — Admin Dashboard · Credit Policies · Quotes · Rate Sheets · Settings</h2>
+  <ul>
+    <li><em>5 views</em> switchable via bottom-right pill — same design system as Phase 1</li>
+    <li><em>Progressive Disclosure</em> — L1 summary cards → L2 filters/tables → L3 slide-overs/modals</li>
+    <li><em>Design tokens</em> match <code>tailwind.config.ts</code>: navy, blue, emerald, amber, red-for-errors-only</li>
+    <li><em>Sidebar</em> shows Phase 2 nav (7 items: Dashboard, Pipeline, Programs, Messages, Reports, Settings)</li>
+    <li><em>Shared components</em> from Phase 1: summary-card, status-badge, collapsible-section, expandable-row</li>
+    <li><em>All API calls identical</em> to v1 — only layout changes</li>
+  </ul>
+</div>
+
+<!-- ══════ VIEW SWITCHER ══════ -->
+<div class="view-switcher">
+  <button class="view-btn active" onclick="showView('dashboard')">Dashboard</button>
+  <button class="view-btn" onclick="showView('credit')">Credit Policy</button>
+  <button class="view-btn" onclick="showView('quotes')">Quotes</button>
+  <button class="view-btn" onclick="showView('sheets')">Rate Sheets</button>
+  <button class="view-btn" onclick="showView('settings')">Settings</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- APP SHELL                                                      -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<div class="app-layout" style="padding-top: 90px;">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar" style="top: 90px;">
+    <div class="sidebar-logo">
+      <div class="logo-icon">L</div>
+      <span>LOS.ai</span>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-group-label">Main</div>
+      <div class="nav-item active" id="nav-dashboard" onclick="showView('dashboard')"><span class="icon">📊</span> Dashboard</div>
+      <div class="nav-item" id="nav-pipeline" onclick="showView('dashboard')"><span class="icon">🔄</span> Pipeline</div>
+      <div class="nav-item" id="nav-programs"><span class="icon">📋</span> Programs</div>
+      <div class="nav-item" id="nav-messages"><span class="icon">💬</span> Messages</div>
+      <div class="nav-group-label">Admin</div>
+      <div class="nav-item" id="nav-credit" onclick="showView('credit')"><span class="icon">📜</span> Credit Policies</div>
+      <div class="nav-item" id="nav-quotes" onclick="showView('quotes')"><span class="icon">📄</span> Quotes</div>
+      <div class="nav-item" id="nav-sheets" onclick="showView('sheets')"><span class="icon">💰</span> Rate Sheets</div>
+      <div class="nav-item" id="nav-settings" onclick="showView('settings')"><span class="icon">⚙️</span> Settings</div>
+    </nav>
+  </aside>
+
+  <!-- ── MAIN CONTENT ── -->
+  <div class="main">
+
+    <!-- ═══════════════════════════════════════ -->
+    <!--  VIEW 1: ADMIN DASHBOARD               -->
+    <!-- ═══════════════════════════════════════ -->
+    <div class="page-view active" id="view-dashboard">
+      <div class="topbar">
+        <div class="breadcrumb"><span class="current">Dashboard</span></div>
+        <div class="topbar-right">
+          <span style="font-size: 12px; color: var(--gray-400);">Last updated: 2 min ago</span>
+          <button class="btn btn-secondary btn-sm">↻ Refresh</button>
+        </div>
+      </div>
+      <div class="content">
+
+        <!-- KPI Strip -->
+        <div class="summary-strip">
+          <div class="summary-card active">
+            <div class="label">Active Deals</div>
+            <div style="display: flex; align-items: flex-end; justify-content: space-between;">
+              <div class="value">24</div>
+              <div class="sparkline">
+                <div class="bar" style="height: 12px;"></div>
+                <div class="bar" style="height: 16px;"></div>
+                <div class="bar" style="height: 14px;"></div>
+                <div class="bar" style="height: 20px;"></div>
+                <div class="bar" style="height: 18px;"></div>
+                <div class="bar" style="height: 22px;"></div>
+                <div class="bar" style="height: 28px;"></div>
+              </div>
+            </div>
+            <div class="trend up">↑ 12% vs last week</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Pipeline Value</div>
+            <div style="display: flex; align-items: flex-end; justify-content: space-between;">
+              <div class="value">$18.4M</div>
+              <div class="sparkline">
+                <div class="bar" style="height: 18px;"></div>
+                <div class="bar" style="height: 15px;"></div>
+                <div class="bar" style="height: 20px;"></div>
+                <div class="bar" style="height: 22px;"></div>
+                <div class="bar" style="height: 19px;"></div>
+                <div class="bar" style="height: 25px;"></div>
+                <div class="bar" style="height: 28px;"></div>
+              </div>
+            </div>
+            <div class="trend up">↑ 8% vs last week</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Funded This Month</div>
+            <div style="display: flex; align-items: flex-end; justify-content: space-between;">
+              <div class="value">$4.2M</div>
+              <div class="sparkline">
+                <div class="bar" style="height: 10px;"></div>
+                <div class="bar" style="height: 14px;"></div>
+                <div class="bar" style="height: 12px;"></div>
+                <div class="bar" style="height: 18px;"></div>
+                <div class="bar" style="height: 22px;"></div>
+                <div class="bar" style="height: 20px;"></div>
+                <div class="bar" style="height: 16px;"></div>
+              </div>
+            </div>
+            <div class="sub">3 deals closed</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Tasks Due Today</div>
+            <div style="display: flex; align-items: flex-end; justify-content: space-between;">
+              <div class="value">7</div>
+              <div style="font-size: 11px; color: var(--amber); font-weight: 500; margin-top: 12px;">2 overdue</div>
+            </div>
+            <div class="trend down">↓ 3 from yesterday</div>
+          </div>
+        </div>
+
+        <!-- Date Navigation -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <h3 style="font-size: 16px; font-weight: 600;">Task Board</h3>
+          <div class="date-nav" style="margin-bottom: 0;">
+            <button class="btn btn-ghost btn-sm">← Prev</button>
+            <div class="date-chip">Mon 24</div>
+            <div class="date-chip">Tue 25</div>
+            <div class="date-chip active">Wed 26</div>
+            <div class="date-chip">Thu 27</div>
+            <div class="date-chip">Fri 28</div>
+            <div class="date-chip">Sat 1</div>
+            <div class="date-chip">Sun 2</div>
+            <button class="btn btn-ghost btn-sm">Next →</button>
+            <button class="btn btn-secondary btn-sm" style="margin-left: 8px;">📅 Calendar</button>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+          <button class="btn btn-sm" style="background: var(--blue); color: white;">By Date</button>
+          <button class="btn btn-sm btn-secondary">All Tasks</button>
+        </div>
+
+        <!-- Task Rows -->
+        <div class="task-board">
+          <div class="task-row" style="border-left: 3px solid var(--red);">
+            <div class="task-checkbox"></div>
+            <div class="priority-dot priority-high"></div>
+            <div class="task-info">
+              <div class="task-title">Review appraisal — 742 Oak Lane</div>
+              <div class="task-meta">Borrower: James Wilson · DSCR Residential · Due Today</div>
+            </div>
+            <span class="badge badge-red"><span class="dot"></span> Overdue</span>
+            <button class="btn btn-ghost btn-sm">Open Deal →</button>
+          </div>
+
+          <div class="task-row" style="border-left: 3px solid var(--red);">
+            <div class="task-checkbox"></div>
+            <div class="priority-dot priority-high"></div>
+            <div class="task-info">
+              <div class="task-title">Collect bank statements — 1825 Elm Dr</div>
+              <div class="task-meta">Borrower: Maria Chen · Bridge Loan · Due Today</div>
+            </div>
+            <span class="badge badge-red"><span class="dot"></span> Overdue</span>
+            <button class="btn btn-ghost btn-sm">Open Deal →</button>
+          </div>
+
+          <div class="task-row" style="border-left: 3px solid var(--amber);">
+            <div class="task-checkbox"></div>
+            <div class="priority-dot priority-medium"></div>
+            <div class="task-info">
+              <div class="task-title">Send term sheet for approval — 456 Pine Ave</div>
+              <div class="task-meta">Borrower: Robert Kim · DSCR Residential · Due 5:00 PM</div>
+            </div>
+            <span class="badge badge-amber"><span class="dot"></span> Due Today</span>
+            <button class="btn btn-ghost btn-sm">Open Deal →</button>
+          </div>
+
+          <div class="task-row" style="border-left: 3px solid var(--amber);">
+            <div class="task-checkbox"></div>
+            <div class="priority-dot priority-medium"></div>
+            <div class="task-info">
+              <div class="task-title">Schedule closing call — 220 Maple Ct</div>
+              <div class="task-meta">Borrower: Sarah Park · Bank Statement · Due 3:00 PM</div>
+            </div>
+            <span class="badge badge-amber"><span class="dot"></span> Due Today</span>
+            <button class="btn btn-ghost btn-sm">Open Deal →</button>
+          </div>
+
+          <div class="task-row" style="border-left: 3px solid var(--emerald);">
+            <div class="task-checkbox done">✓</div>
+            <div class="priority-dot priority-low"></div>
+            <div class="task-info">
+              <div class="task-title" style="text-decoration: line-through; color: var(--gray-400);">Upload title report — 890 Oak Blvd</div>
+              <div class="task-meta">Borrower: Tom Wright · DSCR Residential · Completed 10:24 AM</div>
+            </div>
+            <span class="badge badge-green"><span class="dot"></span> Done</span>
+            <button class="btn btn-ghost btn-sm">Open Deal →</button>
+          </div>
+        </div>
+
+        <!-- Recent Deals -->
+        <div style="margin-top: 32px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h3 style="font-size: 16px; font-weight: 600;">Recent Deals</h3>
+            <button class="btn btn-secondary btn-sm">View All Pipeline →</button>
+          </div>
+          <div class="card" style="padding: 0; overflow: hidden;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Loan #</th>
+                  <th>Borrower</th>
+                  <th>Property</th>
+                  <th>Program</th>
+                  <th>Amount</th>
+                  <th>Stage</th>
+                  <th>Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="font-weight: 600; color: var(--blue);">LN-2024-0042</td>
+                  <td>James Wilson</td>
+                  <td>742 Oak Lane, Austin TX</td>
+                  <td>DSCR Residential</td>
+                  <td style="font-weight: 600;">$485,000</td>
+                  <td><span class="badge badge-blue"><span class="dot"></span> Underwriting</span></td>
+                  <td style="color: var(--gray-400); font-size: 12px;">2 hours ago</td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 600; color: var(--blue);">LN-2024-0041</td>
+                  <td>Maria Chen</td>
+                  <td>1825 Elm Dr, Denver CO</td>
+                  <td>Bridge Loan</td>
+                  <td style="font-weight: 600;">$1,200,000</td>
+                  <td><span class="badge badge-amber"><span class="dot"></span> Processing</span></td>
+                  <td style="color: var(--gray-400); font-size: 12px;">5 hours ago</td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 600; color: var(--blue);">LN-2024-0040</td>
+                  <td>Robert Kim</td>
+                  <td>456 Pine Ave, Seattle WA</td>
+                  <td>DSCR Residential</td>
+                  <td style="font-weight: 600;">$650,000</td>
+                  <td><span class="badge badge-green"><span class="dot"></span> Closing</span></td>
+                  <td style="color: var(--gray-400); font-size: 12px;">Yesterday</td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 600; color: var(--blue);">LN-2024-0039</td>
+                  <td>Sarah Park</td>
+                  <td>220 Maple Ct, Phoenix AZ</td>
+                  <td>Bank Statement</td>
+                  <td style="font-weight: 600;">$320,000</td>
+                  <td><span class="badge badge-blue"><span class="dot"></span> Underwriting</span></td>
+                  <td style="color: var(--gray-400); font-size: 12px;">Yesterday</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════ -->
+    <!--  VIEW 2: CREDIT POLICIES               -->
+    <!-- ═══════════════════════════════════════ -->
+    <div class="page-view" id="view-credit">
+      <div class="topbar">
+        <div class="breadcrumb"><span class="current">Credit Policies</span></div>
+        <div class="topbar-right">
+          <button class="btn btn-primary">+ New Policy</button>
+        </div>
+      </div>
+      <div class="content">
+
+        <!-- Summary Strip -->
+        <div class="summary-strip">
+          <div class="summary-card active">
+            <div class="label">Total Policies</div>
+            <div class="value">4</div>
+            <div class="sub">Across all programs</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Active Rules</div>
+            <div class="value">47</div>
+            <div class="sub">AI-extracted + manual</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Programs Linked</div>
+            <div class="value">6</div>
+            <div class="sub">Using credit policies</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Avg Confidence</div>
+            <div class="value" style="color: var(--emerald);">89%</div>
+            <div class="sub">AI extraction accuracy</div>
+          </div>
+        </div>
+
+        <!-- Policy Cards -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+          <div class="policy-card" style="border-left: 3px solid var(--blue);">
+            <div class="policy-header">
+              <div>
+                <div class="policy-name">DSCR Residential Guidelines</div>
+                <div style="font-size: 12px; color: var(--gray-400); margin-top: 4px;">Source: DSCR_Guidelines_2024.pdf</div>
+              </div>
+              <span class="badge badge-green"><span class="dot"></span> Active</span>
+            </div>
+            <div class="policy-stats">
+              <div class="policy-stat"><strong>18</strong> rules</div>
+              <div class="policy-stat"><strong>3</strong> programs linked</div>
+              <div class="policy-stat">Updated <strong>2 days ago</strong></div>
+            </div>
+            <div style="display: flex; gap: 8px; margin-top: 12px;">
+              <button class="btn btn-sm btn-secondary">View Rules</button>
+              <button class="btn btn-sm btn-ghost">Edit</button>
+            </div>
+          </div>
+
+          <div class="policy-card" style="border-left: 3px solid var(--emerald);">
+            <div class="policy-header">
+              <div>
+                <div class="policy-name">Bridge Loan Policy</div>
+                <div style="font-size: 12px; color: var(--gray-400); margin-top: 4px;">Source: Bridge_Underwriting_Manual.pdf</div>
+              </div>
+              <span class="badge badge-green"><span class="dot"></span> Active</span>
+            </div>
+            <div class="policy-stats">
+              <div class="policy-stat"><strong>12</strong> rules</div>
+              <div class="policy-stat"><strong>1</strong> program linked</div>
+              <div class="policy-stat">Updated <strong>1 week ago</strong></div>
+            </div>
+            <div style="display: flex; gap: 8px; margin-top: 12px;">
+              <button class="btn btn-sm btn-secondary">View Rules</button>
+              <button class="btn btn-sm btn-ghost">Edit</button>
+            </div>
+          </div>
+
+          <div class="policy-card" style="border-left: 3px solid var(--amber);">
+            <div class="policy-header">
+              <div>
+                <div class="policy-name">Bank Statement Program Rules</div>
+                <div style="font-size: 12px; color: var(--gray-400); margin-top: 4px;">Source: Manual entry</div>
+              </div>
+              <span class="badge badge-amber"><span class="dot"></span> Draft</span>
+            </div>
+            <div class="policy-stats">
+              <div class="policy-stat"><strong>9</strong> rules</div>
+              <div class="policy-stat"><strong>1</strong> program linked</div>
+              <div class="policy-stat">Updated <strong>3 days ago</strong></div>
+            </div>
+            <div style="display: flex; gap: 8px; margin-top: 12px;">
+              <button class="btn btn-sm btn-secondary">View Rules</button>
+              <button class="btn btn-sm btn-ghost">Edit</button>
+            </div>
+          </div>
+
+          <div class="policy-card" style="border-left: 3px solid var(--gray-300);">
+            <div class="policy-header">
+              <div>
+                <div class="policy-name">Construction Loan Guidelines</div>
+                <div style="font-size: 12px; color: var(--gray-400); margin-top: 4px;">Source: Construction_Policy_v2.pdf</div>
+              </div>
+              <span class="badge badge-gray"><span class="dot"></span> Inactive</span>
+            </div>
+            <div class="policy-stats">
+              <div class="policy-stat"><strong>8</strong> rules</div>
+              <div class="policy-stat"><strong>1</strong> program linked</div>
+              <div class="policy-stat">Updated <strong>2 weeks ago</strong></div>
+            </div>
+            <div style="display: flex; gap: 8px; margin-top: 12px;">
+              <button class="btn btn-sm btn-secondary">View Rules</button>
+              <button class="btn btn-sm btn-ghost">Edit</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rules Detail (expanded for DSCR policy) -->
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div>
+              <h3 style="font-size: 16px; font-weight: 600;">DSCR Residential Guidelines — Rules</h3>
+              <p style="font-size: 12px; color: var(--gray-400); margin-top: 4px;">18 rules extracted from DSCR_Guidelines_2024.pdf · AI confidence: 92%</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm btn-secondary">+ Add Rule</button>
+              <button class="btn btn-sm btn-secondary">🔄 Re-extract</button>
+            </div>
+          </div>
+
+          <!-- Group: Borrower -->
+          <div class="collapsible-header" onclick="this.querySelector('.arrow').classList.toggle('open'); this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? '' : 'none';">
+            <span class="arrow open">▶</span>
+            <span>Borrower Requirements</span>
+            <span class="badge badge-blue" style="margin-left: auto;">6 rules</span>
+          </div>
+          <div class="collapsible-body">
+            <div class="rule-row">
+              <div class="rule-text">Minimum FICO score of <strong>680</strong> for primary borrower</div>
+              <span class="confidence confidence-high">High</span>
+              <span class="badge badge-gray" style="font-size: 10px;">Credit</span>
+              <button class="btn btn-ghost btn-sm">✏️</button>
+            </div>
+            <div class="rule-row">
+              <div class="rule-text">Maximum <strong>10 financed properties</strong> across all loans</div>
+              <span class="confidence confidence-high">High</span>
+              <span class="badge badge-gray" style="font-size: 10px;">Eligibility</span>
+              <button class="btn btn-ghost btn-sm">✏️</button>
+            </div>
+            <div class="rule-row">
+              <div class="rule-text">No bankruptcy within past <strong>4 years</strong></div>
+              <span class="confidence confidence-medium">Medium</span>
+              <span class="badge badge-gray" style="font-size: 10px;">Credit</span>
+              <button class="btn btn-ghost btn-sm">✏️</button>
+            </div>
+            <div class="rule-row">
+              <div class="rule-text">Must have <strong>US citizenship or permanent residency</strong></div>
+              <span class="confidence confidence-high">High</span>
+              <span class="badge badge-gray" style="font-size: 10px;">Eligibility</span>
+              <button class="btn btn-ghost btn-sm">✏️</button>
+            </div>
+            <div class="rule-row">
+              <div class="rule-text">Minimum <strong>6 months reserves</strong> post-closing</div>
+              <span class="confidence confidence-high">High</span>
+              <span class="badge badge-gray" style="font-size: 10px;">Financial</span>
+              <button class="btn btn-ghost btn-sm">✏️</button>
+            </div>
+            <div class="rule-row">
+              <div class="rule-text">No late payments on existing mortgages in past <strong>12 months</strong></div>
+              <span class="confidence confidence-medium">Medium</span>
+              <span class="badge badge-gray" style="font-size: 10px;">Credit</span>
+              <button class="btn btn-ghost btn-sm">✏️</button>
+            </div>
+          </div>
+
+          <!-- Group: Property -->
+          <div class="collapsible-header" onclick="this.querySelector('.arrow').classList.toggle('open'); this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? '' : 'none';">
+            <span class="arrow">▶</span>
+            <span>Property Requirements</span>
+            <span class="badge badge-blue" style="margin-left: auto;">5 rules</span>
+          </div>
+          <div class="collapsible-body" style="display: none;">
+            <div class="rule-row">
+              <div class="rule-text">SFR, 2-4 Units, Condos, and Townhomes eligible</div>
+              <span class="confidence confidence-high">High</span>
+              <span class="badge badge-gray" style="font-size: 10px;">Property</span>
+              <button class="btn btn-ghost btn-sm">✏️</button>
+            </div>
+            <div class="rule-row">
+              <div class="rule-text">Minimum property value of <strong>$100,000</strong></div>
+              <span class="confidence confidence-high">High</span>
+              <span class="badge badge-gray" style="font-size: 10px;">Property</span>
+              <button class="btn btn-ghost btn-sm">✏️</button>
+            </div>
+            <div class="rule-row">
+              <div class="rule-text">Rural properties require additional <strong>5% down payment</strong></div>
+              <span class="confidence confidence-low">Low</span>
+              <span class="badge badge-gray" style="font-size: 10px;">Property</span>
+              <button class="btn btn-ghost btn-sm">✏️</button>
+            </div>
+          </div>
+
+          <!-- Group: Loan Terms -->
+          <div class="collapsible-header" onclick="this.querySelector('.arrow').classList.toggle('open'); this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? '' : 'none';">
+            <span class="arrow">▶</span>
+            <span>Loan Parameters</span>
+            <span class="badge badge-blue" style="margin-left: auto;">7 rules</span>
+          </div>
+          <div class="collapsible-body" style="display: none;">
+            <div class="rule-row">
+              <div class="rule-text">Maximum LTV of <strong>80%</strong> for purchase, <strong>75%</strong> for cash-out refinance</div>
+              <span class="confidence confidence-high">High</span>
+              <button class="btn btn-ghost btn-sm">✏️</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI Extraction Panel -->
+        <div class="card" style="margin-top: 24px; border: 2px dashed var(--blue); background: var(--blue-light);">
+          <div style="display: flex; gap: 16px; align-items: flex-start;">
+            <div style="font-size: 28px;">🤖</div>
+            <div style="flex: 1;">
+              <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">AI-Powered Rule Extraction</h4>
+              <p style="font-size: 13px; color: var(--gray-600); margin-bottom: 12px;">Upload a credit policy PDF and our AI will automatically extract rules, parameters, and eligibility criteria. You can review and edit each rule before activating.</p>
+              <div class="dropzone" style="background: white;">
+                <div class="dz-icon">📄</div>
+                <div class="dz-text">Drop credit policy PDF here or <span style="color: var(--blue); font-weight: 500;">browse files</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════ -->
+    <!--  VIEW 3: QUOTES                        -->
+    <!-- ═══════════════════════════════════════ -->
+    <div class="page-view" id="view-quotes">
+      <div class="topbar">
+        <div class="breadcrumb"><span class="current">Quotes</span></div>
+        <div class="topbar-right">
+          <div style="display: flex; gap: 8px;">
+            <input class="input" style="width: 220px;" placeholder="Search quotes...">
+            <select class="input" style="width: 140px;">
+              <option>All Programs</option>
+              <option>DSCR Residential</option>
+              <option>Bridge Loan</option>
+              <option>Bank Statement</option>
+            </select>
+            <select class="input" style="width: 130px;">
+              <option>All Status</option>
+              <option>Draft</option>
+              <option>Sent</option>
+              <option>Signed</option>
+              <option>Expired</option>
+            </select>
+          </div>
+          <button class="btn btn-primary">+ New Quote</button>
+        </div>
+      </div>
+      <div class="content">
+
+        <!-- Summary Strip -->
+        <div class="summary-strip">
+          <div class="summary-card active">
+            <div class="label">Total Quotes</div>
+            <div class="value">18</div>
+            <div class="sub">This month</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Pending Signature</div>
+            <div class="value" style="color: var(--amber);">5</div>
+            <div class="sub">Awaiting e-sign</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Signed</div>
+            <div class="value" style="color: var(--emerald);">8</div>
+            <div class="sub">Converted to deals</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Total Commission</div>
+            <div class="value">$142K</div>
+            <div class="sub">Estimated YSP + Points</div>
+          </div>
+        </div>
+
+        <!-- Quote Card 1 -->
+        <div class="quote-card">
+          <div class="quote-header">
+            <div>
+              <div style="font-size: 15px; font-weight: 600;">James Wilson — 742 Oak Lane, Austin TX</div>
+              <div style="font-size: 12px; color: var(--gray-400); margin-top: 4px;">Quote #Q-2024-0018 · Created Feb 24, 2026 · Expires Mar 10, 2026</div>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <span class="badge badge-amber"><span class="dot"></span> Sent — Awaiting Signature</span>
+              <button class="btn btn-sm btn-secondary">Edit</button>
+              <button class="btn btn-sm btn-ghost">⋮</button>
+            </div>
+          </div>
+          <div class="quote-grid">
+            <div class="quote-field">
+              <div class="qf-label">Program</div>
+              <div class="qf-value">DSCR Residential</div>
+            </div>
+            <div class="quote-field">
+              <div class="qf-label">Loan Amount</div>
+              <div class="qf-value">$485,000</div>
+            </div>
+            <div class="quote-field">
+              <div class="qf-label">Interest Rate</div>
+              <div class="qf-value">7.125%</div>
+            </div>
+            <div class="quote-field">
+              <div class="qf-label">LTV</div>
+              <div class="qf-value">75%</div>
+            </div>
+            <div class="quote-field">
+              <div class="qf-label">DSCR</div>
+              <div class="qf-value">1.25x</div>
+            </div>
+            <div class="quote-field">
+              <div class="qf-label">Points</div>
+              <div class="qf-value">1.5 pts ($7,275)</div>
+            </div>
+            <div class="quote-field">
+              <div class="qf-label">YSP</div>
+              <div class="qf-value">2.0% ($9,700)</div>
+            </div>
+            <div class="quote-field">
+              <div class="qf-label">Term</div>
+              <div class="qf-value">30yr Fixed</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border);">
+            <div style="flex: 1; display: flex; align-items: center; gap: 12px;">
+              <span style="font-size: 12px; color: var(--gray-500);">📄 PandaDoc:</span>
+              <span class="badge badge-amber"><span class="dot"></span> Sent — Viewed 3 times</span>
+            </div>
+            <button class="btn btn-sm btn-secondary">💬 Message Borrower</button>
+            <button class="btn btn-sm btn-secondary">🔁 Resend</button>
+            <button class="btn btn-sm btn-primary">📝 Send Term Sheet</button>
+          </div>
+        </div>
+
+        <!-- Quote Card 2 -->
+        <div class="quote-card">
+          <div class="quote-header">
+            <div>
+              <div style="font-size: 15px; font-weight: 600;">Maria Chen — 1825 Elm Dr, Denver CO</div>
+              <div style="font-size: 12px; color: var(--gray-400); margin-top: 4px;">Quote #Q-2024-0017 · Created Feb 22, 2026 · Expires Mar 8, 2026</div>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <span class="badge badge-green"><span class="dot"></span> Signed</span>
+              <button class="btn btn-sm btn-secondary">View</button>
+              <button class="btn btn-sm btn-ghost">⋮</button>
+            </div>
+          </div>
+          <div class="quote-grid">
+            <div class="quote-field">
+              <div class="qf-label">Program</div>
+              <div class="qf-value">Bridge Loan</div>
+            </div>
+            <div class="quote-field">
+              <div class="qf-label">Loan Amount</div>
+              <div class="qf-value">$1,200,000</div>
+            </div>
+            <div class="quote-field">
+              <div class="qf-label">Interest Rate</div>
+              <div class="qf-value">9.750%</div>
+            </div>
+            <div class="quote-field">
+              <div class="qf-label">LTV</div>
+              <div class="qf-value">70%</div>
+            </div>
+            <div class="quote-field">
+              <div class="qf-label">Term</div>
+              <div class="qf-value">12mo I/O</div>
+            </div>
+            <div class="quote-field">
+              <div class="qf-label">Points</div>
+              <div class="qf-value">2.0 pts ($24,000)</div>
+            </div>
+            <div class="quote-field">
+              <div class="qf-label">YSP</div>
+              <div class="qf-value">1.5% ($18,000)</div>
+            </div>
+            <div class="quote-field">
+              <div class="qf-label">Prepay</div>
+              <div class="qf-value">None</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border);">
+            <div style="flex: 1; display: flex; align-items: center; gap: 12px;">
+              <span style="font-size: 12px; color: var(--gray-500);">📄 PandaDoc:</span>
+              <span class="badge badge-green"><span class="dot"></span> Signed Feb 23</span>
+            </div>
+            <button class="btn btn-sm btn-secondary">📥 Download PDF</button>
+            <button class="btn btn-sm btn-primary">→ Convert to Deal</button>
+          </div>
+        </div>
+
+        <!-- Quote Card 3 -->
+        <div class="quote-card">
+          <div class="quote-header">
+            <div>
+              <div style="font-size: 15px; font-weight: 600;">Robert Kim — 456 Pine Ave, Seattle WA</div>
+              <div style="font-size: 12px; color: var(--gray-400); margin-top: 4px;">Quote #Q-2024-0016 · Created Feb 20, 2026</div>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <span class="badge badge-gray"><span class="dot"></span> Draft</span>
+              <button class="btn btn-sm btn-secondary">Edit</button>
+              <button class="btn btn-sm btn-ghost">⋮</button>
+            </div>
+          </div>
+          <div class="quote-grid">
+            <div class="quote-field">
+              <div class="qf-label">Program</div>
+              <div class="qf-value">DSCR Residential</div>
+            </div>
+            <div class="quote-field">
+              <div class="qf-label">Loan Amount</div>
+              <div class="qf-value">$650,000</div>
+            </div>
+            <div class="quote-field">
+              <div class="qf-label">Interest Rate</div>
+              <div class="qf-value">7.375%</div>
+            </div>
+            <div class="quote-field">
+              <div class="qf-label">LTV</div>
+              <div class="qf-value">72%</div>
+            </div>
+            <div class="quote-field">
+              <div class="qf-label">DSCR</div>
+              <div class="qf-value">1.35x</div>
+            </div>
+            <div class="quote-field">
+              <div class="qf-label">Points</div>
+              <div class="qf-value">1.0 pts ($6,500)</div>
+            </div>
+            <div class="quote-field">
+              <div class="qf-label">YSP</div>
+              <div class="qf-value">2.25% ($14,625)</div>
+            </div>
+            <div class="quote-field">
+              <div class="qf-label">Term</div>
+              <div class="qf-value">30yr 5/1 ARM</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border);">
+            <div style="flex: 1;">
+              <span style="font-size: 12px; color: var(--gray-400);">Not yet sent</span>
+            </div>
+            <button class="btn btn-sm btn-primary">📧 Send to Borrower</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════ -->
+    <!--  VIEW 4: RATE SHEETS                   -->
+    <!-- ═══════════════════════════════════════ -->
+    <div class="page-view" id="view-sheets">
+      <div class="topbar">
+        <div class="breadcrumb"><span class="current">Rate Sheets</span></div>
+        <div class="topbar-right">
+          <button class="btn btn-primary">+ New Rate Sheet</button>
+        </div>
+      </div>
+      <div class="content">
+
+        <!-- Summary Strip -->
+        <div class="summary-strip">
+          <div class="summary-card active">
+            <div class="label">Rate Sheets</div>
+            <div class="value">6</div>
+            <div class="sub">Across all programs</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Active</div>
+            <div class="value" style="color: var(--emerald);">3</div>
+            <div class="sub">Currently in use</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Draft</div>
+            <div class="value" style="color: var(--amber);">2</div>
+            <div class="sub">Pending review</div>
+          </div>
+          <div class="summary-card">
+            <div class="label">Archived</div>
+            <div class="value" style="color: var(--gray-400);">1</div>
+            <div class="sub">Previous versions</div>
+          </div>
+        </div>
+
+        <!-- Rate Sheet Table -->
+        <div class="card" style="padding: 0; overflow: hidden; margin-bottom: 24px;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Rate Sheet</th>
+                <th>Program</th>
+                <th>Version</th>
+                <th>Base Rate</th>
+                <th>Adjusters</th>
+                <th>Status</th>
+                <th>Last Updated</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="cursor: pointer;">
+                <td style="font-weight: 600;">DSCR Standard Pricing</td>
+                <td>DSCR Residential</td>
+                <td>v3.2</td>
+                <td style="font-weight: 600;">6.750%</td>
+                <td><span class="badge badge-blue">12 rules</span></td>
+                <td><span class="badge badge-green"><span class="dot"></span> Active</span></td>
+                <td style="font-size: 12px; color: var(--gray-400);">Feb 24, 2026</td>
+                <td><button class="btn btn-ghost btn-sm">Edit →</button></td>
+              </tr>
+              <tr style="cursor: pointer;">
+                <td style="font-weight: 600;">Bridge Rate Table</td>
+                <td>Bridge Loan</td>
+                <td>v2.1</td>
+                <td style="font-weight: 600;">9.000%</td>
+                <td><span class="badge badge-blue">8 rules</span></td>
+                <td><span class="badge badge-green"><span class="dot"></span> Active</span></td>
+                <td style="font-size: 12px; color: var(--gray-400);">Feb 20, 2026</td>
+                <td><button class="btn btn-ghost btn-sm">Edit →</button></td>
+              </tr>
+              <tr style="cursor: pointer;">
+                <td style="font-weight: 600;">Bank Statement Pricing</td>
+                <td>Bank Statement</td>
+                <td>v1.4</td>
+                <td style="font-weight: 600;">7.250%</td>
+                <td><span class="badge badge-blue">10 rules</span></td>
+                <td><span class="badge badge-green"><span class="dot"></span> Active</span></td>
+                <td style="font-size: 12px; color: var(--gray-400);">Feb 18, 2026</td>
+                <td><button class="btn btn-ghost btn-sm">Edit →</button></td>
+              </tr>
+              <tr style="cursor: pointer; background: var(--amber-light);">
+                <td style="font-weight: 600;">DSCR Premium Tier</td>
+                <td>DSCR Residential</td>
+                <td>v1.0</td>
+                <td style="font-weight: 600;">6.500%</td>
+                <td><span class="badge badge-blue">14 rules</span></td>
+                <td><span class="badge badge-amber"><span class="dot"></span> Draft</span></td>
+                <td style="font-size: 12px; color: var(--gray-400);">Feb 25, 2026</td>
+                <td><button class="btn btn-ghost btn-sm">Edit →</button></td>
+              </tr>
+              <tr style="cursor: pointer; background: var(--amber-light);">
+                <td style="font-weight: 600;">Construction Rate Matrix</td>
+                <td>Construction</td>
+                <td>v1.0</td>
+                <td style="font-weight: 600;">8.500%</td>
+                <td><span class="badge badge-blue">6 rules</span></td>
+                <td><span class="badge badge-amber"><span class="dot"></span> Draft</span></td>
+                <td style="font-size: 12px; color: var(--gray-400);">Feb 25, 2026</td>
+                <td><button class="btn btn-ghost btn-sm">Edit →</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Expanded Rate Sheet Detail -->
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div>
+              <h3 style="font-size: 16px; font-weight: 600;">DSCR Standard Pricing — v3.2</h3>
+              <p style="font-size: 12px; color: var(--gray-400); margin-top: 4px;">Active since Feb 24, 2026 · Applied to 3 active deals</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm btn-secondary">📋 Duplicate</button>
+              <button class="btn btn-sm btn-secondary">📥 Export</button>
+              <button class="btn btn-sm btn-primary">Edit Rate Sheet</button>
+            </div>
+          </div>
+
+          <div class="tab-bar">
+            <div class="tab-item active">Base Rates</div>
+            <div class="tab-item">Rate Adjusters</div>
+            <div class="tab-item">Leverage Caps</div>
+            <div class="tab-item">Points & Fees</div>
+            <div class="tab-item">Eligibility</div>
+          </div>
+
+          <!-- Base Rates Tab -->
+          <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 12px;">Base Rates by Loan Sub-Type</h4>
+          <table class="rate-table">
+            <thead>
+              <tr>
+                <th>Loan Type</th>
+                <th>30yr Fixed</th>
+                <th>5/1 ARM</th>
+                <th>7/1 ARM</th>
+                <th>40yr I/O</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="font-weight: 500;">Purchase</td>
+                <td>6.750%</td>
+                <td>6.500%</td>
+                <td>6.625%</td>
+                <td>7.000%</td>
+              </tr>
+              <tr>
+                <td style="font-weight: 500;">Rate/Term Refi</td>
+                <td>6.875%</td>
+                <td>6.625%</td>
+                <td>6.750%</td>
+                <td>7.125%</td>
+              </tr>
+              <tr>
+                <td style="font-weight: 500;">Cash-Out Refi</td>
+                <td>7.125%</td>
+                <td>6.875%</td>
+                <td>7.000%</td>
+                <td>7.375%</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h4 style="font-size: 14px; font-weight: 600; margin: 24px 0 12px;">FICO Score Adjusters</h4>
+          <table class="rate-table">
+            <thead>
+              <tr>
+                <th>FICO Range</th>
+                <th>Adjustment</th>
+                <th>Direction</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>760+</td>
+                <td style="color: var(--emerald); font-weight: 600;">-0.250%</td>
+                <td><span class="badge badge-green">Better</span></td>
+              </tr>
+              <tr>
+                <td>740 – 759</td>
+                <td style="color: var(--emerald); font-weight: 600;">-0.125%</td>
+                <td><span class="badge badge-green">Better</span></td>
+              </tr>
+              <tr>
+                <td>720 – 739</td>
+                <td>0.000%</td>
+                <td><span class="badge badge-gray">Base</span></td>
+              </tr>
+              <tr>
+                <td>700 – 719</td>
+                <td style="color: var(--amber); font-weight: 600;">+0.250%</td>
+                <td><span class="badge badge-amber">Worse</span></td>
+              </tr>
+              <tr>
+                <td>680 – 699</td>
+                <td style="color: var(--amber); font-weight: 600;">+0.500%</td>
+                <td><span class="badge badge-amber">Worse</span></td>
+              </tr>
+              <tr>
+                <td>660 – 679</td>
+                <td style="color: var(--red); font-weight: 600;">+0.750%</td>
+                <td><span class="badge badge-red">Worst</span></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px;">
+            <div>
+              <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 12px;">LTV Adjusters</h4>
+              <table class="rate-table">
+                <thead><tr><th>LTV Range</th><th>Adjustment</th></tr></thead>
+                <tbody>
+                  <tr><td>≤ 65%</td><td style="color: var(--emerald);">-0.125%</td></tr>
+                  <tr><td>65.01% – 70%</td><td>0.000%</td></tr>
+                  <tr><td>70.01% – 75%</td><td style="color: var(--amber);">+0.250%</td></tr>
+                  <tr><td>75.01% – 80%</td><td style="color: var(--amber);">+0.500%</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div>
+              <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 12px;">Property Type Adjusters</h4>
+              <table class="rate-table">
+                <thead><tr><th>Property Type</th><th>Adjustment</th></tr></thead>
+                <tbody>
+                  <tr><td>SFR</td><td>0.000%</td></tr>
+                  <tr><td>Condo (Warrantable)</td><td style="color: var(--amber);">+0.125%</td></tr>
+                  <tr><td>2-4 Units</td><td style="color: var(--amber);">+0.250%</td></tr>
+                  <tr><td>Condo (Non-Warrantable)</td><td style="color: var(--amber);">+0.500%</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════ -->
+    <!--  VIEW 5: SETTINGS                      -->
+    <!-- ═══════════════════════════════════════ -->
+    <div class="page-view" id="view-settings">
+      <div class="topbar">
+        <div class="breadcrumb"><span class="current">Settings</span></div>
+        <div class="topbar-right">
+          <span style="font-size: 12px; color: var(--emerald); font-weight: 500;">✓ All changes auto-saved</span>
+        </div>
+      </div>
+      <div class="content">
+        <div class="settings-layout">
+
+          <!-- Settings Sidebar -->
+          <div class="settings-sidebar">
+            <div class="settings-nav-item active" onclick="showSettingsTab('general')">General</div>
+            <div class="settings-nav-item" onclick="showSettingsTab('stages')">Deal Stages</div>
+            <div class="settings-nav-item" onclick="showSettingsTab('integrations')">Integrations</div>
+            <div class="settings-nav-item" onclick="showSettingsTab('ai')">AI Customization</div>
+            <div class="settings-nav-item" onclick="showSettingsTab('docreview')">Document Review</div>
+            <div class="settings-nav-item" onclick="showSettingsTab('magiclinks')">Magic Links</div>
+            <div class="settings-nav-item" onclick="showSettingsTab('fields')">Custom Fields</div>
+            <div class="settings-nav-item" onclick="showSettingsTab('billing')">Billing</div>
+          </div>
+
+          <!-- Settings Body -->
+          <div class="settings-body">
+
+            <!-- General Tab -->
+            <div class="settings-tab active" id="tab-general">
+              <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 20px;">General Settings</h3>
+
+              <div class="card" style="margin-bottom: 20px;">
+                <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 16px;">Company Information</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                  <div class="input-group">
+                    <label>Company Name</label>
+                    <input class="input" value="Sphinx Capital Group">
+                  </div>
+                  <div class="input-group">
+                    <label>Website</label>
+                    <input class="input" value="https://sphinxcap.com">
+                  </div>
+                  <div class="input-group">
+                    <label>Primary Contact Email</label>
+                    <input class="input" value="carlos@sphinxcap.com">
+                  </div>
+                  <div class="input-group">
+                    <label>Phone</label>
+                    <input class="input" value="(555) 123-4567">
+                  </div>
+                </div>
+              </div>
+
+              <div class="card" style="margin-bottom: 20px;">
+                <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 16px;">Branding</h4>
+                <div style="display: flex; gap: 24px; align-items: flex-start;">
+                  <div>
+                    <label style="display: block; font-size: 12px; font-weight: 600; color: var(--gray-600); margin-bottom: 8px;">Logo</label>
+                    <div style="width: 120px; height: 120px; border: 2px dashed var(--gray-300); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--gray-400); font-size: 32px; cursor: pointer;">🖼️</div>
+                    <button class="btn btn-sm btn-ghost" style="margin-top: 8px;">Upload Logo</button>
+                  </div>
+                  <div style="flex: 1;">
+                    <div class="input-group">
+                      <label>Primary Brand Color</label>
+                      <div style="display: flex; gap: 8px; align-items: center;">
+                        <div style="width: 32px; height: 32px; background: var(--blue); border-radius: 6px; border: 2px solid var(--border);"></div>
+                        <input class="input" value="#2E7FD6" style="width: 120px;">
+                      </div>
+                    </div>
+                    <div class="input-group">
+                      <label>Email Footer Text</label>
+                      <textarea class="input" rows="2">Sphinx Capital Group | NMLS #123456 | Equal Housing Lender</textarea>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 16px;">Default Settings</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                  <div class="input-group">
+                    <label>Default Loan Program</label>
+                    <select class="input">
+                      <option>DSCR Residential</option>
+                      <option>Bridge Loan</option>
+                      <option>Bank Statement</option>
+                    </select>
+                  </div>
+                  <div class="input-group">
+                    <label>Default Quote Expiry (days)</label>
+                    <input class="input" type="number" value="14">
+                  </div>
+                  <div class="input-group">
+                    <label>Time Zone</label>
+                    <select class="input">
+                      <option>America/New_York (EST)</option>
+                      <option>America/Chicago (CST)</option>
+                      <option selected>America/Los_Angeles (PST)</option>
+                    </select>
+                  </div>
+                  <div class="input-group">
+                    <label>Date Format</label>
+                    <select class="input">
+                      <option selected>MM/DD/YYYY</option>
+                      <option>DD/MM/YYYY</option>
+                      <option>YYYY-MM-DD</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Deal Stages Tab -->
+            <div class="settings-tab" id="tab-stages" style="display: none;">
+              <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 6px;">Deal Stages</h3>
+              <p style="font-size: 13px; color: var(--gray-500); margin-bottom: 20px;">Drag to reorder. Each deal progresses through these stages.</p>
+
+              <div class="card" style="padding: 0;">
+                <div style="padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
+                  <span style="font-size: 13px; font-weight: 500; color: var(--gray-500);">7 stages configured</span>
+                  <button class="btn btn-sm btn-primary">+ Add Stage</button>
+                </div>
+
+                <div style="padding: 8px;">
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; background: white;">
+                    <span class="drag-handle">⠿</span>
+                    <div class="stage-color" style="background: var(--gray-400);"></div>
+                    <span style="font-weight: 500; flex: 1;">Lead</span>
+                    <span style="font-size: 12px; color: var(--gray-400);">Initial intake</span>
+                    <button class="btn btn-ghost btn-sm">✏️</button>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; background: white;">
+                    <span class="drag-handle">⠿</span>
+                    <div class="stage-color" style="background: var(--blue);"></div>
+                    <span style="font-weight: 500; flex: 1;">Application</span>
+                    <span style="font-size: 12px; color: var(--gray-400);">Full application received</span>
+                    <button class="btn btn-ghost btn-sm">✏️</button>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; background: white;">
+                    <span class="drag-handle">⠿</span>
+                    <div class="stage-color" style="background: #8B5CF6;"></div>
+                    <span style="font-weight: 500; flex: 1;">Processing</span>
+                    <span style="font-size: 12px; color: var(--gray-400);">Docs being gathered</span>
+                    <button class="btn btn-ghost btn-sm">✏️</button>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; background: white;">
+                    <span class="drag-handle">⠿</span>
+                    <div class="stage-color" style="background: var(--amber);"></div>
+                    <span style="font-weight: 500; flex: 1;">Underwriting</span>
+                    <span style="font-size: 12px; color: var(--gray-400);">Risk assessment</span>
+                    <button class="btn btn-ghost btn-sm">✏️</button>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; background: white;">
+                    <span class="drag-handle">⠿</span>
+                    <div class="stage-color" style="background: #EC4899;"></div>
+                    <span style="font-weight: 500; flex: 1;">Approved</span>
+                    <span style="font-size: 12px; color: var(--gray-400);">Conditional or final</span>
+                    <button class="btn btn-ghost btn-sm">✏️</button>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; background: white;">
+                    <span class="drag-handle">⠿</span>
+                    <div class="stage-color" style="background: var(--emerald);"></div>
+                    <span style="font-weight: 500; flex: 1;">Closing</span>
+                    <span style="font-size: 12px; color: var(--gray-400);">Final docs & funding</span>
+                    <button class="btn btn-ghost btn-sm">✏️</button>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; background: white;">
+                    <span class="drag-handle">⠿</span>
+                    <div class="stage-color" style="background: #14B8A6;"></div>
+                    <span style="font-weight: 500; flex: 1;">Funded</span>
+                    <span style="font-size: 12px; color: var(--gray-400);">Loan disbursed</span>
+                    <button class="btn btn-ghost btn-sm">✏️</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Integrations Tab -->
+            <div class="settings-tab" id="tab-integrations" style="display: none;">
+              <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 6px;">Integrations</h3>
+              <p style="font-size: 13px; color: var(--gray-500); margin-bottom: 20px;">Connect third-party services to enhance your workflow.</p>
+
+              <div class="integration-card" style="border-left: 3px solid var(--emerald);">
+                <div class="integration-icon" style="background: #10A37F; color: white;">🤖</div>
+                <div class="integration-info">
+                  <div class="integration-name">OpenAI</div>
+                  <div class="integration-desc">AI-powered document review, rule extraction, and insights</div>
+                </div>
+                <span class="badge badge-green"><span class="dot"></span> Connected</span>
+                <button class="btn btn-sm btn-secondary">Test</button>
+                <button class="btn btn-sm btn-ghost">⚙️</button>
+              </div>
+
+              <div class="integration-card" style="border-left: 3px solid var(--emerald);">
+                <div class="integration-icon" style="background: #4A154B; color: white;">📝</div>
+                <div class="integration-info">
+                  <div class="integration-name">PandaDoc</div>
+                  <div class="integration-desc">E-signatures, term sheets, and document generation</div>
+                </div>
+                <span class="badge badge-green"><span class="dot"></span> Connected</span>
+                <button class="btn btn-sm btn-secondary">Test</button>
+                <button class="btn btn-sm btn-ghost">⚙️</button>
+              </div>
+
+              <div class="integration-card" style="border-left: 3px solid var(--gray-300);">
+                <div class="integration-icon" style="background: #4285F4; color: white;">📧</div>
+                <div class="integration-info">
+                  <div class="integration-name">Google Workspace</div>
+                  <div class="integration-desc">Gmail, Calendar, and Drive sync for deal communications</div>
+                </div>
+                <span class="badge badge-gray"><span class="dot"></span> Not Connected</span>
+                <button class="btn btn-sm btn-primary">Connect</button>
+              </div>
+
+              <div class="integration-card" style="border-left: 3px solid var(--gray-300);">
+                <div class="integration-icon" style="background: #FF6C37; color: white;">📊</div>
+                <div class="integration-info">
+                  <div class="integration-name">Plaid</div>
+                  <div class="integration-desc">Bank verification, asset verification, income checks</div>
+                </div>
+                <span class="badge badge-gray"><span class="dot"></span> Not Connected</span>
+                <button class="btn btn-sm btn-primary">Connect</button>
+              </div>
+
+              <div class="integration-card" style="border-left: 3px solid var(--gray-300);">
+                <div class="integration-icon" style="background: #1D4ED8; color: white;">🏦</div>
+                <div class="integration-info">
+                  <div class="integration-name">Encompass LOS</div>
+                  <div class="integration-desc">Loan origination system sync for compliance and reporting</div>
+                </div>
+                <span class="badge badge-gray"><span class="dot"></span> Coming Soon</span>
+                <button class="btn btn-sm btn-secondary" disabled>Request Access</button>
+              </div>
+            </div>
+
+            <!-- AI Customization Tab -->
+            <div class="settings-tab" id="tab-ai" style="display: none;">
+              <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 6px;">AI Customization</h3>
+              <p style="font-size: 13px; color: var(--gray-500); margin-bottom: 20px;">Configure how AI assists with document review, rule extraction, and deal insights.</p>
+
+              <div class="card" style="margin-bottom: 20px;">
+                <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 16px;">Document Review Settings</h4>
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0;">
+                    <div>
+                      <div style="font-size: 13px; font-weight: 500;">Auto-review uploaded documents</div>
+                      <div style="font-size: 12px; color: var(--gray-400);">AI will automatically analyze new documents for completeness</div>
+                    </div>
+                    <div class="switch on"></div>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0;">
+                    <div>
+                      <div style="font-size: 13px; font-weight: 500;">Extract credit policy rules from PDFs</div>
+                      <div style="font-size: 12px; color: var(--gray-400);">Use AI to parse guidelines into structured rules</div>
+                    </div>
+                    <div class="switch on"></div>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0;">
+                    <div>
+                      <div style="font-size: 13px; font-weight: 500;">Generate deal insights</div>
+                      <div style="font-size: 12px; color: var(--gray-400);">AI suggestions for risk flags, missing docs, and next steps</div>
+                    </div>
+                    <div class="switch on"></div>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0;">
+                    <div>
+                      <div style="font-size: 13px; font-weight: 500;">Auto-classify document types</div>
+                      <div style="font-size: 12px; color: var(--gray-400);">Automatically categorize uploaded files by document type</div>
+                    </div>
+                    <div class="switch"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 16px;">AI Model Configuration</h4>
+                <div class="input-group">
+                  <label>Confidence Threshold</label>
+                  <div style="display: flex; align-items: center; gap: 12px;">
+                    <input type="range" min="50" max="100" value="75" style="flex: 1;">
+                    <span style="font-weight: 600; min-width: 40px;">75%</span>
+                  </div>
+                  <span style="font-size: 11px; color: var(--gray-400);">Rules below this threshold require manual review</span>
+                </div>
+                <div class="input-group">
+                  <label>AI Tone</label>
+                  <select class="input">
+                    <option>Professional</option>
+                    <option selected>Concise</option>
+                    <option>Detailed</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Document Review Tab -->
+            <div class="settings-tab" id="tab-docreview" style="display: none;">
+              <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 6px;">Document Review Configuration</h3>
+              <p style="font-size: 13px; color: var(--gray-500); margin-bottom: 20px;">Set up AI-powered document orchestration and review workflows.</p>
+
+              <div class="card" style="margin-bottom: 20px;">
+                <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 16px;">Document Orchestrator</h4>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; margin-bottom: 12px;">
+                  <div>
+                    <div style="font-size: 13px; font-weight: 500;">Enable AI Document Orchestrator</div>
+                    <div style="font-size: 12px; color: var(--gray-400);">Automatically route, review, and flag documents across deal stages</div>
+                  </div>
+                  <div class="switch on"></div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                  <div class="input-group">
+                    <label>Review Priority</label>
+                    <select class="input">
+                      <option selected>By Deal Stage</option>
+                      <option>By Upload Date</option>
+                      <option>By Document Type</option>
+                    </select>
+                  </div>
+                  <div class="input-group">
+                    <label>Auto-Flag Threshold</label>
+                    <select class="input">
+                      <option>Low (flag most issues)</option>
+                      <option selected>Medium</option>
+                      <option>High (flag only critical)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 16px;">Review Templates</h4>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 10px 16px; border: 1px solid var(--border); border-radius: 8px;">
+                    <span style="font-weight: 500; flex: 1;">Income Verification Checklist</span>
+                    <span class="badge badge-green"><span class="dot"></span> Active</span>
+                    <button class="btn btn-ghost btn-sm">Edit</button>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 10px 16px; border: 1px solid var(--border); border-radius: 8px;">
+                    <span style="font-weight: 500; flex: 1;">Title Report Review</span>
+                    <span class="badge badge-green"><span class="dot"></span> Active</span>
+                    <button class="btn btn-ghost btn-sm">Edit</button>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 10px 16px; border: 1px solid var(--border); border-radius: 8px;">
+                    <span style="font-weight: 500; flex: 1;">Appraisal Analysis</span>
+                    <span class="badge badge-amber"><span class="dot"></span> Draft</span>
+                    <button class="btn btn-ghost btn-sm">Edit</button>
+                  </div>
+                </div>
+                <button class="btn btn-sm btn-secondary" style="margin-top: 12px;">+ Add Template</button>
+              </div>
+            </div>
+
+            <!-- Magic Links Tab -->
+            <div class="settings-tab" id="tab-magiclinks" style="display: none;">
+              <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 6px;">Magic Links</h3>
+              <p style="font-size: 13px; color: var(--gray-500); margin-bottom: 20px;">Configure borrower-facing portals for document collection.</p>
+
+              <div class="card" style="margin-bottom: 20px;">
+                <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 16px;">Portal Branding</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                  <div class="input-group">
+                    <label>Portal Title</label>
+                    <input class="input" value="Sphinx Capital — Secure Document Portal">
+                  </div>
+                  <div class="input-group">
+                    <label>Welcome Message</label>
+                    <input class="input" value="Please upload the requested documents below.">
+                  </div>
+                  <div class="input-group">
+                    <label>Link Expiry (days)</label>
+                    <input class="input" type="number" value="30">
+                  </div>
+                  <div class="input-group">
+                    <label>Max File Size (MB)</label>
+                    <input class="input" type="number" value="25">
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                  <h4 style="font-size: 14px; font-weight: 600;">Active Magic Links</h4>
+                  <span class="badge badge-blue">4 active</span>
+                </div>
+                <table class="data-table">
+                  <thead>
+                    <tr><th>Borrower</th><th>Deal</th><th>Documents</th><th>Status</th><th>Expires</th><th></th></tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style="font-weight: 500;">James Wilson</td>
+                      <td>LN-2024-0042</td>
+                      <td>3 of 5 uploaded</td>
+                      <td><span class="badge badge-amber"><span class="dot"></span> Partial</span></td>
+                      <td style="font-size: 12px; color: var(--gray-400);">Mar 15</td>
+                      <td><button class="btn btn-ghost btn-sm">Resend</button></td>
+                    </tr>
+                    <tr>
+                      <td style="font-weight: 500;">Maria Chen</td>
+                      <td>LN-2024-0041</td>
+                      <td>5 of 5 uploaded</td>
+                      <td><span class="badge badge-green"><span class="dot"></span> Complete</span></td>
+                      <td style="font-size: 12px; color: var(--gray-400);">Mar 12</td>
+                      <td><button class="btn btn-ghost btn-sm">View</button></td>
+                    </tr>
+                    <tr>
+                      <td style="font-weight: 500;">Robert Kim</td>
+                      <td>LN-2024-0040</td>
+                      <td>0 of 4 uploaded</td>
+                      <td><span class="badge badge-gray"><span class="dot"></span> Not Started</span></td>
+                      <td style="font-size: 12px; color: var(--gray-400);">Mar 20</td>
+                      <td><button class="btn btn-ghost btn-sm">Resend</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Custom Fields Tab -->
+            <div class="settings-tab" id="tab-fields" style="display: none;">
+              <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 6px;">Custom Fields</h3>
+              <p style="font-size: 13px; color: var(--gray-500); margin-bottom: 20px;">Add custom data fields to deals, borrowers, and properties.</p>
+
+              <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                  <div class="tab-bar" style="margin-bottom: 0; border-bottom: none;">
+                    <div class="tab-item active" style="padding: 6px 14px;">Deal Fields</div>
+                    <div class="tab-item" style="padding: 6px 14px;">Borrower Fields</div>
+                    <div class="tab-item" style="padding: 6px 14px;">Property Fields</div>
+                  </div>
+                  <button class="btn btn-sm btn-primary">+ Add Field</button>
+                </div>
+
+                <table class="data-table">
+                  <thead>
+                    <tr><th>Field Name</th><th>Type</th><th>Required</th><th>Display</th><th></th></tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style="font-weight: 500;">Referral Source</td>
+                      <td><span class="badge badge-gray">Dropdown</span></td>
+                      <td><div class="switch on" style="width: 28px; height: 16px;"></div></td>
+                      <td><span style="font-size: 12px; color: var(--gray-500);">Deal Overview</span></td>
+                      <td><button class="btn btn-ghost btn-sm">✏️</button></td>
+                    </tr>
+                    <tr>
+                      <td style="font-weight: 500;">Internal Notes</td>
+                      <td><span class="badge badge-gray">Text Area</span></td>
+                      <td><div class="switch" style="width: 28px; height: 16px;"></div></td>
+                      <td><span style="font-size: 12px; color: var(--gray-500);">Deal Detail</span></td>
+                      <td><button class="btn btn-ghost btn-sm">✏️</button></td>
+                    </tr>
+                    <tr>
+                      <td style="font-weight: 500;">Expected Close Date</td>
+                      <td><span class="badge badge-gray">Date</span></td>
+                      <td><div class="switch on" style="width: 28px; height: 16px;"></div></td>
+                      <td><span style="font-size: 12px; color: var(--gray-500);">Pipeline View</span></td>
+                      <td><button class="btn btn-ghost btn-sm">✏️</button></td>
+                    </tr>
+                    <tr>
+                      <td style="font-weight: 500;">Commission Override</td>
+                      <td><span class="badge badge-gray">Number</span></td>
+                      <td><div class="switch" style="width: 28px; height: 16px;"></div></td>
+                      <td><span style="font-size: 12px; color: var(--gray-500);">Deal Detail</span></td>
+                      <td><button class="btn btn-ghost btn-sm">✏️</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Billing Tab -->
+            <div class="settings-tab" id="tab-billing" style="display: none;">
+              <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 6px;">Billing & Subscription</h3>
+              <p style="font-size: 13px; color: var(--gray-500); margin-bottom: 20px;">Manage your plan and payment method.</p>
+
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
+                <div class="plan-card">
+                  <div class="plan-name">Starter</div>
+                  <div class="plan-price">$49<span>/mo</span></div>
+                  <div style="font-size: 12px; color: var(--gray-500); margin: 12px 0;">Up to 10 deals/mo, 1 user, basic AI</div>
+                  <button class="btn btn-sm btn-secondary" style="width: 100%;">Downgrade</button>
+                </div>
+                <div class="plan-card current">
+                  <div style="font-size: 10px; font-weight: 600; color: var(--blue); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Current Plan</div>
+                  <div class="plan-name">Professional</div>
+                  <div class="plan-price">$149<span>/mo</span></div>
+                  <div style="font-size: 12px; color: var(--gray-500); margin: 12px 0;">Up to 50 deals/mo, 5 users, full AI suite</div>
+                  <button class="btn btn-sm btn-secondary" style="width: 100%;">Manage</button>
+                </div>
+                <div class="plan-card">
+                  <div class="plan-name">Enterprise</div>
+                  <div class="plan-price">Custom</div>
+                  <div style="font-size: 12px; color: var(--gray-500); margin: 12px 0;">Unlimited deals, unlimited users, SLA</div>
+                  <button class="btn btn-sm btn-primary" style="width: 100%;">Contact Sales</button>
+                </div>
+              </div>
+
+              <div class="card">
+                <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 16px;">Usage This Billing Period</h4>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+                  <div>
+                    <div style="font-size: 12px; color: var(--gray-500); margin-bottom: 4px;">Deals Created</div>
+                    <div style="font-size: 18px; font-weight: 700;">18 <span style="font-size: 13px; color: var(--gray-400); font-weight: 400;">/ 50</span></div>
+                    <div style="height: 6px; background: var(--gray-200); border-radius: 3px; margin-top: 6px; overflow: hidden;">
+                      <div style="height: 100%; width: 36%; background: var(--blue); border-radius: 3px;"></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div style="font-size: 12px; color: var(--gray-500); margin-bottom: 4px;">AI Document Reviews</div>
+                    <div style="font-size: 18px; font-weight: 700;">142 <span style="font-size: 13px; color: var(--gray-400); font-weight: 400;">/ 500</span></div>
+                    <div style="height: 6px; background: var(--gray-200); border-radius: 3px; margin-top: 6px; overflow: hidden;">
+                      <div style="height: 100%; width: 28%; background: var(--emerald); border-radius: 3px;"></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div style="font-size: 12px; color: var(--gray-500); margin-bottom: 4px;">Team Members</div>
+                    <div style="font-size: 18px; font-weight: 700;">3 <span style="font-size: 13px; color: var(--gray-400); font-weight: 400;">/ 5</span></div>
+                    <div style="height: 6px; background: var(--gray-200); border-radius: 3px; margin-top: 6px; overflow: hidden;">
+                      <div style="height: 100%; width: 60%; background: var(--amber); border-radius: 3px;"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app-layout -->
+
+<script>
+  // View switching
+  function showView(name) {
+    document.querySelectorAll('.page-view').forEach(v => v.classList.remove('active'));
+    document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+    const view = document.getElementById('view-' + name);
+    if (view) view.classList.add('active');
+    document.querySelectorAll('.view-btn').forEach(b => {
+      if (b.textContent.toLowerCase().replace(/\s/g, '').includes(name.replace(/\s/g, ''))) b.classList.add('active');
+    });
+    // Update sidebar
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    const navEl = document.getElementById('nav-' + name);
+    if (navEl) navEl.classList.add('active');
+  }
+
+  // Settings tab switching
+  function showSettingsTab(name) {
+    document.querySelectorAll('.settings-tab').forEach(t => t.style.display = 'none');
+    document.querySelectorAll('.settings-nav-item').forEach(n => n.classList.remove('active'));
+    const tab = document.getElementById('tab-' + name);
+    if (tab) tab.style.display = '';
+    event.target.classList.add('active');
+  }
+</script>
+</body>
+</html>

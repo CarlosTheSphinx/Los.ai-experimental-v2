@@ -12,6 +12,12 @@ import {
   FileText,
   Zap,
   Search,
+  TrendingUp,
+  EyeOff,
+  Link2,
+  Bot,
+  Eye,
+  BarChart3,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -38,94 +44,93 @@ const itemVariants = {
 export default function PublicHomePage() {
   const features = [
     {
-      icon: Database,
-      title: "One system of record",
-      description: "Everything related to a deal, from intake to funding, lives in Lendry.AI. No more chasing updates across email, spreadsheets, and shared drives.",
+      icon: FileText,
+      title: "Smart Document Review",
+      description: "AI reads documents 100x faster than humans. Automatically extracts key data, flags risks, and verifies compliance.",
+    },
+    {
+      icon: Zap,
+      title: "AI Assistant",
+      description: "Natural language interface. Ask questions about loans, get instant answers. No training required.",
     },
     {
       icon: Target,
-      title: "Clear next steps",
-      description: "Instantly see what's blocked, what's moving, and what needs attention. Every deal has a clear status and a clear path forward.",
-    },
-    {
-      icon: Building2,
-      title: "Built for lending teams",
-      description: "Designed specifically for brokers, processors, and lenders — not retrofitted from a generic CRM.",
+      title: "Smart Prospect Scoring",
+      description: "ML models predict loan quality before processing. Focus on high-probability deals first.",
     },
   ];
 
   const howItWorks = [
     {
       number: "01",
-      title: "Capture deals once. Use them everywhere.",
-      description: "Enter deal information once, and it automatically flows through your documents, pricing calculations, and task management.",
+      title: "Connect",
+      description: "Connect your existing CRM and loan management systems. Lendry.AI integrates with your current stack in minutes, not weeks.",
       position: "left",
     },
     {
       number: "02",
-      title: "One Click Processing",
-      description: "Trigger document checklists, borrower requests, and condition tracking with a single click from your dashboard.",
+      title: "Configure",
+      description: "Define your processing rules and approval criteria. Set up your loan programs, credit policies, and automation workflows.",
       position: "right",
     },
     {
       number: "03",
-      title: "Clarity at every stage of the deal",
-      description: "See your entire deal pipeline at a glance. Know exactly where each deal stands and what needs attention.",
+      title: "Automate",
+      description: "AI agents take over loan processing. Document review, data extraction, compliance checks — all running 24/7 without manual intervention.",
       position: "left",
     },
     {
       number: "04",
-      title: "Everything in one place. Always current.",
-      description: "Documents, notes, communications, and deal history all live in Lendry.AI. No more scattered information.",
+      title: "Communicate",
+      description: "Borrowers receive automatic updates via Magic Links. They see exactly where their application stands — no more phone calls asking for status.",
       position: "right",
     },
     {
       number: "05",
-      title: "Built to scale with your team",
-      description: "Multi-user collaboration with role-based access controls. Your entire team works better together.",
+      title: "Close",
+      description: "Deals move from intake to funded faster. Your team processes 3x more volume with the same headcount. Revenue grows, overhead doesn't.",
       position: "left",
     },
   ];
 
   const pricingPlans = [
     {
-      name: "Starter",
-      price: "$199",
+      name: "Broker",
+      price: "$299",
       period: "/mo",
-      description: "Ideal for individual brokers and small teams",
+      description: "For individual brokers getting started",
       features: [
-        "Up to 10 active deals",
-        "Standard automation rules",
-        "Document collection",
-        "Email support",
+        "Up to 10 active loans",
+        "Up to 3 users",
+        "All 3 AI Agents",
+        "E-Signatures",
       ],
       highlighted: false,
     },
     {
-      name: "Professional",
-      price: "$499",
+      name: "Originator",
+      price: "$999",
       period: "/mo",
-      description: "Built for high-volume processing teams",
+      description: "For growing lending teams ready to scale",
       features: [
-        "Unlimited active deals",
-        "Custom automation workflows",
-        "Advanced condition tracking",
-        "Priority support",
-        "Team collaboration tools",
+        "Up to 50 active loans",
+        "Unlimited users",
+        "All 3 AI Agents",
+        "Cloud Storage Sync",
+        "Advanced reporting",
       ],
       highlighted: true,
     },
     {
-      name: "Enterprise",
-      price: "Custom",
-      period: "",
-      description: "Scale your lending operations with full control",
+      name: "Correspondent",
+      price: "$1,799",
+      period: "/mo",
+      description: "For high-volume operations",
       features: [
-        "White-label options",
-        "API access",
-        "SSO & Security suite",
-        "Dedicated account manager",
-        "Custom integrations",
+        "Up to 100 active loans",
+        "Unlimited users",
+        "Custom Integrations",
+        "Custom Development",
       ],
       highlighted: false,
     },
@@ -160,16 +165,16 @@ export default function PublicHomePage() {
               transition={{ duration: 0.8, delay: 0.1 }}
               className="font-bold text-white leading-tight tracking-tight" style={{ fontSize: 'clamp(2rem, 5vw, 4.5rem)' }}
             >
-              The World's First
+              Stop Hiring.
               <br />
-              <span className="whitespace-nowrap">Loan{" "}
+              <span className="whitespace-nowrap">Start{" "}
               <span className="relative inline-block">
-                Origination
+                Automating
                 <span className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ transform: 'rotate(-8deg)' }}>
                   <span className="block w-full" style={{ height: '10px', background: 'rgba(59, 130, 246, 0.85)', borderRadius: '3px' }}></span>
                 </span>
               </span>
-              {" "}Automation System</span>
+              .</span>
             </motion.h1>
 
             {/* Subheadline */}
@@ -179,7 +184,17 @@ export default function PublicHomePage() {
               transition={{ duration: 0.8, delay: 0.2 }}
               className="text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto"
             >
-              Lendry.AI automates origination and processing so lending teams can move deals forward with clarity, speed, and control.
+              AI-powered loan processing that scales your business without scaling your team. Process more deals, faster.
+            </motion.p>
+
+            {/* World's First badge */}
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.25 }}
+              className="text-sm font-semibold text-blue-400 tracking-widest uppercase"
+            >
+              The World's First Loan Automation System
             </motion.p>
 
             {/* CTA Buttons */}
@@ -189,6 +204,11 @@ export default function PublicHomePage() {
               transition={{ duration: 0.8, delay: 0.3 }}
               className="flex flex-col sm:flex-row gap-4 justify-center pt-4"
             >
+              <Link href="/register">
+                <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white">
+                  Start Free Trial
+                </Button>
+              </Link>
               <Button
                 size="lg"
                 variant="outline"
@@ -198,13 +218,8 @@ export default function PublicHomePage() {
                   if (el) el.scrollIntoView({ behavior: 'smooth' });
                 }}
               >
-                See how Lendry.AI works &gt;
+                Watch Demo →
               </Button>
-              <Link href="/register">
-                <Button size="lg" variant="outline" className="text-white border-white/30 hover:border-white/60">
-                  Request access
-                </Button>
-              </Link>
             </motion.div>
           </motion.div>
         </div>
@@ -230,7 +245,7 @@ export default function PublicHomePage() {
             className="text-center mb-12"
           >
             <p className="text-gray-600 text-sm font-medium tracking-widest uppercase">
-              Trusted by leading lenders
+              Trusted by 200+ lending teams
             </p>
           </motion.div>
 
@@ -239,21 +254,26 @@ export default function PublicHomePage() {
             whileInView={{ opacity: 1 }}
             transition={{ duration: 0.6, delay: 0.1 }}
             viewport={{ once: true }}
-            className="flex flex-wrap items-center justify-center gap-8 md:gap-12"
+            className="flex flex-wrap items-center justify-center gap-6 md:gap-10"
           >
-            {['Partner 1', 'Partner 2', 'Partner 3', 'Partner 4', 'Partner 5'].map((partner, idx) => (
+            {[
+              { icon: '🔒', label: 'SOC2 Type II' },
+              { icon: '🛡️', label: 'SSL Encrypted' },
+              { icon: '🏦', label: 'Bank-Grade Security' },
+            ].map((badge, idx) => (
               <div
                 key={idx}
-                className="text-gray-400 text-sm font-medium opacity-50 hover:opacity-100 transition-opacity"
+                className="flex items-center gap-2 px-4 py-2 bg-white rounded-full border border-gray-200 shadow-sm"
               >
-                {partner}
+                <span>{badge.icon}</span>
+                <span className="text-gray-700 text-sm font-medium">{badge.label}</span>
               </div>
             ))}
           </motion.div>
         </div>
       </section>
 
-      {/* AI Suite Features Section */}
+      {/* The Lending Scale Problem Section */}
       <section className="py-24 lg:py-32 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
@@ -263,94 +283,118 @@ export default function PublicHomePage() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <p className="text-sm font-semibold text-blue-600 tracking-wide uppercase mb-3">
-              AI Suite
-            </p>
             <h2 className="text-4xl lg:text-5xl font-bold tracking-tight text-gray-900 mb-4">
-              Powered by intelligent automation
+              The Lending Scale Problem
             </h2>
             <p className="text-lg text-gray-600 max-w-3xl mx-auto">
-              Three branded AI capabilities working together to move deals faster.
+              Sound familiar? You're not alone. Most lenders face the same squeeze.
             </p>
           </motion.div>
 
-          {/* Branded Features Grid */}
           <motion.div
             variants={containerVariants}
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true }}
-            className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16"
+            className="grid grid-cols-1 md:grid-cols-3 gap-8"
           >
             {[
               {
-                icon: FileText,
-                title: 'Smart Review',
-                subtitle: 'Document Review',
-                tagline: 'AI reads every document so you don\'t have to',
-                description: 'Automatically analyze and extract key information from loan documents, saving hours of manual review.'
+                icon: TrendingUp,
+                title: 'More Deals = More Hires',
+                description: 'Every new loan means hiring another processor. Your overhead grows faster than revenue.',
               },
               {
-                icon: Zap,
-                title: 'Your Assistant',
-                subtitle: 'AI Processor',
-                tagline: 'Your smartest processor, always on call',
-                description: 'Intelligent processing that learns your workflow and automates repetitive tasks with precision.'
+                icon: EyeOff,
+                title: 'Borrowers Left in the Dark',
+                description: "Manual processes mean radio silence. Borrowers can't track progress, leading to dropped deals.",
               },
               {
-                icon: Search,
-                title: 'Smart Prospect',
-                subtitle: 'AI Outreach',
-                tagline: 'Finds your next deal before you do',
-                description: 'Proactively identify opportunities and match them to your lending programs automatically.'
+                icon: Link2,
+                title: 'Scattered Tools Slow You Down',
+                description: "Juggling 5+ platforms. Data doesn't sync. Time wasted copying and pasting between systems.",
               },
-            ].map((feature, idx) => {
-              const Icon = feature.icon;
+            ].map((problem, idx) => {
+              const Icon = problem.icon;
               return (
                 <motion.div key={idx} variants={itemVariants}>
-                  <Card className="h-full p-8 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                    <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center mb-6">
-                      <Icon className="w-6 h-6 text-blue-600" />
+                  <Card className="h-full p-8 border border-gray-200 shadow-sm hover:shadow-md transition-shadow bg-gray-50">
+                    <div className="w-12 h-12 rounded-lg bg-red-100 flex items-center justify-center mb-6">
+                      <Icon className="w-6 h-6 text-red-500" />
                     </div>
-                    <h3 className="text-2xl font-bold text-gray-900 mb-1">
-                      {feature.title}
+                    <h3 className="text-xl font-bold text-gray-900 mb-3">
+                      {problem.title}
                     </h3>
-                    <p className="text-sm text-gray-500 font-medium mb-3">
-                      {feature.subtitle}
-                    </p>
-                    <p className="text-gray-700 italic text-sm mb-4">
-                      "{feature.tagline}"
-                    </p>
                     <p className="text-gray-600">
-                      {feature.description}
+                      {problem.description}
                     </p>
                   </Card>
                 </motion.div>
               );
             })}
           </motion.div>
+        </div>
+      </section>
 
-          {/* Generic Features Grid */}
+      {/* Three Pillars — Solution Section */}
+      <section className="py-24 lg:py-32 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            transition={{ duration: 0.8 }}
+            initial={{ opacity: 0, y: 40 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, ease: [0.25, 0.1, 0.25, 1] }}
             viewport={{ once: true }}
-            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 pt-8 border-t border-gray-200"
+            className="text-center mb-16"
+          >
+            <h2 className="text-4xl lg:text-5xl font-bold tracking-tight text-gray-900 mb-4">
+              Built to Scale Your Lending Business
+            </h2>
+            <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+              Three pillars. One platform. Infinite growth.
+            </p>
+          </motion.div>
+
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+            className="grid grid-cols-1 md:grid-cols-3 gap-8"
           >
             {[
-              'One-Click Processing',
-              'Daily Digest',
-              'Rate Comparison',
-              'Program Templates',
-              'AI Review Rules'
-            ].map((feature, idx) => (
-              <div key={idx} className="py-4 px-3 text-center">
-                <p className="text-sm font-medium text-gray-700 hover:text-blue-600 transition-colors">
-                  {feature}
-                </p>
-              </div>
-            ))}
+              {
+                icon: Bot,
+                title: 'Automate Processing',
+                description: 'AI agents handle 80% of loan processing tasks. Document review, data extraction, compliance checks — all automated 24/7.',
+              },
+              {
+                icon: Eye,
+                title: 'Borrower Visibility',
+                description: 'Magic links give borrowers real-time updates. They see exactly where their application stands, reducing phone calls by 60%.',
+              },
+              {
+                icon: BarChart3,
+                title: 'Scale Without Hiring',
+                description: 'Your team processes 3x more loans. No new hires needed. Same people, 10x productivity through intelligent automation.',
+              },
+            ].map((pillar, idx) => {
+              const Icon = pillar.icon;
+              return (
+                <motion.div key={idx} variants={itemVariants}>
+                  <Card className="h-full p-8 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center mb-6">
+                      <Icon className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-3">
+                      {pillar.title}
+                    </h3>
+                    <p className="text-gray-600">
+                      {pillar.description}
+                    </p>
+                  </Card>
+                </motion.div>
+              );
+            })}
           </motion.div>
         </div>
       </section>
@@ -365,11 +409,14 @@ export default function PublicHomePage() {
             viewport={{ once: true }}
             className="text-center mb-16 will-change-transform"
           >
+            <p className="text-sm font-semibold text-blue-600 tracking-wide uppercase mb-3">
+              Intelligent Automation at Work
+            </p>
             <h2 className="text-4xl lg:text-5xl font-bold tracking-tight text-gray-900 mb-4">
-              Built for the way lending actually works
+              Purpose-Built Features for Lending Teams
             </h2>
             <p className="text-lg text-gray-600 max-w-3xl mx-auto">
-              Most lending teams don't need more software — they need software that actually fits. Lendry.AI replaces the spreadsheets, shared drives, and scattered tools slowing your team down.
+              Three branded AI capabilities working together to move deals faster.
             </p>
           </motion.div>
 
@@ -415,10 +462,10 @@ export default function PublicHomePage() {
             className="text-center mb-16 will-change-transform"
           >
             <p className="text-sm font-semibold text-blue-600 tracking-wide uppercase mb-2">
-              How Lendry.AI Works
+              How It Works
             </p>
             <h2 className="text-4xl lg:text-5xl font-bold tracking-tight text-gray-900">
-              From intake to close, automated.
+              From setup to automation in minutes
             </h2>
           </motion.div>
 
@@ -562,10 +609,10 @@ export default function PublicHomePage() {
             className="text-center mb-16"
           >
             <h2 className="text-4xl lg:text-5xl font-bold tracking-tight text-gray-900 mb-4">
-              Transparent Pricing
+              Simple Pricing. Infinite Scale.
             </h2>
             <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Choose the plan that fits your volume.
+              Start free, grow without limits.
             </p>
           </motion.div>
 
@@ -646,16 +693,18 @@ export default function PublicHomePage() {
           >
             <div>
               <h2 className="text-4xl lg:text-5xl font-bold tracking-tight text-white mb-4">
-                Ready to automate lending?
+                Ready to Process More Deals?
               </h2>
               <p className="text-lg text-gray-300">
-                Join leading brokers, processors, and lenders who are moving deals faster with Lendry.AI.
+                Join 200+ lending teams automating their operations. No credit card required.
               </p>
             </div>
 
             <div className="flex justify-center">
-              <Link href="/register" className="text-xl text-white/90 hover:text-white border-b border-transparent hover:border-white/50 transition-all duration-300 pb-1 font-medium">
-                  Get Started
+              <Link href="/register">
+                <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white">
+                  Start Your Free Trial
+                </Button>
               </Link>
             </div>
           </motion.div>

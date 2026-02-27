@@ -26,23 +26,23 @@ export default function PublicUseCasesPage() {
       icon: Briefcase,
       title: "Mortgage Brokers",
       description:
-        "Manage multiple lender relationships, compare rates instantly, and give borrowers a seamless application experience.",
+        "Processing applications manually = bottleneck that kills growth. Lendry.AI automates the busywork so you close more deals.",
       benefits: [
-        "Connect to multiple lenders in seconds",
-        "Real-time rate shopping",
-        "Automated compliance checking",
-        "Faster closings, higher volume",
+        "Auto-qualify borrowers in minutes",
+        "Instant document verification",
+        "Real-time borrower updates",
+        "5x deal volume increase",
       ],
     },
     {
       icon: Building,
       title: "Community Banks",
       description:
-        "Modernize your lending operations with AI-powered underwriting while maintaining the personal touch your customers love.",
+        "Limited staff can't keep up with loan volume without hiring. Lendry.AI lets your existing team do more with less.",
       benefits: [
-        "Streamline local lending workflows",
-        "Maintain customer relationships",
-        "Reduce manual underwriting",
+        "Automate repetitive tasks",
+        "Free up loan officers for relationship building",
+        "Reduce approval times by 60%",
         "Stay competitive with larger banks",
       ],
     },
@@ -50,24 +50,24 @@ export default function PublicUseCasesPage() {
       icon: Users,
       title: "Credit Unions",
       description:
-        "Serve your members better with faster approvals, transparent pricing, and a mobile-first borrower experience.",
+        "Legacy systems can't scale with member demand. Modernize your lending operations without replacing everything.",
       benefits: [
-        "Member-first experience",
-        "Faster approval times",
-        "Enhanced member communications",
-        "Increased member satisfaction",
+        "Seamless integration with existing systems",
+        "Member satisfaction through visibility",
+        "Compliance automation built-in",
+        "99% member satisfaction",
       ],
     },
     {
       icon: BarChart3,
-      title: "Commercial Lenders",
+      title: "Private Lenders",
       description:
-        "Complex deal structures made simple. Multi-property portfolios, DSCR calculations, and commercial underwriting workflows.",
+        "Manual underwriting = slower closings and lost deals. Move faster with AI-powered risk assessment and due diligence.",
       benefits: [
-        "Handle complex deal structures",
-        "Automated property analysis",
-        "DSCR and cash flow calculations",
-        "Commercial deal pipeline management",
+        "AI-powered risk assessment",
+        "Quick turnaround on due diligence",
+        "Competitive edge with speed",
+        "3-day average closing time",
       ],
     },
   ];
@@ -84,11 +84,10 @@ export default function PublicUseCasesPage() {
             className="space-y-4"
           >
             <h1 className="text-4xl lg:text-5xl font-bold tracking-tight">
-              Built for Every Type of Lender
+              Built for Every Lender
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Whether you're a broker, bank, credit union, or commercial lender,
-              Lendry.AI has a solution for you.
+              Whether you're a broker, bank, or alternative lender — Lendry.AI scales with you.
             </p>
           </motion.div>
         </div>
@@ -161,27 +160,30 @@ export default function PublicUseCasesPage() {
           >
             <div className="text-center">
               <h2 className="text-4xl font-bold mb-4">
-                Helping Lenders Succeed
+                Impact Across the Industry
               </h2>
               <p className="text-background/80 max-w-2xl mx-auto">
-                Our platform is trusted by lenders of all sizes to streamline
-                their operations and improve borrower experiences.
+                Lendry.AI is trusted by lending teams of all sizes to automate operations and scale without overhead.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
               {[
                 {
-                  value: "50%",
-                  label: "Faster Loan Closings",
+                  value: "200+",
+                  label: "Lending Teams Trust Us",
                 },
                 {
-                  value: "60%",
-                  label: "Reduced Manual Work",
+                  value: "$50M+",
+                  label: "In Loans Processed",
                 },
                 {
-                  value: "3x",
-                  label: "More Loan Volume",
+                  value: "1.2M+",
+                  label: "Applications Automated",
+                },
+                {
+                  value: "99.9%",
+                  label: "Uptime SLA",
                 },
               ].map((stat, idx) => (
                 <motion.div
@@ -216,21 +218,19 @@ export default function PublicUseCasesPage() {
                 Works with Your Existing Stack
               </h2>
               <p className="text-muted-foreground">
-                Lendry.AI integrates seamlessly with the tools and systems you
-                already use, from loan origination systems to document management
-                platforms.
+                Seamlessly integrate with tools you already use. Don't see your tool? We support custom API integrations.
               </p>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
-                "LOS Integration",
-                "Bank APIs",
-                "Document Tools",
-                "Compliance",
-                "Analytics",
-                "CRM Systems",
-                "Email & SMS",
+                "Encompass",
+                "Salesforce",
+                "DocuSign",
+                "Stripe",
+                "Slack",
+                "Zapier",
+                "Loan Depot",
                 "Webhooks",
               ].map((integration, idx) => (
                 <div
@@ -263,10 +263,10 @@ export default function PublicUseCasesPage() {
           >
             <div>
               <h2 className="text-4xl font-bold tracking-tight mb-4">
-                Let's Find the Right Solution for You
+                Your Lending Automation Starts Here
               </h2>
               <p className="text-xl text-muted-foreground">
-                Schedule a personalized demo with our lending experts.
+                See how your team could benefit. Schedule a personalized demo.
               </p>
             </div>
 

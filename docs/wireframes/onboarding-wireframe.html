@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Onboarding / Setup Guide — Wireframe</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #F1F3F6; --card: #FAFAFA; --navy: #1A3A52; --blue: #2E7FD6;
+    --blue-light: #EBF3FC; --emerald: #10B981; --emerald-light: #ECFDF5;
+    --amber: #F59E0B; --amber-light: #FFFBEB; --red: #EF4444; --red-light: #FEF2F2;
+    --gray-50: #F8FAFC; --gray-100: #F1F5F9; --gray-200: #E2E8F0; --gray-300: #CBD5E1;
+    --gray-400: #94A3B8; --gray-500: #64748B; --gray-600: #475569; --gray-700: #334155;
+    --border: #E2E6EB; --radius: 10px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08);
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  body { font-family: var(--font); background: var(--bg); color: var(--navy); min-height: 100vh; display: flex; -webkit-font-smoothing: antialiased; }
+
+  /* SIDEBAR */
+  .sidebar { width: 240px; min-height: 100vh; background: #0F2438; color: #E2E8EF; display: flex; flex-direction: column; flex-shrink: 0; }
+  .sidebar-logo { padding: 20px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 10px; }
+  .sidebar-logo .logo-icon { width: 32px; height: 32px; background: var(--blue); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 14px; }
+  .sidebar-logo span { font-weight: 600; font-size: 15px; }
+  .sidebar-nav { padding: 12px 8px; flex: 1; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; font-size: 13.5px; color: rgba(255,255,255,0.65); cursor: pointer; transition: all 0.15s; font-weight: 500; }
+  .nav-item:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.9); }
+  .nav-item.active { background: rgba(46,127,214,0.15); color: #4A9EFF; }
+  .nav-item .icon { width: 18px; text-align: center; opacity: 0.7; font-size: 15px; }
+
+  /* MAIN */
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .topbar { background: white; border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 10; }
+  .breadcrumb { font-size: 13px; color: var(--gray-500); }
+  .breadcrumb a { color: var(--gray-500); text-decoration: none; }
+  .breadcrumb a:hover { color: var(--blue); }
+  .breadcrumb .sep { margin: 0 6px; }
+  .breadcrumb .current { color: var(--navy); font-weight: 500; }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+
+  .content { padding: 24px; flex: 1; overflow-y: auto; display: flex; gap: 24px; }
+
+  /* ===== STEP SIDEBAR ===== */
+  .step-sidebar { width: 260px; flex-shrink: 0; }
+  .step-sidebar-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; position: sticky; top: 76px; }
+  .step-sidebar-title { font-size: 13px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 12px; }
+  .step-progress-bar { height: 6px; background: var(--gray-200); border-radius: 3px; margin-bottom: 16px; overflow: hidden; }
+  .step-progress-fill { height: 100%; background: var(--emerald); border-radius: 3px; transition: width 0.4s ease; }
+  .step-progress-text { font-size: 12px; color: var(--gray-500); margin-bottom: 16px; text-align: center; }
+
+  .step-nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; transition: all 0.15s; margin-bottom: 2px; }
+  .step-nav-item:hover { background: var(--gray-50); }
+  .step-nav-item.active { background: var(--blue-light); }
+  .step-nav-item.done .step-circle { background: var(--emerald); color: white; }
+  .step-nav-item.active .step-circle { background: var(--blue); color: white; box-shadow: 0 0 0 3px rgba(46,127,214,0.2); }
+  .step-nav-item.active .step-label { color: var(--blue); font-weight: 600; }
+  .step-circle { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; background: var(--gray-200); color: var(--gray-500); transition: all 0.2s; }
+  .step-label { font-size: 13px; color: var(--gray-600); font-weight: 500; flex: 1; }
+  .step-status { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; }
+  .step-status.done { background: var(--emerald-light); color: #047857; }
+  .step-status.active { background: var(--blue-light); color: var(--blue); }
+
+  /* GROUP DIVIDER */
+  .step-group-label { font-size: 10px; font-weight: 600; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.06em; padding: 12px 12px 4px; margin-top: 4px; }
+
+  /* ===== MAIN CONTENT AREA ===== */
+  .step-content { flex: 1; min-width: 0; }
+  .step-header { margin-bottom: 20px; display: flex; align-items: flex-start; justify-content: space-between; }
+  .step-title { font-size: 22px; font-weight: 700; }
+  .step-desc { font-size: 14px; color: var(--gray-500); margin-top: 4px; max-width: 600px; }
+  .step-actions { display: flex; gap: 8px; }
+
+  .btn { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: white; color: var(--gray-600); transition: all 0.15s; display: flex; align-items: center; gap: 6px; }
+  .btn:hover { border-color: var(--gray-300); background: var(--gray-50); }
+  .btn-primary { background: var(--blue); color: white; border-color: var(--blue); }
+  .btn-primary:hover { background: #2570C0; }
+  .btn-success { background: var(--emerald); color: white; border-color: var(--emerald); }
+
+  /* CARDS */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 16px; }
+  .card-header { padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+  .card-title { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .card-body { padding: 18px; }
+
+  /* FORM FIELDS */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-field { display: flex; flex-direction: column; gap: 4px; }
+  .form-field.full { grid-column: 1 / -1; }
+  .form-label { font-size: 12px; font-weight: 500; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.04em; }
+  .form-input { padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13.5px; color: var(--navy); background: white; outline: none; transition: border 0.15s; }
+  .form-input:focus { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(46,127,214,0.12); }
+  .form-input::placeholder { color: var(--gray-400); }
+  .form-select { padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13.5px; color: var(--navy); background: white; }
+  .form-hint { font-size: 11.5px; color: var(--gray-400); }
+
+  /* INTEGRATION CARDS */
+  .integration-row { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 10px; background: white; transition: all 0.15s; }
+  .integration-row:hover { border-color: var(--gray-300); box-shadow: var(--shadow); }
+  .integration-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+  .integration-info { flex: 1; }
+  .integration-name { font-size: 14px; font-weight: 600; }
+  .integration-desc { font-size: 12px; color: var(--gray-500); margin-top: 1px; }
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 12px; font-size: 11.5px; font-weight: 500; }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .badge-green { background: var(--emerald-light); color: #047857; }
+  .badge-green .dot { background: var(--emerald); }
+  .badge-amber { background: var(--amber-light); color: #B45309; }
+  .badge-amber .dot { background: var(--amber); }
+  .badge-gray { background: var(--gray-100); color: var(--gray-500); }
+  .badge-gray .dot { background: var(--gray-400); }
+  .badge-blue { background: var(--blue-light); color: var(--blue); }
+  .badge-blue .dot { background: var(--blue); }
+
+  /* PROGRAM CARDS */
+  .program-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; background: white; margin-bottom: 10px; }
+  .program-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .program-name { font-size: 14px; font-weight: 600; }
+  .program-stats { display: flex; gap: 16px; }
+  .program-stat { font-size: 12px; color: var(--gray-500); }
+  .program-stat strong { color: var(--navy); }
+
+  /* CHECKLIST */
+  .checklist-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .checklist-item:last-child { border-bottom: none; }
+  .check-circle { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--gray-300); display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
+  .check-circle.done { background: var(--emerald); border-color: var(--emerald); color: white; }
+  .check-text { font-size: 13.5px; font-weight: 500; }
+  .check-text.done { color: var(--gray-400); text-decoration: line-through; }
+
+  /* TEAM TABLE */
+  .team-table { width: 100%; border-collapse: collapse; }
+  .team-table th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 2px solid var(--border); background: var(--gray-50); }
+  .team-table td { padding: 10px 14px; font-size: 13.5px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .team-table tbody tr:hover { background: var(--blue-light); }
+  .avatar { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+
+  /* UPLOAD AREA */
+  .upload-area { border: 2px dashed var(--border); border-radius: var(--radius); padding: 24px; text-align: center; cursor: pointer; transition: all 0.15s; }
+  .upload-area:hover { border-color: var(--blue); background: var(--blue-light); }
+  .upload-area .icon { font-size: 28px; opacity: 0.4; margin-bottom: 8px; }
+  .upload-area p { font-size: 13px; color: var(--gray-500); }
+  .upload-area .hint { font-size: 11px; color: var(--gray-400); margin-top: 4px; }
+
+  /* STEP CONTENT SECTIONS */
+  .step-panel { display: none; animation: fadeIn 0.25s ease-out; }
+  .step-panel.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* FOOTER NAV */
+  .step-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+  .skip-btn { font-size: 13px; color: var(--gray-400); border: none; background: none; cursor: pointer; }
+  .skip-btn:hover { color: var(--gray-600); }
+
+  /* DESIGN NOTES */
+  .design-notes { background: linear-gradient(135deg, #1E1E2E, #2D2D44); color: #F8F8F2; padding: 16px 24px; font-size: 13px; line-height: 1.6; border-bottom: 2px solid var(--blue); }
+  .design-notes h2 { font-size: 15px; margin-bottom: 8px; color: #A78BFA; }
+  .design-notes ul { padding-left: 20px; }
+  .design-notes li { margin-bottom: 4px; }
+  .design-notes em { color: var(--amber); font-style: normal; font-weight: 500; }
+  .design-notes code { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+
+  /* COMPLETION CARD */
+  .completion-card { text-align: center; padding: 48px 24px; }
+  .completion-icon { width: 64px; height: 64px; border-radius: 50%; background: var(--emerald-light); display: flex; align-items: center; justify-content: center; font-size: 28px; margin: 0 auto 16px; }
+  .completion-title { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+  .completion-desc { font-size: 14px; color: var(--gray-500); max-width: 460px; margin: 0 auto 24px; }
+</style>
+</head>
+<body>
+
+<!-- Design Notes -->
+<div class="design-notes" style="position: fixed; top: 0; left: 0; right: 0; z-index: 1000;">
+  <h2>Admin Onboarding / Setup Guide — Wireframe Annotations</h2>
+  <ul>
+    <li><em>10 steps → 3 groups</em>: "Foundation" (company, integrations), "Lending" (programs, pricing, AI), "Team & Access" (team, roles, portals). Reduces cognitive load.</li>
+    <li><em>Progress bar</em> at top of step sidebar shows overall completion (40% = 4 of 10 steps done).</li>
+    <li><em>Step status badges</em>: Done (green), In Progress (blue), or none (pending). Users can jump to any step — non-linear.</li>
+    <li><em>Skip option</em> on every step footer — nothing blocks progress. Users can come back later.</li>
+    <li><em>Auto-save</em> indicator replaces manual "Save Changes" button. Changes save on blur/debounce.</li>
+    <li>Click step items in the <em>left sidebar</em> to switch between steps.</li>
+  </ul>
+</div>
+
+<div style="display: flex; margin-top: 95px;">
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo"><div class="logo-icon">L</div><span>Lendry.AI</span></div>
+  <nav class="sidebar-nav">
+    <div class="nav-item"><span class="icon">🏠</span> Dashboard</div>
+    <div class="nav-item"><span class="icon">📊</span> Pipeline</div>
+    <div class="nav-item"><span class="icon">👥</span> Contacts</div>
+    <div class="nav-item"><span class="icon">📋</span> Programs</div>
+    <div class="nav-item"><span class="icon">💬</span> Messages</div>
+    <div class="nav-item"><span class="icon">📈</span> Reports</div>
+    <div class="nav-item active"><span class="icon">⚙️</span> Settings</div>
+  </nav>
+</aside>
+
+<div class="main">
+  <div class="topbar">
+    <div class="breadcrumb">
+      <a href="#">Dashboard</a><span class="sep">›</span>
+      <a href="#">Settings</a><span class="sep">›</span>
+      <span class="current">Setup Guide</span>
+    </div>
+    <div class="topbar-right">
+      <span style="font-size: 12px; color: var(--gray-400);">Auto-saved · 2 min ago</span>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ===== STEP SIDEBAR ===== -->
+    <div class="step-sidebar">
+      <div class="step-sidebar-card">
+        <div class="step-sidebar-title">Setup Progress</div>
+        <div class="step-progress-bar"><div class="step-progress-fill" style="width: 40%;"></div></div>
+        <div class="step-progress-text">4 of 10 steps complete</div>
+
+        <!-- Group 1: Foundation -->
+        <div class="step-group-label">Foundation</div>
+        <div class="step-nav-item done" onclick="switchStep('company')">
+          <div class="step-circle">✓</div>
+          <span class="step-label">Company Profile</span>
+          <span class="step-status done">Done</span>
+        </div>
+        <div class="step-nav-item done" onclick="switchStep('integrations')">
+          <div class="step-circle">✓</div>
+          <span class="step-label">Integrations</span>
+          <span class="step-status done">Done</span>
+        </div>
+
+        <!-- Group 2: Lending -->
+        <div class="step-group-label">Lending Setup</div>
+        <div class="step-nav-item done" onclick="switchStep('programs')">
+          <div class="step-circle">✓</div>
+          <span class="step-label">Loan Programs</span>
+          <span class="step-status done">Done</span>
+        </div>
+        <div class="step-nav-item done" onclick="switchStep('pricing')">
+          <div class="step-circle">✓</div>
+          <span class="step-label">Pricing</span>
+          <span class="step-status done">Done</span>
+        </div>
+        <div class="step-nav-item active" onclick="switchStep('docreview')">
+          <div class="step-circle">5</div>
+          <span class="step-label">Doc Review</span>
+          <span class="step-status active">Current</span>
+        </div>
+        <div class="step-nav-item" onclick="switchStep('ai')">
+          <div class="step-circle">6</div>
+          <span class="step-label">AI Agent</span>
+        </div>
+
+        <!-- Group 3: Team & Access -->
+        <div class="step-group-label">Team & Access</div>
+        <div class="step-nav-item" onclick="switchStep('comms')">
+          <div class="step-circle">7</div>
+          <span class="step-label">Communications</span>
+        </div>
+        <div class="step-nav-item" onclick="switchStep('team')">
+          <div class="step-circle">8</div>
+          <span class="step-label">Team Members</span>
+        </div>
+        <div class="step-nav-item" onclick="switchStep('roles')">
+          <div class="step-circle">9</div>
+          <span class="step-label">Roles & Permissions</span>
+        </div>
+        <div class="step-nav-item" onclick="switchStep('launch')">
+          <div class="step-circle">10</div>
+          <span class="step-label">Launch</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== STEP CONTENT ===== -->
+    <div class="step-content">
+
+      <!-- ======== STEP 1: COMPANY PROFILE ======== -->
+      <div class="step-panel" id="step-company">
+        <div class="step-header">
+          <div>
+            <div class="step-title">Company Profile</div>
+            <div class="step-desc">Set up your company branding and contact information. This appears on borrower-facing communications and portals.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">🏢 Basic Information</span></div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="form-field"><label class="form-label">Company Name</label><input class="form-input" value="Sphinx Capital" /></div>
+              <div class="form-field"><label class="form-label">Support Email</label><input class="form-input" value="support@sphinxcap.com" /></div>
+              <div class="form-field"><label class="form-label">Email Sender Name</label><input class="form-input" value="Sphinx Capital Lending" /><span class="form-hint">Appears as the "From" name in outgoing emails</span></div>
+              <div class="form-field"><label class="form-label">Phone</label><input class="form-input" value="(305) 555-0100" /></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">🎨 Branding</span></div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="form-field">
+                <label class="form-label">Logo (Light Background)</label>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <div style="width: 60px; height: 60px; background: var(--gray-100); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 24px;">🏛️</div>
+                  <button class="btn" style="font-size: 12px; padding: 6px 12px;">Replace</button>
+                </div>
+              </div>
+              <div class="form-field">
+                <label class="form-label">Logo (Dark Background)</label>
+                <div class="upload-area" style="padding: 14px;">
+                  <p style="font-size: 12px;">Drop logo here or click to upload</p>
+                  <div class="hint">PNG, SVG. Max 2MB.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step-footer">
+          <button class="skip-btn">Skip for now →</button>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn" disabled style="opacity: 0.5;">← Back</button>
+            <button class="btn btn-primary" onclick="switchStep('integrations')">Continue →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======== STEP 2: INTEGRATIONS ======== -->
+      <div class="step-panel" id="step-integrations">
+        <div class="step-header">
+          <div>
+            <div class="step-title">Integrations</div>
+            <div class="step-desc">Connect your Google or Microsoft accounts to enable email sync, document storage, and calendar features.</div>
+          </div>
+        </div>
+
+        <div class="integration-row">
+          <div class="integration-icon" style="background: var(--emerald-light);">📧</div>
+          <div class="integration-info">
+            <div class="integration-name">Gmail / Google Workspace</div>
+            <div class="integration-desc">Sync emails, send from your domain, and auto-link communications to deals</div>
+          </div>
+          <span class="badge badge-green"><span class="dot"></span> Connected</span>
+        </div>
+
+        <div class="integration-row">
+          <div class="integration-icon" style="background: var(--emerald-light);">📁</div>
+          <div class="integration-info">
+            <div class="integration-name">Google Drive</div>
+            <div class="integration-desc">Auto-create deal folders and sync documents to your Drive</div>
+          </div>
+          <span class="badge badge-green"><span class="dot"></span> Connected</span>
+          <button class="btn" style="font-size: 12px; padding: 5px 10px;">⚙️</button>
+        </div>
+
+        <div class="integration-row">
+          <div class="integration-icon" style="background: var(--blue-light);">☁️</div>
+          <div class="integration-info">
+            <div class="integration-name">OneDrive / SharePoint</div>
+            <div class="integration-desc">Alternative document storage using Microsoft 365</div>
+          </div>
+          <span class="badge badge-gray"><span class="dot"></span> Not Connected</span>
+          <button class="btn btn-primary" style="font-size: 12px; padding: 5px 12px;">Connect</button>
+        </div>
+
+        <div class="integration-row">
+          <div class="integration-icon" style="background: var(--amber-light);">📅</div>
+          <div class="integration-info">
+            <div class="integration-name">Google Calendar</div>
+            <div class="integration-desc">Schedule closings, inspections, and follow-ups directly from deals</div>
+          </div>
+          <span class="badge badge-gray"><span class="dot"></span> Not Connected</span>
+          <button class="btn btn-primary" style="font-size: 12px; padding: 5px 12px;">Connect</button>
+        </div>
+
+        <div class="step-footer">
+          <button class="skip-btn">Skip for now →</button>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn" onclick="switchStep('company')">← Back</button>
+            <button class="btn btn-primary" onclick="switchStep('programs')">Continue →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======== STEP 3: LOAN PROGRAMS ======== -->
+      <div class="step-panel" id="step-programs">
+        <div class="step-header">
+          <div>
+            <div class="step-title">Loan Programs</div>
+            <div class="step-desc">Configure your lending products. Each program defines stages, required documents, and pricing parameters.</div>
+          </div>
+          <button class="btn btn-primary" style="font-size: 13px;">+ Create Program</button>
+        </div>
+
+        <div class="program-card">
+          <div class="program-header">
+            <div class="program-name">🏠 DSCR 30-Year Fixed</div>
+            <span class="badge badge-green"><span class="dot"></span> Active</span>
+          </div>
+          <div class="program-stats">
+            <span class="program-stat"><strong>6</strong> stages</span>
+            <span class="program-stat"><strong>27</strong> documents</span>
+            <span class="program-stat"><strong>12</strong> form fields</span>
+          </div>
+        </div>
+
+        <div class="program-card">
+          <div class="program-header">
+            <div class="program-name">🔨 RTL Fix & Flip</div>
+            <span class="badge badge-green"><span class="dot"></span> Active</span>
+          </div>
+          <div class="program-stats">
+            <span class="program-stat"><strong>5</strong> stages</span>
+            <span class="program-stat"><strong>22</strong> documents</span>
+            <span class="program-stat"><strong>15</strong> form fields</span>
+          </div>
+        </div>
+
+        <div class="program-card">
+          <div class="program-header">
+            <div class="program-name">🌉 Bridge Loan</div>
+            <span class="badge badge-amber"><span class="dot"></span> Draft</span>
+          </div>
+          <div class="program-stats">
+            <span class="program-stat"><strong>4</strong> stages</span>
+            <span class="program-stat"><strong>18</strong> documents</span>
+            <span class="program-stat"><strong>10</strong> form fields</span>
+          </div>
+        </div>
+
+        <div class="step-footer">
+          <button class="skip-btn">Skip for now →</button>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn" onclick="switchStep('integrations')">← Back</button>
+            <button class="btn btn-primary" onclick="switchStep('pricing')">Continue →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======== STEP 4: PRICING ======== -->
+      <div class="step-panel" id="step-pricing">
+        <div class="step-header">
+          <div>
+            <div class="step-title">Pricing Configuration</div>
+            <div class="step-desc">Set up rate sheets and pricing rules for each loan program. Borrowers and brokers will use these to generate instant quotes.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">💰 DSCR 30-Year Fixed — Rate Sheet</span>
+            <button class="btn" style="font-size: 12px; padding: 5px 10px;">✏️ Edit</button>
+          </div>
+          <div class="card-body">
+            <div style="overflow-x: auto;">
+              <table class="team-table" style="min-width: 500px;">
+                <thead><tr><th>LTV Range</th><th>DSCR ≥ 1.25</th><th>DSCR 1.0–1.24</th><th>DSCR &lt; 1.0</th></tr></thead>
+                <tbody>
+                  <tr><td style="font-weight: 600;">≤ 65%</td><td>6.75%</td><td>7.25%</td><td>8.00%</td></tr>
+                  <tr><td style="font-weight: 600;">65–70%</td><td>7.00%</td><td>7.50%</td><td>8.25%</td></tr>
+                  <tr><td style="font-weight: 600;">70–75%</td><td>7.25%</td><td>7.75%</td><td>8.50%</td></tr>
+                  <tr><td style="font-weight: 600;">75–80%</td><td>7.50%</td><td>8.00%</td><td>N/A</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">🔨 RTL Fix & Flip — Rate Sheet</span>
+            <button class="btn" style="font-size: 12px; padding: 5px 10px;">✏️ Edit</button>
+          </div>
+          <div class="card-body" style="text-align: center; padding: 24px; color: var(--gray-400);">
+            <div style="font-size: 28px; opacity: 0.3; margin-bottom: 8px;">💰</div>
+            <div style="font-size: 14px; font-weight: 500; color: var(--gray-600); margin-bottom: 4px;">No pricing configured yet</div>
+            <div style="font-size: 13px; color: var(--gray-400); margin-bottom: 12px;">Set up your rate sheet so borrowers can get instant quotes</div>
+            <button class="btn btn-primary" style="margin: 0 auto; font-size: 12px;">+ Configure Pricing</button>
+          </div>
+        </div>
+
+        <div class="step-footer">
+          <button class="skip-btn">Skip for now →</button>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn" onclick="switchStep('programs')">← Back</button>
+            <button class="btn btn-primary" onclick="switchStep('docreview')">Continue →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======== STEP 5: DOC REVIEW (Active) ======== -->
+      <div class="step-panel active" id="step-docreview">
+        <div class="step-header">
+          <div>
+            <div class="step-title">Document Review</div>
+            <div class="step-desc">Configure how documents are reviewed — automatically by AI, on a schedule, or manually. You can change this per-deal later.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">⚡ Default Review Mode</span></div>
+          <div class="card-body">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+              <div style="border: 2px solid var(--blue); border-radius: var(--radius); padding: 16px; cursor: pointer; background: var(--blue-light);">
+                <div style="font-size: 18px; margin-bottom: 6px;">⚡</div>
+                <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px; color: var(--blue);">Automatic</div>
+                <div style="font-size: 12px; color: var(--gray-500);">AI reviews documents immediately when uploaded. Fastest turnaround for borrowers.</div>
+              </div>
+              <div style="border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; cursor: pointer;">
+                <div style="font-size: 18px; margin-bottom: 6px;">🕐</div>
+                <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">Timed / Batch</div>
+                <div style="font-size: 12px; color: var(--gray-500);">AI reviews at scheduled times (e.g., every morning at 9 AM). Good for controlled workflows.</div>
+              </div>
+              <div style="border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; cursor: pointer;">
+                <div style="font-size: 18px; margin-bottom: 6px;">✋</div>
+                <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">Manual</div>
+                <div style="font-size: 12px; color: var(--gray-500);">AI only reviews when you click "Auto Process" on a deal. Full control.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">📋 Review Checklist</span></div>
+          <div class="card-body">
+            <div style="font-size: 13px; color: var(--gray-500); margin-bottom: 12px;">The AI agent checks each document for these criteria:</div>
+            <div class="checklist-item">
+              <div class="check-circle done">✓</div>
+              <span class="check-text">Document is legible and not corrupted</span>
+            </div>
+            <div class="checklist-item">
+              <div class="check-circle done">✓</div>
+              <span class="check-text">Document matches the expected category (e.g., bank statement vs. pay stub)</span>
+            </div>
+            <div class="checklist-item">
+              <div class="check-circle done">✓</div>
+              <span class="check-text">Key data fields are present and readable</span>
+            </div>
+            <div class="checklist-item">
+              <div class="check-circle done">✓</div>
+              <span class="check-text">Dates are within acceptable range (not expired)</span>
+            </div>
+            <div class="checklist-item">
+              <div class="check-circle done">✓</div>
+              <span class="check-text">Borrower name matches across documents</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="step-footer">
+          <button class="skip-btn">Skip for now →</button>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn" onclick="switchStep('pricing')">← Back</button>
+            <button class="btn btn-primary" onclick="switchStep('ai')">Continue →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======== STEP 6: AI AGENT ======== -->
+      <div class="step-panel" id="step-ai">
+        <div class="step-header">
+          <div>
+            <div class="step-title">AI Agent Configuration</div>
+            <div class="step-desc">Customize your AI assistant's behavior, communication style, and automation level.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">🤖 Agent Personality</span></div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="form-field full">
+                <label class="form-label">Agent Name</label>
+                <input class="form-input" value="Sphinx AI" placeholder="e.g., Lendry Assistant" />
+                <span class="form-hint">This name appears in borrower-facing communications</span>
+              </div>
+              <div class="form-field full">
+                <label class="form-label">Tone / Style</label>
+                <select class="form-select">
+                  <option selected>Professional & Friendly</option>
+                  <option>Formal & Corporate</option>
+                  <option>Casual & Approachable</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">⚙️ Automation Level</span></div>
+          <div class="card-body">
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border);">
+                <div><div style="font-size: 13.5px; font-weight: 500;">Auto-send borrower updates</div><div style="font-size: 12px; color: var(--gray-400);">Notify borrowers when document status changes</div></div>
+                <div style="width: 44px; height: 24px; background: var(--emerald); border-radius: 12px; cursor: pointer; position: relative;"><div style="width: 20px; height: 20px; background: white; border-radius: 50%; position: absolute; top: 2px; right: 2px; box-shadow: 0 1px 2px rgba(0,0,0,0.15);"></div></div>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border);">
+                <div><div style="font-size: 13.5px; font-weight: 500;">Auto-create deal tasks</div><div style="font-size: 12px; color: var(--gray-400);">Generate recommended tasks based on pipeline stage</div></div>
+                <div style="width: 44px; height: 24px; background: var(--emerald); border-radius: 12px; cursor: pointer; position: relative;"><div style="width: 20px; height: 20px; background: white; border-radius: 50%; position: absolute; top: 2px; right: 2px; box-shadow: 0 1px 2px rgba(0,0,0,0.15);"></div></div>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 0;">
+                <div><div style="font-size: 13.5px; font-weight: 500;">Auto-move stages</div><div style="font-size: 12px; color: var(--gray-400);">Advance deal to next stage when all documents are approved</div></div>
+                <div style="width: 44px; height: 24px; background: var(--gray-200); border-radius: 12px; cursor: pointer; position: relative;"><div style="width: 20px; height: 20px; background: white; border-radius: 50%; position: absolute; top: 2px; left: 2px; box-shadow: 0 1px 2px rgba(0,0,0,0.15);"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step-footer">
+          <button class="skip-btn">Skip for now →</button>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn" onclick="switchStep('docreview')">← Back</button>
+            <button class="btn btn-primary" onclick="switchStep('comms')">Continue →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======== STEP 7: COMMUNICATIONS ======== -->
+      <div class="step-panel" id="step-comms">
+        <div class="step-header">
+          <div>
+            <div class="step-title">Communications</div>
+            <div class="step-desc">Configure how Lendry sends emails on your behalf. Requires Gmail or Google Workspace integration.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-body" style="display: flex; align-items: center; gap: 14px; padding: 20px;">
+            <div style="width: 48px; height: 48px; border-radius: 12px; background: var(--emerald-light); display: flex; align-items: center; justify-content: center; font-size: 24px;">📧</div>
+            <div style="flex: 1;">
+              <div style="font-size: 15px; font-weight: 600;">Gmail Connected</div>
+              <div style="font-size: 13px; color: var(--gray-500);">Sending as: <strong>carlos@sphinxcap.com</strong></div>
+            </div>
+            <span class="badge badge-green"><span class="dot"></span> Active</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">📬 Email Templates</span></div>
+          <div class="card-body">
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;">
+                <div><div style="font-size: 13.5px; font-weight: 500;">Welcome Email</div><div style="font-size: 12px; color: var(--gray-400);">Sent when borrower portal is activated</div></div>
+                <button class="btn" style="font-size: 11px; padding: 4px 10px;">Preview</button>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;">
+                <div><div style="font-size: 13.5px; font-weight: 500;">Document Request</div><div style="font-size: 12px; color: var(--gray-400);">Sent when new documents are needed</div></div>
+                <button class="btn" style="font-size: 11px; padding: 4px 10px;">Preview</button>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;">
+                <div><div style="font-size: 13.5px; font-weight: 500;">Weekly Digest</div><div style="font-size: 12px; color: var(--gray-400);">Status update sent to borrower weekly</div></div>
+                <button class="btn" style="font-size: 11px; padding: 4px 10px;">Preview</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step-footer">
+          <button class="skip-btn">Skip for now →</button>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn" onclick="switchStep('ai')">← Back</button>
+            <button class="btn btn-primary" onclick="switchStep('team')">Continue →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======== STEP 8: TEAM ======== -->
+      <div class="step-panel" id="step-team">
+        <div class="step-header">
+          <div>
+            <div class="step-title">Team Members</div>
+            <div class="step-desc">Invite your team to collaborate on deals. Each member can be assigned a role with specific permissions.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">👥 Current Team</span>
+            <button class="btn btn-primary" style="font-size: 12px; padding: 6px 14px;">+ Invite Member</button>
+          </div>
+          <div class="card-body" style="padding: 0;">
+            <table class="team-table">
+              <thead><tr><th>Member</th><th>Role</th><th>Status</th><th style="width: 80px;">Actions</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <div class="avatar" style="background: var(--blue-light); color: var(--blue);">CV</div>
+                      <div><div style="font-weight: 500;">Carlos Velez</div><div style="font-size: 12px; color: var(--gray-400);">carlos@sphinxcap.com</div></div>
+                    </div>
+                  </td>
+                  <td><span class="badge badge-blue"><span class="dot"></span> Admin</span></td>
+                  <td><span class="badge badge-green"><span class="dot"></span> Active</span></td>
+                  <td style="font-size: 12px; color: var(--gray-400);">Owner</td>
+                </tr>
+                <tr>
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <div class="avatar" style="background: var(--emerald-light); color: #047857;">MS</div>
+                      <div><div style="font-weight: 500;">Maria Santos</div><div style="font-size: 12px; color: var(--gray-400);">maria@sphinxcap.com</div></div>
+                    </div>
+                  </td>
+                  <td><span class="badge badge-green"><span class="dot"></span> Processor</span></td>
+                  <td><span class="badge badge-green"><span class="dot"></span> Active</span></td>
+                  <td><button class="btn" style="font-size: 11px; padding: 3px 8px;">✏️</button></td>
+                </tr>
+                <tr>
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <div class="avatar" style="background: var(--amber-light); color: #B45309;">JT</div>
+                      <div><div style="font-weight: 500;">James Torres</div><div style="font-size: 12px; color: var(--gray-400);">james@sphinxcap.com</div></div>
+                    </div>
+                  </td>
+                  <td><span class="badge badge-amber"><span class="dot"></span> Processor</span></td>
+                  <td><span class="badge badge-amber"><span class="dot"></span> Invited</span></td>
+                  <td><button class="btn" style="font-size: 11px; padding: 3px 8px;">↻ Resend</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="step-footer">
+          <button class="skip-btn">Skip for now →</button>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn" onclick="switchStep('comms')">← Back</button>
+            <button class="btn btn-primary" onclick="switchStep('roles')">Continue →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======== STEP 9: ROLES ======== -->
+      <div class="step-panel" id="step-roles">
+        <div class="step-header">
+          <div>
+            <div class="step-title">Roles & Permissions</div>
+            <div class="step-desc">Define what each role can see and do. Customize these based on your team's workflow.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-body" style="padding: 0; overflow-x: auto;">
+            <table class="team-table" style="min-width: 600px;">
+              <thead>
+                <tr>
+                  <th>Permission</th>
+                  <th style="text-align: center;">Admin</th>
+                  <th style="text-align: center;">Processor</th>
+                  <th style="text-align: center;">Viewer</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="font-weight: 500;">View all deals</td>
+                  <td style="text-align: center; color: var(--emerald);">✓</td>
+                  <td style="text-align: center; color: var(--emerald);">✓</td>
+                  <td style="text-align: center; color: var(--emerald);">✓</td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 500;">Create & edit deals</td>
+                  <td style="text-align: center; color: var(--emerald);">✓</td>
+                  <td style="text-align: center; color: var(--emerald);">✓</td>
+                  <td style="text-align: center; color: var(--gray-300);">—</td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 500;">Approve documents</td>
+                  <td style="text-align: center; color: var(--emerald);">✓</td>
+                  <td style="text-align: center; color: var(--emerald);">✓</td>
+                  <td style="text-align: center; color: var(--gray-300);">—</td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 500;">Run AI processing</td>
+                  <td style="text-align: center; color: var(--emerald);">✓</td>
+                  <td style="text-align: center; color: var(--emerald);">✓</td>
+                  <td style="text-align: center; color: var(--gray-300);">—</td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 500;">Manage team members</td>
+                  <td style="text-align: center; color: var(--emerald);">✓</td>
+                  <td style="text-align: center; color: var(--gray-300);">—</td>
+                  <td style="text-align: center; color: var(--gray-300);">—</td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 500;">Configure settings</td>
+                  <td style="text-align: center; color: var(--emerald);">✓</td>
+                  <td style="text-align: center; color: var(--gray-300);">—</td>
+                  <td style="text-align: center; color: var(--gray-300);">—</td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 500;">Manage loan programs</td>
+                  <td style="text-align: center; color: var(--emerald);">✓</td>
+                  <td style="text-align: center; color: var(--gray-300);">—</td>
+                  <td style="text-align: center; color: var(--gray-300);">—</td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 500;">View reports & analytics</td>
+                  <td style="text-align: center; color: var(--emerald);">✓</td>
+                  <td style="text-align: center; color: var(--emerald);">✓</td>
+                  <td style="text-align: center; color: var(--emerald);">✓</td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 500;">Access borrower PII</td>
+                  <td style="text-align: center; color: var(--emerald);">✓</td>
+                  <td style="text-align: center; color: var(--emerald);">✓</td>
+                  <td style="text-align: center; color: var(--gray-300);">—</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p style="font-size: 12px; color: var(--gray-400); margin-top: 10px;">
+            You can create custom roles with fine-grained permissions after setup.
+          </p>
+        </div>
+
+        <!-- Step Footer -->
+        <div class="step-footer">
+          <button class="skip-btn" onclick="switchStep(10)">Skip for now →</button>
+          <div style="display: flex; gap: 10px;">
+            <button class="btn btn-secondary" onclick="switchStep(8)">← Back</button>
+            <button class="btn btn-primary" onclick="switchStep(10)">Continue →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== STEP 10: LAUNCH ===== -->
+      <div class="step-panel" id="step-10">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;">
+          <h1 style="font-size: 22px; font-weight: 700;">🚀 You're Ready to Launch!</h1>
+        </div>
+
+        <div class="card" style="border: none; box-shadow: none;">
+          <div class="completion-card">
+            <div class="completion-icon">🎉</div>
+            <h2 class="completion-title">Setup Complete</h2>
+            <p class="completion-desc">
+              Lendry AI is configured and ready to go. Here's a summary of what's been set up — you can always adjust these in Settings.
+            </p>
+          </div>
+
+          <!-- Completion Checklist -->
+          <div style="max-width: 480px; margin: 0 auto 32px; text-align: left;">
+            <div class="checklist-item">
+              <div class="check-circle done">✓</div>
+              <span class="check-text done">Company profile configured</span>
+            </div>
+            <div class="checklist-item">
+              <div class="check-circle done">✓</div>
+              <span class="check-text done">Google Drive connected</span>
+            </div>
+            <div class="checklist-item">
+              <div class="check-circle done">✓</div>
+              <span class="check-text done">3 loan programs created</span>
+            </div>
+            <div class="checklist-item">
+              <div class="check-circle done">✓</div>
+              <span class="check-text done">Pricing engine configured</span>
+            </div>
+            <div class="checklist-item">
+              <div class="check-circle done">✓</div>
+              <span class="check-text done">Document review rules set</span>
+            </div>
+            <div class="checklist-item">
+              <div class="check-circle">○</div>
+              <span class="check-text">AI agent personality — <em style="color: var(--gray-400);">skipped</em></span>
+            </div>
+            <div class="checklist-item">
+              <div class="check-circle">○</div>
+              <span class="check-text">Communications setup — <em style="color: var(--gray-400);">skipped</em></span>
+            </div>
+            <div class="checklist-item">
+              <div class="check-circle done">✓</div>
+              <span class="check-text done">3 team members invited</span>
+            </div>
+            <div class="checklist-item">
+              <div class="check-circle done">✓</div>
+              <span class="check-text done">Roles & permissions defined</span>
+            </div>
+          </div>
+
+          <!-- Quick Start Actions -->
+          <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 24px;">
+            <button class="btn btn-primary" style="padding: 12px 28px; font-size: 15px;">
+              Go to Dashboard →
+            </button>
+            <button class="btn btn-secondary" style="padding: 12px 28px; font-size: 15px;">
+              Create Your First Deal
+            </button>
+          </div>
+
+          <p style="font-size: 12px; color: var(--gray-400); text-align: center;">
+            You can revisit any setup step from <strong>Settings</strong> at any time.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+function switchStep(n) {
+  // Hide all step panels
+  document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
+  // Show selected step
+  const panel = document.getElementById('step-' + n);
+  if (panel) panel.classList.add('active');
+
+  // Update step sidebar active states
+  document.querySelectorAll('.step-item').forEach(item => {
+    item.classList.remove('active');
+    if (parseInt(item.getAttribute('data-step')) === n) {
+      item.classList.add('active');
+    }
+  });
+}
+
+// Initialize: show step 5 (Doc Review) as active by default
+document.addEventListener('DOMContentLoaded', () => {
+  switchStep(5);
+});
+</script>
+
+</body>
+</html>

@@ -104,11 +104,10 @@ export default function PublicContactPage() {
             className="space-y-4"
           >
             <h1 className="text-4xl lg:text-5xl font-bold tracking-tight">
-              Get in Touch
+              Let's Automate Your Lending
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              We'd love to hear from you. Reach out to learn more about how
-              Lendry.AI can transform your lending operations.
+              Whether you're processing 10 deals or 10,000, we'll help you find the right setup. Talk to our team.
             </p>
           </motion.div>
         </div>
@@ -278,8 +277,7 @@ export default function PublicContactPage() {
               <div>
                 <h2 className="text-2xl font-bold mb-4">Contact Information</h2>
                 <p className="text-muted-foreground mb-8">
-                  Get in touch with our team. We're here to answer any questions
-                  and help you get started.
+                  Built by lenders, for lenders. Our team knows your workflow because we've lived it.
                 </p>
               </div>
 
@@ -338,10 +336,10 @@ export default function PublicContactPage() {
             className="space-y-4"
           >
             <h3 className="text-lg font-semibold">
-              We typically respond within 24 hours
+              We typically respond within 2 hours during business hours
             </h3>
             <p className="text-muted-foreground">
-              If you need immediate assistance, feel free to call us at{" "}
+              Need a faster answer? Call us directly at{" "}
               <span className="font-semibold text-foreground">
                 (555) 123-4567
               </span>
