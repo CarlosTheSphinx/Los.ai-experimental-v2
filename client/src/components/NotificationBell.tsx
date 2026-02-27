@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
-import { Bell, FileUp, MessageSquare, Check, CheckCheck, ExternalLink, ClipboardList, AtSign, Mail, Paperclip } from "lucide-react";
+import { Bell, FileUp, MessageSquare, Check, CheckCheck, ExternalLink, ClipboardList, AtSign, Mail, Paperclip, FileCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
@@ -79,6 +79,8 @@ export function NotificationBell() {
         return <Mail className="h-4 w-4 text-indigo-500" />;
       case "email_document_detected":
         return <Paperclip className="h-4 w-4 text-amber-500" />;
+      case "term_sheet_signed":
+        return <FileCheck className="h-4 w-4 text-emerald-500" />;
       default:
         return <Bell className="h-4 w-4 text-muted-foreground" />;
     }

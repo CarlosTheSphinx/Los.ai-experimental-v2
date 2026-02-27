@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   FileText,
   Search,
@@ -21,6 +20,9 @@ import {
   DollarSign,
   FileSignature,
   TrendingUp,
+  Plus,
+  ArrowLeft,
+  Download,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -88,7 +90,7 @@ function getEnvelopeStatusDisplay(envelope: Envelope | null) {
   return { label: envelope.status, color: 'bg-gray-100 text-gray-600', dotColor: 'bg-gray-400' };
 }
 
-function QuoteCardEnvelope({ envelope, isBorrower }: { envelope: Envelope | null; isBorrower: boolean }) {
+function QuoteCardEnvelope({ envelope, isBorrower, onSendTermSheet }: { envelope: Envelope | null; isBorrower: boolean; onSendTermSheet?: () => void }) {
   const { toast } = useToast();
 
   const syncMutation = useMutation({
@@ -130,8 +132,9 @@ function QuoteCardEnvelope({ envelope, isBorrower }: { envelope: Envelope | null
     return (
       <div className="border-t border-border/50 px-5 py-3 bg-slate-50/50 dark:bg-muted/20">
         <div className="flex items-center gap-3">
-          <FileSignature className="h-4 w-4 text-muted-foreground" />
-          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-medium ${noStatus.color}`} data-testid="badge-no-termsheet">
+          <FileSignature className="h-4.5 w-4.5 text-muted-foreground" />
+          <span className="text-[15px] font-medium text-muted-foreground" data-testid="text-pandadoc-label">PandaDoc:</span>
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[14px] font-medium ${noStatus.color}`} data-testid="badge-no-termsheet">
             <span className={`w-1.5 h-1.5 rounded-full ${noStatus.dotColor}`} />
             {noStatus.label}
           </span>
@@ -149,25 +152,32 @@ function QuoteCardEnvelope({ envelope, isBorrower }: { envelope: Envelope | null
     <div className="border-t border-border/50 px-5 py-3 bg-slate-50/50 dark:bg-muted/20">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <FileSignature className="h-4 w-4 text-muted-foreground" />
-          <div className="flex items-center gap-2">
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-medium ${status.color}`} data-testid={`badge-envelope-status-${latest.quoteId}`}>
+          <FileSignature className="h-4.5 w-4.5 text-muted-foreground" />
+          <span className="text-[15px] font-medium text-muted-foreground" data-testid={`text-pandadoc-label-${latest.quoteId}`}>PandaDoc:</span>
+          <div className="flex items-center gap-2.5">
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[14px] font-medium ${status.color}`} data-testid={`badge-envelope-status-${latest.quoteId}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${status.dotColor}`} />
               {status.label}
             </span>
-            {s === 'sent' && viewCount > 0 && (
-              <span className="text-[13px] text-muted-foreground flex items-center gap-1" data-testid={`text-viewed-count-${latest.quoteId}`}>
-                <Eye className="h-3.5 w-3.5" /> Viewed {viewCount} time{viewCount > 1 ? 's' : ''}
+            {(s === 'sent' || s === 'viewed') && viewCount > 0 && (
+              <span className="text-[15px] text-muted-foreground flex items-center gap-1" data-testid={`text-viewed-count-${latest.quoteId}`}>
+                <Eye className="h-4 w-4" /> Viewed {viewCount} time{viewCount > 1 ? 's' : ''}
               </span>
             )}
             {s === 'completed' && latest.completedAt && (
-              <span className="text-[13px] text-emerald-600 flex items-center gap-1" data-testid={`text-signed-date-${latest.quoteId}`}>
-                <CheckCircle className="h-3.5 w-3.5" /> Signed {formatShortDate(latest.completedAt)}
+              <span className="text-[15px] text-emerald-600 flex items-center gap-1" data-testid={`text-signed-date-${latest.quoteId}`}>
+                <CheckCircle className="h-4 w-4" /> Signed {formatShortDate(latest.completedAt)}
               </span>
             )}
-            {s === 'sent' && latest.sentAt && (
-              <span className="text-[13px] text-muted-foreground" data-testid={`text-sent-date-${latest.quoteId}`}>
+            {(s === 'sent' || s === 'viewed') && latest.sentAt && (
+              <span className="text-[15px] text-muted-foreground" data-testid={`text-sent-date-${latest.quoteId}`}>
                 Sent {formatShortDate(latest.sentAt)}
+              </span>
+            )}
+            {s === 'completed' && latest.hasProject && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[14px] font-medium bg-emerald-50 text-emerald-700" data-testid={`badge-deal-created-${latest.quoteId}`}>
+                <CheckCircle className="h-3.5 w-3.5" />
+                Deal Created
               </span>
             )}
           </div>
@@ -179,31 +189,54 @@ function QuoteCardEnvelope({ envelope, isBorrower }: { envelope: Envelope | null
               size="sm"
               onClick={() => syncMutation.mutate(latest.id)}
               disabled={syncMutation.isPending}
-              className="h-7 text-[13px] px-2"
+              className="h-7 text-[14px] px-2"
               data-testid={`button-sync-${latest.quoteId}`}
             >
               <RefreshCw className={`h-3.5 w-3.5 mr-1 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
               Sync
             </Button>
           )}
+          {!isBorrower && (s === 'sent' || s === 'viewed') && onSendTermSheet && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onSendTermSheet}
+              className="h-8 text-[14px] gap-1.5 rounded-full"
+              data-testid={`button-resend-bar-${latest.quoteId}`}
+            >
+              <Send className="h-3.5 w-3.5" />
+              Resend
+            </Button>
+          )}
           {isBorrower && latest.signingUrl && s !== 'completed' && (
             <Button
               size="sm"
               onClick={() => window.open(latest.signingUrl || "", "_blank")}
-              className="h-8 text-[13px] gap-1.5"
+              className="h-8 text-[14px] gap-1.5"
               data-testid={`button-sign-${latest.quoteId}`}
             >
               <ExternalLink className="h-3.5 w-3.5" />
               Sign Now
             </Button>
           )}
-          {!isBorrower && s === 'completed' && !latest.hasProject && (
+          {s === 'completed' && (
             <Button
               variant="outline"
               size="sm"
+              onClick={() => window.open(`/api/esign/pandadoc/documents/${latest.externalDocumentId}/download`, "_blank")}
+              className="h-8 text-[14px] gap-1.5 rounded-full"
+              data-testid={`button-download-pdf-${latest.quoteId}`}
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download PDF
+            </Button>
+          )}
+          {!isBorrower && s === 'completed' && !latest.hasProject && (
+            <Button
+              size="sm"
               onClick={() => createProjectMutation.mutate(latest.id)}
               disabled={createProjectMutation.isPending}
-              className="h-8 text-[13px] gap-1.5"
+              className="h-8 text-[14px] gap-1.5 rounded-full"
               data-testid={`button-convert-deal-${latest.quoteId}`}
             >
               {createProjectMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderPlus className="h-3.5 w-3.5" />}
@@ -352,20 +385,46 @@ export default function QuotesUnified() {
   const signed = Array.from(envelopeMap.values()).filter(e => e.status.toLowerCase() === 'completed').length;
   const noTermSheet = quotes.length - envelopeMap.size;
 
+  const [activeView, setActiveView] = useState<"quotes" | "create">("quotes");
   const hasResult = (loanProductType === "dscr" && dscrResult) || (loanProductType === "rtl" && rtlResult);
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[26px] font-bold tracking-tight" data-testid="text-page-title">Quotes</h1>
+          <h1 className="text-[26px] font-bold tracking-tight" data-testid="text-page-title">
+            {activeView === "create" ? "New Quote" : "Quotes"}
+          </h1>
           <p className="text-[16px] text-muted-foreground mt-0.5">
-            {isBorrower ? 'View your loan quotes and term sheets.' : 'Manage quotes, term sheets, and deal conversions.'}
+            {activeView === "create"
+              ? "Create a new loan pricing quote."
+              : isBorrower ? 'View your loan quotes and term sheets.' : 'Manage quotes, term sheets, and deal conversions.'}
           </p>
         </div>
+        {activeView === "quotes" && (
+          <Button
+            onClick={() => setActiveView("create")}
+            className="h-10 px-5 text-[15px] gap-2 shadow-md"
+            data-testid="button-new-quote"
+          >
+            <Plus className="h-4 w-4" />
+            New Quote
+          </Button>
+        )}
+        {activeView === "create" && (
+          <Button
+            variant="outline"
+            onClick={() => { setActiveView("quotes"); handleReset(); }}
+            className="h-10 px-5 text-[15px] gap-2"
+            data-testid="button-back-quotes"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Quotes
+          </Button>
+        )}
       </div>
 
-      {!quotesLoading && (
+      {activeView === "quotes" && !quotesLoading && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4" data-testid="stats-row">
           <div className="bg-card border rounded-[10px] shadow-sm px-5 py-4" data-testid="stat-total-quotes">
             <div className="flex items-center gap-2 mb-1">
@@ -410,194 +469,183 @@ export default function QuotesUnified() {
         </div>
       )}
 
-      <div>
-        <Tabs defaultValue={isBorrower ? "quotes" : "quotes"} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-5">
-            <TabsTrigger value="quotes" className="text-[16px]" data-testid="tab-quotes">
-              <FileText className="w-4 h-4 mr-2" />
-              {isBorrower ? 'My Quotes' : 'Quotes'}
-            </TabsTrigger>
-            <TabsTrigger value="create" className="text-[16px]" data-testid="tab-create-quote">
-              <Calculator className="w-4 h-4 mr-2" />
-              Create Quote
-            </TabsTrigger>
-          </TabsList>
+      {activeView === "quotes" && (
+        <div className="space-y-5">
+          {quotes.length > 3 && (
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name, address, or email..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 h-10 text-[15px]"
+                data-testid="input-search-quotes"
+              />
+            </div>
+          )}
 
-          <TabsContent value="quotes" className="space-y-5">
-            {quotes.length > 3 && (
-              <div className="relative max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by name, address, or email..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 h-10 text-[15px]"
-                  data-testid="input-search-quotes"
-                />
-              </div>
-            )}
-
-            {quotesLoading ? (
-              <div className="space-y-4">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="bg-card border rounded-[10px] shadow-sm overflow-hidden p-6">
-                    <div className="h-6 w-48 bg-muted animate-pulse rounded mb-3" />
-                    <div className="h-4 w-72 bg-muted animate-pulse rounded mb-4" />
-                    <div className="grid grid-cols-4 gap-4">
-                      {[1, 2, 3, 4].map(j => (
-                        <div key={j} className="h-12 bg-muted animate-pulse rounded" />
-                      ))}
-                    </div>
+          {quotesLoading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="bg-card border rounded-[10px] shadow-sm overflow-hidden p-6">
+                  <div className="h-6 w-48 bg-muted animate-pulse rounded mb-3" />
+                  <div className="h-4 w-72 bg-muted animate-pulse rounded mb-4" />
+                  <div className="grid grid-cols-4 gap-4">
+                    {[1, 2, 3, 4].map(j => (
+                      <div key={j} className="h-12 bg-muted animate-pulse rounded" />
+                    ))}
                   </div>
-                ))}
-              </div>
-            ) : filteredQuotes.length === 0 ? (
-              <div className="bg-card border rounded-[10px] shadow-sm overflow-hidden">
-                <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
-                  <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mb-4">
-                    <FileText className="h-6 w-6 text-muted-foreground" />
-                  </div>
-                  <h3 className="text-[15px] font-semibold text-foreground mb-1">
-                    {searchQuery ? 'No quotes match your search' : 'No Quotes Yet'}
-                  </h3>
-                  <p className="text-[13px] text-muted-foreground max-w-sm">
-                    {searchQuery ? 'Try a different search term.' : 'Create a loan pricing quote to get started.'}
-                  </p>
                 </div>
+              ))}
+            </div>
+          ) : filteredQuotes.length === 0 ? (
+            <div className="bg-card border rounded-[10px] shadow-sm overflow-hidden">
+              <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
+                <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mb-4">
+                  <FileText className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <h3 className="text-[15px] font-semibold text-foreground mb-1">
+                  {searchQuery ? 'No quotes match your search' : 'No Quotes Yet'}
+                </h3>
+                <p className="text-[13px] text-muted-foreground max-w-sm">
+                  {searchQuery ? 'Try a different search term.' : 'Create a loan pricing quote to get started.'}
+                </p>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {filteredQuotes.map((quote) => (
-                  <QuoteCard
-                    key={quote.id}
-                    quote={quote}
-                    isBorrower={isBorrower}
-                    latestEnvelope={envelopeMap.get(quote.id) || null}
-                    onEdit={() => handleEditQuote(quote)}
-                    onDelete={() => deleteMutation.mutate(quote.id)}
-                    onSendTermSheet={() => setSigningQuote(quote)}
-                    onMessage={() => navigate(`/messages?dealId=${quote.id}&new=true`)}
-                    deleteIsPending={deleteMutation.isPending}
-                  />
-                ))}
-              </div>
-            )}
-          </TabsContent>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredQuotes.map((quote) => (
+                <QuoteCard
+                  key={quote.id}
+                  quote={quote}
+                  isBorrower={isBorrower}
+                  latestEnvelope={envelopeMap.get(quote.id) || null}
+                  onEdit={() => handleEditQuote(quote)}
+                  onDelete={() => deleteMutation.mutate(quote.id)}
+                  onSendTermSheet={() => setSigningQuote(quote)}
+                  onMessage={() => navigate(`/messages?dealId=${quote.id}&new=true`)}
+                  deleteIsPending={deleteMutation.isPending}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
-          <TabsContent value="create" className="space-y-5">
-            {!hasResult ? (
-              <>
-                <div className="bg-card border rounded-[10px] shadow-sm overflow-hidden px-5 py-4">
-                  <h3 className="text-[16px] font-semibold mb-1">Loan Program</h3>
-                  <p className="text-[13px] text-muted-foreground mb-3">Select the loan program to price</p>
-                  <div>
-                    {allActivePrograms.length > 0 ? (
-                      <Select
-                        value={selectedProgramId?.toString() || ""}
-                        onValueChange={(v) => {
-                          const prog = allActivePrograms.find(p => p.id === parseInt(v));
-                          if (prog) {
-                            setSelectedProgramId(prog.id);
-                            const derivedType = (prog.loanType === "dscr" ? "dscr" : "rtl") as "dscr" | "rtl";
-                            setLoanProductType(derivedType);
-                            setDscrResult(null);
-                            setRtlResult(null);
-                          }
-                        }}
-                      >
-                        <SelectTrigger className="w-full md:w-96" data-testid="select-loan-program">
-                          <SelectValue placeholder="Select a loan program" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {allActivePrograms.map((program) => (
-                            <SelectItem key={program.id} value={program.id.toString()}>
-                              <div className="flex items-center gap-2">
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11.5px] font-medium bg-gray-100 text-gray-600">
-                                  {program.loanType.toUpperCase()}
-                                </span>
-                                <span className="text-[16px]">{program.name}</span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Select
-                        value={loanProductType}
-                        onValueChange={(v: "dscr" | "rtl") => {
-                          setLoanProductType(v);
-                          setSelectedProgramId(null);
+      {activeView === "create" && (
+        <div className="space-y-5">
+          {!hasResult ? (
+            <>
+              <div className="bg-card border rounded-[10px] shadow-sm overflow-hidden px-5 py-4">
+                <h3 className="text-[16px] font-semibold mb-1">Loan Program</h3>
+                <p className="text-[13px] text-muted-foreground mb-3">Select the loan program to price</p>
+                <div>
+                  {allActivePrograms.length > 0 ? (
+                    <Select
+                      value={selectedProgramId?.toString() || ""}
+                      onValueChange={(v) => {
+                        const prog = allActivePrograms.find(p => p.id === parseInt(v));
+                        if (prog) {
+                          setSelectedProgramId(prog.id);
+                          const derivedType = (prog.loanType === "dscr" ? "dscr" : "rtl") as "dscr" | "rtl";
+                          setLoanProductType(derivedType);
                           setDscrResult(null);
                           setRtlResult(null);
-                        }}
-                      >
-                        <SelectTrigger className="w-full md:w-80" data-testid="select-loan-product-type">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="dscr">DSCR</SelectItem>
-                          <SelectItem value="rtl">Fix and Flip/Ground Up Construction</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
-                </div>
-
-                {selectedProgramId && (
-                <div className="max-w-4xl mx-auto">
-                  {loanProductType === "dscr" ? (
-                    <LoanForm
-                      onSubmit={handleDSCRSubmit}
-                      isLoading={dscrPending}
-                      defaultData={dscrFormData}
-                      visibleFields={allActivePrograms.find(p => p.id === selectedProgramId)?.quoteFormFields as any}
-                    />
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-full md:w-96" data-testid="select-loan-program">
+                        <SelectValue placeholder="Select a loan program" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {allActivePrograms.map((program) => (
+                          <SelectItem key={program.id} value={program.id.toString()}>
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11.5px] font-medium bg-gray-100 text-gray-600">
+                                {program.loanType.toUpperCase()}
+                              </span>
+                              <span className="text-[16px]">{program.name}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   ) : (
-                    <RTLLoanForm
-                      onSubmit={handleRTLSubmit}
-                      isLoading={rtlPricingMutation.isPending}
-                      defaultData={rtlFormData}
-                      visibleFields={allActivePrograms.find(p => p.id === selectedProgramId)?.quoteFormFields as any}
-                    />
+                    <Select
+                      value={loanProductType}
+                      onValueChange={(v: "dscr" | "rtl") => {
+                        setLoanProductType(v);
+                        setSelectedProgramId(null);
+                        setDscrResult(null);
+                        setRtlResult(null);
+                      }}
+                    >
+                      <SelectTrigger className="w-full md:w-80" data-testid="select-loan-product-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="dscr">DSCR</SelectItem>
+                        <SelectItem value="rtl">Fix and Flip/Ground Up Construction</SelectItem>
+                      </SelectContent>
+                    </Select>
                   )}
                 </div>
-                )}
+              </div>
 
-                {!selectedProgramId && (
-                  <div className="bg-card border rounded-[10px] shadow-sm overflow-hidden">
-                    <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
-                      <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mb-4">
-                        <Calculator className="h-6 w-6 text-muted-foreground" />
-                      </div>
-                      <h3 className="text-[15px] font-semibold text-foreground mb-1">Select a loan program above to get started</h3>
-                      <p className="text-[13px] text-muted-foreground max-w-sm">The form fields will appear based on the program you choose</p>
-                    </div>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="max-w-2xl mx-auto space-y-6">
-                {loanProductType === "dscr" && dscrResult && (
-                  <PricingResult
-                    result={dscrResult}
-                    formData={dscrFormData}
-                    onReset={handleReset}
-                    programId={selectedProgramId}
+              {selectedProgramId && (
+              <div className="max-w-4xl mx-auto">
+                {loanProductType === "dscr" ? (
+                  <LoanForm
+                    onSubmit={handleDSCRSubmit}
+                    isLoading={dscrPending}
+                    defaultData={dscrFormData}
+                    visibleFields={allActivePrograms.find(p => p.id === selectedProgramId)?.quoteFormFields as any}
                   />
-                )}
-                {loanProductType === "rtl" && rtlResult && (
-                  <RTLPricingResult
-                    result={rtlResult}
-                    formData={rtlFormData}
-                    onReset={handleReset}
-                    programId={selectedProgramId}
+                ) : (
+                  <RTLLoanForm
+                    onSubmit={handleRTLSubmit}
+                    isLoading={rtlPricingMutation.isPending}
+                    defaultData={rtlFormData}
+                    visibleFields={allActivePrograms.find(p => p.id === selectedProgramId)?.quoteFormFields as any}
                   />
                 )}
               </div>
-            )}
-          </TabsContent>
-        </Tabs>
-      </div>
+              )}
+
+              {!selectedProgramId && (
+                <div className="bg-card border rounded-[10px] shadow-sm overflow-hidden">
+                  <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
+                    <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mb-4">
+                      <Calculator className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-[15px] font-semibold text-foreground mb-1">Select a loan program above to get started</h3>
+                    <p className="text-[13px] text-muted-foreground max-w-sm">The form fields will appear based on the program you choose</p>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="max-w-2xl mx-auto space-y-6">
+              {loanProductType === "dscr" && dscrResult && (
+                <PricingResult
+                  result={dscrResult}
+                  formData={dscrFormData}
+                  onReset={handleReset}
+                  programId={selectedProgramId}
+                />
+              )}
+              {loanProductType === "rtl" && rtlResult && (
+                <RTLPricingResult
+                  result={rtlResult}
+                  formData={rtlFormData}
+                  onReset={handleReset}
+                  programId={selectedProgramId}
+                />
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {signingQuote && (
         <DocumentSigningModal
@@ -658,152 +706,149 @@ function QuoteCard({
   const createdAt = quote.createdAt ? formatShortDate(quote.createdAt) : 'N/A';
   const quoteNumber = formatQuoteNumber(quote.id, quote.createdAt);
   const statusDisplay = getEnvelopeStatusDisplay(latestEnvelope);
+  const envelopeStatus = latestEnvelope?.status.toLowerCase() || '';
 
   return (
     <div className="bg-card border rounded-[10px] shadow-sm overflow-hidden" data-testid={`card-quote-${quote.id}`}>
-      <div className="px-5 pt-5 pb-4">
+      <div className="px-6 pt-5 pb-5">
         <div className="flex items-start justify-between gap-3 mb-1">
           <div className="min-w-0 flex-1">
-            <h3 className="text-[18px] font-bold tracking-tight truncate" data-testid={`text-borrower-${quote.id}`}>
+            <h3 className="text-[21px] font-bold tracking-tight truncate" data-testid={`text-borrower-${quote.id}`}>
               {quote.customerFirstName} {quote.customerLastName}
               {quote.propertyAddress && (
-                <span className="text-muted-foreground font-normal text-[16px]"> — {quote.propertyAddress.split(',')[0]}</span>
+                <span className="text-muted-foreground font-normal text-[18px]"> — {quote.propertyAddress.split(',')[0]}</span>
               )}
             </h3>
-            <p className="text-[13px] text-muted-foreground mt-0.5" data-testid={`text-quote-meta-${quote.id}`}>
-              {quoteNumber} · Created {createdAt}
+            <p className="text-[15px] text-muted-foreground mt-0.5" data-testid={`text-quote-meta-${quote.id}`}>
+              Quote #{quoteNumber} · Created {createdAt}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium ${statusDisplay.color}`} data-testid={`badge-status-${quote.id}`}>
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[14px] font-medium ${statusDisplay.color}`} data-testid={`badge-status-${quote.id}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${statusDisplay.dotColor}`} />
               {statusDisplay.label}
             </span>
             {!isBorrower && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onEdit}
+                  className="h-8 rounded-full text-[14px] gap-1.5 px-3"
+                  data-testid={`button-edit-quote-${quote.id}`}
+                >
+                  <Edit className="h-3.5 w-3.5" />
+                  Edit
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onMessage}
+                  className="h-8 rounded-full text-[14px] gap-1.5 px-3"
+                  data-testid={`button-message-quote-${quote.id}`}
+                  title="Message Borrower"
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  Message Borrower
+                </Button>
+                {(!latestEnvelope || envelopeStatus === 'draft') && (
+                  <Button
+                    onClick={onSendTermSheet}
+                    size="sm"
+                    className="h-8 rounded-full text-[14px] gap-1.5 px-3 shadow-md"
+                    data-testid={`button-send-signature-${quote.id}`}
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    Send Term Sheet
+                  </Button>
+                )}
+                {(envelopeStatus === 'sent' || envelopeStatus === 'viewed') && (
+                  <Button
+                    onClick={onSendTermSheet}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-full text-[14px] gap-1.5 px-3"
+                    data-testid={`button-resend-${quote.id}`}
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    Resend
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onDelete}
+                  disabled={deleteIsPending}
+                  className="text-muted-foreground hover:text-destructive h-8 w-8"
+                  data-testid={`button-delete-quote-${quote.id}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </>
+            )}
+            {isBorrower && latestEnvelope?.signingUrl && envelopeStatus !== 'completed' && (
               <Button
-                variant="ghost"
-                size="icon"
-                onClick={onDelete}
-                disabled={deleteIsPending}
-                className="text-muted-foreground hover:text-destructive h-8 w-8"
-                data-testid={`button-delete-quote-${quote.id}`}
+                size="sm"
+                onClick={() => window.open(latestEnvelope.signingUrl || "", "_blank")}
+                className="h-8 rounded-full text-[14px] gap-1.5 px-3"
+                data-testid={`button-view-termsheet-${quote.id}`}
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <ExternalLink className="h-3.5 w-3.5" />
+                View & Sign Term Sheet
               </Button>
             )}
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-4 mt-4" data-testid={`grid-metrics-row1-${quote.id}`}>
+        <div className="grid grid-cols-4 gap-4 mt-5" data-testid={`grid-metrics-row1-${quote.id}`}>
           <div>
-            <div className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Program</div>
-            <div className="text-[15px] font-semibold truncate">{programName}</div>
+            <div className="text-[15px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Program</div>
+            <div className="text-[17px] font-semibold truncate">{programName}</div>
           </div>
           <div>
-            <div className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">{isRTLQuote ? 'Total Cost' : 'Loan Amount'}</div>
-            <div className="text-[15px] font-semibold">${displayLoanAmount?.toLocaleString() || 'N/A'}</div>
+            <div className="text-[15px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">{isRTLQuote ? 'Total Cost' : 'Loan Amount'}</div>
+            <div className="text-[17px] font-semibold">${displayLoanAmount?.toLocaleString() || 'N/A'}</div>
           </div>
           <div>
-            <div className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Interest Rate</div>
-            <div className="text-[18px] font-bold">{quote.interestRate || 'TBD'}</div>
+            <div className="text-[15px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Interest Rate</div>
+            <div className="text-[21px] font-bold">{quote.interestRate || 'TBD'}</div>
           </div>
           <div>
-            <div className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">LTV</div>
-            <div className="text-[15px] font-semibold">{typeof ltv === 'number' ? `${ltv}%` : ltv}</div>
+            <div className="text-[15px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">LTV</div>
+            <div className="text-[17px] font-semibold">{typeof ltv === 'number' ? `${ltv}%` : ltv}</div>
           </div>
         </div>
 
         <div className="grid grid-cols-4 gap-4 mt-3" data-testid={`grid-metrics-row2-${quote.id}`}>
           <div>
-            <div className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">{isRTLQuote ? 'Term' : 'DSCR'}</div>
-            <div className="text-[15px] font-semibold">{isRTLQuote ? term : dscr}</div>
+            <div className="text-[15px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">{isRTLQuote ? 'Term' : 'DSCR'}</div>
+            <div className="text-[17px] font-semibold">{isRTLQuote ? term : dscr}</div>
           </div>
           <div>
-            <div className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Points</div>
-            <div className="text-[15px] font-semibold">{points.toFixed(2)}</div>
+            <div className="text-[15px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Points</div>
+            <div className="text-[17px] font-semibold">{points.toFixed(2)}</div>
           </div>
           <div>
-            <div className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">YSP</div>
-            <div className="text-[15px] font-semibold">{ysp ? `${ysp}%` : '—'}</div>
+            <div className="text-[15px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">YSP</div>
+            <div className="text-[17px] font-semibold">{ysp ? `${ysp}%` : '—'}</div>
           </div>
           {!isBorrower ? (
             <div>
-              <div className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Commission</div>
-              <div className="text-[15px] font-semibold text-emerald-600">
+              <div className="text-[15px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Commission</div>
+              <div className="text-[17px] font-semibold text-emerald-600">
                 ${commission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
             </div>
           ) : (
             <div>
-              <div className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">{isRTLQuote ? 'Loan Purpose' : 'Term'}</div>
-              <div className="text-[15px] font-semibold">{isRTLQuote ? (loanData?.loanPurpose || loanData?.purpose || '—') : term}</div>
+              <div className="text-[15px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">{isRTLQuote ? 'Loan Purpose' : 'Term'}</div>
+              <div className="text-[17px] font-semibold">{isRTLQuote ? (loanData?.loanPurpose || loanData?.purpose || '—') : term}</div>
             </div>
-          )}
-        </div>
-
-        <div className="mt-4 pt-4 border-t border-border/50 flex items-center gap-2">
-          {!isBorrower && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onEdit}
-                className="h-8 text-[13px] gap-1.5"
-                data-testid={`button-edit-quote-${quote.id}`}
-              >
-                <Edit className="h-3.5 w-3.5" />
-                Edit Quote
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={onMessage}
-                className="h-8 w-8"
-                data-testid={`button-message-quote-${quote.id}`}
-                title="Message about this quote"
-              >
-                <MessageSquare className="h-3.5 w-3.5" />
-              </Button>
-              {(!latestEnvelope || latestEnvelope.status.toLowerCase() === 'draft') && (
-                <Button
-                  onClick={onSendTermSheet}
-                  size="sm"
-                  className="h-8 text-[13px] gap-1.5 ml-auto shadow-md"
-                  data-testid={`button-send-signature-${quote.id}`}
-                >
-                  <Send className="h-3.5 w-3.5" />
-                  Send Term Sheet
-                </Button>
-              )}
-              {latestEnvelope && latestEnvelope.status.toLowerCase() === 'sent' && (
-                <Button
-                  onClick={onSendTermSheet}
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-[13px] gap-1.5 ml-auto"
-                  data-testid={`button-resend-${quote.id}`}
-                >
-                  <Send className="h-3.5 w-3.5" />
-                  Resend
-                </Button>
-              )}
-            </>
-          )}
-          {isBorrower && latestEnvelope?.signingUrl && latestEnvelope.status.toLowerCase() !== 'completed' && (
-            <Button
-              size="sm"
-              onClick={() => window.open(latestEnvelope.signingUrl || "", "_blank")}
-              className="h-8 text-[13px] gap-1.5"
-              data-testid={`button-view-termsheet-${quote.id}`}
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              View & Sign Term Sheet
-            </Button>
           )}
         </div>
       </div>
 
-      <QuoteCardEnvelope envelope={latestEnvelope} isBorrower={isBorrower} />
+      <QuoteCardEnvelope envelope={latestEnvelope} isBorrower={isBorrower} onSendTermSheet={onSendTermSheet} />
     </div>
   );
 }
