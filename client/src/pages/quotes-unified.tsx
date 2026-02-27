@@ -801,7 +801,7 @@ function QuoteCard({
         </div>
       </div>
 
-      <div className="border-t border-b border-border/50 bg-slate-50/70 dark:bg-muted/30 px-6 py-4">
+      <div className="border-t border-b border-border/50 bg-slate-100/80 dark:bg-muted/40 px-6 py-4">
         <div className="grid grid-cols-4 gap-4" data-testid={`grid-metrics-row1-${quote.id}`}>
           <div>
             <div className="text-[15px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Program</div>
