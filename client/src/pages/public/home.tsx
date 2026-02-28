@@ -142,8 +142,8 @@ export default function PublicHomePage() {
     <PublicLayout>
       {/* Hero Section - Two Column Grid */}
       <section className="relative bg-gradient-to-br from-[#0F1729] via-[#162040] to-[#1a2744] overflow-hidden">
-        <div className="relative pt-10 pb-20 px-4 md:px-8 max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-2 gap-12 items-center md:min-h-screen md:py-10">
+        <div className="relative pt-6 pb-16 px-4 md:px-8 max-w-7xl mx-auto">
+          <div className="grid md:grid-cols-2 gap-12 items-center md:pt-6 md:pb-10">
 
             {/* Left: Copy */}
             <motion.div
@@ -356,42 +356,49 @@ export default function PublicHomePage() {
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true }}
-            className="grid grid-cols-1 md:grid-cols-3 gap-8"
+            className="grid grid-cols-1 md:grid-cols-2 md:grid-rows-2 gap-5"
           >
-            {[
-              {
-                icon: TrendingUp,
-                title: 'More Deals = More Hires',
-                description: 'Every new loan means hiring another processor. Your overhead grows faster than revenue.',
-              },
-              {
-                icon: EyeOff,
-                title: 'Borrowers Left in the Dark',
-                description: "Manual processes mean radio silence. Borrowers can't track progress, leading to dropped deals.",
-              },
-              {
-                icon: Link2,
-                title: 'Scattered Tools Slow You Down',
-                description: "Juggling 5+ platforms. Data doesn't sync. Time wasted copying and pasting between systems.",
-              },
-            ].map((problem, idx) => {
-              const Icon = problem.icon;
-              return (
-                <motion.div key={idx} variants={itemVariants}>
-                  <Card className="h-full p-8 border border-gray-200 shadow-sm hover:shadow-md transition-shadow bg-gray-50">
-                    <div className="w-12 h-12 rounded-lg bg-red-100 flex items-center justify-center mb-6">
-                      <Icon className="w-6 h-6 text-red-500" />
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-3">
-                      {problem.title}
-                    </h3>
-                    <p className="text-gray-600">
-                      {problem.description}
-                    </p>
-                  </Card>
-                </motion.div>
-              );
-            })}
+            <motion.div variants={itemVariants} className="md:row-span-2">
+              <div className="h-full rounded-3xl bg-red-50 p-10 flex flex-col justify-between">
+                <div>
+                  <div className="w-14 h-14 rounded-2xl bg-red-100 flex items-center justify-center mb-6">
+                    <TrendingUp className="w-7 h-7 text-red-500" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-4">
+                    More Deals = More Hires
+                  </h3>
+                  <p className="text-gray-600 text-lg leading-relaxed">
+                    Every new loan means hiring another processor. Your overhead grows faster than revenue. The math never works in your favor.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+            <motion.div variants={itemVariants}>
+              <div className="h-full rounded-3xl bg-[#1E293B] p-10">
+                <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center mb-6">
+                  <EyeOff className="w-7 h-7 text-white" />
+                </div>
+                <h3 className="text-2xl font-bold text-white mb-3">
+                  Borrowers Left in the Dark
+                </h3>
+                <p className="text-gray-300 text-base leading-relaxed">
+                  Manual processes mean radio silence. Borrowers can't track progress, leading to dropped deals.
+                </p>
+              </div>
+            </motion.div>
+            <motion.div variants={itemVariants}>
+              <div className="h-full rounded-3xl bg-gray-100 p-10">
+                <div className="w-14 h-14 rounded-2xl bg-gray-200 flex items-center justify-center mb-6">
+                  <Link2 className="w-7 h-7 text-gray-700" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                  Scattered Tools Slow You Down
+                </h3>
+                <p className="text-gray-600 text-base leading-relaxed">
+                  Juggling 5+ platforms. Data doesn't sync. Time wasted copying and pasting between systems.
+                </p>
+              </div>
+            </motion.div>
           </motion.div>
         </div>
       </section>
@@ -419,42 +426,49 @@ export default function PublicHomePage() {
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true }}
-            className="grid grid-cols-1 md:grid-cols-3 gap-8"
+            className="grid grid-cols-1 md:grid-cols-2 md:grid-rows-2 gap-5"
           >
-            {[
-              {
-                icon: Bot,
-                title: 'Automate Processing',
-                description: 'AI agents handle 80% of loan processing tasks. Document review, data extraction, compliance checks — all automated 24/7.',
-              },
-              {
-                icon: Eye,
-                title: 'Borrower Visibility',
-                description: 'Magic links give borrowers real-time updates. They see exactly where their application stands, reducing phone calls by 60%.',
-              },
-              {
-                icon: BarChart3,
-                title: 'Scale Without Hiring',
-                description: 'Your team processes 3x more loans. No new hires needed. Same people, 10x productivity through intelligent automation.',
-              },
-            ].map((pillar, idx) => {
-              const Icon = pillar.icon;
-              return (
-                <motion.div key={idx} variants={itemVariants}>
-                  <Card className="h-full p-8 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                    <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center mb-6">
-                      <Icon className="w-6 h-6 text-blue-600" />
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-3">
-                      {pillar.title}
-                    </h3>
-                    <p className="text-gray-600">
-                      {pillar.description}
-                    </p>
-                  </Card>
-                </motion.div>
-              );
-            })}
+            <motion.div variants={itemVariants}>
+              <div className="h-full rounded-3xl bg-blue-600 p-10">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center mb-6">
+                  <Bot className="w-7 h-7 text-white" />
+                </div>
+                <h3 className="text-2xl font-bold text-white mb-3">
+                  Automate Processing
+                </h3>
+                <p className="text-blue-100 text-base leading-relaxed">
+                  AI agents handle 80% of loan processing tasks. Document review, data extraction, compliance checks — all automated 24/7.
+                </p>
+              </div>
+            </motion.div>
+            <motion.div variants={itemVariants} className="md:row-span-2">
+              <div className="h-full rounded-3xl bg-gray-100 p-10 flex flex-col justify-between">
+                <div>
+                  <div className="w-14 h-14 rounded-2xl bg-blue-100 flex items-center justify-center mb-6">
+                    <BarChart3 className="w-7 h-7 text-blue-600" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-4">
+                    Scale Without Hiring
+                  </h3>
+                  <p className="text-gray-600 text-lg leading-relaxed">
+                    Your team processes 3x more loans. No new hires needed. Same people, 10x productivity through intelligent automation.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+            <motion.div variants={itemVariants}>
+              <div className="h-full rounded-3xl bg-gray-100 p-10">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mb-6">
+                  <Eye className="w-7 h-7 text-emerald-600" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                  Borrower Visibility
+                </h3>
+                <p className="text-gray-600 text-base leading-relaxed">
+                  Magic links give borrowers real-time updates. They see exactly where their application stands, reducing phone calls by 60%.
+                </p>
+              </div>
+            </motion.div>
           </motion.div>
         </div>
       </section>
@@ -485,24 +499,23 @@ export default function PublicHomePage() {
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true }}
-            className="grid grid-cols-1 md:grid-cols-3 gap-8"
+            className="grid grid-cols-1 md:grid-cols-3 gap-5"
           >
             {features.map((feature, idx) => {
               const Icon = feature.icon;
+              const isAccent = idx === 1;
               return (
                 <motion.div key={idx} variants={itemVariants} className="will-change-transform">
-                  <div className="h-full">
-                    <div className="flex flex-col h-full">
-                      <div className="w-14 h-14 rounded-lg bg-[#1E293B] flex items-center justify-center mb-4">
-                        <Icon className="w-7 h-7 text-white" />
-                      </div>
-                      <h3 className="text-xl font-semibold text-gray-900 mb-3">
-                        {feature.title}
-                      </h3>
-                      <p className="text-gray-600">
-                        {feature.description}
-                      </p>
+                  <div className={`h-full rounded-3xl p-10 ${isAccent ? 'bg-[#1E293B]' : 'bg-gray-100'}`}>
+                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 ${isAccent ? 'bg-white/10' : 'bg-white'}`}>
+                      <Icon className={`w-7 h-7 ${isAccent ? 'text-white' : 'text-gray-900'}`} />
                     </div>
+                    <h3 className={`text-2xl font-bold mb-3 ${isAccent ? 'text-white' : 'text-gray-900'}`}>
+                      {feature.title}
+                    </h3>
+                    <p className={`text-base leading-relaxed ${isAccent ? 'text-gray-300' : 'text-gray-600'}`}>
+                      {feature.description}
+                    </p>
                   </div>
                 </motion.div>
               );
