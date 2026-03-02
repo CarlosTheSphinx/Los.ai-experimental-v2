@@ -77,13 +77,13 @@ export default function LoginPage() {
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-b from-[#0F2438] via-[#1A3A52] to-[#0F1729] text-background flex-col justify-between items-center p-12">
         {/* Centered Logo & Tagline */}
         <div className="flex flex-col items-center justify-center flex-1">
-          <div className="flex items-center gap-0 mb-6">
-            <span className="text-3xl font-bold text-white">Lendry.</span>
-            <span className="text-3xl font-bold text-blue-400">AI</span>
+          <div className="flex items-center gap-0 mb-4">
+            <span className="text-6xl font-bold text-white">Lendry.</span>
+            <span className="text-6xl font-bold text-blue-400">AI</span>
           </div>
-          <h1 className="text-4xl font-bold tracking-tight text-center">
+          <p className="text-xl font-medium tracking-tight text-center text-white/70">
             Lending, Automated.
-          </h1>
+          </p>
         </div>
 
         {/* Copyright Footer */}
