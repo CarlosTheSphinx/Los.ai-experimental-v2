@@ -102,7 +102,7 @@ export default function PublicHomePage() {
   return (
     <PublicLayout>
       {/* ===== HERO (Simplified) ===== */}
-      <section className="relative bg-gradient-to-br from-navy via-blue/5 to-background overflow-hidden pt-20 pb-20">
+      <section className="relative bg-[#0F1729] overflow-hidden pt-20 pb-20">
         <div className="relative max-w-7xl mx-auto px-4 md:px-8">
           <div className="grid md:grid-cols-2 gap-12 items-center md:min-h-[600px]">
             {/* Left: Simplified Copy */}
@@ -133,7 +133,7 @@ export default function PublicHomePage() {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="text-foreground border-foreground/30 hover:border-foreground/60 w-full sm:w-auto"
+                  className="text-white border-white/30 hover:border-white/60 w-full sm:w-auto"
                   onClick={() => {
                     const el = document.getElementById('how-it-works');
                     if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -162,15 +162,15 @@ export default function PublicHomePage() {
               <div className="mt-8 grid grid-cols-3 gap-4 text-center">
                 <div>
                   <div className="text-2xl font-bold text-white">200+</div>
-                  <div className="text-sm text-foreground/60">Lending Teams</div>
+                  <div className="text-sm text-white/60">Lending Teams</div>
                 </div>
                 <div>
                   <div className="text-2xl font-bold text-white">$50M+</div>
-                  <div className="text-sm text-foreground/60">Processed</div>
+                  <div className="text-sm text-white/60">Processed</div>
                 </div>
                 <div>
                   <div className="text-2xl font-bold text-white">99.9%</div>
-                  <div className="text-sm text-foreground/60">Uptime</div>
+                  <div className="text-sm text-white/60">Uptime</div>
                 </div>
               </div>
             </motion.div>
@@ -179,7 +179,7 @@ export default function PublicHomePage() {
       </section>
 
       {/* ===== SOCIAL PROOF (Early) ===== */}
-      <section className="py-12 bg-gradient-to-b from-navy/20 to-white border-b border-gray-200">
+      <section className="py-12 bg-[#0F1729]">
         <div className="max-w-7xl mx-auto px-4 md:px-8">
           <motion.div
             initial={{ opacity: 0 }}
@@ -189,12 +189,12 @@ export default function PublicHomePage() {
             className="text-center space-y-6"
           >
             {/* Testimonial Block */}
-            <div className="max-w-2xl mx-auto bg-white border border-gray-200 rounded-lg p-6">
-              <p className="text-gray-700 italic mb-4">
+            <div className="max-w-2xl mx-auto bg-white/5 border border-white/10 rounded-lg p-6">
+              <p className="text-white/80 italic mb-4">
                 "Lendry cut our document processing time from 4 hours to 2 minutes per loan. Our team went from processing 50 loans/month to 500. We haven't hired anyone. Our margins improved 23%."
               </p>
-              <p className="font-semibold text-gray-900">Mike Chen, VP Operations</p>
-              <p className="text-sm text-gray-600">Midwest Community Bank, Des Moines</p>
+              <p className="font-semibold text-white">Mike Chen, VP Operations</p>
+              <p className="text-sm text-white/60">Midwest Community Bank, Des Moines</p>
             </div>
 
             {/* Security Badges */}
@@ -206,10 +206,10 @@ export default function PublicHomePage() {
               ].map((badge, idx) => (
                 <div
                   key={idx}
-                  className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-full border border-gray-200"
+                  className="flex items-center gap-2 px-3 py-2 bg-white/10 rounded-full border border-white/10"
                 >
                   <span>{badge.icon}</span>
-                  <span className="text-sm font-medium text-gray-700">{badge.label}</span>
+                  <span className="text-sm font-medium text-white/80">{badge.label}</span>
                 </div>
               ))}
             </div>
@@ -218,7 +218,7 @@ export default function PublicHomePage() {
       </section>
 
       {/* ===== THE PROBLEM (Dark Section) ===== */}
-      <section className="py-24 lg:py-32 bg-gradient-to-br from-navy to-navy/95">
+      <section className="py-24 lg:py-32 bg-[#0F1729]">
         <div className="max-w-7xl mx-auto px-4 md:px-8">
           <motion.div
             initial={{ opacity: 0, y: 40 }}
@@ -260,7 +260,7 @@ export default function PublicHomePage() {
       </section>
 
       {/* ===== BENEFIT CARDS (Redesigned) ===== */}
-      <section className="py-24 lg:py-32 bg-white">
+      <section className="py-24 lg:py-32 bg-[#0F1729]">
         <div className="max-w-7xl mx-auto px-4 md:px-8">
           <motion.div
             initial={{ opacity: 0, y: 40 }}
@@ -269,13 +269,13 @@ export default function PublicHomePage() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <p className="text-sm font-semibold text-blue-600 tracking-wide uppercase mb-3">
+            <p className="text-sm font-semibold text-blue-400 tracking-wide uppercase mb-3">
               The Solution
             </p>
-            <h2 className="text-4xl lg:text-5xl font-display font-bold text-gray-900 mb-4">
+            <h2 className="text-4xl lg:text-5xl font-display font-bold text-white mb-4">
               Three Pillars. One Platform.
             </h2>
-            <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+            <p className="text-lg text-white/60 max-w-3xl mx-auto">
               Lendry handles the three things that are killing your margins: document processing, borrower communication, and automation setup.
             </p>
           </motion.div>
@@ -292,12 +292,12 @@ export default function PublicHomePage() {
               const Icon = card.icon;
               return (
                 <motion.div key={idx} variants={itemVariants}>
-                  <div className="h-full bg-white border border-gray-200 rounded-lg p-8 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="h-full bg-white/5 border border-white/10 rounded-lg p-8 hover:bg-white/10 transition-colors">
                     <div className="w-12 h-12 bg-blue/10 rounded-lg flex items-center justify-center mb-4">
                       <Icon className="w-6 h-6 text-blue" />
                     </div>
-                    <h3 className="text-xl font-semibold text-gray-900 mb-3">{card.title}</h3>
-                    <p className="text-gray-600 leading-relaxed">{card.description}</p>
+                    <h3 className="text-xl font-semibold text-white mb-3">{card.title}</h3>
+                    <p className="text-white/60 leading-relaxed">{card.description}</p>
                   </div>
                 </motion.div>
               );
@@ -307,7 +307,7 @@ export default function PublicHomePage() {
       </section>
 
       {/* ===== SCALABILITY (Before/After) ===== */}
-      <section className="py-24 lg:py-32 bg-gradient-to-br from-navy via-navy/95 to-background">
+      <section className="py-24 lg:py-32 bg-[#0F1729]">
         <div className="max-w-7xl mx-auto px-4 md:px-8">
           <motion.div
             initial={{ opacity: 0, y: 40 }}
@@ -372,7 +372,7 @@ export default function PublicHomePage() {
       </section>
 
       {/* ===== HOW IT WORKS (3 Steps) ===== */}
-      <section className="py-24 lg:py-32 bg-gray-50" id="how-it-works">
+      <section className="py-24 lg:py-32 bg-[#0F1729]" id="how-it-works">
         <div className="max-w-7xl mx-auto px-4 md:px-8">
           <motion.div
             initial={{ opacity: 0, y: 40 }}
@@ -381,13 +381,13 @@ export default function PublicHomePage() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <p className="text-sm font-semibold text-blue-600 tracking-wide uppercase mb-3">
+            <p className="text-sm font-semibold text-blue-400 tracking-wide uppercase mb-3">
               Quick Setup
             </p>
-            <h2 className="text-4xl lg:text-5xl font-display font-bold text-gray-900 mb-4">
+            <h2 className="text-4xl lg:text-5xl font-display font-bold text-white mb-4">
               Three Simple Steps
             </h2>
-            <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+            <p className="text-lg text-white/60 max-w-3xl mx-auto">
               From connection to closing, Lendry fits into your workflow without disruption.
             </p>
           </motion.div>
@@ -402,10 +402,10 @@ export default function PublicHomePage() {
           >
             {howItWorks.map((step, idx) => (
               <motion.div key={idx} variants={itemVariants}>
-                <div className="h-full bg-white border border-gray-200 rounded-lg p-8">
+                <div className="h-full bg-white/5 border border-white/10 rounded-lg p-8">
                   <div className="text-4xl font-bold text-blue mb-4">{step.number}</div>
-                  <h3 className="text-2xl font-semibold text-gray-900 mb-3">{step.title}</h3>
-                  <p className="text-gray-600">{step.description}</p>
+                  <h3 className="text-2xl font-semibold text-white mb-3">{step.title}</h3>
+                  <p className="text-white/60">{step.description}</p>
                 </div>
               </motion.div>
             ))}
@@ -414,7 +414,7 @@ export default function PublicHomePage() {
       </section>
 
       {/* ===== TRUST SECTION ===== */}
-      <section className="py-12 bg-gradient-to-b from-white to-gray-50 border-b border-gray-200">
+      <section className="py-12 bg-[#0F1729]">
         <div className="max-w-3xl mx-auto px-4 text-center">
           <motion.div
             initial={{ opacity: 0 }}
@@ -422,15 +422,15 @@ export default function PublicHomePage() {
             transition={{ duration: 0.6 }}
             viewport={{ once: true }}
           >
-            <div className="bg-blue/10 border border-blue/30 rounded-lg p-6">
-              <p className="text-gray-700 font-medium">
+            <div className="bg-blue-500/10 border border-blue-400/30 rounded-lg p-6">
+              <p className="text-white/80 font-medium">
                 <span className="font-semibold">Bank-grade security.</span> SOC2 Type II certified. Your loan programs, your data, your control. No vendor lock-in. Compliant with all lending regulations.
               </p>
             </div>
 
             <div className="mt-6">
               <Link href="/how-we-compare">
-                <p className="text-blue-600 hover:text-blue-700 font-semibold cursor-pointer">
+                <p className="text-blue-400 hover:text-blue-300 font-semibold cursor-pointer">
                   See How Lendry Compares to the Big Guys →
                 </p>
               </Link>
@@ -440,7 +440,7 @@ export default function PublicHomePage() {
       </section>
 
       {/* ===== FINAL CTA ===== */}
-      <section className="py-32 lg:py-40 bg-gradient-to-b from-gray-900 via-navy to-navy">
+      <section className="py-32 lg:py-40 bg-[#0F1729]">
         <div className="max-w-3xl mx-auto px-4 text-center">
           <motion.div
             initial={{ opacity: 0, y: 40 }}
