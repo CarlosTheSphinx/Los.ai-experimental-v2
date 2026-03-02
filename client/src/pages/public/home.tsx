@@ -114,12 +114,12 @@ export default function PublicHomePage() {
             >
               <div>
                 <h1 className="font-hero text-5xl md:text-6xl font-bold text-white leading-tight mb-3">
-                  Stop Hiring Processors.
+                  Automate Your Loan Processing
                   <br />
-                  <span className="text-blue-300">Start Growing Your Margins.</span>
+                  <span className="text-blue-300">in Less Than 10 Minutes.</span>
                 </h1>
                 <p className="text-2xl text-white font-semibold mt-4">
-                  Process 3x more loans with the same team.
+                  Stop Hiring Processors. Start Growing Your Margins.
                 </p>
               </div>
 

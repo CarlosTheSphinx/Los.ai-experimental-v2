@@ -99,7 +99,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
 
       <main className="flex-1">{children}</main>
 
-      <footer className="bg-[#0F1729] border-t border-white/10 mt-24">
+      <footer className="bg-[#0F1729] border-t border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="grid grid-cols-1 md:grid-cols-5 gap-8 mb-12">
             <div className="md:col-span-1">
