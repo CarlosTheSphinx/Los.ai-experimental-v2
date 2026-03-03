@@ -48,6 +48,7 @@ import { registerTeamChatRoutes } from './routes/team-chat';
 import { registerPortalRoutes } from './routes/portal';
 import { registerAdminProgramsRoutes } from './routes/admin-programs';
 import { setupPermissionsRoutes } from './routes/permissions';
+import { setupAuditRoutes } from './routes/audit';
 
 import { registerProcessorRoutes } from './routes/processor';
 import { registerBrokerSdrRoutes } from './routes/broker-sdr';
@@ -226,6 +227,7 @@ export async function registerRoutes(
   // Register auth routes (address autocomplete, registration, login, OAuth, password reset)
   registerAuthRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
   setupPermissionsRoutes(app, { db, authenticateUser });
+  setupAuditRoutes(app, { db });
 
   // Register unified Google connect routes (Gmail + Drive in one OAuth flow)
   registerGoogleConnectRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
