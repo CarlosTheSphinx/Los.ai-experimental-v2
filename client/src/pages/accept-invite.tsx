@@ -12,7 +12,7 @@ import { apiRequest } from '@/lib/queryClient';
 import { Loader2, CheckCircle, AlertCircle, Mail } from 'lucide-react';
 
 const acceptInviteSchema = z.object({
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: z.string().min(12, 'Password must be at least 12 characters'),
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
@@ -199,7 +199,7 @@ export default function AcceptInvitePage() {
                       <FormControl>
                         <Input
                           type="password"
-                          placeholder="At least 8 characters"
+                          placeholder="At least 12 characters"
                           data-testid="input-invite-password"
                           {...field}
                         />

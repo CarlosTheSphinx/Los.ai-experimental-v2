@@ -22,7 +22,7 @@ const registerSchema = z.object({
   lastName: z.string().min(1, 'Last name is required'),
   email: z.string().email('Please enter a valid email address'),
   phone: z.string().optional(),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: z.string().min(12, 'Password must be at least 12 characters'),
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
@@ -298,7 +298,7 @@ export default function RegisterPage() {
                   <div className="text-xs text-muted-foreground space-y-0.5 mb-4">
                     <p className="font-medium text-foreground/80">Password must contain:</p>
                     <ul className="list-disc list-inside space-y-0">
-                      <li>At least 8 characters</li>
+                      <li>At least 12 characters</li>
                       <li>One uppercase letter (A-Z)</li>
                       <li>One lowercase letter (a-z)</li>
                       <li>One number (0-9)</li>

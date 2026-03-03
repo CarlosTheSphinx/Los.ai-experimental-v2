@@ -20,6 +20,8 @@ import {
   calculateLockoutUntil,
   PASSWORD_POLICY,
   validatePassword,
+  calculatePasswordExpiry,
+  isPasswordExpired,
 } from '../lib/auth';
 
 function getClientIp(req: Request): string {
@@ -233,7 +235,8 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         passwordResetToken: null,
         passwordResetExpires: null,
         userType: validUserType,
-        onboardingCompleted
+        onboardingCompleted,
+        passwordExpiresAt: calculatePasswordExpiry(),
       });
 
       await logAudit(db, {
@@ -421,6 +424,8 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         success: true,
       });
 
+      const passwordExpired = isPasswordExpired(user.passwordExpiresAt ?? null);
+
       const token = generateToken(user.id, user.email);
       setAuthCookie(res, token);
 
@@ -431,6 +436,7 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
 
       res.json({
         success: true,
+        passwordExpired,
         user: {
           id: user.id,
           email: user.email,
@@ -444,6 +450,77 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
     } catch (error) {
       console.error('Login error:', error);
       res.status(500).json({ error: 'Login failed' });
+    }
+  });
+
+  // Change password (authenticated)
+  app.post('/api/auth/change-password', deps.authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      const clientIp = getClientIp(req);
+      const ua = req.headers['user-agent'] || '';
+
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ error: 'Current password and new password are required' });
+      }
+
+      const user = await storage.getUserById(req.user!.id);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      if (!user.passwordHash) {
+        return res.status(400).json({ error: 'This account uses Google login and has no password to change.' });
+      }
+
+      const isCurrentValid = await comparePassword(currentPassword, user.passwordHash);
+      if (!isCurrentValid) {
+        await logAudit(db, {
+          userId: user.id,
+          userEmail: user.email,
+          userRole: user.role,
+          action: 'user.password_change_failed',
+          resourceType: 'user',
+          resourceId: String(user.id),
+          ipAddress: clientIp,
+          userAgent: ua,
+          statusCode: 401,
+          success: false,
+          errorMessage: 'Current password incorrect',
+        });
+        return res.status(401).json({ error: 'Current password is incorrect' });
+      }
+
+      const pwValidation = validatePassword(newPassword);
+      if (!pwValidation.isValid) {
+        return res.status(400).json({ error: pwValidation.errors.join('. ') });
+      }
+
+      const newHash = await hashPassword(newPassword);
+      await storage.updateUser(user.id, {
+        passwordHash: newHash,
+        failedLoginAttempts: 0,
+        accountLockedUntil: null,
+        passwordExpiresAt: calculatePasswordExpiry(),
+      });
+
+      await logAudit(db, {
+        userId: user.id,
+        userEmail: user.email,
+        userRole: user.role,
+        action: 'user.password_changed',
+        resourceType: 'user',
+        resourceId: String(user.id),
+        ipAddress: clientIp,
+        userAgent: ua,
+        statusCode: 200,
+        success: true,
+      });
+
+      res.json({ success: true, message: 'Password changed successfully' });
+    } catch (error) {
+      console.error('Change password error:', error);
+      res.status(500).json({ error: 'Failed to change password' });
     }
   });
 
@@ -777,6 +854,7 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         passwordResetExpires: null,
         failedLoginAttempts: 0,
         accountLockedUntil: null,
+        passwordExpiresAt: calculatePasswordExpiry(),
       });
 
       await logAudit(db, {

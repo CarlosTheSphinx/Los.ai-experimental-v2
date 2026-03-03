@@ -60,6 +60,7 @@ export const users = pgTable("users", {
   brokerMagicLinkEnabled: boolean("broker_magic_link_enabled").default(false),
   failedLoginAttempts: integer("failed_login_attempts").default(0),
   accountLockedUntil: timestamp("account_locked_until"),
+  passwordExpiresAt: timestamp("password_expires_at"),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({
@@ -3793,3 +3794,23 @@ export const loginAttempts = pgTable("login_attempts", {
 
 export type LoginAttempt = typeof loginAttempts.$inferSelect;
 export type InsertLoginAttempt = typeof loginAttempts.$inferInsert;
+
+export const apiKeys = pgTable("api_keys", {
+  id: serial("id").primaryKey(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdByUserId: integer("created_by_user_id").notNull(),
+  keyPrefix: varchar("key_prefix", { length: 10 }).notNull(),
+  keyHash: text("key_hash").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  scopes: jsonb("scopes").notNull().default('[]'),
+  expiresAt: timestamp("expires_at"),
+  isRevoked: boolean("is_revoked").default(false),
+  lastUsedAt: timestamp("last_used_at"),
+  usageCount: integer("usage_count").default(0),
+}, (table) => ({
+  createdByUserIdx: index("api_keys_created_by_user_id_idx").on(table.createdByUserId),
+  keyPrefixIdx: index("api_keys_key_prefix_idx").on(table.keyPrefix),
+}));
+
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type InsertApiKey = typeof apiKeys.$inferInsert;
