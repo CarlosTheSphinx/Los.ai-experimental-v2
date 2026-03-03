@@ -3,7 +3,7 @@ import type { AuthRequest } from '../auth';
 import type { RouteDeps } from './types';
 import { OAuth2Client } from 'google-auth-library';
 import { eq } from 'drizzle-orm';
-import { users } from '@shared/schema';
+import { users, auditLogs, loginAttempts } from '@shared/schema';
 import {
   hashPassword,
   comparePassword,
@@ -11,9 +11,76 @@ import {
   generateRandomToken,
   setAuthCookie,
   clearAuthCookie,
-  encryptToken
+  encryptToken,
+  verifyToken
 } from '../auth';
 import { sendPasswordResetEmail } from '../email';
+import {
+  isAccountLocked,
+  calculateLockoutUntil,
+  PASSWORD_POLICY,
+  validatePassword,
+} from '../lib/auth';
+
+function getClientIp(req: Request): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string') return forwarded.split(',')[0].trim();
+  return req.ip || req.socket.remoteAddress || 'unknown';
+}
+
+async function logAudit(
+  db: any,
+  params: {
+    userId?: number | null;
+    userEmail?: string | null;
+    userRole?: string | null;
+    action: string;
+    resourceType?: string;
+    resourceId?: string;
+    ipAddress?: string;
+    userAgent?: string;
+    statusCode?: number;
+    success: boolean;
+    errorMessage?: string;
+  }
+) {
+  try {
+    await db.insert(auditLogs).values({
+      userId: params.userId ?? null,
+      userEmail: params.userEmail ?? null,
+      userRole: params.userRole ?? null,
+      action: params.action,
+      resourceType: params.resourceType ?? null,
+      resourceId: params.resourceId ?? null,
+      ipAddress: params.ipAddress ?? null,
+      userAgent: params.userAgent ?? null,
+      statusCode: params.statusCode ?? null,
+      success: params.success,
+      errorMessage: params.errorMessage ?? null,
+    });
+  } catch (err) {
+    console.error('Audit log write failed:', err);
+  }
+}
+
+async function recordLoginAttempt(
+  db: any,
+  email: string,
+  ip: string,
+  success: boolean,
+  userAgent?: string,
+) {
+  try {
+    await db.insert(loginAttempts).values({
+      email,
+      ipAddress: ip,
+      success,
+      userAgent: userAgent ?? null,
+    });
+  } catch (err) {
+    console.error('Login attempt log failed:', err);
+  }
+}
 
 export function registerAuthRoutes(app: Express, deps: RouteDeps) {
   const { storage, db } = deps;
@@ -131,18 +198,10 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         return res.status(400).json({ error: 'Email, password, and name are required' });
       }
 
-      if (password.length < 8) {
-        return res.status(400).json({ error: 'Password must be at least 8 characters' });
-      }
-
-      // Password strength requirements
-      const hasUppercase = /[A-Z]/.test(password);
-      const hasLowercase = /[a-z]/.test(password);
-      const hasNumber = /[0-9]/.test(password);
-      const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
-      if (!hasUppercase || !hasLowercase || !hasNumber || !hasSpecial) {
+      const passwordValidation = validatePassword(password);
+      if (!passwordValidation.isValid) {
         return res.status(400).json({
-          error: 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'
+          error: passwordValidation.errors.join('. ')
         });
       }
 
@@ -177,6 +236,19 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         onboardingCompleted
       });
 
+      await logAudit(db, {
+        userId: user.id,
+        userEmail: user.email,
+        userRole: userRole,
+        action: 'user.registered',
+        resourceType: 'user',
+        resourceId: String(user.id),
+        ipAddress: getClientIp(req),
+        userAgent: req.headers['user-agent'] || '',
+        statusCode: 201,
+        success: true,
+      });
+
       const token = generateToken(user.id, user.email);
       setAuthCookie(res, token);
 
@@ -209,19 +281,78 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
   app.post('/api/auth/login', async (req: Request, res: Response) => {
     try {
       const { email, password } = req.body;
+      const clientIp = getClientIp(req);
+      const ua = req.headers['user-agent'] || '';
 
       if (!email || !password) {
         return res.status(400).json({ error: 'Email and password are required' });
       }
 
-      const user = await storage.getUserByEmail(email.toLowerCase());
+      const normalizedEmail = email.toLowerCase();
+      const user = await storage.getUserByEmail(normalizedEmail);
 
       if (!user) {
+        await recordLoginAttempt(db, normalizedEmail, clientIp, false, ua);
+        await logAudit(db, {
+          userEmail: normalizedEmail,
+          action: 'user.login_failed',
+          resourceType: 'user',
+          ipAddress: clientIp,
+          userAgent: ua,
+          statusCode: 401,
+          success: false,
+          errorMessage: 'User not found',
+        });
         return res.status(401).json({ error: 'Invalid email or password' });
       }
 
       if (!user.isActive) {
+        await recordLoginAttempt(db, normalizedEmail, clientIp, false, ua);
+        await logAudit(db, {
+          userId: user.id,
+          userEmail: user.email,
+          userRole: user.role,
+          action: 'user.login_failed',
+          resourceType: 'user',
+          resourceId: String(user.id),
+          ipAddress: clientIp,
+          userAgent: ua,
+          statusCode: 403,
+          success: false,
+          errorMessage: 'Account deactivated',
+        });
         return res.status(403).json({ error: 'Account has been deactivated' });
+      }
+
+      const failedAttempts = user.failedLoginAttempts ?? 0;
+      const lockedUntil = user.accountLockedUntil ?? null;
+      const locked = isAccountLocked(failedAttempts, lockedUntil);
+
+      if (!locked && failedAttempts >= PASSWORD_POLICY.maxFailedAttempts && lockedUntil && lockedUntil <= new Date()) {
+        await storage.updateUser(user.id, {
+          failedLoginAttempts: 0,
+          accountLockedUntil: null,
+        });
+      }
+
+      if (locked) {
+        await recordLoginAttempt(db, normalizedEmail, clientIp, false, ua);
+        await logAudit(db, {
+          userId: user.id,
+          userEmail: user.email,
+          userRole: user.role,
+          action: 'user.login_blocked',
+          resourceType: 'user',
+          resourceId: String(user.id),
+          ipAddress: clientIp,
+          userAgent: ua,
+          statusCode: 423,
+          success: false,
+          errorMessage: 'Account locked due to too many failed attempts',
+        });
+        return res.status(423).json({
+          error: 'Account temporarily locked due to too many failed login attempts. Please try again in 30 minutes.',
+        });
       }
 
       if (!user.passwordHash) {
@@ -231,10 +362,64 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
       const isValid = await comparePassword(password, user.passwordHash);
 
       if (!isValid) {
+        const newFailedCount = (user.failedLoginAttempts ?? 0) + 1;
+        const updates: Record<string, any> = { failedLoginAttempts: newFailedCount };
+        if (newFailedCount >= PASSWORD_POLICY.maxFailedAttempts) {
+          updates.accountLockedUntil = calculateLockoutUntil();
+        }
+        await storage.updateUser(user.id, updates);
+        await recordLoginAttempt(db, normalizedEmail, clientIp, false, ua);
+        await logAudit(db, {
+          userId: user.id,
+          userEmail: user.email,
+          userRole: user.role,
+          action: 'user.login_failed',
+          resourceType: 'user',
+          resourceId: String(user.id),
+          ipAddress: clientIp,
+          userAgent: ua,
+          statusCode: 401,
+          success: false,
+          errorMessage: `Invalid password (attempt ${newFailedCount}/${PASSWORD_POLICY.maxFailedAttempts})`,
+        });
+
+        if (newFailedCount >= PASSWORD_POLICY.maxFailedAttempts) {
+          await logAudit(db, {
+            userId: user.id,
+            userEmail: user.email,
+            userRole: user.role,
+            action: 'user.locked',
+            resourceType: 'user',
+            resourceId: String(user.id),
+            ipAddress: clientIp,
+            userAgent: ua,
+            statusCode: 423,
+            success: true,
+            errorMessage: `Account locked after ${PASSWORD_POLICY.maxFailedAttempts} failed attempts`,
+          });
+        }
+
         return res.status(401).json({ error: 'Invalid email or password' });
       }
 
-      await storage.updateUser(user.id, { lastLoginAt: new Date() });
+      await storage.updateUser(user.id, {
+        lastLoginAt: new Date(),
+        failedLoginAttempts: 0,
+        accountLockedUntil: null,
+      });
+      await recordLoginAttempt(db, normalizedEmail, clientIp, true, ua);
+      await logAudit(db, {
+        userId: user.id,
+        userEmail: user.email,
+        userRole: user.role,
+        action: 'user.login',
+        resourceType: 'user',
+        resourceId: String(user.id),
+        ipAddress: clientIp,
+        userAgent: ua,
+        statusCode: 200,
+        success: true,
+      });
 
       const token = generateToken(user.id, user.email);
       setAuthCookie(res, token);
@@ -263,7 +448,24 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
   });
 
   // Logout
-  app.post('/api/auth/logout', (_req: Request, res: Response) => {
+  app.post('/api/auth/logout', (req: Request, res: Response) => {
+    const token = req.cookies?.auth_token;
+    if (token) {
+      const decoded = verifyToken(token);
+      if (decoded) {
+        logAudit(db, {
+          userId: decoded.userId,
+          userEmail: decoded.email,
+          action: 'user.logout',
+          resourceType: 'user',
+          resourceId: String(decoded.userId),
+          ipAddress: getClientIp(req),
+          userAgent: req.headers['user-agent'] || '',
+          statusCode: 200,
+          success: true,
+        });
+      }
+    }
     clearAuthCookie(res);
     res.json({ success: true, message: 'Logged out successfully' });
   });
@@ -554,18 +756,10 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         return res.status(400).json({ error: 'Token and password are required' });
       }
 
-      if (password.length < 8) {
-        return res.status(400).json({ error: 'Password must be at least 8 characters' });
-      }
-
-      // Password strength requirements (same as registration)
-      const hasUpper = /[A-Z]/.test(password);
-      const hasLower = /[a-z]/.test(password);
-      const hasNum = /[0-9]/.test(password);
-      const hasSpec = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
-      if (!hasUpper || !hasLower || !hasNum || !hasSpec) {
+      const pwValidation = validatePassword(password);
+      if (!pwValidation.isValid) {
         return res.status(400).json({
-          error: 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'
+          error: pwValidation.errors.join('. ')
         });
       }
 
@@ -580,7 +774,21 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
       await storage.updateUser(user.id, {
         passwordHash,
         passwordResetToken: null,
-        passwordResetExpires: null
+        passwordResetExpires: null,
+        failedLoginAttempts: 0,
+        accountLockedUntil: null,
+      });
+
+      await logAudit(db, {
+        userId: user.id,
+        userEmail: user.email,
+        action: 'user.password_changed',
+        resourceType: 'user',
+        resourceId: String(user.id),
+        ipAddress: getClientIp(req),
+        userAgent: req.headers['user-agent'] || '',
+        statusCode: 200,
+        success: true,
       });
 
       res.json({ success: true, message: 'Password reset successful' });

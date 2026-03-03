@@ -7,7 +7,7 @@ import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 export { encryptToken, decryptToken } from './utils/encryption';
 
-const SALT_ROUNDS = 10;
+const SALT_ROUNDS = 12;
 const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET;
 if (!JWT_SECRET) {
   throw new Error('CRITICAL: JWT_SECRET or SESSION_SECRET environment variable must be set. Server cannot start without a secure signing key.');

@@ -58,6 +58,8 @@ export const users = pgTable("users", {
   ),
   brokerMagicLink: varchar("broker_magic_link", { length: 255 }).unique(),
   brokerMagicLinkEnabled: boolean("broker_magic_link_enabled").default(false),
+  failedLoginAttempts: integer("failed_login_attempts").default(0),
+  accountLockedUntil: timestamp("account_locked_until"),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({
@@ -3751,3 +3753,43 @@ export const borrowerDocuments = pgTable("borrower_documents", {
 export const insertBorrowerDocumentSchema = createInsertSchema(borrowerDocuments).omit({ id: true, uploadedAt: true, updatedAt: true });
 export type BorrowerDocument = typeof borrowerDocuments.$inferSelect;
 export type InsertBorrowerDocument = z.infer<typeof insertBorrowerDocumentSchema>;
+
+export const auditLogs = pgTable("audit_logs", {
+  id: serial("id").primaryKey(),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  userId: integer("user_id"),
+  userEmail: varchar("user_email", { length: 255 }),
+  userRole: varchar("user_role", { length: 50 }),
+  action: varchar("action", { length: 100 }).notNull(),
+  resourceType: varchar("resource_type", { length: 100 }),
+  resourceId: varchar("resource_id", { length: 255 }),
+  oldValues: jsonb("old_values"),
+  newValues: jsonb("new_values"),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  userAgent: text("user_agent"),
+  statusCode: integer("status_code"),
+  success: boolean("success").default(true),
+  errorMessage: text("error_message"),
+}, (table) => ({
+  userIdIdx: index("audit_logs_user_id_idx").on(table.userId),
+  timestampIdx: index("audit_logs_timestamp_idx").on(table.timestamp),
+  actionIdx: index("audit_logs_action_idx").on(table.action),
+}));
+
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertAuditLog = typeof auditLogs.$inferInsert;
+
+export const loginAttempts = pgTable("login_attempts", {
+  id: serial("id").primaryKey(),
+  email: varchar("email", { length: 255 }).notNull(),
+  ipAddress: varchar("ip_address", { length: 45 }).notNull(),
+  success: boolean("success").notNull(),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  userAgent: text("user_agent"),
+}, (table) => ({
+  emailIpIdx: index("login_attempts_email_ip_idx").on(table.email, table.ipAddress),
+  timestampIdx: index("login_attempts_timestamp_idx").on(table.timestamp),
+}));
+
+export type LoginAttempt = typeof loginAttempts.$inferSelect;
+export type InsertLoginAttempt = typeof loginAttempts.$inferInsert;

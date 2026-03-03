@@ -16,6 +16,7 @@ The application is built on a modern web stack, utilizing React 18 with TypeScri
 **Backend:**
 -   **Technology Stack**: Express.js, TypeScript, Drizzle ORM, RESTful API, Zod for validation.
 -   **Core Functionality**: JWT-based authentication with httpOnly cookies and Google OAuth 2.0 support, multi-tenant architecture, user type differentiation (Brokers/Borrowers), deal-linked messaging, and automated notification systems. It orchestrates frontend input with external pricing requests and interest rate retrieval.
+-   **SOC 2 Compliance Layer**: Account lockout after 5 failed login attempts (30-minute lockout duration), immutable audit logging for all auth events (login, logout, registration, password changes, lockouts), per-attempt login tracking with IP/user-agent forensics. Utilities in `server/lib/auth.ts`, tables `audit_logs` and `login_attempts` in `shared/schema.ts`, columns `failed_login_attempts` and `account_locked_until` on `users` table.
 
 **Database Schema Highlights**: Manages users, pricing requests, quotes, documents, e-signatures, audit logs, projects (deals), tasks, activities, system settings, admin tasks, partners, loan programs, message threads, onboarding progress, loan digest configurations, and commercial loan submissions.
 
