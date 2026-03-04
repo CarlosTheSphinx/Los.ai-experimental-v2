@@ -1,11 +1,13 @@
-import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo, useCallback } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   DollarSign, FolderOpen, Clock, CheckCircle2, Search, ChevronRight, Plus,
   Building2, User, FileText, ExternalLink, Copy, MoreHorizontal, Mail,
-  List, LayoutGrid, SlidersHorizontal, ChevronDown, ArrowUpDown, Filter
+  List, LayoutGrid, SlidersHorizontal, ChevronDown, ArrowUpDown, Filter,
+  CalendarIcon
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -17,6 +19,11 @@ import { StatusBadge } from "@/components/ui/phase1/status-badge";
 import { EmptyState } from "@/components/ui/phase1/empty-state";
 import { ExpandableRow } from "@/components/ui/phase1/expandable-row";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { useToast } from "@/hooks/use-toast";
+import { format } from "date-fns";
 
 interface Deal {
   id: number;
@@ -51,6 +58,8 @@ interface Deal {
   completedTasks?: number;
   totalTasks?: number;
   userName?: string;
+  asIsValue?: number;
+  appraisalStatus?: string;
   googleDriveFolderUrl?: string;
   driveSyncStatus?: string;
   metadata?: any;
@@ -163,6 +172,187 @@ function getStatusVariant(status?: string): "active" | "pending" | "closed" | "i
   }
 }
 
+function InlineDollarField({ label, value, onSave, testId }: {
+  label: string;
+  value?: number;
+  onSave: (v: number) => void;
+  testId: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [localVal, setLocalVal] = useState("");
+
+  const startEdit = () => {
+    setLocalVal(value ? String(Math.round(value)) : "");
+    setEditing(true);
+  };
+
+  const commit = () => {
+    setEditing(false);
+    const parsed = parseFloat(localVal.replace(/[^0-9.]/g, ""));
+    if (!isNaN(parsed) && parsed !== value) {
+      onSave(parsed);
+    }
+  };
+
+  const displayVal = value ? `$${Math.round(value).toLocaleString()}` : "—";
+
+  return (
+    <div className="flex items-center justify-between text-[15px]">
+      <span className="text-muted-foreground">{label}</span>
+      {editing ? (
+        <div className="flex items-center gap-1">
+          <span className="text-muted-foreground">$</span>
+          <Input
+            data-testid={testId}
+            className="h-7 w-[130px] text-right text-[14px]"
+            value={localVal}
+            onChange={(e) => setLocalVal(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
+            autoFocus
+          />
+        </div>
+      ) : (
+        <span
+          className="font-medium cursor-pointer hover:text-primary transition-colors border-b border-dashed border-transparent hover:border-muted-foreground/40"
+          onClick={startEdit}
+          data-testid={testId}
+        >
+          {displayVal}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function InlinePercentField({ label, value, decimals, onSave, testId }: {
+  label: string;
+  value?: number;
+  decimals: number;
+  onSave: (v: number) => void;
+  testId: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [localVal, setLocalVal] = useState("");
+
+  const startEdit = () => {
+    setLocalVal(value != null ? value.toFixed(decimals) : "");
+    setEditing(true);
+  };
+
+  const commit = () => {
+    setEditing(false);
+    const parsed = parseFloat(localVal);
+    if (!isNaN(parsed) && parsed !== value) {
+      onSave(parseFloat(parsed.toFixed(decimals)));
+    }
+  };
+
+  const displayVal = value != null ? `${value.toFixed(decimals)}%` : "—";
+
+  return (
+    <div className="flex items-center justify-between text-[15px]">
+      <span className="text-muted-foreground">{label}</span>
+      {editing ? (
+        <div className="flex items-center gap-1">
+          <Input
+            data-testid={testId}
+            className="h-7 w-[90px] text-right text-[14px]"
+            value={localVal}
+            onChange={(e) => setLocalVal(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
+            autoFocus
+          />
+          <span className="text-muted-foreground">%</span>
+        </div>
+      ) : (
+        <span
+          className="font-medium cursor-pointer hover:text-primary transition-colors border-b border-dashed border-transparent hover:border-muted-foreground/40"
+          onClick={startEdit}
+          data-testid={testId}
+        >
+          {displayVal}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function InlineSelectField({ label, value, options, onSave, testId }: {
+  label: string;
+  value: string;
+  options: { label: string; value: string }[];
+  onSave: (v: string) => void;
+  testId: string;
+}) {
+  const currentLabel = options.find((o) => o.value === value)?.label || value || "—";
+
+  return (
+    <div className="flex items-center justify-between text-[15px]">
+      <span className="text-muted-foreground">{label}</span>
+      <Select value={value} onValueChange={(v) => onSave(v)}>
+        <SelectTrigger
+          className="h-7 w-auto min-w-[120px] max-w-[180px] text-right text-[14px] border-dashed border-muted-foreground/30 bg-transparent font-medium"
+          data-testid={testId}
+        >
+          <SelectValue placeholder="—">{currentLabel}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value} data-testid={`${testId}-option-${opt.value}`}>
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function InlineDateField({ label, value, onSave, testId }: {
+  label: string;
+  value?: string;
+  onSave: (v: string) => void;
+  testId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const date = value ? new Date(value) : undefined;
+  const displayVal = date && !isNaN(date.getTime())
+    ? format(date, "MMM d, yyyy")
+    : "—";
+
+  return (
+    <div className="flex items-center justify-between text-[15px]">
+      <span className="text-muted-foreground">{label}</span>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            className="font-medium text-[14px] cursor-pointer hover:text-primary transition-colors border-b border-dashed border-transparent hover:border-muted-foreground/40 flex items-center gap-1.5"
+            data-testid={testId}
+          >
+            {displayVal}
+            <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="end">
+          <Calendar
+            mode="single"
+            selected={date}
+            onSelect={(d) => {
+              if (d) {
+                onSave(d.toISOString());
+                setOpen(false);
+              }
+            }}
+            initialFocus
+          />
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 export default function DealsV2() {
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
@@ -181,6 +371,23 @@ export default function DealsV2() {
   const [stateFilter, setStateFilter] = useState<string>("all");
   const [brokerFilter, setBrokerFilter] = useState<string>("all");
   const [daysInStageFilter, setDaysInStageFilter] = useState<string>("all");
+  const { toast } = useToast();
+
+  const updateDealMutation = useMutation({
+    mutationFn: async ({ dealId, updates }: { dealId: number; updates: Record<string, unknown> }) => {
+      await apiRequest("PUT", `/api/projects/${dealId}`, updates);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/deals"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const handleFieldUpdate = useCallback((dealId: number, field: string, value: unknown) => {
+    updateDealMutation.mutate({ dealId, updates: { [field]: value } });
+  }, [updateDealMutation]);
 
   const { data: dealsData, isLoading } = useQuery<{ projects: Deal[] }>({
     queryKey: ["/api/deals"],
@@ -683,68 +890,106 @@ export default function DealsV2() {
                       <div className="grid grid-cols-3 gap-8">
                         <div>
                           <h4 className="text-[16px] font-semibold uppercase tracking-wider text-muted-foreground mb-3" data-testid={`heading-loan-details-${deal.id}`}>Loan Details</h4>
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between text-[16px]">
-                              <span className="text-muted-foreground">Loan Amount</span>
-                              <span className="font-semibold">{formatCurrencyFull(deal.loanAmount)}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-[16px]">
-                              <span className="text-muted-foreground">LTV</span>
-                              <span className="font-semibold">{deal.ltv ? `${deal.ltv}%` : "—"}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-[16px]">
-                              <span className="text-muted-foreground">Interest Rate</span>
-                              <span className="font-semibold">{deal.interestRate ? `${deal.interestRate}%` : "—"}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-[16px]">
-                              <span className="text-muted-foreground">Term</span>
-                              <span className="font-semibold">{formatTerm(deal.loanTermMonths)}</span>
-                            </div>
+                          <div className="space-y-3">
+                            <InlineDollarField
+                              label="Loan Amount"
+                              value={deal.loanAmount}
+                              onSave={(v) => handleFieldUpdate(deal.id, "loanAmount", v)}
+                              testId={`input-loan-amount-${deal.id}`}
+                            />
+                            <InlinePercentField
+                              label="LTV"
+                              value={deal.ltv}
+                              decimals={0}
+                              onSave={(v) => handleFieldUpdate(deal.id, "ltv", v)}
+                              testId={`input-ltv-${deal.id}`}
+                            />
+                            <InlinePercentField
+                              label="Interest Rate"
+                              value={deal.interestRate}
+                              decimals={3}
+                              onSave={(v) => handleFieldUpdate(deal.id, "interestRate", v)}
+                              testId={`input-interest-rate-${deal.id}`}
+                            />
+                            <InlineSelectField
+                              label="Term"
+                              value={deal.loanTermMonths != null ? String(deal.loanTermMonths) : ""}
+                              options={
+                                deal.loanType?.toLowerCase() === "rtl" || deal.loanType?.toLowerCase() === "fix-and-flip" || deal.loanType?.toLowerCase() === "bridge"
+                                  ? [
+                                      { label: "12 month", value: "12" },
+                                      { label: "15 month", value: "15" },
+                                      { label: "18 month", value: "18" },
+                                      { label: "24 month", value: "24" },
+                                    ]
+                                  : [
+                                      { label: "5 Year IO", value: "60" },
+                                      { label: "7 Year IO", value: "84" },
+                                      { label: "10 Year IO", value: "120" },
+                                    ]
+                              }
+                              onSave={(v) => handleFieldUpdate(deal.id, "loanTermMonths", parseInt(v))}
+                              testId={`select-term-${deal.id}`}
+                            />
                           </div>
                         </div>
 
                         <div>
                           <h4 className="text-[16px] font-semibold uppercase tracking-wider text-muted-foreground mb-3" data-testid={`heading-property-${deal.id}`}>Property</h4>
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between text-[16px]">
-                              <span className="text-muted-foreground">Type</span>
-                              <span className="font-semibold">{getPropertyTypeLabel(deal.propertyType)}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-[16px]">
+                          <div className="space-y-3">
+                            <InlineSelectField
+                              label="Type"
+                              value={deal.propertyType || ""}
+                              options={[
+                                { label: "Single Family Residence", value: "single-family-residence" },
+                                { label: "Duplex", value: "duplex" },
+                                { label: "Triplex", value: "triplex" },
+                                { label: "Quadplex", value: "quadplex" },
+                                { label: "5+ Unit Multifamily", value: "multifamily-5-plus" },
+                              ]}
+                              onSave={(v) => handleFieldUpdate(deal.id, "propertyType", v)}
+                              testId={`select-property-type-${deal.id}`}
+                            />
+                            <InlineDollarField
+                              label="As-Is Value"
+                              value={deal.asIsValue}
+                              onSave={(v) => handleFieldUpdate(deal.id, "asIsValue", v)}
+                              testId={`input-as-is-value-${deal.id}`}
+                            />
+                            <div className="flex items-center justify-between text-[15px]">
                               <span className="text-muted-foreground">State</span>
-                              <span className="font-semibold">{deal.propertyState || extractState(deal.propertyAddress)}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-[16px]">
-                              <span className="text-muted-foreground">Purpose</span>
-                              <span className="font-semibold">{getLoanPurpose(deal)}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-[16px]">
-                              <span className="text-muted-foreground">Address</span>
-                              <span className="font-semibold truncate max-w-[180px] text-right" title={cleanAddress(deal.propertyAddress)}>
-                                {deal.propertyAddress ? deal.propertyAddress.split(",")[0] : "—"}
-                              </span>
+                              <span className="font-medium" data-testid={`text-state-${deal.id}`}>{deal.propertyState || extractState(deal.propertyAddress)}</span>
                             </div>
                           </div>
                         </div>
 
                         <div>
                           <h4 className="text-[16px] font-semibold uppercase tracking-wider text-muted-foreground mb-3" data-testid={`heading-timeline-${deal.id}`}>Timeline</h4>
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between text-[16px]">
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between text-[15px]">
                               <span className="text-muted-foreground">Created</span>
-                              <span className="font-semibold">{formatDate(deal.createdAt)}</span>
+                              <span className="font-medium" data-testid={`text-created-${deal.id}`}>{formatDate(deal.createdAt)}</span>
                             </div>
-                            <div className="flex items-center justify-between text-[16px]">
-                              <span className="text-muted-foreground">Target Close</span>
-                              <span className="font-semibold">{formatDate(deal.targetCloseDate)}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-[16px]">
-                              <span className="text-muted-foreground">Days in Stage</span>
-                              <span className="font-semibold">{getDaysInStage(deal.createdAt)}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-[16px]">
-                              <span className="text-muted-foreground">Assigned To</span>
-                              <span className="font-semibold">{deal.userName || "—"}</span>
+                            <InlineDateField
+                              label="Target Close"
+                              value={deal.targetCloseDate}
+                              onSave={(v) => handleFieldUpdate(deal.id, "targetCloseDate", v)}
+                              testId={`date-target-close-${deal.id}`}
+                            />
+                            <InlineSelectField
+                              label="Appraisal Status"
+                              value={deal.appraisalStatus || ""}
+                              options={[
+                                { label: "Not Ordered", value: "not_ordered" },
+                                { label: "Ordered", value: "ordered" },
+                                { label: "Received", value: "received" },
+                              ]}
+                              onSave={(v) => handleFieldUpdate(deal.id, "appraisalStatus", v)}
+                              testId={`select-appraisal-${deal.id}`}
+                            />
+                            <div className="flex items-center justify-between text-[15px]">
+                              <span className="text-muted-foreground">Time in Stage</span>
+                              <span className="font-medium" data-testid={`text-days-in-stage-${deal.id}`}>{getDaysInStage(deal.createdAt)}</span>
                             </div>
                           </div>
                         </div>

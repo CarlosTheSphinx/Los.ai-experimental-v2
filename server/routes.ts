@@ -3064,7 +3064,8 @@ export async function registerRoutes(
       const allowedFields = [
         'projectName', 'status', 'loanAmount', 'interestRate', 'loanTermMonths',
         'loanType', 'propertyAddress', 'propertyType', 'borrowerName',
-        'borrowerEmail', 'borrowerPhone', 'targetCloseDate', 'notes', 'internalNotes'
+        'borrowerEmail', 'borrowerPhone', 'targetCloseDate', 'notes', 'internalNotes',
+        'ltv', 'asIsValue', 'propertyState', 'appraisalStatus'
       ];
       
       const updates: Record<string, unknown> = {};

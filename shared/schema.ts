@@ -498,6 +498,11 @@ export const projects = pgTable("projects", {
   brokerPortalToken: varchar("broker_portal_token", { length: 255 }).unique(),
   brokerPortalEnabled: boolean("broker_portal_enabled").default(true),
 
+  ltv: real("ltv"),
+  asIsValue: real("as_is_value"),
+  propertyState: varchar("property_state", { length: 50 }),
+  appraisalStatus: varchar("appraisal_status", { length: 50 }),
+
   notes: text("notes"),
   internalNotes: text("internal_notes"),
   isArchived: boolean("is_archived").default(false),

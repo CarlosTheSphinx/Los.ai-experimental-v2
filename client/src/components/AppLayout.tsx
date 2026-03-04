@@ -136,12 +136,18 @@ const adminNavItems: NavItem[] = [
 const adminNavItemsV2: NavItem[] = [
   { href: "/admin/overview", label: "Dashboard", icon: Gauge },
   { href: "/admin", label: "Pipeline", icon: LayoutDashboard, shortcut: "⌘1" },
-  { href: "/admin/programs", label: "Programs", icon: Settings2, requiredPermission: "programs.view" },
   { href: "/quotes", label: "Quotes", icon: FileText },
-  { href: "/inbox", label: "Messages", icon: Inbox, showBadge: true, requiredPermission: "messages.view" },
+  { href: "/admin/credit-policies", label: "Credit Policies", icon: ShieldCheck, requiredPermission: "programs.view" },
+  { href: "/admin/programs", label: "Programs", icon: Settings2, requiredPermission: "programs.view" },
+  { href: "/admin/digests", label: "Communications", icon: CalendarDays, requiredPermission: "digests.view" },
+  { href: "/admin/commercial-submissions", label: "Commercial Deals", icon: Building2, requiredPermission: "commercial.view" },
+  { href: "/admin/partners", label: "Partners", icon: Handshake, requiredPermission: "partners.view" },
+  { href: "/inbox", label: "Inbox", icon: Inbox, showBadge: true, requiredPermission: "messages.view" },
   { href: "/admin/users", label: "Users", icon: Users, requiredPermission: "users.view", shortcut: "⌘2" },
-  { href: "/admin/onboarding", label: "Onboarding", icon: BookOpen, requiredPermission: "onboarding.view" },
+  { href: "/admin/team-permissions", label: "Permissions", icon: Shield, requiredPermission: "users.manage" },
+  { href: "/admin/commercial/config", label: "Commercial Config", icon: ClipboardEdit, requiredPermission: "commercial.manage" },
   { href: "/admin/integrations", label: "Integrations", icon: Blocks, requiredPermission: "settings.view" },
+  { href: "/admin/onboarding", label: "Onboarding", icon: BookOpen, requiredPermission: "onboarding.view" },
   { href: "/admin/settings", label: "Settings", icon: Settings, requiredPermission: "settings.view" },
 ];
 
