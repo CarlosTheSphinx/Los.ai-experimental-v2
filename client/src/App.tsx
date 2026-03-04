@@ -30,6 +30,7 @@ import AdminOverview from "@/pages/admin/admin-overview";
 import AdminUsers from "@/pages/admin/users";
 import AdminSettings from "@/pages/admin/settings";
 import AdminTeamPermissions from "@/pages/admin/team-permissions";
+import AdminApiKeys from "@/pages/admin/api-keys";
 import AdminDeals from "@/pages/admin/deals";
 
 import AdminDealDetail from "@/pages/admin/deal-detail";
@@ -242,6 +243,7 @@ function MainRoutes() {
           <Route path="/admin/projects" component={() => <Redirect to="/admin/deals" />} />
           <Route path="/admin/projects/:id">{(params) => <Redirect to={`/admin/deals/${params.id}`} />}</Route>
           <Route path="/admin/settings" component={() => <AdminProtectedRoute component={AdminSettings} />} />
+          <Route path="/admin/api-keys" component={() => <AdminProtectedRoute component={AdminApiKeys} />} />
           <Route path="/admin/onboarding" component={() => <AdminProtectedRoute component={AdminOnboarding} skipOnboardingRedirect />} />
           <Route path="/admin/digests" component={() => <AdminProtectedRoute component={AdminDigests} />} />
           <Route path="/admin/document-templates" component={() => <AdminProtectedRoute component={AdminDocumentTemplates} />} />

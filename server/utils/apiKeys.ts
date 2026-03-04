@@ -1,38 +1,25 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { db } from '../db';
-import { apiKeys, apiKeyUsage } from '../db/schema';
-import { eq, and, isNull, or, lt, inArray } from 'drizzle-orm';
-
-/**
- * API Key Management Utilities
- *
- * Handles:
- * - API key generation and validation
- * - Scope matching and validation
- * - Key lifecycle management (creation, rotation, revocation)
- * - Rate limiting enforcement
- * - Usage tracking and audit logging
- */
+import { apiKeys, apiKeyUsage } from '@shared/schema';
+import { eq, and, lt, gte, sql } from 'drizzle-orm';
 
 export interface APIKey {
-  id: string;
-  userId: string;
+  id: number;
+  createdByUserId: number;
   name: string;
   keyHash: string;
-  keyPreview: string;
+  keyPrefix: string;
   scopes: string[];
-  rateLimitPerMinute: number;
-  expiresAt?: Date;
-  revokedAt?: Date;
-  lastUsedAt?: Date;
+  expiresAt?: Date | null;
+  isRevoked: boolean;
+  lastUsedAt?: Date | null;
+  usageCount: number;
   createdAt: Date;
-  updatedAt: Date;
 }
 
 export interface APIKeyUsageRecord {
-  id: string;
-  apiKeyId: string;
+  apiKeyId: number;
   endpoint: string;
   method: string;
   statusCode: number;
@@ -43,32 +30,18 @@ export interface APIKeyUsageRecord {
   authorized: boolean;
   errorMessage?: string;
   requestId?: string;
-  timestamp: Date;
   responseTimeMs?: number;
 }
 
-/**
- * Generate a new API key
- *
- * Returns both the plaintext (to show user once) and hash (for storage)
- * Format: sk_prod_[32 random characters]
- */
-export function generateAPIKey(): { plaintext: string; hash: string } {
+export function generateAPIKey(): { plaintext: string; hash: string; prefix: string } {
   const randomPart = crypto.randomBytes(24).toString('hex');
   const plaintext = `sk_prod_${randomPart}`;
-
-  // Hash with bcrypt-12 for storage
   const hash = bcrypt.hashSync(plaintext, 12);
+  const prefix = plaintext.slice(0, 8);
 
-  return {
-    plaintext,
-    hash,
-  };
+  return { plaintext, hash, prefix };
 }
 
-/**
- * Validate plaintext API key against stored hash
- */
 export function validateAPIKey(plaintext: string, hash: string): boolean {
   try {
     return bcrypt.compareSync(plaintext, hash);
@@ -77,22 +50,11 @@ export function validateAPIKey(plaintext: string, hash: string): boolean {
   }
 }
 
-/**
- * Mask API key for display
- * Shows only last 4 characters
- *
- * Example: sk_prod_abc123xyz... → ...xyz
- */
 export function maskAPIKey(plaintext: string): string {
-  if (plaintext.length < 4) return '...';
-  return `...${plaintext.slice(-4)}`;
+  if (plaintext.length < 8) return '...';
+  return `${plaintext.slice(0, 8)}...${plaintext.slice(-4)}`;
 }
 
-/**
- * Extract API key from Authorization header
- *
- * Accepts: "Bearer sk_prod_xxx" or "sk_prod_xxx"
- */
 export function extractAPIKeyFromHeader(authHeader?: string): string | null {
   if (!authHeader) return null;
 
@@ -101,7 +63,6 @@ export function extractAPIKeyFromHeader(authHeader?: string): string | null {
     return parts[1];
   }
 
-  // Also accept raw key
   if (parts.length === 1 && parts[0].startsWith('sk_prod_')) {
     return parts[0];
   }
@@ -109,28 +70,23 @@ export function extractAPIKeyFromHeader(authHeader?: string): string | null {
   return null;
 }
 
-/**
- * Lookup API key from database by hash
- */
 export async function lookupAPIKey(plaintext: string): Promise<APIKey | null> {
-  // Get all keys, filter by hash comparison (since bcrypt is one-way)
-  const allKeys = await db.select().from(apiKeys).execute();
+  const allKeys = await db.select().from(apiKeys);
 
   for (const key of allKeys) {
-    if (validateAPIKey(plaintext, key.key_hash)) {
+    if (validateAPIKey(plaintext, key.keyHash)) {
       return {
         id: key.id,
-        userId: key.user_id,
+        createdByUserId: key.createdByUserId,
         name: key.name,
-        keyHash: key.key_hash,
-        keyPreview: key.key_preview,
-        scopes: key.scopes || [],
-        rateLimitPerMinute: key.rate_limit_per_minute,
-        expiresAt: key.expires_at || undefined,
-        revokedAt: key.revoked_at || undefined,
-        lastUsedAt: key.last_used_at || undefined,
-        createdAt: key.created_at,
-        updatedAt: key.updated_at,
+        keyHash: key.keyHash,
+        keyPrefix: key.keyPrefix,
+        scopes: (key.scopes as string[]) || [],
+        expiresAt: key.expiresAt,
+        isRevoked: key.isRevoked ?? false,
+        lastUsedAt: key.lastUsedAt,
+        usageCount: key.usageCount ?? 0,
+        createdAt: key.createdAt,
       };
     }
   }
@@ -138,43 +94,23 @@ export async function lookupAPIKey(plaintext: string): Promise<APIKey | null> {
   return null;
 }
 
-/**
- * Check if API key is valid and active
- *
- * Validates:
- * - Key exists
- * - Not revoked
- * - Not expired
- */
 export function isAPIKeyValid(key: APIKey): boolean {
-  // Check revoked
-  if (key.revokedAt) {
+  if (key.isRevoked) {
     return false;
   }
 
-  // Check expired
-  if (key.expiresAt && new Date() > key.expiresAt) {
+  if (key.expiresAt && new Date() > new Date(key.expiresAt)) {
     return false;
   }
 
   return true;
 }
 
-/**
- * Validate that granted scopes satisfy required scopes
- *
- * Supports wildcard matching:
- * - 'deals:*' matches 'deals:read' and 'deals:write'
- * - '*' matches any scope
- *
- * Returns: { valid: boolean; missingScopes: string[] }
- */
 export function validateScopes(
   requiredScopes: string[],
   grantedScopes: string[]
 ): { valid: boolean; missingScopes: string[] } {
   if (grantedScopes.includes('*')) {
-    // Full access
     return { valid: true, missingScopes: [] };
   }
 
@@ -184,7 +120,7 @@ export function validateScopes(
     const hasScopeExact = grantedScopes.includes(required);
     const hasScopeWildcard = grantedScopes.some((granted) => {
       if (granted.endsWith(':*')) {
-        const prefix = granted.slice(0, -2); // Remove :*
+        const prefix = granted.slice(0, -2);
         return required.startsWith(prefix + ':');
       }
       return false;
@@ -201,33 +137,21 @@ export function validateScopes(
   };
 }
 
-/**
- * Check if a single scope matches granted scopes
- */
 export function scopeMatches(requiredScope: string, grantedScopes: string[]): boolean {
   const result = validateScopes([requiredScope], grantedScopes);
   return result.valid;
 }
 
-/**
- * Check rate limit for API key
- *
- * Returns:
- * - { allowed: true, remaining: number }
- * - { allowed: false, retryAfter: number }
- */
 export async function checkRateLimit(
-  apiKeyId: string,
-  limit: number
+  apiKeyId: number,
+  limit: number = 100
 ): Promise<{ allowed: boolean; remaining?: number; retryAfter?: number }> {
-  // Get count of requests in last minute
   const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
 
   const recentRequests = await db
     .select()
     .from(apiKeyUsage)
-    .where(and(eq(apiKeyUsage.api_key_id, apiKeyId), lt(apiKeyUsage.timestamp, oneMinuteAgo)))
-    .execute();
+    .where(and(eq(apiKeyUsage.apiKeyId, apiKeyId), gte(apiKeyUsage.timestamp, oneMinuteAgo)));
 
   const requestCount = recentRequests.length;
 
@@ -238,7 +162,6 @@ export async function checkRateLimit(
     };
   }
 
-  // Find oldest request to calculate retry time
   const oldestRequest = recentRequests.reduce((oldest, current) =>
     current.timestamp < oldest.timestamp ? current : oldest
   );
@@ -251,145 +174,103 @@ export async function checkRateLimit(
   };
 }
 
-/**
- * Increment request count and update last_used_at
- */
-export async function updateKeyLastUsed(apiKeyId: string): Promise<void> {
+export async function updateKeyLastUsed(apiKeyId: number): Promise<void> {
   await db
     .update(apiKeys)
     .set({
-      last_used_at: new Date(),
-      updated_at: new Date(),
+      lastUsedAt: new Date(),
+      usageCount: sql`${apiKeys.usageCount} + 1`,
     })
-    .where(eq(apiKeys.id, apiKeyId))
-    .execute();
+    .where(eq(apiKeys.id, apiKeyId));
 }
 
-/**
- * Log API key usage (for audit trail)
- */
-export async function logAPIKeyUsage(usage: Omit<APIKeyUsageRecord, 'id' | 'timestamp'>): Promise<void> {
-  await db
-    .insert(apiKeyUsage)
-    .values({
-      id: usage.id || crypto.randomUUID(),
-      api_key_id: usage.apiKeyId,
-      endpoint: usage.endpoint,
-      method: usage.method,
-      status_code: usage.statusCode,
-      ip_address: usage.ipAddress,
-      user_agent: usage.userAgent,
-      scope_required: usage.scopeRequired,
-      scope_granted: usage.scopeGranted,
-      authorized: usage.authorized,
-      error_message: usage.errorMessage,
-      request_id: usage.requestId,
-      response_time_ms: usage.responseTimeMs,
-      timestamp: new Date(),
-    })
-    .execute();
+export async function logAPIKeyUsage(usage: APIKeyUsageRecord): Promise<void> {
+  try {
+    await db
+      .insert(apiKeyUsage)
+      .values({
+        apiKeyId: usage.apiKeyId,
+        endpoint: usage.endpoint,
+        method: usage.method,
+        statusCode: usage.statusCode,
+        ipAddress: usage.ipAddress,
+        userAgent: usage.userAgent,
+        scopeRequired: usage.scopeRequired,
+        scopeGranted: usage.scopeGranted,
+        authorized: usage.authorized,
+        errorMessage: usage.errorMessage,
+        requestId: usage.requestId,
+        responseTimeMs: usage.responseTimeMs,
+      });
+  } catch (err) {
+    console.error('Failed to log API key usage:', err);
+  }
 }
 
-/**
- * Revoke an API key
- */
-export async function revokeAPIKey(apiKeyId: string): Promise<void> {
+export async function revokeAPIKey(apiKeyId: number): Promise<void> {
   await db
     .update(apiKeys)
-    .set({
-      revoked_at: new Date(),
-      updated_at: new Date(),
-    })
-    .where(eq(apiKeys.id, apiKeyId))
-    .execute();
+    .set({ isRevoked: true })
+    .where(eq(apiKeys.id, apiKeyId));
 }
 
-/**
- * Rotate an API key (revoke old, create new)
- *
- * Returns plaintext of new key
- */
-export async function rotateAPIKey(apiKeyId: string): Promise<string> {
-  // Get original key info
+export async function rotateAPIKey(apiKeyId: number): Promise<{ plaintext: string; newKeyId: number }> {
   const originalKey = await db
     .select()
     .from(apiKeys)
     .where(eq(apiKeys.id, apiKeyId))
-    .limit(1)
-    .execute();
+    .limit(1);
 
   if (originalKey.length === 0) {
     throw new Error('API key not found');
   }
 
   const original = originalKey[0];
+  const { plaintext, hash, prefix } = generateAPIKey();
 
-  // Generate new key
-  const { plaintext, hash } = generateAPIKey();
-
-  // Create new key with same scopes
-  await db
+  const [newKey] = await db
     .insert(apiKeys)
     .values({
-      id: crypto.randomUUID(),
-      user_id: original.user_id,
+      createdByUserId: original.createdByUserId,
       name: `${original.name} (rotated)`,
-      key_hash: hash,
-      key_preview: maskAPIKey(plaintext).slice(-4),
+      keyHash: hash,
+      keyPrefix: prefix,
       scopes: original.scopes,
-      rate_limit_per_minute: original.rate_limit_per_minute,
-      expires_at: original.expires_at,
-      created_at: new Date(),
-      updated_at: new Date(),
-      created_by: original.created_by,
+      expiresAt: original.expiresAt,
     })
-    .execute();
+    .returning();
 
-  // Revoke old key
   await revokeAPIKey(apiKeyId);
 
-  return plaintext;
+  return { plaintext, newKeyId: newKey.id };
 }
 
-/**
- * List API keys for a user
- */
 export async function listAPIKeysByUser(
-  userId: string,
-  options?: {
-    includeRevoked?: boolean;
-  }
+  userId: number,
+  options?: { includeRevoked?: boolean }
 ): Promise<APIKey[]> {
-  let query = db.select().from(apiKeys).where(eq(apiKeys.user_id, userId));
+  const allKeys = await db.select().from(apiKeys).where(eq(apiKeys.createdByUserId, userId));
 
-  if (!options?.includeRevoked) {
-    query = query.where(isNull(apiKeys.revoked_at));
-  }
+  const filtered = options?.includeRevoked ? allKeys : allKeys.filter(k => !k.isRevoked);
 
-  const rows = await query.execute();
-
-  return rows.map((row) => ({
-    id: row.id,
-    userId: row.user_id,
-    name: row.name,
-    keyHash: row.key_hash,
-    keyPreview: row.key_preview,
-    scopes: row.scopes || [],
-    rateLimitPerMinute: row.rate_limit_per_minute,
-    expiresAt: row.expires_at || undefined,
-    revokedAt: row.revoked_at || undefined,
-    lastUsedAt: row.last_used_at || undefined,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+  return filtered.map((key) => ({
+    id: key.id,
+    createdByUserId: key.createdByUserId,
+    name: key.name,
+    keyHash: key.keyHash,
+    keyPrefix: key.keyPrefix,
+    scopes: (key.scopes as string[]) || [],
+    expiresAt: key.expiresAt,
+    isRevoked: key.isRevoked ?? false,
+    lastUsedAt: key.lastUsedAt,
+    usageCount: key.usageCount ?? 0,
+    createdAt: key.createdAt,
   }));
 }
 
-/**
- * Get API key usage statistics
- */
 export async function getAPIKeyUsageStats(
-  apiKeyId: string,
-  timeframeMinutes: number = 1440 // Default 24 hours
+  apiKeyId: number,
+  timeframeMinutes: number = 1440
 ): Promise<{
   totalRequests: number;
   authorizedRequests: number;
@@ -402,8 +283,7 @@ export async function getAPIKeyUsageStats(
   const usageRecords = await db
     .select()
     .from(apiKeyUsage)
-    .where(and(eq(apiKeyUsage.api_key_id, apiKeyId), lt(apiKeyUsage.timestamp, startTime)))
-    .execute();
+    .where(and(eq(apiKeyUsage.apiKeyId, apiKeyId), gte(apiKeyUsage.timestamp, startTime)));
 
   const statusCodeMap: Record<number, number> = {};
   let totalResponseTime = 0;
@@ -411,15 +291,12 @@ export async function getAPIKeyUsageStats(
   let deniedCount = 0;
 
   for (const record of usageRecords) {
-    // Count status codes
-    statusCodeMap[record.status_code] = (statusCodeMap[record.status_code] || 0) + 1;
-
-    // Sum response times
-    if (record.response_time_ms) {
-      totalResponseTime += record.response_time_ms;
+    if (record.statusCode) {
+      statusCodeMap[record.statusCode] = (statusCodeMap[record.statusCode] || 0) + 1;
     }
-
-    // Count authorized/denied
+    if (record.responseTimeMs) {
+      totalResponseTime += record.responseTimeMs;
+    }
     if (record.authorized) {
       authorizedCount++;
     } else {
@@ -436,9 +313,6 @@ export async function getAPIKeyUsageStats(
   };
 }
 
-/**
- * Delete an API key (permanent removal)
- */
-export async function deleteAPIKey(apiKeyId: string): Promise<void> {
-  await db.delete(apiKeys).where(eq(apiKeys.id, apiKeyId)).execute();
+export async function deleteAPIKey(apiKeyId: number): Promise<void> {
+  await db.delete(apiKeys).where(eq(apiKeys.id, apiKeyId));
 }

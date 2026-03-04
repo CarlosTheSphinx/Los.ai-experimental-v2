@@ -3814,3 +3814,26 @@ export const apiKeys = pgTable("api_keys", {
 
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type InsertApiKey = typeof apiKeys.$inferInsert;
+
+export const apiKeyUsage = pgTable("api_key_usage", {
+  id: serial("id").primaryKey(),
+  apiKeyId: integer("api_key_id").notNull(),
+  endpoint: varchar("endpoint", { length: 255 }),
+  method: varchar("method", { length: 10 }),
+  statusCode: integer("status_code"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  scopeRequired: jsonb("scope_required"),
+  scopeGranted: jsonb("scope_granted"),
+  authorized: boolean("authorized").default(true),
+  errorMessage: text("error_message"),
+  requestId: text("request_id"),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  responseTimeMs: integer("response_time_ms"),
+}, (table) => ({
+  apiKeyIdIdx: index("api_key_usage_key_id_idx").on(table.apiKeyId),
+  timestampIdx: index("api_key_usage_timestamp_idx").on(table.timestamp),
+}));
+
+export type ApiKeyUsage = typeof apiKeyUsage.$inferSelect;
+export type InsertApiKeyUsage = typeof apiKeyUsage.$inferInsert;

@@ -49,6 +49,7 @@ import { registerPortalRoutes } from './routes/portal';
 import { registerAdminProgramsRoutes } from './routes/admin-programs';
 import { setupPermissionsRoutes } from './routes/permissions';
 import { setupAuditRoutes } from './routes/audit';
+import { setupApiKeysRoutes } from './routes/apiKeys';
 import { createAuditLog, getClientIp, logUserAction, AuditActions, ResourceTypes } from './utils/audit';
 
 import { registerProcessorRoutes } from './routes/processor';
@@ -229,6 +230,7 @@ export async function registerRoutes(
   registerAuthRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
   setupPermissionsRoutes(app, { db, authenticateUser });
   setupAuditRoutes(app, { db });
+  setupApiKeysRoutes(app, { db, authenticateUser });
 
   // Register unified Google connect routes (Gmail + Drive in one OAuth flow)
   registerGoogleConnectRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
