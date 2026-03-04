@@ -11,6 +11,23 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
+type QuoteFormField = {
+  fieldKey: string;
+  label: string;
+  fieldType: string;
+  required: boolean;
+  visible: boolean;
+  displayGroup?: string;
+  options?: string[];
+};
+
+const LOCKED_LOAN_FIELD_KEYS = new Set([
+  'ltv', 'ysp', 'lenderOriginationPoints', 'brokerOriginationPoints',
+  'interestRate', 'brokerName', 'holdbackAmount', 'loanTermMonths', 'term',
+]);
+
+const CONTACT_FIELD_KEYS = new Set(['firstName', 'lastName', 'email', 'phone', 'address']);
+
 function fmt(amount: number | string | undefined | null): string {
   if (amount === null || amount === undefined || amount === "" || amount === "—") return "—";
   const n = typeof amount === "string" ? parseFloat(amount.replace(/[^0-9.-]/g, "")) : amount;
@@ -23,10 +40,18 @@ function fmtDate(d: string | Date | null | undefined): string {
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function daysBetween(start: string | Date | null | undefined): string {
-  if (!start) return "—";
-  const diff = Math.floor((Date.now() - new Date(start).getTime()) / 86400000);
-  return `${diff} days`;
+function formatFieldValue(value: any, fieldType: string): string {
+  if (value === null || value === undefined || value === "") return "—";
+  switch (fieldType) {
+    case 'currency':
+      return fmt(value);
+    case 'percentage':
+      return `${value}%`;
+    case 'yes_no':
+      return value === true || value === 'yes' || value === 'Yes' || value === true ? 'Yes' : 'No';
+    default:
+      return String(value);
+  }
 }
 
 function Field({ label, value, tooltip }: { label: string; value: string; tooltip?: string }) {
@@ -41,7 +66,7 @@ function Field({ label, value, tooltip }: { label: string; value: string; toolti
     <span className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
   );
   return (
-    <div>
+    <div data-testid={`field-${label.toLowerCase().replace(/\s+/g, "-")}`}>
       {labelEl}
       <p className="text-[17px] font-bold mt-0.5">{value}</p>
     </div>
@@ -95,7 +120,9 @@ export default function TabOverview({
   const { toast } = useToast();
   const apiBase = "/api/admin";
 
-  const propertyValue = deal.propertyValue || deal.loanData?.propertyValue;
+  const primaryProp = properties?.find((p: any) => p.isPrimary) || properties?.[0];
+
+  const propertyValue = deal.propertyValue || deal.applicationData?.propertyValue || primaryProp?.estimatedValue || deal.loanData?.propertyValue;
   const loanAmount = deal.loanAmount || deal.loanData?.loanAmount;
   const interestRate = deal.interestRate;
   const termMonths = deal.termMonths || deal.loanTermMonths || deal.loanData?.loanTerm;
@@ -148,10 +175,8 @@ export default function TabOverview({
     { value: "3-2-1%", label: "3-2-1%" },
     { value: "2-1%", label: "2-1%" },
     { value: "1%", label: "1%" },
-    { value: "none", label: "None" },
+    { value: "None", label: "None" },
   ];
-
-  const primaryProp = properties.find((p: any) => p.isPrimary) || properties[0];
 
   const [editLoan, setEditLoan] = useState(false);
   const [loanForm, setLoanForm] = useState<Record<string, string>>({});
@@ -243,6 +268,149 @@ export default function TabOverview({
   const rateNum = interestRate && interestRate !== "—" ? String(interestRate).replace("%", "") : "";
   const appData = deal.applicationData || {};
 
+  const quoteFormFields: QuoteFormField[] = deal.quoteFormFields || [];
+  const hasProgram = quoteFormFields.length > 0;
+
+  const getFieldsByGroup = (group: string) =>
+    quoteFormFields.filter(f => {
+      if (f.visible === false || CONTACT_FIELD_KEYS.has(f.fieldKey)) return false;
+      const dg = f.displayGroup || 'loan_details';
+      if (dg === group) return true;
+      if (dg === 'application_details' && group === 'loan_details') return true;
+      return false;
+    });
+
+  const getFieldValue = (fieldKey: string): any => {
+    if (deal[fieldKey] !== undefined && deal[fieldKey] !== null) return deal[fieldKey];
+    if (appData[fieldKey] !== undefined && appData[fieldKey] !== null) return appData[fieldKey];
+    if (deal.loanData?.[fieldKey] !== undefined && deal.loanData?.[fieldKey] !== null) return deal.loanData[fieldKey];
+    return null;
+  };
+
+  const buildLockedLoanFields = (): { label: string; value: string; tooltip?: string; key: string }[] => {
+    const fields: { label: string; value: string; tooltip?: string; key: string }[] = [];
+
+    fields.push({ key: 'interestRate', label: "Interest Rate", value: rateDisplay });
+    fields.push({ key: 'ltv', label: "LTV", value: calculatedLtv ? `${calculatedLtv}%` : "—", tooltip: "Loan-to-Value ratio — auto-calculated as Loan Amount / Property Value" });
+
+    if (isAdmin) {
+      fields.push({ key: 'ysp', label: "YSP", value: yspValue != null ? `${yspValue}%` : "—", tooltip: "Yield Spread Premium — visible to lender admins only" });
+      fields.push({ key: 'lenderOriginationPoints', label: "Lender Origination Points", value: lenderPts != null ? `${lenderPts}%` : "—" });
+      fields.push({ key: 'brokerOriginationPoints', label: "Broker Origination Points", value: brokerPts != null ? `${brokerPts}%` : "—" });
+    } else {
+      fields.push({
+        key: 'originationPoints',
+        label: "Origination Points",
+        value: (lenderPts != null || brokerPts != null)
+          ? `${((Number(lenderPts) || 0) + (Number(brokerPts) || 0)).toFixed(2)}%`
+          : "—"
+      });
+    }
+
+    fields.push({ key: 'brokerName', label: "Broker Name", value: brokerNameVal || "—" });
+    fields.push({ key: 'term', label: "Term", value: termDisplay });
+    fields.push({ key: 'holdbackAmount', label: "Holdback Amount", value: isDSCR ? "N/A" : (holdbackAmt != null ? fmt(holdbackAmt) : "—") });
+
+    return fields;
+  };
+
+  const buildDynamicLoanFields = (): { label: string; value: string; key: string }[] => {
+    if (!hasProgram) {
+      return [
+        { key: 'loanAmount', label: "Loan Amount", value: fmt(loanAmount) },
+        { key: 'prepaymentPenalty', label: "Prepayment Penalty", value: prepayPenalty || "—" },
+      ];
+    }
+    const programLoanFields = getFieldsByGroup('loan_details');
+    return programLoanFields
+      .filter(f => !LOCKED_LOAN_FIELD_KEYS.has(f.fieldKey))
+      .map(f => ({
+        key: f.fieldKey,
+        label: f.label,
+        value: formatFieldValue(getFieldValue(f.fieldKey), f.fieldType),
+      }));
+  };
+
+  const allLoanFields = [...buildDynamicLoanFields(), ...buildLockedLoanFields()];
+
+  const buildPropertyFields = (): { label: string; value: string; key: string; tooltip?: string }[] => {
+    const baseFields: { label: string; value: string; key: string; tooltip?: string }[] = [
+      { key: 'address', label: "Address", value: primaryProp?.address || deal.propertyAddress || "—" },
+      { key: 'cityState', label: "City / State", value: primaryProp ? [primaryProp.city, primaryProp.state].filter(Boolean).join(", ") || "—" : "—" },
+    ];
+
+    if (hasProgram) {
+      const programPropertyFields = getFieldsByGroup('property_details');
+      const baseKeys = new Set(['address', 'city', 'state', 'cityState']);
+      programPropertyFields
+        .filter(f => !baseKeys.has(f.fieldKey))
+        .forEach(f => {
+          let val = getFieldValue(f.fieldKey);
+          if (val === null && f.fieldKey === 'propertyType') val = primaryProp?.propertyType || deal.propertyType;
+          if (val === null && f.fieldKey === 'grossMonthlyRent') val = primaryProp?.monthlyRent;
+          if (val === null && f.fieldKey === 'annualTaxes') val = primaryProp?.annualTaxes;
+          if (val === null && f.fieldKey === 'annualInsurance') val = primaryProp?.annualInsurance;
+          if (val === null && f.fieldKey === 'propertyUnits') val = primaryProp?.units;
+          if (val === null && f.fieldKey === 'propertyValue') val = primaryProp?.estimatedValue;
+          baseFields.push({
+            key: f.fieldKey,
+            label: f.label,
+            value: formatFieldValue(val, f.fieldType),
+          });
+        });
+    } else {
+      baseFields.push(
+        { key: 'propertyType', label: "Property Type", value: primaryProp?.propertyType || deal.propertyType || "—" },
+        { key: 'units', label: "Units", value: primaryProp?.units ? String(primaryProp.units) : "—" },
+        { key: 'monthlyRent', label: "Monthly Rent", value: fmt(primaryProp?.monthlyRent) },
+        { key: 'annualTaxes', label: "Annual Taxes", value: fmt(primaryProp?.annualTaxes) },
+        { key: 'annualInsurance', label: "Annual Insurance", value: fmt(primaryProp?.annualInsurance) },
+      );
+      const noi = primaryProp
+        ? ((primaryProp.monthlyRent || 0) * 12 - (primaryProp.annualTaxes || 0) - (primaryProp.annualInsurance || 0))
+        : null;
+      baseFields.push({ key: 'noi', label: "NOI", value: noi !== null && noi !== 0 ? fmt(noi) : "—", tooltip: "Net Operating Income" });
+    }
+
+    return baseFields;
+  };
+
+  const buildBorrowerFields = (): { label: string; value: string; key: string }[] => {
+    const baseFields: { label: string; value: string; key: string }[] = [
+      { key: 'fullName', label: "Full Name", value: deal.borrowerName || `${deal.customerFirstName || ""} ${deal.customerLastName || ""}`.trim() || "—" },
+      { key: 'email', label: "Email", value: deal.borrowerEmail || deal.customerEmail || "—" },
+      { key: 'phone', label: "Phone", value: deal.borrowerPhone || deal.customerPhone || "—" },
+    ];
+
+    if (hasProgram) {
+      const programBorrowerFields = getFieldsByGroup('borrower_details');
+      const baseKeys = new Set(['firstName', 'lastName', 'email', 'phone', 'address', 'fullName']);
+      programBorrowerFields
+        .filter(f => !baseKeys.has(f.fieldKey))
+        .forEach(f => {
+          baseFields.push({
+            key: f.fieldKey,
+            label: f.label,
+            value: formatFieldValue(getFieldValue(f.fieldKey), f.fieldType),
+          });
+        });
+    } else {
+      baseFields.push(
+        { key: 'creditScore', label: "Credit Score", value: appData.creditScore || deal.creditScore || "—" },
+        { key: 'employer', label: "Employer", value: appData.employer || appData.employerName || "—" },
+        { key: 'title', label: "Title", value: appData.title || appData.borrowerTitle || "—" },
+        { key: 'annualIncome', label: "Annual Income", value: appData.annualIncome ? fmt(appData.annualIncome) : "—" },
+        { key: 'entityName', label: "Entity Name", value: appData.entityName || "—" },
+        { key: 'entityType', label: "Entity Type", value: appData.entityType || "—" },
+      );
+    }
+
+    return baseFields;
+  };
+
+  const propertyFields = buildPropertyFields();
+  const borrowerFields = buildBorrowerFields();
+
   const startEditLoan = () => {
     setLoanForm({
       loanAmount: String(loanAmount || ""),
@@ -259,16 +427,10 @@ export default function TabOverview({
   };
 
   const startEditBorrower = () => {
-    const nameParts = (deal.borrowerName || deal.customerFirstName || "").split(" ");
     setBorrowerForm({
       fullName: deal.borrowerName || `${deal.customerFirstName || ""} ${deal.customerLastName || ""}`.trim(),
       email: deal.borrowerEmail || deal.customerEmail || "",
       phone: deal.borrowerPhone || deal.customerPhone || "",
-      employer: appData.employer || appData.employerName || "",
-      title: appData.title || appData.borrowerTitle || "",
-      annualIncome: String(appData.annualIncome || ""),
-      entityName: appData.entityName || "",
-      entityType: appData.entityType || "",
     });
     setEditBorrower(true);
   };
@@ -287,10 +449,6 @@ export default function TabOverview({
     });
     setEditProperty(true);
   };
-
-  const noi = primaryProp
-    ? ((primaryProp.monthlyRent || 0) * 12 - (primaryProp.annualTaxes || 0) - (primaryProp.annualInsurance || 0))
-    : null;
 
   const stageOptions = [
     { value: "application", label: "Application" },
@@ -350,28 +508,9 @@ export default function TabOverview({
           <CardContent>
             {!editLoan ? (
               <div className="grid grid-cols-2 gap-x-8 gap-y-2.5">
-                <Field label="Loan Amount" value={fmt(loanAmount)} />
-                <Field label="LTV" value={calculatedLtv ? `${calculatedLtv}%` : "—"} tooltip="Loan-to-Value ratio — auto-calculated as Loan Amount / Property Value" />
-                <Field label="Interest Rate" value={rateDisplay} />
-                {isAdmin && (
-                  <Field label="YSP" value={yspValue != null ? `${yspValue}%` : "—"} tooltip="Yield Spread Premium — visible to lender admins only" />
-                )}
-                {isAdmin ? (
-                  <>
-                    <Field label="Lender Origination Points" value={lenderPts != null ? `${lenderPts}%` : "—"} />
-                    <Field label="Broker Origination Points" value={brokerPts != null ? `${brokerPts}%` : "—"} />
-                  </>
-                ) : (
-                  <Field label="Origination Points" value={
-                    (lenderPts != null || brokerPts != null)
-                      ? `${((Number(lenderPts) || 0) + (Number(brokerPts) || 0)).toFixed(2)}%`
-                      : "—"
-                  } />
-                )}
-                <Field label="Broker Name" value={brokerNameVal || "—"} />
-                <Field label="Term" value={termDisplay} />
-                <Field label="Prepayment Penalty" value={prepayPenalty || "—"} />
-                <Field label="Holdback Amount" value={isDSCR ? "N/A" : (holdbackAmt != null ? fmt(holdbackAmt) : "—")} />
+                {allLoanFields.map(f => (
+                  <Field key={f.key} label={f.label} value={f.value} tooltip={f.tooltip} />
+                ))}
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-x-8 gap-y-2.5">
@@ -453,18 +592,9 @@ export default function TabOverview({
           <CardContent>
             {!editProperty ? (
               <div className="grid grid-cols-2 gap-x-8 gap-y-2.5">
-                <Field label="Address" value={primaryProp?.address || deal.propertyAddress || "—"} />
-                <Field label="City / State" value={
-                  primaryProp
-                    ? [primaryProp.city, primaryProp.state].filter(Boolean).join(", ") || "—"
-                    : "—"
-                } />
-                <Field label="Property Type" value={primaryProp?.propertyType || deal.propertyType || "—"} />
-                <Field label="Units" value={primaryProp?.units ? String(primaryProp.units) : "—"} />
-                <Field label="Monthly Rent" value={fmt(primaryProp?.monthlyRent)} />
-                <Field label="Annual Taxes" value={fmt(primaryProp?.annualTaxes)} />
-                <Field label="Annual Insurance" value={fmt(primaryProp?.annualInsurance)} />
-                <Field label="NOI" value={noi !== null && noi !== 0 ? fmt(noi) : "—"} tooltip="Net Operating Income" />
+                {propertyFields.map(f => (
+                  <Field key={f.key} label={f.label} value={f.value} tooltip={f.tooltip} />
+                ))}
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-x-8 gap-y-2.5">
@@ -514,27 +644,15 @@ export default function TabOverview({
           <CardContent>
             {!editBorrower ? (
               <div className="grid grid-cols-2 gap-x-8 gap-y-2.5">
-                <Field label="Full Name" value={deal.borrowerName || `${deal.customerFirstName || ""} ${deal.customerLastName || ""}`.trim() || "—"} />
-                <Field label="Email" value={deal.borrowerEmail || deal.customerEmail || "—"} />
-                <Field label="Phone" value={deal.borrowerPhone || deal.customerPhone || "—"} />
-                <Field label="Credit Score" value={appData.creditScore || deal.creditScore || "—"} />
-                <Field label="Employer" value={appData.employer || appData.employerName || "—"} />
-                <Field label="Title" value={appData.title || appData.borrowerTitle || "—"} />
-                <Field label="Annual Income" value={appData.annualIncome ? fmt(appData.annualIncome) : "—"} />
-                <Field label="Entity Name" value={appData.entityName || "—"} />
-                <Field label="Entity Type" value={appData.entityType || "—"} />
+                {borrowerFields.map(f => (
+                  <Field key={f.key} label={f.label} value={f.value} />
+                ))}
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-x-8 gap-y-2.5">
                 <EditField label="Full Name" value={borrowerForm.fullName} onChange={(v) => setBorrowerForm({ ...borrowerForm, fullName: v })} />
                 <EditField label="Email" value={borrowerForm.email} onChange={(v) => setBorrowerForm({ ...borrowerForm, email: v })} type="email" />
                 <EditField label="Phone" value={borrowerForm.phone} onChange={(v) => setBorrowerForm({ ...borrowerForm, phone: v })} type="tel" />
-                <Field label="Credit Score" value={appData.creditScore || deal.creditScore || "—"} />
-                <Field label="Employer" value={appData.employer || appData.employerName || "—"} />
-                <Field label="Title" value={appData.title || appData.borrowerTitle || "—"} />
-                <Field label="Annual Income" value={appData.annualIncome ? fmt(appData.annualIncome) : "—"} />
-                <Field label="Entity Name" value={appData.entityName || "—"} />
-                <Field label="Entity Type" value={appData.entityType || "—"} />
               </div>
             )}
           </CardContent>

@@ -6656,6 +6656,12 @@ export async function registerRoutes(
         brokerPortalToken: projects.brokerPortalToken,
         brokerPortalEnabled: projects.brokerPortalEnabled,
         metadata: projects.metadata,
+        ysp: projects.ysp,
+        lenderOriginationPoints: projects.lenderOriginationPoints,
+        brokerOriginationPoints: projects.brokerOriginationPoints,
+        brokerName: projects.brokerName,
+        prepaymentPenalty: projects.prepaymentPenalty,
+        holdbackAmount: projects.holdbackAmount,
         userName: users.fullName,
         userEmail: users.email,
       })
@@ -6691,12 +6697,14 @@ export async function registerRoutes(
       }
       
       let programName: string | null = null;
+      let quoteFormFields: any[] = [];
       if (project.programId) {
-        const [prog] = await db.select({ name: loanPrograms.name })
+        const [prog] = await db.select({ name: loanPrograms.name, quoteFormFields: loanPrograms.quoteFormFields })
           .from(loanPrograms)
           .where(eq(loanPrograms.id, project.programId))
           .limit(1);
         programName = prog?.name || null;
+        quoteFormFields = (prog?.quoteFormFields as any[]) || [];
       }
 
       // Determine current workflow step key from projectStages
@@ -6781,6 +6789,15 @@ export async function registerRoutes(
         brokerPortalEnabled: project.brokerPortalEnabled,
         programId: project.programId,
         programName,
+        quoteFormFields,
+        ysp: project.ysp,
+        lenderOriginationPoints: project.lenderOriginationPoints,
+        brokerOriginationPoints: project.brokerOriginationPoints,
+        brokerName: project.brokerName,
+        prepaymentPenalty: project.prepaymentPenalty,
+        holdbackAmount: project.holdbackAmount,
+        loanAmount: project.loanAmount,
+        loanTermMonths: project.loanTermMonths,
       };
       
       const docs = await db.select()

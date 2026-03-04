@@ -178,7 +178,7 @@ const standardDocuments = [
 
 // ─── Quote Form Field Types ─────────────────────────────────────
 
-type DisplayGroup = 'loan_details' | 'property_details' | 'borrower_details' | 'application_details';
+type DisplayGroup = 'loan_details' | 'property_details' | 'borrower_details';
 
 type QuoteFormField = {
   fieldKey: string;
@@ -197,7 +197,6 @@ const DISPLAY_GROUP_OPTIONS: { value: DisplayGroup; label: string }[] = [
   { value: 'loan_details', label: 'Loan Details' },
   { value: 'property_details', label: 'Property Details' },
   { value: 'borrower_details', label: 'Borrower Details' },
-  { value: 'application_details', label: 'Application Details' },
 ];
 
 const FIELD_TYPE_OPTIONS: { value: QuoteFormField['fieldType']; label: string }[] = [
@@ -220,35 +219,35 @@ const CONTACT_FIELDS: QuoteFormField[] = [
 ];
 
 const DSCR_QUOTE_FIELDS: Omit<QuoteFormField, 'isDefault'>[] = [
-  { fieldKey: 'loanAmount', label: 'Loan Amount', fieldType: 'currency', required: true, visible: true },
-  { fieldKey: 'propertyValue', label: 'Property Value', fieldType: 'currency', required: true, visible: true },
-  { fieldKey: 'loanPurpose', label: 'Loan Purpose', fieldType: 'select', required: true, visible: true, options: ['Purchase', 'Refinance', 'Cash-Out Refinance'] },
-  { fieldKey: 'loanType', label: 'Loan Type (Fixed/ARM)', fieldType: 'select', required: true, visible: true, options: ['Fixed', 'ARM'] },
-  { fieldKey: 'propertyType', label: 'Property Type', fieldType: 'select', required: true, visible: true, options: ['Single Family', '2-4 Unit', 'Condo', 'Townhouse', 'Multifamily 5+'] },
-  { fieldKey: 'ficoScore', label: 'FICO Score', fieldType: 'number', required: true, visible: true },
-  { fieldKey: 'grossMonthlyRent', label: 'Gross Monthly Rent', fieldType: 'currency', required: false, visible: true },
-  { fieldKey: 'annualTaxes', label: 'Annual Taxes', fieldType: 'currency', required: false, visible: true },
-  { fieldKey: 'annualInsurance', label: 'Annual Insurance', fieldType: 'currency', required: false, visible: true },
-  { fieldKey: 'interestOnly', label: 'Interest Only', fieldType: 'yes_no', required: false, visible: true },
-  { fieldKey: 'prepaymentPenalty', label: 'Prepayment Penalty', fieldType: 'select', required: false, visible: true, options: ['None', '1 Year', '2 Years', '3 Years', '5 Years'] },
-  { fieldKey: 'appraisalValue', label: 'Appraisal Value', fieldType: 'currency', required: false, visible: true },
+  { fieldKey: 'loanAmount', label: 'Loan Amount', fieldType: 'currency', required: true, visible: true, displayGroup: 'loan_details' },
+  { fieldKey: 'propertyValue', label: 'Property Value', fieldType: 'currency', required: true, visible: true, displayGroup: 'property_details' },
+  { fieldKey: 'loanPurpose', label: 'Loan Purpose', fieldType: 'select', required: true, visible: true, options: ['Purchase', 'Refinance', 'Cash-Out Refinance'], displayGroup: 'loan_details' },
+  { fieldKey: 'loanType', label: 'Loan Type (Fixed/ARM)', fieldType: 'select', required: true, visible: true, options: ['Fixed', 'ARM'], displayGroup: 'loan_details' },
+  { fieldKey: 'propertyType', label: 'Property Type', fieldType: 'select', required: true, visible: true, options: ['Single Family', '2-4 Unit', 'Condo', 'Townhouse', 'Multifamily 5+'], displayGroup: 'property_details' },
+  { fieldKey: 'ficoScore', label: 'FICO Score', fieldType: 'number', required: true, visible: true, displayGroup: 'borrower_details' },
+  { fieldKey: 'grossMonthlyRent', label: 'Gross Monthly Rent', fieldType: 'currency', required: false, visible: true, displayGroup: 'property_details' },
+  { fieldKey: 'annualTaxes', label: 'Annual Taxes', fieldType: 'currency', required: false, visible: true, displayGroup: 'property_details' },
+  { fieldKey: 'annualInsurance', label: 'Annual Insurance', fieldType: 'currency', required: false, visible: true, displayGroup: 'property_details' },
+  { fieldKey: 'interestOnly', label: 'Interest Only', fieldType: 'yes_no', required: false, visible: true, displayGroup: 'loan_details' },
+  { fieldKey: 'prepaymentPenalty', label: 'Prepayment Penalty', fieldType: 'select', required: false, visible: true, options: ['None', '1 Year', '2 Years', '3 Years', '5 Years'], displayGroup: 'loan_details' },
+  { fieldKey: 'appraisalValue', label: 'Appraisal Value', fieldType: 'currency', required: false, visible: true, displayGroup: 'property_details' },
 ];
 
 const RTL_QUOTE_FIELDS: Omit<QuoteFormField, 'isDefault'>[] = [
-  { fieldKey: 'loanType', label: 'Loan Type (Light/Heavy Rehab)', fieldType: 'select', required: true, visible: true, options: ['Light Rehab', 'Heavy Rehab', 'Ground Up'] },
-  { fieldKey: 'purpose', label: 'Purpose (Purchase/Refi)', fieldType: 'select', required: true, visible: true, options: ['Purchase', 'Refinance'] },
-  { fieldKey: 'asIsValue', label: 'As-Is Value', fieldType: 'currency', required: true, visible: true },
-  { fieldKey: 'arv', label: 'After Repair Value (ARV)', fieldType: 'currency', required: true, visible: true },
-  { fieldKey: 'rehabBudget', label: 'Rehab Budget', fieldType: 'currency', required: true, visible: true },
-  { fieldKey: 'propertyType', label: 'Property Type', fieldType: 'select', required: true, visible: true, options: ['Single Family', '2-4 Unit', 'Condo', 'Townhouse', 'Multifamily 5+'] },
-  { fieldKey: 'ficoScore', label: 'FICO Score', fieldType: 'number', required: true, visible: true },
-  { fieldKey: 'propertyUnits', label: 'Property Units', fieldType: 'number', required: false, visible: true },
-  { fieldKey: 'isMidstream', label: 'Is Midstream?', fieldType: 'yes_no', required: false, visible: true },
-  { fieldKey: 'borrowingEntityType', label: 'Borrowing Entity Type', fieldType: 'select', required: false, visible: true, options: ['LLC', 'Corporation', 'Individual', 'Trust', 'Partnership'] },
-  { fieldKey: 'completedProjects', label: 'Completed Projects', fieldType: 'number', required: false, visible: true },
-  { fieldKey: 'hasFullGuaranty', label: 'Full Guaranty?', fieldType: 'yes_no', required: false, visible: true },
-  { fieldKey: 'exitStrategy', label: 'Exit Strategy', fieldType: 'select', required: false, visible: true, options: ['Sell', 'Refinance', 'Hold'] },
-  { fieldKey: 'appraisalValue', label: 'Appraisal Value', fieldType: 'currency', required: false, visible: true },
+  { fieldKey: 'loanType', label: 'Loan Type (Light/Heavy Rehab)', fieldType: 'select', required: true, visible: true, options: ['Light Rehab', 'Heavy Rehab', 'Ground Up'], displayGroup: 'loan_details' },
+  { fieldKey: 'purpose', label: 'Purpose (Purchase/Refi)', fieldType: 'select', required: true, visible: true, options: ['Purchase', 'Refinance'], displayGroup: 'loan_details' },
+  { fieldKey: 'asIsValue', label: 'As-Is Value', fieldType: 'currency', required: true, visible: true, displayGroup: 'property_details' },
+  { fieldKey: 'arv', label: 'After Repair Value (ARV)', fieldType: 'currency', required: true, visible: true, displayGroup: 'property_details' },
+  { fieldKey: 'rehabBudget', label: 'Rehab Budget', fieldType: 'currency', required: true, visible: true, displayGroup: 'loan_details' },
+  { fieldKey: 'propertyType', label: 'Property Type', fieldType: 'select', required: true, visible: true, options: ['Single Family', '2-4 Unit', 'Condo', 'Townhouse', 'Multifamily 5+'], displayGroup: 'property_details' },
+  { fieldKey: 'ficoScore', label: 'FICO Score', fieldType: 'number', required: true, visible: true, displayGroup: 'borrower_details' },
+  { fieldKey: 'propertyUnits', label: 'Property Units', fieldType: 'number', required: false, visible: true, displayGroup: 'property_details' },
+  { fieldKey: 'isMidstream', label: 'Is Midstream?', fieldType: 'yes_no', required: false, visible: true, displayGroup: 'property_details' },
+  { fieldKey: 'borrowingEntityType', label: 'Borrowing Entity Type', fieldType: 'select', required: false, visible: true, options: ['LLC', 'Corporation', 'Individual', 'Trust', 'Partnership'], displayGroup: 'borrower_details' },
+  { fieldKey: 'completedProjects', label: 'Completed Projects', fieldType: 'number', required: false, visible: true, displayGroup: 'borrower_details' },
+  { fieldKey: 'hasFullGuaranty', label: 'Full Guaranty?', fieldType: 'yes_no', required: false, visible: true, displayGroup: 'borrower_details' },
+  { fieldKey: 'exitStrategy', label: 'Exit Strategy', fieldType: 'select', required: false, visible: true, options: ['Sell', 'Refinance', 'Hold'], displayGroup: 'borrower_details' },
+  { fieldKey: 'appraisalValue', label: 'Appraisal Value', fieldType: 'currency', required: false, visible: true, displayGroup: 'property_details' },
 ];
 
 function getDefaultQuoteFields(loanType: string): QuoteFormField[] {
@@ -1709,7 +1708,7 @@ function QuoteFormBuilderStep({
     const fieldKey = `custom_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${Date.now()}`;
     setQuoteFormFields([
       ...quoteFormFields,
-      { fieldKey, label: name, fieldType: newFieldType, required: false, visible: true, isDefault: false, displayGroup: 'application_details' as DisplayGroup },
+      { fieldKey, label: name, fieldType: newFieldType, required: false, visible: true, isDefault: false, displayGroup: 'loan_details' as DisplayGroup },
     ]);
     setNewFieldName('');
     setNewFieldType('text');
@@ -1957,7 +1956,7 @@ function QuoteFormBuilderStep({
               <div className="space-y-1">
                 <Label className="text-xs">Display Section</Label>
                 <Select
-                  value={field.displayGroup || 'application_details'}
+                  value={field.displayGroup || 'loan_details'}
                   onValueChange={(v) => updateField(field.fieldKey, { displayGroup: v as DisplayGroup })}
                 >
                   <SelectTrigger data-testid={`select-display-group-${field.fieldKey}`}>
