@@ -63,31 +63,93 @@ function EditField({ label, value, onChange, type = "text" }: { label: string; v
   );
 }
 
+function SelectField({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+  return (
+    <div>
+      <span className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="h-8 text-[16px] mt-0.5" data-testid={`select-edit-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+          <SelectValue placeholder="Select..." />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 export default function TabOverview({
   deal,
   properties,
   dealId,
+  isAdmin = true,
 }: {
   deal: any;
   properties: any[];
   dealId: string;
+  isAdmin?: boolean;
 }) {
   const { toast } = useToast();
   const apiBase = "/api/admin";
 
   const propertyValue = deal.propertyValue || deal.loanData?.propertyValue;
   const loanAmount = deal.loanAmount || deal.loanData?.loanAmount;
-  const ltv = deal.ltv || deal.loanData?.ltv;
-  const dscr = deal.dscr || deal.loanData?.dscr;
   const interestRate = deal.interestRate;
   const termMonths = deal.termMonths || deal.loanTermMonths || deal.loanData?.loanTerm;
-  const dscrValue = dscr ? `${dscr}` : "—";
-  const rateDisplay = interestRate && interestRate !== "—" ? (String(interestRate).includes("%") ? interestRate : `${interestRate}%`) : "—";
-  const termLabel = termMonths
-    ? (typeof termMonths === "string" && termMonths.includes("month")
-        ? (parseInt(termMonths) >= 12 ? `${Math.round(parseInt(termMonths) / 12)}-year` : termMonths)
-        : (Number(termMonths) >= 12 ? `${Math.round(Number(termMonths) / 12)}-year` : `${termMonths} months`))
-    : "";
+  const loanType = deal.loanType || deal.loanData?.loanType || "";
+  const isDSCR = loanType.toLowerCase().includes("dscr");
+  const isRTL = !isDSCR;
+
+  const calculatedLtv = (loanAmount && propertyValue && Number(propertyValue) > 0)
+    ? ((Number(loanAmount) / Number(propertyValue)) * 100).toFixed(1)
+    : null;
+
+  const rateDisplay = interestRate && interestRate !== "—"
+    ? (String(interestRate).includes("%") ? interestRate : `${Number(interestRate).toFixed(3)}%`)
+    : "—";
+
+  const yspValue = deal.ysp ?? deal.applicationData?.ysp ?? deal.applicationData?.yspAmount;
+  const lenderPts = deal.lenderOriginationPoints ?? deal.applicationData?.originationPoints ?? deal.applicationData?.basePointsCharged;
+  const brokerPts = deal.brokerOriginationPoints ?? deal.applicationData?.brokerPointsCharged;
+  const brokerNameVal = deal.brokerName ?? deal.applicationData?.brokerName ?? "";
+  const prepayPenalty = deal.prepaymentPenalty ?? deal.applicationData?.prepaymentPenalty ?? "";
+  const holdbackAmt = deal.holdbackAmount ?? deal.applicationData?.holdbackAmount;
+
+  const termOptions = isDSCR
+    ? [
+        { value: "60", label: "5 Year IO" },
+        { value: "84", label: "7 Year IO" },
+        { value: "120", label: "10 Year IO" },
+      ]
+    : [
+        { value: "12", label: "12 month" },
+        { value: "15", label: "15 month" },
+        { value: "18", label: "18 month" },
+        { value: "24", label: "24 month" },
+      ];
+
+  const termDisplay = (() => {
+    if (!termMonths) return "—";
+    const match = termOptions.find(o => o.value === String(termMonths));
+    if (match) return match.label;
+    const n = Number(termMonths);
+    if (!isNaN(n) && n > 0) {
+      return `${n} month${n > 1 ? 's' : ''}`;
+    }
+    return String(termMonths);
+  })();
+
+  const prepayOptions = [
+    { value: "5-4-3-2-1%", label: "5-4-3-2-1%" },
+    { value: "4-3-2-1%", label: "4-3-2-1%" },
+    { value: "3-2-1%", label: "3-2-1%" },
+    { value: "2-1%", label: "2-1%" },
+    { value: "1%", label: "1%" },
+    { value: "none", label: "None" },
+  ];
 
   const primaryProp = properties.find((p: any) => p.isPrimary) || properties[0];
 
@@ -179,20 +241,19 @@ export default function TabOverview({
   const programs = Array.isArray(programsData) ? programsData : [];
 
   const rateNum = interestRate && interestRate !== "—" ? String(interestRate).replace("%", "") : "";
-  const termNum = termMonths ? (typeof termMonths === "string" ? termMonths.replace(/[^0-9]/g, "") : String(termMonths)) : "";
   const appData = deal.applicationData || {};
 
   const startEditLoan = () => {
     setLoanForm({
       loanAmount: String(loanAmount || ""),
-      propertyValue: String(propertyValue || ""),
-      ltv: String(ltv || ""),
-      dscr: String(dscr || ""),
       interestRate: rateNum,
-      loanTermMonths: termNum,
-      originationPoints: String(appData.originationPoints || ""),
-      ysp: String(appData.ysp || appData.yspAmount || ""),
-      targetCloseDate: deal.targetCloseDate ? new Date(deal.targetCloseDate).toISOString().split("T")[0] : "",
+      ysp: String(yspValue ?? ""),
+      lenderOriginationPoints: String(lenderPts ?? ""),
+      brokerOriginationPoints: String(brokerPts ?? ""),
+      brokerName: brokerNameVal,
+      loanTermMonths: String(termMonths || ""),
+      prepaymentPenalty: prepayPenalty || "",
+      holdbackAmount: String(holdbackAmt ?? ""),
     });
     setEditLoan(true);
   };
@@ -271,8 +332,13 @@ export default function TabOverview({
                   saveLoanMutation.mutate({
                     loanAmount: loanForm.loanAmount ? Number(loanForm.loanAmount) : null,
                     interestRate: loanForm.interestRate ? Number(loanForm.interestRate) : null,
-                    loanTermMonths: loanForm.loanTermMonths ? Number(loanForm.loanTermMonths) : null,
-                    targetCloseDate: loanForm.targetCloseDate || null,
+                    loanTermMonths: loanForm.loanTermMonths || null,
+                    ysp: loanForm.ysp ? Number(loanForm.ysp) : null,
+                    lenderOriginationPoints: loanForm.lenderOriginationPoints ? Number(loanForm.lenderOriginationPoints) : null,
+                    brokerOriginationPoints: loanForm.brokerOriginationPoints ? Number(loanForm.brokerOriginationPoints) : null,
+                    brokerName: loanForm.brokerName || null,
+                    prepaymentPenalty: loanForm.prepaymentPenalty || null,
+                    holdbackAmount: loanForm.holdbackAmount ? Number(loanForm.holdbackAmount) : null,
                   });
                 }}>
                   {saveLoanMutation.isPending ? "Saving..." : "Save"}
@@ -285,28 +351,60 @@ export default function TabOverview({
             {!editLoan ? (
               <div className="grid grid-cols-2 gap-x-8 gap-y-2.5">
                 <Field label="Loan Amount" value={fmt(loanAmount)} />
-                <Field label="Property Value" value={fmt(propertyValue)} />
-                <Field label="LTV" value={ltv ? `${ltv}%` : "—"} tooltip="Loan-to-Value ratio" />
-                <Field label="DSCR" value={dscrValue} tooltip="Debt Service Coverage Ratio" />
+                <Field label="LTV" value={calculatedLtv ? `${calculatedLtv}%` : "—"} tooltip="Loan-to-Value ratio — auto-calculated as Loan Amount / Property Value" />
                 <Field label="Interest Rate" value={rateDisplay} />
-                <Field label="Loan Term" value={termLabel || termMonths || "—"} />
-                <Field label="Origination Points" value={appData.originationPoints ? String(appData.originationPoints) : "—"} />
-                <Field label="YSP" value={appData.ysp || appData.yspAmount ? `${appData.ysp || appData.yspAmount}%` : "—"} tooltip="Yield Spread Premium" />
-                <Field label="Target Close" value={fmtDate(deal.targetCloseDate)} />
-                <Field label="Days in Stage" value={daysBetween(deal.createdAt)} />
+                {isAdmin && (
+                  <Field label="YSP" value={yspValue != null ? `${yspValue}%` : "—"} tooltip="Yield Spread Premium — visible to lender admins only" />
+                )}
+                {isAdmin ? (
+                  <>
+                    <Field label="Lender Origination Points" value={lenderPts != null ? `${lenderPts}%` : "—"} />
+                    <Field label="Broker Origination Points" value={brokerPts != null ? `${brokerPts}%` : "—"} />
+                  </>
+                ) : (
+                  <Field label="Origination Points" value={
+                    (lenderPts != null || brokerPts != null)
+                      ? `${((Number(lenderPts) || 0) + (Number(brokerPts) || 0)).toFixed(2)}%`
+                      : "—"
+                  } />
+                )}
+                <Field label="Broker Name" value={brokerNameVal || "—"} />
+                <Field label="Term" value={termDisplay} />
+                <Field label="Prepayment Penalty" value={prepayPenalty || "—"} />
+                <Field label="Holdback Amount" value={isDSCR ? "N/A" : (holdbackAmt != null ? fmt(holdbackAmt) : "—")} />
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-x-8 gap-y-2.5">
                 <EditField label="Loan Amount" value={loanForm.loanAmount} onChange={(v) => setLoanForm({ ...loanForm, loanAmount: v })} type="number" />
-                <Field label="Property Value" value={fmt(propertyValue)} />
-                <Field label="LTV" value={ltv ? `${ltv}%` : "—"} tooltip="Loan-to-Value ratio" />
-                <Field label="DSCR" value={dscrValue} tooltip="Debt Service Coverage Ratio" />
+                <Field label="LTV" value={
+                  loanForm.loanAmount && propertyValue && Number(propertyValue) > 0
+                    ? `${((Number(loanForm.loanAmount) / Number(propertyValue)) * 100).toFixed(1)}%`
+                    : (calculatedLtv ? `${calculatedLtv}%` : "—")
+                } tooltip="Auto-calculated from Loan Amount / Property Value" />
                 <EditField label="Interest Rate %" value={loanForm.interestRate} onChange={(v) => setLoanForm({ ...loanForm, interestRate: v })} type="number" />
-                <EditField label="Loan Term (months)" value={loanForm.loanTermMonths} onChange={(v) => setLoanForm({ ...loanForm, loanTermMonths: v })} type="number" />
-                <Field label="Origination Points" value={appData.originationPoints ? String(appData.originationPoints) : "—"} />
-                <Field label="YSP" value={appData.ysp || appData.yspAmount ? `${appData.ysp || appData.yspAmount}%` : "—"} tooltip="Yield Spread Premium" />
-                <EditField label="Target Close" value={loanForm.targetCloseDate} onChange={(v) => setLoanForm({ ...loanForm, targetCloseDate: v })} type="date" />
-                <Field label="Days in Stage" value={daysBetween(deal.createdAt)} />
+                {isAdmin && (
+                  <EditField label="YSP %" value={loanForm.ysp} onChange={(v) => setLoanForm({ ...loanForm, ysp: v })} type="number" />
+                )}
+                {isAdmin ? (
+                  <>
+                    <EditField label="Lender Origination Points %" value={loanForm.lenderOriginationPoints} onChange={(v) => setLoanForm({ ...loanForm, lenderOriginationPoints: v })} type="number" />
+                    <EditField label="Broker Origination Points %" value={loanForm.brokerOriginationPoints} onChange={(v) => setLoanForm({ ...loanForm, brokerOriginationPoints: v })} type="number" />
+                  </>
+                ) : (
+                  <Field label="Origination Points" value={
+                    (lenderPts != null || brokerPts != null)
+                      ? `${((Number(lenderPts) || 0) + (Number(brokerPts) || 0)).toFixed(2)}%`
+                      : "—"
+                  } />
+                )}
+                <EditField label="Broker Name" value={loanForm.brokerName} onChange={(v) => setLoanForm({ ...loanForm, brokerName: v })} />
+                <SelectField label="Term" value={loanForm.loanTermMonths} onChange={(v) => setLoanForm({ ...loanForm, loanTermMonths: v })} options={termOptions} />
+                <SelectField label="Prepayment Penalty" value={loanForm.prepaymentPenalty} onChange={(v) => setLoanForm({ ...loanForm, prepaymentPenalty: v })} options={prepayOptions} />
+                {isRTL ? (
+                  <EditField label="Holdback Amount" value={loanForm.holdbackAmount} onChange={(v) => setLoanForm({ ...loanForm, holdbackAmount: v })} type="number" />
+                ) : (
+                  <Field label="Holdback Amount" value="N/A" />
+                )}
               </div>
             )}
           </CardContent>

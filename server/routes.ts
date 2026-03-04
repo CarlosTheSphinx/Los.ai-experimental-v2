@@ -1152,6 +1152,12 @@ export async function registerRoutes(
           borrowerPortalEnabled: true,
           quoteId: quoteId,
           tenantId: quoteTenantId,
+          ysp: quote.yspAmount ?? null,
+          lenderOriginationPoints: quote.basePointsCharged ?? null,
+          brokerOriginationPoints: quote.brokerPointsCharged ?? null,
+          brokerName: quote.partnerName || null,
+          prepaymentPenalty: loanData?.prepaymentPenalty || null,
+          holdbackAmount: loanData?.holdbackAmount != null ? parseFloat(loanData.holdbackAmount) : null,
           notes: `Accepted from borrower quote #${quoteId}`,
           metadata: { applicationData: loanData },
         }).returning();
@@ -2118,6 +2124,7 @@ export async function registerRoutes(
           // Get quote data if linked
           let loanData: Record<string, unknown> = {};
           let quoteProgramId: number | null = null;
+          let quoteFields: Record<string, any> = {};
           if (doc.quoteId) {
             const quote = await storage.getQuoteById(doc.quoteId, doc.userId!);
             if (quote) {
@@ -2129,6 +2136,15 @@ export async function registerRoutes(
                 propertyAddress: quote.propertyAddress,
               };
               quoteProgramId = quote.programId || null;
+              const qLoanData = (quote as any).loanData || {};
+              quoteFields = {
+                ysp: (quote as any).yspAmount ?? null,
+                lenderOriginationPoints: (quote as any).basePointsCharged ?? null,
+                brokerOriginationPoints: (quote as any).brokerPointsCharged ?? null,
+                brokerName: (quote as any).partnerName || null,
+                prepaymentPenalty: qLoanData?.prepaymentPenalty || null,
+                holdbackAmount: qLoanData?.holdbackAmount ?? null,
+              };
             }
           }
           
@@ -2152,6 +2168,7 @@ export async function registerRoutes(
             borrowerPortalToken: borrowerToken,
             borrowerPortalEnabled: true,
             sourceDocumentId: doc.id,
+            ...quoteFields,
           });
           
           // Create stages/tasks/documents from program template (or legacy fallback)
@@ -2925,6 +2942,8 @@ export async function registerRoutes(
         borrowerPortalEnabled: true,
         notes,
         tenantId: userTenantId,
+        prepaymentPenalty: programFieldData?.prepaymentPenalty || req.body.prepaymentPenalty || null,
+        holdbackAmount: programFieldData?.holdbackAmount ? parseFloat(programFieldData.holdbackAmount) : (req.body.holdbackAmount ? parseFloat(req.body.holdbackAmount) : null),
         metadata: programFieldData ? { applicationData: programFieldData } : undefined,
       });
       
@@ -3061,12 +3080,17 @@ export async function registerRoutes(
         return res.status(404).json({ error: 'Project not found' });
       }
       
-      const allowedFields = [
+      const userRole = req.user!.role;
+      const isAdminUser = userRole === 'admin' || userRole === 'super_admin' || userRole === 'staff';
+      const baseFields = [
         'projectName', 'status', 'loanAmount', 'interestRate', 'loanTermMonths',
         'loanType', 'propertyAddress', 'propertyType', 'borrowerName',
         'borrowerEmail', 'borrowerPhone', 'targetCloseDate', 'notes', 'internalNotes',
-        'ltv', 'asIsValue', 'propertyState', 'appraisalStatus'
+        'ltv', 'asIsValue', 'propertyState', 'appraisalStatus',
+        'brokerName', 'prepaymentPenalty', 'holdbackAmount'
       ];
+      const adminOnlyFields = ['ysp', 'lenderOriginationPoints', 'brokerOriginationPoints'];
+      const allowedFields = isAdminUser ? [...baseFields, ...adminOnlyFields] : baseFields;
       
       const updates: Record<string, unknown> = {};
       for (const field of allowedFields) {
@@ -5343,7 +5367,10 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Project ID is required' });
       }
 
-      const allowedFields: Record<string, (v: any) => any> = {
+      const userRole = req.user!.role;
+      const isAdminRole = userRole === 'admin' || userRole === 'super_admin' || userRole === 'staff';
+
+      const baseFields: Record<string, (v: any) => any> = {
         loanAmount: (v) => v !== null && v !== '' ? Number(v) : null,
         interestRate: (v) => v !== null && v !== '' ? Number(v) : null,
         loanTermMonths: (v) => v !== null && v !== '' ? Number(v) : null,
@@ -5357,7 +5384,18 @@ export async function registerRoutes(
         propertyAddress: (v) => v || null,
         propertyType: (v) => v || null,
         currentStage: (v) => v || null,
+        brokerName: (v) => v || null,
+        prepaymentPenalty: (v) => v || null,
+        holdbackAmount: (v) => v !== null && v !== '' ? Number(v) : null,
       };
+
+      const adminOnlyFields: Record<string, (v: any) => any> = {
+        ysp: (v) => v !== null && v !== '' ? Number(v) : null,
+        lenderOriginationPoints: (v) => v !== null && v !== '' ? Number(v) : null,
+        brokerOriginationPoints: (v) => v !== null && v !== '' ? Number(v) : null,
+      };
+
+      const allowedFields = isAdminRole ? { ...baseFields, ...adminOnlyFields } : baseFields;
 
       const updateData: Record<string, any> = {};
       for (const [field, transform] of Object.entries(allowedFields)) {
@@ -15015,6 +15053,12 @@ If the user provides specific criteria, extract as many rules as you can from th
         borrowerPortalEnabled: true,
         quoteId: quote.id,
         tenantId: envelopeTenantId,
+        ysp: quote.yspAmount ?? null,
+        lenderOriginationPoints: quote.basePointsCharged ?? null,
+        brokerOriginationPoints: quote.brokerPointsCharged ?? null,
+        brokerName: quote.partnerName || null,
+        prepaymentPenalty: loanData?.prepaymentPenalty || null,
+        holdbackAmount: loanData?.holdbackAmount ?? null,
         notes: `Manually created from signed envelope #${envelope.id} (Quote #${quote.id})`,
         metadata: {
           pandadocEnvelopeId: envelope.id,
@@ -15237,6 +15281,12 @@ If the user provides specific criteria, extract as many rules as you can from th
                     borrowerPortalToken: borrowerToken,
                     borrowerPortalEnabled: true,
                     quoteId: quote.id,
+                    ysp: quote.yspAmount ?? null,
+                    lenderOriginationPoints: quote.basePointsCharged ?? null,
+                    brokerOriginationPoints: quote.brokerPointsCharged ?? null,
+                    brokerName: quote.partnerName || null,
+                    prepaymentPenalty: loanData?.prepaymentPenalty || null,
+                    holdbackAmount: loanData?.holdbackAmount ?? null,
                     notes: `Auto-created from signed PandaDoc term sheet (Quote #${quote.id})`,
                     metadata: {
                       pandadocEnvelopeId: envelope.id,

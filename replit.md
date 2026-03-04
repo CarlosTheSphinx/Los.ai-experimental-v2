@@ -20,7 +20,7 @@ The application is built on a modern web stack, utilizing React 18 with TypeScri
 -   **API Key Management System**: SOC 2-compliant API key infrastructure with hashed storage, scope-based access control, per-key rate limiting, and complete usage audit trails.
 -   **Webhook System**: SOC 2-compliant webhook infrastructure featuring HMAC-SHA256 signature verification, SSRF protection, exponential backoff retry, and timing-safe signature comparison.
 
-**Database Schema Highlights**: Manages users, pricing requests, quotes, documents, e-signatures, audit logs, projects (deals), tasks, activities, system settings, admin tasks, partners, loan programs, message threads, onboarding progress, loan digest configurations, and commercial loan submissions.
+**Database Schema Highlights**: Manages users, pricing requests, quotes, documents, e-signatures, audit logs, projects (deals), tasks, activities, system settings, admin tasks, partners, loan programs, message threads, onboarding progress, loan digest configurations, and commercial loan submissions. Projects table includes dedicated loan detail columns: `ysp`, `lenderOriginationPoints`, `brokerOriginationPoints`, `brokerName`, `prepaymentPenalty`, `holdbackAmount` — populated from quote data on deal creation and editable via the Loan Details card.
 
 **Key Architectural Decisions:**
 -   **Google Drive Integration**: Automates folder creation and document synchronization for projects using super_admin's OAuth tokens.

@@ -502,6 +502,12 @@ export const projects = pgTable("projects", {
   asIsValue: real("as_is_value"),
   propertyState: varchar("property_state", { length: 50 }),
   appraisalStatus: varchar("appraisal_status", { length: 50 }),
+  ysp: real("ysp"),
+  lenderOriginationPoints: real("lender_origination_points"),
+  brokerOriginationPoints: real("broker_origination_points"),
+  brokerName: varchar("broker_name", { length: 255 }),
+  prepaymentPenalty: varchar("prepayment_penalty", { length: 100 }),
+  holdbackAmount: real("holdback_amount"),
 
   notes: text("notes"),
   internalNotes: text("internal_notes"),
