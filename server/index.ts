@@ -9,6 +9,7 @@ import { validateConfig } from "./utils/validateConfig";
 import { seedDefaultAgentConfigs } from "./routes/agents";
 import { db } from "./db";
 import { seedSuperAdmins } from "./seedAdmins";
+import { initializePIIContext, autoDecryptResponseMiddleware } from "./middleware/piiDecryption";
 const app = express();
 app.set('trust proxy', 1);
 const httpServer = createServer(app);
@@ -40,9 +41,25 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   if (process.env.NODE_ENV === 'production') {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    res.setHeader('Content-Security-Policy',
+      "default-src 'self'; " +
+      "script-src 'self' 'unsafe-inline'; " +
+      "style-src 'self' 'unsafe-inline'; " +
+      "img-src 'self' data: https:; " +
+      "font-src 'self' data:; " +
+      "connect-src 'self' https:; " +
+      "frame-ancestors 'none'"
+    );
   }
   next();
 });
+
+// Make db available on app.locals for middleware
+app.locals.db = db;
+
+// PII encryption middleware
+app.use(initializePIIContext);
+app.use(autoDecryptResponseMiddleware);
 
 // Rate limiting - applied globally to all /api routes
 app.use('/api/', apiLimiter);

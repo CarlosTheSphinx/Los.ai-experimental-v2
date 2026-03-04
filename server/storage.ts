@@ -2,7 +2,7 @@
 import { db } from "./db";
 import {
   pricingRequests, savedQuotes, documents, signers, documentFields, documentAuditLog, users,
-  projects, projectStages, projectTasks, projectActivity, projectDocuments, projectWebhooks,
+  projects, projectStages, projectTasks, projectActivity, projectDocuments,
   dealDocuments, dealDocumentFiles,
   systemSettings, adminTasks, adminActivity, dealStages, teamPermissions,
   commercialSubmissions, commercialSubmissionDocuments,
@@ -16,7 +16,7 @@ import {
   type User, type InsertUser,
   type Project, type InsertProject, type ProjectStage, type InsertProjectStage,
   type ProjectTask, type InsertProjectTask, type ProjectActivity, type InsertProjectActivity,
-  type ProjectDocument, type InsertProjectDocument, type ProjectWebhook, type InsertProjectWebhook,
+  type ProjectDocument, type InsertProjectDocument,
   type DealDocument, type InsertDealDocument, type DealDocumentFile,
   type SystemSetting, type InsertSystemSetting, type AdminTask, type InsertAdminTask,
   type AdminActivity, type InsertAdminActivity,
@@ -683,23 +683,6 @@ export class DatabaseStorage implements IStorage {
   async updateDealDocument(id: number, updates: Partial<DealDocument>): Promise<DealDocument | undefined> {
     const [updated] = await db.update(dealDocuments).set(updates).where(eq(dealDocuments.id, id)).returning();
     return updated;
-  }
-
-  // Project webhooks methods
-  async createProjectWebhook(webhook: InsertProjectWebhook): Promise<ProjectWebhook> {
-    const [created] = await db.insert(projectWebhooks).values(webhook).returning();
-    return created;
-  }
-
-  async updateProjectWebhook(id: number, updates: Partial<ProjectWebhook>): Promise<ProjectWebhook | undefined> {
-    const [updated] = await db.update(projectWebhooks).set(updates).where(eq(projectWebhooks.id, id)).returning();
-    return updated;
-  }
-
-  async getWebhooksByProjectId(projectId: number): Promise<ProjectWebhook[]> {
-    return await db.select().from(projectWebhooks)
-      .where(eq(projectWebhooks.projectId, projectId))
-      .orderBy(desc(projectWebhooks.triggeredAt));
   }
 
   // Admin methods - System Settings

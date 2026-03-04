@@ -252,10 +252,9 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         success: true,
       });
 
-      const token = generateToken(user.id, user.email);
+      const token = generateToken(user.id, user.email, user.tokenVersion ?? 0);
       setAuthCookie(res, token);
 
-      // Parse firstName and lastName from fullName for response
       const respNameParts = user.fullName?.split(' ') || [];
       const respFirstName = respNameParts[0] || '';
       const respLastName = respNameParts.slice(1).join(' ') || '';
@@ -426,10 +425,9 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
 
       const passwordExpired = isPasswordExpired(user.passwordExpiresAt ?? null);
 
-      const token = generateToken(user.id, user.email);
+      const token = generateToken(user.id, user.email, user.tokenVersion ?? 0);
       setAuthCookie(res, token);
 
-      // Parse firstName and lastName from fullName
       const nameParts = user.fullName?.split(' ') || [];
       const firstName = nameParts[0] || '';
       const lastName = nameParts.slice(1).join(' ') || '';
@@ -497,11 +495,13 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
       }
 
       const newHash = await hashPassword(newPassword);
+      const newTokenVersion = (user.tokenVersion ?? 0) + 1;
       await storage.updateUser(user.id, {
         passwordHash: newHash,
         failedLoginAttempts: 0,
         accountLockedUntil: null,
         passwordExpiresAt: calculatePasswordExpiry(),
+        tokenVersion: newTokenVersion,
       });
 
       await logAudit(db, {
@@ -515,7 +515,11 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         userAgent: ua,
         statusCode: 200,
         success: true,
+        newValues: { tokenVersion: newTokenVersion },
       });
+
+      const freshToken = generateToken(user.id, user.email, newTokenVersion);
+      setAuthCookie(res, freshToken);
 
       res.json({ success: true, message: 'Password changed successfully' });
     } catch (error) {
@@ -694,7 +698,7 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         });
       }
 
-      const token = generateToken(user.id, user.email);
+      const token = generateToken(user.id, user.email, user.tokenVersion ?? 0);
       setAuthCookie(res, token);
 
       const returnTo = oauthState.returnTo || null;

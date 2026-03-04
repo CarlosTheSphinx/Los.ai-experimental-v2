@@ -64,6 +64,7 @@ export const users = pgTable("users", {
   failedLoginAttempts: integer("failed_login_attempts").default(0),
   accountLockedUntil: timestamp("account_locked_until"),
   passwordExpiresAt: timestamp("password_expires_at"),
+  tokenVersion: integer("token_version").default(0).notNull(),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({
@@ -638,27 +639,6 @@ export const projectDocuments = pgTable("project_documents", {
 });
 
 // Webhook/Integration log
-export const projectWebhooks = pgTable("project_webhooks", {
-  id: serial("id").primaryKey(),
-  projectId: integer("project_id")
-    .references(() => projects.id, { onDelete: "cascade" })
-    .notNull(),
-
-  webhookType: varchar("webhook_type", { length: 100 }), // n8n, external_los, custom
-  webhookUrl: text("webhook_url"),
-
-  triggerEvent: varchar("trigger_event", { length: 100 }), // stage_completed, project_created, task_completed, etc.
-
-  payload: jsonb("payload"),
-  responseStatus: integer("response_status"),
-  responseBody: text("response_body"),
-
-  status: varchar("status", { length: 50 }), // pending, success, failed, retry
-  attempts: integer("attempts").default(0),
-
-  triggeredAt: timestamp("triggered_at").defaultNow(),
-  completedAt: timestamp("completed_at"),
-});
 
 // Insert schemas for projects
 export const insertProjectSchema = createInsertSchema(projects).omit({
@@ -679,9 +659,6 @@ export const insertProjectActivitySchema = createInsertSchema(
 export const insertProjectDocumentSchema = createInsertSchema(
   projectDocuments,
 ).omit({ id: true, uploadedAt: true });
-export const insertProjectWebhookSchema = createInsertSchema(
-  projectWebhooks,
-).omit({ id: true, triggeredAt: true });
 
 // Project types
 export type Project = typeof projects.$inferSelect;
@@ -702,8 +679,6 @@ export const deals = projects;
 export const insertDealSchema = insertProjectSchema;
 export type Deal = Project;
 export type InsertDeal = InsertProject;
-export type ProjectWebhook = typeof projectWebhooks.$inferSelect;
-export type InsertProjectWebhook = z.infer<typeof insertProjectWebhookSchema>;
 
 // Deal documents - required documents checklist per deal based on loan type
 export const dealDocuments = pgTable("deal_documents", {
@@ -3761,7 +3736,7 @@ export type InsertBorrowerDocument = z.infer<typeof insertBorrowerDocumentSchema
 export const auditLogs = pgTable("audit_logs", {
   id: serial("id").primaryKey(),
   timestamp: timestamp("timestamp").defaultNow().notNull(),
-  userId: integer("user_id"),
+  userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
   userEmail: varchar("user_email", { length: 255 }),
   userRole: varchar("user_role", { length: 50 }),
   action: varchar("action", { length: 100 }).notNull(),
@@ -3801,7 +3776,7 @@ export type InsertLoginAttempt = typeof loginAttempts.$inferInsert;
 export const apiKeys = pgTable("api_keys", {
   id: serial("id").primaryKey(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  createdByUserId: integer("created_by_user_id").notNull(),
+  createdByUserId: integer("created_by_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   keyPrefix: varchar("key_prefix", { length: 10 }).notNull(),
   keyHash: text("key_hash").notNull(),
   name: varchar("name", { length: 255 }).notNull(),
@@ -3820,7 +3795,7 @@ export type InsertApiKey = typeof apiKeys.$inferInsert;
 
 export const apiKeyUsage = pgTable("api_key_usage", {
   id: serial("id").primaryKey(),
-  apiKeyId: integer("api_key_id").notNull(),
+  apiKeyId: integer("api_key_id").notNull().references(() => apiKeys.id, { onDelete: "cascade" }),
   endpoint: varchar("endpoint", { length: 255 }),
   method: varchar("method", { length: 10 }),
   statusCode: integer("status_code"),

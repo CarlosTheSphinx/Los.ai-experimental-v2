@@ -19,7 +19,6 @@ import {
   PII_FIELD_CONFIG,
 } from '../utils/piiEncryption';
 import { createAuditLog } from '../utils/audit';
-import { Database } from '../db';
 
 /**
  * Context for storing PII decryption state during request
@@ -144,7 +143,7 @@ async function logSensitiveFieldAccess(req: Request, data: any): Promise<void> {
 
   try {
     // Log access to sensitive PII
-    const db = req.app.locals.db as Database;
+    const db = req.app.locals.db as any;
     if (!db) {
       console.warn('[PII] Database context not available for audit logging');
       return;
@@ -166,10 +165,13 @@ async function logSensitiveFieldAccess(req: Request, data: any): Promise<void> {
 
     // Create audit log for sensitive access
     // This helps security team monitor who accesses what sensitive PII
-    await createAuditLog(db, req, {
+    await createAuditLog(db, {
+      userId,
       action: 'pii.sensitive_field_accessed',
       resourceType: 'pii',
       resourceId: userId.toString(),
+      ipAddress: ipAddress,
+      userAgent: req.headers['user-agent'] || '',
       newValues: {
         fields: sensitiveFields,
         count: sensitiveFields.length,
