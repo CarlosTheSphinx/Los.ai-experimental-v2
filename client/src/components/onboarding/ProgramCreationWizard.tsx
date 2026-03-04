@@ -476,6 +476,7 @@ export function ProgramCreationWizard({
     setEligiblePropertyTypes(p.eligiblePropertyTypes || []);
     setQuoteFormFields((p.quoteFormFields as QuoteFormField[]) || getDefaultQuoteFields(p.loanType || 'dscr'));
     setSelectedCreditPolicyId(p.creditPolicyId || null);
+    setActivationMode(p.isActive ? 'active' : 'draft');
 
     if (editProgramData.workflowSteps?.length > 0) {
       setStages(editProgramData.workflowSteps.map((s: any) => ({

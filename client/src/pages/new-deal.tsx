@@ -60,7 +60,8 @@ export default function NewDeal() {
     enabled: !!formData.programId,
   });
 
-  const programFields = fieldsData?.quoteFormFields?.filter(f => f.visible) || [];
+  const CONTACT_FIELD_KEYS = new Set(['firstName', 'lastName', 'email', 'phone', 'address']);
+  const programFields = fieldsData?.quoteFormFields?.filter(f => f.visible && !CONTACT_FIELD_KEYS.has(f.fieldKey)) || [];
   const termOptionsList = fieldsData?.termOptions ? fieldsData.termOptions.split(',').map(t => t.trim()).filter(Boolean) : [];
 
   // Auto-populate from borrower profile when email is entered
@@ -406,6 +407,62 @@ export default function NewDeal() {
             </div>
           </CardContent>
         </Card>
+
+        {formData.programId && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <User className="h-4 w-4" />
+                Borrower Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="firstName">First Name *</Label>
+                  <Input
+                    id="firstName"
+                    value={formData.firstName || ''}
+                    onChange={(e) => updateField("firstName", e.target.value)}
+                    placeholder="First name"
+                    data-testid="input-first-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lastName">Last Name *</Label>
+                  <Input
+                    id="lastName"
+                    value={formData.lastName || ''}
+                    onChange={(e) => updateField("lastName", e.target.value)}
+                    placeholder="Last name"
+                    data-testid="input-last-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email *</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email || ''}
+                    onChange={(e) => updateField("email", e.target.value)}
+                    placeholder="borrower@example.com"
+                    data-testid="input-email"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input
+                    id="phone"
+                    value={formData.phone || ''}
+                    onChange={(e) => updateField("phone", e.target.value)}
+                    placeholder="(555) 555-5555"
+                    data-testid="input-phone"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {formData.programId && programFields.length > 0 && (
           <Card>
