@@ -23,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
+import { ComposeEmailModal } from "@/components/ComposeEmailModal";
 import { format } from "date-fns";
 
 interface Deal {
@@ -371,6 +372,7 @@ export default function DealsV2() {
   const [stateFilter, setStateFilter] = useState<string>("all");
   const [brokerFilter, setBrokerFilter] = useState<string>("all");
   const [daysInStageFilter, setDaysInStageFilter] = useState<string>("all");
+  const [composeEmailDealId, setComposeEmailDealId] = useState<number | null>(null);
   const { toast } = useToast();
 
   const updateDealMutation = useMutation({
@@ -1018,17 +1020,26 @@ export default function DealsV2() {
                             <FolderOpen className="h-4 w-4 mr-1.5" /> Google Drive
                           </Button>
                         )}
-                        {deal.borrowerEmail ? (
-                          <a href={`mailto:${deal.borrowerEmail}`}>
-                            <Button variant="outline" size="default" className="text-[18px] [--button-outline:rgba(156,163,175,0.30)] border-[0.5px]" data-testid={`button-email-borrower-${deal.id}`}>
-                              <Mail className="h-4 w-4 mr-1.5" /> Email Borrower
-                            </Button>
-                          </a>
-                        ) : (
-                          <Button variant="outline" size="default" className="text-[18px] [--button-outline:rgba(156,163,175,0.30)] border-[0.5px]" disabled data-testid={`button-email-borrower-${deal.id}`}>
-                            <Mail className="h-4 w-4 mr-1.5" /> Email Borrower
-                          </Button>
-                        )}
+                        <Button
+                          variant="outline"
+                          size="default"
+                          className="text-[18px] [--button-outline:rgba(156,163,175,0.30)] border-[0.5px]"
+                          disabled={!deal.borrowerEmail}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setComposeEmailDealId(deal.id);
+                          }}
+                          data-testid={`button-email-borrower-${deal.id}`}
+                        >
+                          <Mail className="h-4 w-4 mr-1.5" /> Email Borrower
+                        </Button>
+                        <ComposeEmailModal
+                          open={composeEmailDealId === deal.id}
+                          onClose={() => setComposeEmailDealId(null)}
+                          defaultTo={deal.borrowerEmail || ""}
+                          defaultSubject={`Regarding your loan - ${deal.loanNumber || deal.dealNumber || `Deal #${deal.id}`}`}
+                          dealId={deal.id}
+                        />
                         <Link href={isAdmin ? `/admin/deals/${deal.id}` : `/deals/${deal.id}`}>
                           <Button variant="outline" size="default" className="text-[18px] [--button-outline:rgba(156,163,175,0.30)] border-[0.5px]" data-testid={`button-documents-${deal.id}`}>
                             <FileText className="h-4 w-4 mr-1.5" /> Documents ({deal.documents?.length || 0}/{deal.totalDocuments || 0})
