@@ -529,6 +529,8 @@ export const projects = pgTable("projects", {
   aiReviewScheduledDays: jsonb("ai_review_scheduled_days"),
   aiReviewTimezone: varchar("ai_review_timezone", { length: 50 }),
   aiCommunicationFrequencyMinutes: integer("ai_communication_frequency_minutes"),
+  aiCommAutoSend: boolean("ai_comm_auto_send").default(false),
+  aiCommSendDeadline: varchar("ai_comm_send_deadline", { length: 10 }),
 });
 
 // Project stages/milestones

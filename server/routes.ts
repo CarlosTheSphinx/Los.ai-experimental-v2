@@ -7783,6 +7783,72 @@ export async function registerRoutes(
     }
   });
 
+  app.post('/api/admin/deals/:dealId/documents/:docId/review', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      const docId = parseInt(req.params.docId);
+      const [doc] = await db.select().from(dealDocuments).where(and(eq(dealDocuments.id, docId), eq(dealDocuments.dealId, dealId)));
+      if (!doc) return res.status(404).json({ error: 'Document not found' });
+      if (!doc.filePath && !doc.fileName) return res.status(400).json({ error: 'No file uploaded for this document' });
+
+      const { onDocumentUploaded } = await import('./services/documentReviewOrchestrator');
+      await db.update(dealDocuments).set({ aiReviewStatus: 'reviewing' }).where(eq(dealDocuments.id, docId));
+
+      onDocumentUploaded({
+        documentId: docId,
+        projectId: dealId,
+        fileName: doc.fileName || 'document',
+        filePath: doc.filePath || '',
+      }).catch((err: any) => {
+        console.error(`Manual review failed for doc ${docId}:`, err.message);
+      });
+
+      res.json({ success: true, message: 'AI review triggered' });
+    } catch (error) {
+      console.error('Manual document review error:', error);
+      res.status(500).json({ error: 'Failed to trigger review' });
+    }
+  });
+
+  app.post('/api/admin/deals/:dealId/documents/review-all', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      const docs = await db.select().from(dealDocuments)
+        .where(and(
+          eq(dealDocuments.dealId, dealId),
+          inArray(dealDocuments.status, ['uploaded']),
+          or(
+            inArray(dealDocuments.aiReviewStatus, ['not_reviewed', 'pending']),
+            isNull(dealDocuments.aiReviewStatus),
+          ),
+        ));
+
+      if (docs.length === 0) return res.json({ reviewed: 0, message: 'No documents to review' });
+
+      const { onDocumentUploaded } = await import('./services/documentReviewOrchestrator');
+      let triggered = 0;
+
+      for (const doc of docs) {
+        if (!doc.filePath && !doc.fileName) continue;
+        await db.update(dealDocuments).set({ aiReviewStatus: 'reviewing' }).where(eq(dealDocuments.id, doc.id));
+        onDocumentUploaded({
+          documentId: doc.id,
+          projectId: dealId,
+          fileName: doc.fileName || 'document',
+          filePath: doc.filePath || '',
+        }).catch((err: any) => {
+          console.error(`Batch review failed for doc ${doc.id}:`, err.message);
+        });
+        triggered++;
+      }
+
+      res.json({ reviewed: triggered, message: `Triggered AI review for ${triggered} documents` });
+    } catch (error) {
+      console.error('Batch document review error:', error);
+      res.status(500).json({ error: 'Failed to trigger batch review' });
+    }
+  });
+
   // Admin - Download/view document file
   app.get('/api/admin/deals/:dealId/documents/:docId/download', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
@@ -18292,6 +18358,8 @@ Return JSON only:
         aiReviewScheduledDays: projects.aiReviewScheduledDays,
         aiReviewTimezone: projects.aiReviewTimezone,
         aiCommunicationFrequencyMinutes: projects.aiCommunicationFrequencyMinutes,
+        aiCommAutoSend: projects.aiCommAutoSend,
+        aiCommSendDeadline: projects.aiCommSendDeadline,
       }).from(projects).where(eq(projects.id, dealId));
       if (!project) return res.status(404).json({ error: 'Deal not found' });
 
@@ -18302,6 +18370,8 @@ Return JSON only:
         scheduledDays: project.aiReviewScheduledDays || null,
         timezone: project.aiReviewTimezone || null,
         communicationFrequencyMinutes: project.aiCommunicationFrequencyMinutes || null,
+        commAutoSend: project.aiCommAutoSend || false,
+        commSendDeadline: project.aiCommSendDeadline || null,
       });
     } catch (error) {
       console.error('Error getting deal review mode:', error);
@@ -18312,7 +18382,7 @@ Return JSON only:
   app.put('/api/projects/:dealId/review-mode', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const dealId = parseInt(req.params.dealId);
-      const { aiReviewMode, intervalMinutes, scheduledTime, scheduledDays, timezone, communicationFrequencyMinutes } = req.body;
+      const { aiReviewMode, intervalMinutes, scheduledTime, scheduledDays, timezone, communicationFrequencyMinutes, commAutoSend, commSendDeadline } = req.body;
       if (aiReviewMode && !['automatic', 'timed', 'manual'].includes(aiReviewMode)) {
         return res.status(400).json({ error: 'Invalid review mode' });
       }
@@ -18327,6 +18397,15 @@ Return JSON only:
       const updateData: Record<string, any> = {
         aiReviewMode: aiReviewMode || 'manual',
       };
+      if (commAutoSend !== undefined) {
+        updateData.aiCommAutoSend = !!commAutoSend;
+      }
+      if (commSendDeadline !== undefined) {
+        if (commSendDeadline && !/^\d{2}:\d{2}$/.test(commSendDeadline)) {
+          return res.status(400).json({ error: 'Invalid send deadline format (expected HH:MM)' });
+        }
+        updateData.aiCommSendDeadline = commSendDeadline || null;
+      }
       if (aiReviewMode === 'automatic') {
         updateData.aiReviewIntervalMinutes = intervalMinutes != null ? parseInt(intervalMinutes) : null;
         updateData.aiCommunicationFrequencyMinutes = communicationFrequencyMinutes != null ? parseInt(communicationFrequencyMinutes) : null;
@@ -18337,13 +18416,15 @@ Return JSON only:
         updateData.aiReviewScheduledDays = scheduledDays || null;
         updateData.aiReviewTimezone = timezone || null;
         updateData.aiReviewIntervalMinutes = null;
-        updateData.aiCommunicationFrequencyMinutes = null;
+        updateData.aiCommunicationFrequencyMinutes = communicationFrequencyMinutes != null ? parseInt(communicationFrequencyMinutes) : null;
       } else {
         updateData.aiReviewIntervalMinutes = null;
         updateData.aiReviewScheduledTime = null;
         updateData.aiReviewScheduledDays = null;
         updateData.aiReviewTimezone = null;
         updateData.aiCommunicationFrequencyMinutes = null;
+        updateData.aiCommAutoSend = false;
+        updateData.aiCommSendDeadline = null;
       }
       await db.update(projects).set(updateData).where(eq(projects.id, dealId));
       res.json({ success: true });

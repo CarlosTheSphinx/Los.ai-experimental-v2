@@ -2,39 +2,61 @@ import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   Upload, FileText, CheckCircle2, Clock, AlertCircle, Eye,
-  Loader2, Zap, Hand, FolderOpen, ChevronDown,
+  Loader2, Zap, Hand, FolderOpen, ChevronDown, Bot, CloudUpload,
+  XCircle, Shield, Play, RotateCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/ui/phase1/empty-state";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 
-function statusDisplay(status: string) {
+function statusDisplay(status: string, aiReviewStatus?: string, driveStatus?: string) {
   const s = status?.toLowerCase();
-  switch (s) {
-    case "approved":
-    case "accepted":
-      return { dot: "bg-emerald-500", label: "Approved" };
-    case "ai_reviewed":
-      return { dot: "bg-blue-500", label: "AI Reviewed" };
-    case "pending":
-    case "in_review":
-      return { dot: "bg-amber-500", label: "Pending" };
-    case "rejected":
-      return { dot: "bg-red-500", label: "Rejected" };
-    case "uploaded":
-      return { dot: "bg-blue-400", label: "Uploaded" };
-    case "waived":
-      return { dot: "bg-gray-400", label: "Waived" };
-    default:
-      return { dot: "bg-gray-300", label: status || "Pending" };
+  const ai = aiReviewStatus?.toLowerCase();
+  const drive = driveStatus?.toLowerCase();
+
+  if (drive === "ok" || drive === "synced") {
+    return { dot: "bg-emerald-600", label: "Synced to Drive", step: 5 };
   }
+  if (s === "approved" || s === "accepted") {
+    return { dot: "bg-emerald-500", label: "Approved", step: 4 };
+  }
+  if (s === "rejected") {
+    return { dot: "bg-red-500", label: "Rejected", step: 4 };
+  }
+  if (ai === "approved") {
+    return { dot: "bg-blue-500", label: "AI Approved", step: 3 };
+  }
+  if (ai === "denied") {
+    return { dot: "bg-red-400", label: "AI Rejected", step: 3 };
+  }
+  if (s === "ai_reviewed" || ai === "reviewed") {
+    return { dot: "bg-blue-500", label: "AI Reviewed", step: 3 };
+  }
+  if (ai === "reviewing") {
+    return { dot: "bg-blue-400 animate-pulse", label: "Reviewing...", step: 2.5 };
+  }
+  if (ai === "pending") {
+    return { dot: "bg-amber-400", label: "Queued for Review", step: 2.5 };
+  }
+  if (s === "uploaded") {
+    return { dot: "bg-blue-400", label: "Uploaded", step: 2 };
+  }
+  if (s === "waived") {
+    return { dot: "bg-gray-400", label: "Waived", step: 0 };
+  }
+  if (s === "not_applicable") {
+    return { dot: "bg-gray-400", label: "N/A", step: 0 };
+  }
+  return { dot: "bg-gray-300", label: "Pending", step: 1 };
 }
 
 function fileCountLabel(doc: any) {
@@ -74,11 +96,13 @@ export default function TabDocuments({
     scheduledDays: string[] | null;
     timezone: string | null;
     communicationFrequencyMinutes: number | null;
+    commAutoSend: boolean;
+    commSendDeadline: string | null;
   }>({
     queryKey: ["/api/projects", numericDealId, "review-mode"],
     queryFn: async () => {
       const res = await fetch(`/api/projects/${numericDealId}/review-mode`, { credentials: "include" });
-      if (!res.ok) return { dealReviewMode: "manual", dealIntervalMinutes: null, scheduledTime: null, scheduledDays: null, timezone: null, communicationFrequencyMinutes: null };
+      if (!res.ok) return { dealReviewMode: "manual", dealIntervalMinutes: null, scheduledTime: null, scheduledDays: null, timezone: null, communicationFrequencyMinutes: null, commAutoSend: false, commSendDeadline: null };
       return res.json();
     },
     enabled: !!dealId,
@@ -101,7 +125,7 @@ export default function TabDocuments({
     },
   });
 
-  const aiReviewedCount = documents.filter((d) => d.status === "ai_reviewed").length;
+  const aiReviewedCount = documents.filter((d) => d.status === "ai_reviewed" || d.aiReviewStatus === "approved").length;
 
   const approveAllMutation = useMutation({
     mutationFn: async () => {
@@ -111,10 +135,27 @@ export default function TabDocuments({
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: [`/api/deals/${dealId}/documents`] });
       queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}/documents`] });
+      queryClient.invalidateQueries({ queryKey: [apiBase, dealId, "documents"] });
       toast({ title: `Approved ${data.approved || 0} documents` });
     },
     onError: () => {
       toast({ title: "Failed to approve documents", variant: "destructive" });
+    },
+  });
+
+  const reviewAllMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `${apiBase}/${dealId}/documents/review-all`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/deals/${dealId}/documents`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}/documents`] });
+      queryClient.invalidateQueries({ queryKey: [apiBase, dealId, "documents"] });
+      toast({ title: data.message || `Triggered review for ${data.reviewed || 0} documents` });
+    },
+    onError: () => {
+      toast({ title: "Failed to trigger batch review", variant: "destructive" });
     },
   });
 
@@ -205,6 +246,7 @@ export default function TabDocuments({
   if (docsByStage.has(null)) sortedStageKeys.push(null);
 
   const uploaded = documents.filter((d) => d.filePath || d.fileName).length;
+  const uploadedNotReviewed = documents.filter((d) => (d.status === "uploaded") && (d.aiReviewStatus === "not_reviewed" || d.aiReviewStatus === "pending")).length;
 
   return (
     <div className="space-y-4">
@@ -237,98 +279,190 @@ export default function TabDocuments({
                 {REVIEW_MODE_DESCRIPTIONS[currentMode] || REVIEW_MODE_DESCRIPTIONS.manual}
               </span>
             </div>
-            <Button
-              size="sm"
-              className="bg-emerald-600 text-white border-emerald-600"
-              onClick={() => approveAllMutation.mutate()}
-              disabled={approveAllMutation.isPending || aiReviewedCount === 0}
-              data-testid="button-approve-all-docs"
-            >
-              {approveAllMutation.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-              ) : (
-                <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+            <div className="flex items-center gap-2">
+              {currentMode === "manual" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  onClick={() => reviewAllMutation.mutate()}
+                  disabled={reviewAllMutation.isPending || uploadedNotReviewed === 0}
+                  data-testid="button-auto-process-docs"
+                >
+                  {reviewAllMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Play className="h-3.5 w-3.5" />
+                  )}
+                  Auto Process ({uploadedNotReviewed})
+                </Button>
               )}
-              Approve All ({aiReviewedCount})
-            </Button>
+              <Button
+                size="sm"
+                className="bg-emerald-600 text-white border-emerald-600"
+                onClick={() => approveAllMutation.mutate()}
+                disabled={approveAllMutation.isPending || aiReviewedCount === 0}
+                data-testid="button-approve-all-docs"
+              >
+                {approveAllMutation.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                Approve All ({aiReviewedCount})
+              </Button>
+            </div>
           </div>
 
           {currentMode === "automatic" && (
-            <div className="border-t pt-3 flex items-center gap-4 flex-wrap" data-testid="panel-automatic-settings">
-              <div className="flex items-center gap-2">
-                <Label className="text-[14px] text-muted-foreground whitespace-nowrap">Update message frequency</Label>
-                <Select
-                  value={String(reviewData?.communicationFrequencyMinutes ?? "30")}
-                  onValueChange={(val) =>
-                    updateReviewMode.mutate({
-                      aiReviewMode: "automatic",
-                      communicationFrequencyMinutes: parseInt(val),
-                    })
-                  }
-                >
-                  <SelectTrigger className="w-[140px] h-8 text-[14px]" data-testid="select-comm-frequency">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="5">Every 5 min</SelectItem>
-                    <SelectItem value="15">Every 15 min</SelectItem>
-                    <SelectItem value="30">Every 30 min</SelectItem>
-                    <SelectItem value="60">Every 1 hour</SelectItem>
-                    <SelectItem value="120">Every 2 hours</SelectItem>
-                    <SelectItem value="360">Every 6 hours</SelectItem>
-                    <SelectItem value="720">Every 12 hours</SelectItem>
-                    <SelectItem value="1440">Every 24 hours</SelectItem>
-                  </SelectContent>
-                </Select>
+            <div className="border-t pt-3 space-y-3" data-testid="panel-automatic-settings">
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Label className="text-[14px] text-muted-foreground whitespace-nowrap">Update message frequency</Label>
+                  <Select
+                    value={String(reviewData?.communicationFrequencyMinutes ?? "30")}
+                    onValueChange={(val) =>
+                      updateReviewMode.mutate({
+                        aiReviewMode: "automatic",
+                        communicationFrequencyMinutes: parseInt(val),
+                      })
+                    }
+                  >
+                    <SelectTrigger className="w-[140px] h-8 text-[14px]" data-testid="select-comm-frequency">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">Every 5 min</SelectItem>
+                      <SelectItem value="15">Every 15 min</SelectItem>
+                      <SelectItem value="30">Every 30 min</SelectItem>
+                      <SelectItem value="60">Every 1 hour</SelectItem>
+                      <SelectItem value="120">Every 2 hours</SelectItem>
+                      <SelectItem value="360">Every 6 hours</SelectItem>
+                      <SelectItem value="720">Every 12 hours</SelectItem>
+                      <SelectItem value="1440">Every 24 hours</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={reviewData?.commAutoSend ?? false}
+                    onCheckedChange={(checked) =>
+                      updateReviewMode.mutate({
+                        aiReviewMode: "automatic",
+                        commAutoSend: checked,
+                        commSendDeadline: reviewData?.commSendDeadline || "10:00",
+                      })
+                    }
+                    data-testid="switch-auto-send"
+                  />
+                  <Label className="text-[14px] text-muted-foreground whitespace-nowrap">
+                    Auto-send if not reviewed by
+                  </Label>
+                </div>
+                {reviewData?.commAutoSend && (
+                  <Input
+                    type="time"
+                    className="w-[120px] h-8 text-[14px]"
+                    value={reviewData?.commSendDeadline || "10:00"}
+                    onChange={(e) =>
+                      updateReviewMode.mutate({
+                        aiReviewMode: "automatic",
+                        commAutoSend: true,
+                        commSendDeadline: e.target.value || null,
+                      })
+                    }
+                    data-testid="input-send-deadline"
+                  />
+                )}
               </div>
             </div>
           )}
 
           {currentMode === "timed" && (
-            <div className="border-t pt-3 flex items-center gap-4 flex-wrap" data-testid="panel-timed-settings">
-              <div className="flex items-center gap-2">
-                <Label className="text-[14px] text-muted-foreground whitespace-nowrap">Review frequency</Label>
-                <Select
-                  value={String(reviewData?.dealIntervalMinutes ?? "60")}
-                  onValueChange={(val) =>
-                    updateReviewMode.mutate({
-                      aiReviewMode: "timed",
-                      intervalMinutes: parseInt(val),
-                      scheduledTime: reviewData?.scheduledTime || null,
-                      scheduledDays: reviewData?.scheduledDays || null,
-                    })
-                  }
-                >
-                  <SelectTrigger className="w-[140px] h-8 text-[14px]" data-testid="select-review-frequency">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="15">Every 15 min</SelectItem>
-                    <SelectItem value="30">Every 30 min</SelectItem>
-                    <SelectItem value="60">Every 1 hour</SelectItem>
-                    <SelectItem value="120">Every 2 hours</SelectItem>
-                    <SelectItem value="360">Every 6 hours</SelectItem>
-                    <SelectItem value="720">Every 12 hours</SelectItem>
-                    <SelectItem value="1440">Daily</SelectItem>
-                  </SelectContent>
-                </Select>
+            <div className="border-t pt-3 space-y-3" data-testid="panel-timed-settings">
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Label className="text-[14px] text-muted-foreground whitespace-nowrap">Review time</Label>
+                  <Input
+                    type="time"
+                    className="w-[120px] h-8 text-[14px]"
+                    value={reviewData?.scheduledTime || ""}
+                    onChange={(e) =>
+                      updateReviewMode.mutate({
+                        aiReviewMode: "timed",
+                        scheduledTime: e.target.value || null,
+                        scheduledDays: reviewData?.scheduledDays || null,
+                      })
+                    }
+                    data-testid="input-scheduled-time"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label className="text-[14px] text-muted-foreground whitespace-nowrap">Message frequency</Label>
+                  <Select
+                    value={String(reviewData?.communicationFrequencyMinutes ?? "60")}
+                    onValueChange={(val) =>
+                      updateReviewMode.mutate({
+                        aiReviewMode: "timed",
+                        communicationFrequencyMinutes: parseInt(val),
+                        scheduledTime: reviewData?.scheduledTime || null,
+                        scheduledDays: reviewData?.scheduledDays || null,
+                      })
+                    }
+                  >
+                    <SelectTrigger className="w-[140px] h-8 text-[14px]" data-testid="select-review-frequency">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="15">Every 15 min</SelectItem>
+                      <SelectItem value="30">Every 30 min</SelectItem>
+                      <SelectItem value="60">Every 1 hour</SelectItem>
+                      <SelectItem value="120">Every 2 hours</SelectItem>
+                      <SelectItem value="360">Every 6 hours</SelectItem>
+                      <SelectItem value="720">Every 12 hours</SelectItem>
+                      <SelectItem value="1440">Daily</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Label className="text-[14px] text-muted-foreground whitespace-nowrap">Scheduled time</Label>
-                <Input
-                  type="time"
-                  className="w-[120px] h-8 text-[14px]"
-                  value={reviewData?.scheduledTime || ""}
-                  onChange={(e) =>
-                    updateReviewMode.mutate({
-                      aiReviewMode: "timed",
-                      intervalMinutes: reviewData?.dealIntervalMinutes || 60,
-                      scheduledTime: e.target.value || null,
-                      scheduledDays: reviewData?.scheduledDays || null,
-                    })
-                  }
-                  data-testid="input-scheduled-time"
-                />
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={reviewData?.commAutoSend ?? false}
+                    onCheckedChange={(checked) =>
+                      updateReviewMode.mutate({
+                        aiReviewMode: "timed",
+                        commAutoSend: checked,
+                        commSendDeadline: reviewData?.commSendDeadline || "10:00",
+                        scheduledTime: reviewData?.scheduledTime || null,
+                        scheduledDays: reviewData?.scheduledDays || null,
+                      })
+                    }
+                    data-testid="switch-timed-auto-send"
+                  />
+                  <Label className="text-[14px] text-muted-foreground whitespace-nowrap">
+                    Auto-send if not reviewed by
+                  </Label>
+                </div>
+                {reviewData?.commAutoSend && (
+                  <Input
+                    type="time"
+                    className="w-[120px] h-8 text-[14px]"
+                    value={reviewData?.commSendDeadline || "10:00"}
+                    onChange={(e) =>
+                      updateReviewMode.mutate({
+                        aiReviewMode: "timed",
+                        commAutoSend: true,
+                        commSendDeadline: e.target.value || null,
+                        scheduledTime: reviewData?.scheduledTime || null,
+                        scheduledDays: reviewData?.scheduledDays || null,
+                      })
+                    }
+                    data-testid="input-timed-send-deadline"
+                  />
+                )}
               </div>
             </div>
           )}
@@ -399,6 +533,7 @@ export default function TabDocuments({
             documents={s.stageDocs}
             dealId={dealId}
             defaultOpen={idx === activeIdx}
+            currentMode={currentMode}
           />
         ));
       })()}
@@ -415,6 +550,7 @@ function StageSection({
   documents,
   dealId,
   defaultOpen = false,
+  currentMode,
 }: {
   stageOrder: number;
   stageName: string;
@@ -424,6 +560,7 @@ function StageSection({
   documents: any[];
   dealId: string;
   defaultOpen?: boolean;
+  currentMode: string;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
@@ -471,58 +608,232 @@ function StageSection({
               </tr>
             </thead>
             <tbody>
-              {documents.map((doc) => {
-                const { dot, label } = statusDisplay(doc.status);
-                const downloadUrl = `/api/admin/deals/${dealId}/documents/${doc.id}/download`;
-
-                return (
-                  <tr
-                    key={doc.id}
-                    className="border-b border-border/20 last:border-0 hover:bg-muted/30"
-                    data-testid={`doc-row-${doc.id}`}
-                  >
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="truncate font-medium">
-                          {doc.documentName || doc.fileName || "Untitled"}
-                        </span>
-                        {doc.isRequired && (
-                          <Badge variant="destructive" className="text-[11px] px-1.5 py-0 shrink-0">
-                            REQ
-                          </Badge>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className={cn("w-2 h-2 rounded-full shrink-0", dot)} />
-                        <span className="text-[14px]">{label}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-2.5 text-muted-foreground text-[14px]">
-                      {fileCountLabel(doc)}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      {(doc.filePath || doc.fileName || doc.googleDriveFileUrl) && (
-                        <a
-                          href={doc.googleDriveFileUrl || downloadUrl}
-                          target={doc.googleDriveFileUrl ? "_blank" : undefined}
-                          rel="noreferrer"
-                        >
-                          <Button variant="ghost" size="sm" data-testid={`button-view-doc-${doc.id}`}>
-                            <Eye className="h-3.5 w-3.5 mr-1" /> View
-                          </Button>
-                        </a>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+              {documents.map((doc) => (
+                <DocumentRow
+                  key={doc.id}
+                  doc={doc}
+                  dealId={dealId}
+                  currentMode={currentMode}
+                />
+              ))}
             </tbody>
           </table>
         </div>
       )}
     </div>
+  );
+}
+
+function DocumentRow({
+  doc,
+  dealId,
+  currentMode,
+}: {
+  doc: any;
+  dealId: string;
+  currentMode: string;
+}) {
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const { dot, label, step } = statusDisplay(doc.status, doc.aiReviewStatus, doc.driveUploadStatus);
+  const downloadUrl = `/api/admin/deals/${dealId}/documents/${doc.id}/download`;
+  const hasFile = doc.filePath || doc.fileName;
+  const canReview = hasFile && (doc.aiReviewStatus === "not_reviewed" || doc.aiReviewStatus === "pending" || !doc.aiReviewStatus);
+
+  const reviewMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/deals/${dealId}/documents/${doc.id}/review`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/deals/${dealId}/documents`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}/documents`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals`, dealId, "documents"] });
+      toast({ title: "AI review triggered" });
+    },
+    onError: () => {
+      toast({ title: "Failed to trigger review", variant: "destructive" });
+    },
+  });
+
+  const handlePerDocUpload = async (files: FileList) => {
+    const file = files[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const urlRes = await apiRequest("POST", `/api/admin/deals/${dealId}/documents/${doc.id}/upload-url`, {
+        name: file.name,
+        size: file.size,
+        contentType: file.type,
+      });
+      const urlData = await urlRes.json();
+
+      let objectPath: string;
+      if (urlData.useDirectUpload) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const dr = await fetch(urlData.uploadURL, { method: "POST", body: fd, credentials: "include" });
+        if (!dr.ok) throw new Error("Upload failed");
+        objectPath = (await dr.json()).objectPath;
+      } else {
+        await fetch(urlData.uploadURL, {
+          method: "PUT",
+          body: file,
+          headers: { "Content-Type": file.type || "application/octet-stream" },
+        });
+        objectPath = urlData.objectPath;
+      }
+
+      await apiRequest("POST", `/api/admin/deals/${dealId}/documents/${doc.id}/upload-complete`, {
+        objectPath,
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.type,
+      });
+
+      toast({ title: `Uploaded: ${file.name}` });
+      queryClient.invalidateQueries({ queryKey: [`/api/deals/${dealId}/documents`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}/documents`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals`, dealId, "documents"] });
+    } catch {
+      toast({ title: `Failed to upload ${file.name}`, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const statusSteps = [
+    { key: 1, label: "Pending", icon: Clock },
+    { key: 2, label: "Uploaded", icon: CloudUpload },
+    { key: 3, label: "Reviewed", icon: Bot },
+    { key: 4, label: "Approved", icon: Shield },
+    { key: 5, label: "Drive", icon: FolderOpen },
+  ];
+
+  return (
+    <tr
+      className="border-b border-border/20 last:border-0 hover:bg-muted/30"
+      data-testid={`doc-row-${doc.id}`}
+    >
+      <td className="px-4 py-2.5">
+        <div className="flex items-center gap-2 min-w-0">
+          <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="truncate font-medium">
+            {doc.documentName || doc.fileName || "Untitled"}
+          </span>
+          {doc.isRequired && (
+            <Badge variant="destructive" className="text-[11px] px-1.5 py-0 shrink-0">
+              REQ
+            </Badge>
+          )}
+        </div>
+      </td>
+      <td className="px-4 py-2.5">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <span className={cn("w-2 h-2 rounded-full shrink-0", dot)} />
+            <span className="text-[14px] font-medium">{label}</span>
+          </div>
+          <div className="flex items-center gap-0.5">
+            {statusSteps.map((s, i) => {
+              const isActive = step >= s.key;
+              const isCurrent = Math.floor(step) === s.key;
+              const isRejected = (s.key === 3 && (doc.aiReviewStatus === "denied")) ||
+                                 (s.key === 4 && doc.status === "rejected");
+              return (
+                <Tooltip key={s.key}>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center">
+                      <div
+                        className={cn(
+                          "w-5 h-1.5 rounded-full transition-colors",
+                          isRejected ? "bg-red-400" :
+                          isActive ? "bg-emerald-500" :
+                          isCurrent ? "bg-blue-400" :
+                          "bg-muted-foreground/20"
+                        )}
+                      />
+                      {i < statusSteps.length - 1 && (
+                        <div className="w-0.5" />
+                      )}
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">
+                    {s.label}
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
+          </div>
+          {doc.aiReviewReason && (step >= 3) && (
+            <p className="text-[12px] text-muted-foreground truncate max-w-[200px]" title={doc.aiReviewReason}>
+              {doc.aiReviewReason}
+            </p>
+          )}
+        </div>
+      </td>
+      <td className="px-4 py-2.5 text-muted-foreground text-[14px]">
+        {fileCountLabel(doc)}
+      </td>
+      <td className="px-4 py-2.5">
+        <div className="flex items-center justify-end gap-1.5">
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            data-testid={`input-upload-doc-${doc.id}`}
+            onChange={(e) => e.target.files && handlePerDocUpload(e.target.files)}
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            data-testid={`button-upload-doc-${doc.id}`}
+          >
+            {uploading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Upload className="h-3.5 w-3.5" />
+            )}
+          </Button>
+
+          {canReview && currentMode === "manual" && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => reviewMutation.mutate()}
+                  disabled={reviewMutation.isPending}
+                  data-testid={`button-review-doc-${doc.id}`}
+                >
+                  {reviewMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Bot className="h-3.5 w-3.5" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>AI Review</TooltipContent>
+            </Tooltip>
+          )}
+
+          {(doc.filePath || doc.fileName || doc.googleDriveFileUrl) && (
+            <a
+              href={doc.googleDriveFileUrl || downloadUrl}
+              target={doc.googleDriveFileUrl ? "_blank" : undefined}
+              rel="noreferrer"
+            >
+              <Button variant="ghost" size="sm" data-testid={`button-view-doc-${doc.id}`}>
+                <Eye className="h-3.5 w-3.5" />
+              </Button>
+            </a>
+          )}
+        </div>
+      </td>
+    </tr>
   );
 }
