@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   Upload, FileText, CheckCircle2, Clock, AlertCircle, Eye,
   Loader2, Zap, Hand, FolderOpen, ChevronDown, Bot, CloudUpload,
-  XCircle, Shield, Play, RotateCw,
+  XCircle, Shield, Play, RotateCw, HardDriveUpload, ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -658,6 +658,25 @@ function DocumentRow({
     },
   });
 
+  const driveSyncMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/deals/${dealId}/documents/${doc.id}/drive/retry`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/deals/${dealId}/documents`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${dealId}/documents`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals`, dealId, "documents"] });
+      toast({ title: "Pushed to Google Drive" });
+    },
+    onError: () => {
+      toast({ title: "Failed to push to Drive", variant: "destructive" });
+    },
+  });
+
+  const isSynced = doc.driveUploadStatus === "ok" || doc.driveUploadStatus === "synced" || !!doc.googleDriveFileId;
+  const canPushToDrive = hasFile && !isSynced;
+
   const handlePerDocUpload = async (files: FileList) => {
     const file = files[0];
     if (!file) return;
@@ -778,7 +797,7 @@ function DocumentRow({
         {fileCountLabel(doc)}
       </td>
       <td className="px-4 py-2.5">
-        <div className="flex items-center justify-end gap-1.5">
+        <div className="flex items-center justify-end gap-2">
           <input
             ref={fileInputRef}
             type="file"
@@ -786,26 +805,29 @@ function DocumentRow({
             data-testid={`input-upload-doc-${doc.id}`}
             onChange={(e) => e.target.files && handlePerDocUpload(e.target.files)}
           />
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            data-testid={`button-upload-doc-${doc.id}`}
-          >
-            {uploading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Upload className="h-3.5 w-3.5" />
-            )}
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                className="h-7 w-7 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center transition-colors disabled:opacity-50"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                data-testid={`button-upload-doc-${doc.id}`}
+              >
+                {uploading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Upload className="h-3.5 w-3.5" />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Upload File</TooltipContent>
+          </Tooltip>
 
           {canReview && currentMode === "manual" && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
+                <button
+                  className="h-7 w-7 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center transition-colors disabled:opacity-50"
                   onClick={() => reviewMutation.mutate()}
                   disabled={reviewMutation.isPending}
                   data-testid={`button-review-doc-${doc.id}`}
@@ -815,22 +837,64 @@ function DocumentRow({
                   ) : (
                     <Bot className="h-3.5 w-3.5" />
                   )}
-                </Button>
+                </button>
               </TooltipTrigger>
               <TooltipContent>AI Review</TooltipContent>
             </Tooltip>
           )}
 
-          {(doc.filePath || doc.fileName || doc.googleDriveFileUrl) && (
-            <a
-              href={doc.googleDriveFileUrl || downloadUrl}
-              target={doc.googleDriveFileUrl ? "_blank" : undefined}
-              rel="noreferrer"
-            >
-              <Button variant="ghost" size="sm" data-testid={`button-view-doc-${doc.id}`}>
-                <Eye className="h-3.5 w-3.5" />
-              </Button>
-            </a>
+          {canPushToDrive && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className="h-7 w-7 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center transition-colors disabled:opacity-50"
+                  onClick={() => driveSyncMutation.mutate()}
+                  disabled={driveSyncMutation.isPending}
+                  data-testid={`button-push-drive-${doc.id}`}
+                >
+                  {driveSyncMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <HardDriveUpload className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Push to Drive</TooltipContent>
+            </Tooltip>
+          )}
+
+          {isSynced && doc.googleDriveFileUrl && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <a
+                  href={doc.googleDriveFileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="h-7 w-7 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center transition-colors"
+                  data-testid={`button-drive-link-${doc.id}`}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </TooltipTrigger>
+              <TooltipContent>Open in Drive</TooltipContent>
+            </Tooltip>
+          )}
+
+          {(doc.filePath || doc.fileName) && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <a
+                  href={downloadUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="h-7 w-7 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center transition-colors"
+                  data-testid={`button-view-doc-${doc.id}`}
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                </a>
+              </TooltipTrigger>
+              <TooltipContent>Preview</TooltipContent>
+            </Tooltip>
           )}
         </div>
       </td>

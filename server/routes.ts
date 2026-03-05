@@ -3625,17 +3625,6 @@ export async function registerRoutes(
         userId
       ).catch(err => console.error('Notification error:', err));
 
-      try {
-        const { isDriveIntegrationEnabled, syncDealDocumentToDrive } = await import('./services/googleDrive');
-        const driveEnabled = await isDriveIntegrationEnabled();
-        if (driveEnabled && updated && newFile) {
-          syncDealDocumentToDrive(updated.id, newFile.id).catch((err: any) => {
-            console.error(`Drive sync failed for broker doc ${updated.id}:`, err.message);
-          });
-        }
-      } catch (driveErr: any) {
-        console.error('Drive sync check error:', driveErr.message);
-      }
 
       maybeAutoTriggerPipeline(projectId, userId);
 
@@ -7761,19 +7750,6 @@ export async function registerRoutes(
         );
       }
       
-      // Google Drive sync for the new file (non-blocking)
-      try {
-        const { isDriveIntegrationEnabled, syncDealDocumentToDrive } = await import('./services/googleDrive');
-        const driveEnabled = await isDriveIntegrationEnabled();
-        if (driveEnabled && updated && newFile) {
-          syncDealDocumentToDrive(updated.id, newFile.id).catch((err: any) => {
-            console.error(`Drive sync failed for deal doc ${updated.id}:`, err.message);
-          });
-        }
-      } catch (driveErr: any) {
-        console.error('Drive sync check error:', driveErr.message);
-      }
-
       maybeAutoTriggerPipeline(dealId, req.user!.id);
       
       res.json({ document: updated, file: newFile });
@@ -7866,9 +7842,10 @@ export async function registerRoutes(
       // Get the file and stream it
       const objectFile = await objectStorageService.getObjectEntityFile(doc.filePath);
       
-      // Set content disposition for download
       if (req.query.download === 'true' && doc.fileName) {
         res.set('Content-Disposition', `attachment; filename="${doc.fileName}"`);
+      } else {
+        res.set('Content-Disposition', `inline${doc.fileName ? `; filename="${doc.fileName}"` : ''}`);
       }
       
       await objectStorageService.downloadObject(objectFile, res);
@@ -7889,6 +7866,8 @@ export async function registerRoutes(
       const objectFile = await objectStorageService.getObjectEntityFile(file.filePath);
       if (req.query.download === 'true' && file.fileName) {
         res.set('Content-Disposition', `attachment; filename="${file.fileName}"`);
+      } else {
+        res.set('Content-Disposition', `inline${file.fileName ? `; filename="${file.fileName}"` : ''}`);
       }
       await objectStorageService.downloadObject(objectFile, res);
     } catch (error) {
