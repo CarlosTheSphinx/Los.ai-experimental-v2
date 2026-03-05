@@ -321,7 +321,7 @@ export default function DealsKanbanView() {
 
     try {
       await apiRequest("PATCH", `/api/admin/projects/${project.id}/move-stage`, {
-        targetStageKey,
+        targetStageKey: targetStepKey,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/deals"] });

@@ -314,6 +314,186 @@ export default function TabPeople({ deal }: { deal: any }) {
           </CardContent>
         </Card>
       </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-[14px] font-semibold text-muted-foreground uppercase tracking-wider" data-testid="text-third-parties-title">
+            Third Parties ({thirdParties.length})
+          </h3>
+          {!showForm && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-[13px]"
+              onClick={() => { setEditingId(null); setForm(emptyForm); setShowForm(true); }}
+              data-testid="button-add-third-party"
+            >
+              <Plus className="h-3 w-3 mr-1" /> Add
+            </Button>
+          )}
+        </div>
+
+        {showForm && (
+          <Card className="mb-3">
+            <CardContent className="py-4 px-5">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[15px] font-semibold">{editingId ? "Edit Contact" : "Add External Contact"}</span>
+                <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={cancelForm} data-testid="button-cancel-third-party">
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-[13px]">Name *</Label>
+                  <Input
+                    className="h-8 text-[14px] mt-1"
+                    placeholder="Full name"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    data-testid="input-third-party-name"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[13px]">Role *</Label>
+                  <Select value={form.role} onValueChange={(val) => setForm({ ...form, role: val })}>
+                    <SelectTrigger className="h-8 text-[14px] mt-1" data-testid="select-third-party-role">
+                      <SelectValue placeholder="Select role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {THIRD_PARTY_ROLES.map((r) => (
+                        <SelectItem key={r} value={r}>{r}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-[13px]">Email</Label>
+                  <Input
+                    className="h-8 text-[14px] mt-1"
+                    placeholder="email@example.com"
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    data-testid="input-third-party-email"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[13px]">Phone</Label>
+                  <Input
+                    className="h-8 text-[14px] mt-1"
+                    placeholder="(555) 123-4567"
+                    value={form.phone}
+                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                    data-testid="input-third-party-phone"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[13px]">Company</Label>
+                  <Input
+                    className="h-8 text-[14px] mt-1"
+                    placeholder="Company name"
+                    value={form.company}
+                    onChange={(e) => setForm({ ...form, company: e.target.value })}
+                    data-testid="input-third-party-company"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[13px]">Notes</Label>
+                  <Input
+                    className="h-8 text-[14px] mt-1"
+                    placeholder="Additional notes"
+                    value={form.notes}
+                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                    data-testid="input-third-party-notes"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 mt-3">
+                <Button variant="outline" size="sm" className="h-8 text-[13px]" onClick={cancelForm}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-[13px]"
+                  onClick={handleSubmit}
+                  disabled={addMutation.isPending || updateMutation.isPending}
+                  data-testid="button-save-third-party"
+                >
+                  {(addMutation.isPending || updateMutation.isPending) && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                  {editingId ? "Update" : "Add Contact"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card>
+          <CardContent className="py-3 px-5">
+            {thirdParties.length === 0 && !showForm ? (
+              <p className="text-[16px] text-muted-foreground py-2" data-testid="text-no-third-parties">
+                No external contacts added yet.
+              </p>
+            ) : (
+              <div className="divide-y divide-border/50">
+                {thirdParties.map((tp, idx) => (
+                  <div key={tp.id} className="flex items-center gap-3 py-3 first:pt-1 last:pb-1" data-testid={`third-party-${tp.id}`}>
+                    <div className={cn("w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-[14px] shrink-0", getAvatarColor(tp.name, idx + 10))}>
+                      {getInitials(tp.name)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[16px] font-medium truncate">{tp.name}</span>
+                        <Badge variant="secondary" className="text-[12px]">{tp.role}</Badge>
+                        {tp.company && (
+                          <span className="text-[13px] text-muted-foreground truncate">{tp.company}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 text-[13px] text-muted-foreground">
+                        {tp.email && (
+                          <div className="flex items-center gap-1">
+                            <Mail className="h-2.5 w-2.5" />
+                            <a href={`mailto:${tp.email}`} className="hover:underline">{tp.email}</a>
+                          </div>
+                        )}
+                        {tp.phone && (
+                          <div className="flex items-center gap-1">
+                            <Phone className="h-2.5 w-2.5" />
+                            <a href={`tel:${tp.phone}`} className="hover:underline">{tp.phone}</a>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => startEdit(tp)} data-testid={`button-edit-third-party-${tp.id}`}>
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Edit</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                            onClick={() => deleteMutation.mutate(tp.id)}
+                            disabled={deleteMutation.isPending}
+                            data-testid={`button-delete-third-party-${tp.id}`}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Remove</TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
