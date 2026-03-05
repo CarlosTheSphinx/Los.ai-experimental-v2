@@ -437,7 +437,7 @@ export default function DealDetailV2() {
 
           <div className="mt-5">
             <TabsContent value="overview" className="m-0">
-              <TabOverview deal={deal} properties={properties} dealId={dealId!} isAdmin={!!isAdmin} />
+              <TabOverview deal={deal} properties={properties} dealId={dealId!} isAdmin={!!isAdmin} stages={dealData?.stages} />
             </TabsContent>
             <TabsContent value="documents" className="m-0">
               <TabDocuments deal={deal} documents={documents} dealId={dealId!} stages={dealData?.stages} />
