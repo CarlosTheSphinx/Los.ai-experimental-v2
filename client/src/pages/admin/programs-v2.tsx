@@ -2,7 +2,8 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   Layers, Plus, Search, CheckCircle2, FileText, ListTodo,
-  Pencil, Copy, BarChart3, Download
+  Pencil, Copy, BarChart3, Download, ShieldCheck,
+  ChevronRight, ChevronDown, AlertTriangle, Clock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,10 +17,224 @@ import { EmptyState } from "@/components/ui/phase1/empty-state";
 import { ExpandableRow } from "@/components/ui/phase1/expandable-row";
 import { SlideOverPanel } from "@/components/ui/phase1/slide-over-panel";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ProgramCreationWizard } from "@/components/onboarding/ProgramCreationWizard";
+
+type CreditPolicyRule = {
+  documentType: string;
+  ruleTitle: string;
+  ruleDescription: string;
+  category?: string;
+  severity?: string;
+  isActive?: boolean;
+  confidence?: "high" | "medium" | "low";
+};
+
+type CreditPolicy = {
+  id: number;
+  name: string;
+  description: string | null;
+  sourceFileName: string | null;
+  isActive: boolean;
+  ruleCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type CreditPolicyWithRules = CreditPolicy & { rules: CreditPolicyRule[] };
+
+function CreditPoliciesTab() {
+  const [expandedPolicyId, setExpandedPolicyId] = useState<number | null>(null);
+  const [expandedDocTypes, setExpandedDocTypes] = useState<Record<string, boolean>>({});
+
+  const { data: policies = [], isLoading } = useQuery<CreditPolicy[]>({
+    queryKey: ["/api/admin/credit-policies"],
+  });
+
+  const { data: policyDetails } = useQuery<CreditPolicyWithRules>({
+    queryKey: ["/api/admin/credit-policies", expandedPolicyId],
+    enabled: !!expandedPolicyId,
+  });
+
+  function togglePolicy(id: number) {
+    if (expandedPolicyId === id) {
+      setExpandedPolicyId(null);
+      setExpandedDocTypes({});
+    } else {
+      setExpandedPolicyId(id);
+      setExpandedDocTypes({});
+    }
+  }
+
+  function toggleDocType(docType: string) {
+    setExpandedDocTypes((prev) => ({ ...prev, [docType]: !prev[docType] }));
+  }
+
+  function groupRulesByDocType(rules: CreditPolicyRule[]) {
+    return rules.reduce((acc, rule) => {
+      const dt = rule.documentType || "General";
+      if (!acc[dt]) acc[dt] = [];
+      acc[dt].push(rule);
+      return acc;
+    }, {} as Record<string, CreditPolicyRule[]>);
+  }
+
+  function formatDate(dateStr: string) {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-20 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  if (policies.length === 0) {
+    return (
+      <EmptyState
+        icon={ShieldCheck}
+        title="No credit policies"
+        description="Credit policies define the review rules for your loan programs. Create one from the Credit Policies page."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {policies.map((policy) => {
+        const isExpanded = expandedPolicyId === policy.id;
+        const grouped = isExpanded && policyDetails?.rules ? groupRulesByDocType(policyDetails.rules) : {};
+
+        return (
+          <Card key={policy.id} data-testid={`card-credit-policy-${policy.id}`}>
+            <div
+              className="flex items-center gap-3 p-4 cursor-pointer"
+              onClick={() => togglePolicy(policy.id)}
+              data-testid={`button-toggle-policy-${policy.id}`}
+            >
+              {isExpanded ? (
+                <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              ) : (
+                <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              )}
+              <ShieldCheck className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[15px] font-semibold" data-testid={`text-policy-name-${policy.id}`}>
+                    {policy.name}
+                  </span>
+                  <StatusBadge
+                    variant={policy.isActive ? "active" : "inactive"}
+                    label={policy.isActive ? "Active" : "Inactive"}
+                  />
+                </div>
+                {policy.description && (
+                  <p className="text-[13px] text-muted-foreground mt-0.5 truncate" data-testid={`text-policy-desc-${policy.id}`}>
+                    {policy.description}
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-4 flex-shrink-0 text-[13px] text-muted-foreground">
+                <span className="flex items-center gap-1" data-testid={`text-policy-rules-${policy.id}`}>
+                  <FileText className="h-3.5 w-3.5" />
+                  {policy.ruleCount} rules
+                </span>
+                <span className="flex items-center gap-1" data-testid={`text-policy-updated-${policy.id}`}>
+                  <Clock className="h-3.5 w-3.5" />
+                  {formatDate(policy.updatedAt)}
+                </span>
+              </div>
+            </div>
+
+            {isExpanded && (
+              <CardContent className="pt-0 pb-4">
+                {!policyDetails?.rules ? (
+                  <div className="space-y-2 pl-9">
+                    {[1, 2].map((i) => (
+                      <Skeleton key={i} className="h-10 w-full" />
+                    ))}
+                  </div>
+                ) : Object.keys(grouped).length === 0 ? (
+                  <p className="text-[13px] text-muted-foreground pl-9">No rules defined for this policy.</p>
+                ) : (
+                  <div className="space-y-2 pl-9">
+                    {Object.entries(grouped).map(([docType, rules]) => {
+                      const isDocExpanded = expandedDocTypes[docType];
+                      return (
+                        <div key={docType} className="border rounded-md" data-testid={`group-doctype-${policy.id}-${docType}`}>
+                          <div
+                            className="flex items-center gap-2 p-3 cursor-pointer hover-elevate"
+                            onClick={() => toggleDocType(docType)}
+                            data-testid={`button-toggle-doctype-${policy.id}-${docType}`}
+                          >
+                            {isDocExpanded ? (
+                              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                            )}
+                            <FileText className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-[14px] font-medium flex-1">{docType}</span>
+                            <Badge variant="secondary">{rules.length}</Badge>
+                          </div>
+
+                          {isDocExpanded && (
+                            <div className="border-t divide-y">
+                              {rules.map((rule, rIdx) => (
+                                <div
+                                  key={rIdx}
+                                  className="px-4 py-2.5 flex items-start gap-3"
+                                  data-testid={`row-rule-${policy.id}-${docType}-${rIdx}`}
+                                >
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="text-[13px] font-medium" data-testid={`text-rule-title-${policy.id}-${rIdx}`}>
+                                        {rule.ruleTitle || "(untitled)"}
+                                      </span>
+                                      {rule.category && (
+                                        <Badge variant="outline" className="text-[11px]">
+                                          {rule.category}
+                                        </Badge>
+                                      )}
+                                      {rule.severity && (
+                                        <Badge
+                                          variant={rule.severity === "critical" ? "destructive" : "secondary"}
+                                          className="text-[11px]"
+                                        >
+                                          {rule.severity}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    {rule.ruleDescription && (
+                                      <p className="text-[12px] text-muted-foreground mt-0.5">
+                                        {rule.ruleDescription}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            )}
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
 
 interface LoanProgram {
   id: number;
@@ -358,6 +573,20 @@ export default function ProgramsV2() {
         </Button>
       </div>
 
+      <Tabs defaultValue="programs" className="w-full">
+        <TabsList data-testid="tabs-programs-page">
+          <TabsTrigger value="programs" data-testid="tab-programs">
+            <Layers className="h-4 w-4 mr-1.5" />
+            Programs
+          </TabsTrigger>
+          <TabsTrigger value="credit-policies" data-testid="tab-credit-policies">
+            <ShieldCheck className="h-4 w-4 mr-1.5" />
+            Credit Policies
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="programs" className="space-y-5 mt-4">
+
       {/* Summary Strip */}
       <SummaryStrip>
         <SummaryCard
@@ -572,6 +801,13 @@ export default function ProgramsV2() {
           </div>
         )}
       </div>
+
+        </TabsContent>
+
+        <TabsContent value="credit-policies" className="mt-4">
+          <CreditPoliciesTab />
+        </TabsContent>
+      </Tabs>
 
       {/* Slide-Over Panel */}
       <SlideOverPanel

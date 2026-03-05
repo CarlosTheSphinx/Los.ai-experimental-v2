@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useRoute, Link } from "wouter";
@@ -11,6 +11,7 @@ import {
   Loader2, Zap
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { StageProgressBar } from "@/components/ui/phase1/stage-progress-bar";
@@ -108,6 +109,9 @@ export default function DealDetailV2() {
   const { user } = useAuth();
   const isAdmin = user?.role && ["admin", "staff", "super_admin"].includes(user.role);
   const [activeTab, setActiveTab] = useState("overview");
+  const [pipelineRunning, setPipelineRunning] = useState(false);
+  const [pipelineProjectId, setPipelineProjectId] = useState<number | null>(null);
+  const { toast } = useToast();
 
   const apiBase = isAdmin ? `/api/admin/deals` : `/api/deals`;
 
@@ -158,6 +162,109 @@ export default function DealDetailV2() {
     enabled: !!dealId,
   });
   const documents = docsData?.documents ?? [];
+
+  useEffect(() => {
+    if (deal) {
+      const projectId = deal.projectId || deal.project_id;
+      if (projectId) {
+        setPipelineProjectId(projectId);
+      }
+    }
+  }, [deal]);
+
+  const { data: initialPipelineStatus } = useQuery<{ hasRun: boolean; latestRun: any }>({
+    queryKey: ["/api/projects", pipelineProjectId, "pipeline", "status", "initial"],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${pipelineProjectId}/pipeline/status`, { credentials: "include" });
+      if (!res.ok) return { hasRun: false, latestRun: null };
+      return res.json();
+    },
+    enabled: !!pipelineProjectId && !pipelineRunning,
+    staleTime: Infinity,
+  });
+
+  useEffect(() => {
+    if (initialPipelineStatus?.latestRun?.status === "running") {
+      setPipelineRunning(true);
+    }
+  }, [initialPipelineStatus]);
+
+  const triggerPipeline = useMutation({
+    mutationFn: async (projectId: number) => {
+      const res = await apiRequest("POST", "/api/admin/agents/pipeline/start", { projectId });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "AI Pipeline Started", description: "Processing your deal automatically..." });
+      setPipelineRunning(true);
+    },
+    onError: (error: any) => {
+      toast({ title: "Pipeline Error", description: error?.message || "Failed to start pipeline", variant: "destructive" });
+    },
+  });
+
+  const { data: pipelineStatus } = useQuery<{
+    hasRun: boolean;
+    latestRun: any;
+    steps: any[];
+  }>({
+    queryKey: ["/api/projects", pipelineProjectId, "pipeline", "status"],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${pipelineProjectId}/pipeline/status`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch pipeline status");
+      return res.json();
+    },
+    enabled: pipelineRunning && !!pipelineProjectId,
+    refetchInterval: pipelineRunning ? 3000 : false,
+  });
+
+  const agentSequence: string[] = (pipelineStatus?.latestRun?.agentSequence as string[]) || [];
+  const currentAgentIndex: number = pipelineStatus?.latestRun?.currentAgentIndex ?? 0;
+  const pipelineStatusValue: string = pipelineStatus?.latestRun?.status || "";
+  const totalSteps = agentSequence.length || 1;
+  const completedSteps = pipelineStatusValue === "completed"
+    ? totalSteps
+    : pipelineStatusValue === "failed"
+      ? currentAgentIndex
+      : currentAgentIndex;
+  const pipelineProgress = Math.round((completedSteps / totalSteps) * 100);
+
+  const AGENT_LABELS: Record<string, string> = {
+    document_intelligence: "Analyzing Documents",
+    processor: "Processing Deal",
+    communication: "Drafting Communications",
+  };
+
+  const currentStepName = pipelineStatusValue === "completed"
+    ? "Complete"
+    : pipelineStatusValue === "failed"
+      ? "Failed"
+      : AGENT_LABELS[agentSequence[currentAgentIndex]] || `Step ${currentAgentIndex + 1}`;
+
+  useEffect(() => {
+    if (!pipelineRunning) return;
+    if (pipelineStatusValue === "completed") {
+      toast({ title: "Pipeline Complete", description: "All AI agents have finished processing." });
+      setPipelineRunning(false);
+      queryClient.invalidateQueries({ queryKey: [apiBase, dealId] });
+      queryClient.invalidateQueries({ queryKey: [apiBase, dealId, "documents"] });
+      queryClient.invalidateQueries({ queryKey: [apiBase, dealId, "tasks"] });
+    } else if (pipelineStatusValue === "failed") {
+      const errorMsg = pipelineStatus?.latestRun?.errorMessage || "Pipeline encountered an error";
+      toast({ title: "Pipeline Failed", description: errorMsg, variant: "destructive" });
+      setPipelineRunning(false);
+    }
+  }, [pipelineStatusValue, pipelineRunning]);
+
+  const handleAutoProcess = () => {
+    const projectId = deal?.projectId || deal?.project_id;
+    if (!projectId) {
+      toast({ title: "No Project", description: "This deal has no associated project for pipeline processing.", variant: "destructive" });
+      return;
+    }
+    setPipelineProjectId(projectId);
+    triggerPipeline.mutate(projectId);
+  };
 
   if (isLoading) {
     return (
@@ -253,8 +360,19 @@ export default function DealDetailV2() {
             <Button variant="ghost" size="sm" className="h-9 px-4 text-[13px] font-medium" data-testid="button-drive">
               <FolderOpen className="h-3.5 w-3.5 mr-1.5" /> Drive
             </Button>
-            <Button size="sm" className="h-9 px-4 text-[13px] font-medium bg-emerald-600 hover:bg-emerald-700 text-white border-0 shadow-md shadow-emerald-600/30" data-testid="button-auto-process">
-              <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Auto Process
+            <Button
+              size="sm"
+              className="h-9 px-4 text-[13px] font-medium bg-emerald-600 hover:bg-emerald-700 text-white border-0 shadow-md shadow-emerald-600/30"
+              data-testid="button-auto-process"
+              disabled={pipelineRunning || triggerPipeline.isPending}
+              onClick={handleAutoProcess}
+            >
+              {(pipelineRunning || triggerPipeline.isPending) ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              {pipelineRunning ? "Processing..." : "Auto Process"}
             </Button>
             <Button variant="ghost" size="icon" className="h-9 w-9" data-testid="button-more-actions">
               <MoreHorizontal className="h-4 w-4" />
@@ -264,6 +382,24 @@ export default function DealDetailV2() {
 
         {/* Stage Progress Bar */}
         <StageProgressBar stages={stages} />
+
+        {pipelineRunning && (
+          <div className="mt-3 space-y-1.5" data-testid="pipeline-progress">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-[13px] font-medium text-emerald-700 dark:text-emerald-400">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span data-testid="text-pipeline-step">{currentStepName}...</span>
+              </div>
+              <span className="text-[13px] font-semibold text-emerald-700 dark:text-emerald-400" data-testid="text-pipeline-percent">
+                {pipelineProgress}%
+              </span>
+            </div>
+            <Progress
+              value={pipelineProgress}
+              className="h-2 bg-emerald-100 dark:bg-emerald-900/30 [&>div]:bg-emerald-500 [&>div]:transition-all [&>div]:duration-700"
+            />
+          </div>
+        )}
       </div>
 
       {/* KPI Cards + Tabs */}

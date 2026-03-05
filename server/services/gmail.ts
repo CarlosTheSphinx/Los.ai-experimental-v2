@@ -339,6 +339,35 @@ export async function sendReply(
   return { messageId: result.data.id || '' };
 }
 
+export async function sendNewEmail(
+  accountId: number,
+  to: string,
+  subject: string,
+  body: string
+): Promise<{ messageId: string }> {
+  const { gmail, account } = await getGmailClient(accountId);
+
+  const fromEmail = account.emailAddress;
+  const headers = [
+    `From: ${fromEmail}`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    `Content-Type: text/html; charset=utf-8`,
+  ];
+
+  const rawMessage = headers.join('\r\n') + '\r\n\r\n' + body;
+  const encodedMessage = Buffer.from(rawMessage).toString('base64url');
+
+  const result = await gmail.users.messages.send({
+    userId: 'me',
+    requestBody: {
+      raw: encodedMessage,
+    },
+  });
+
+  return { messageId: result.data.id || '' };
+}
+
 export async function checkLinkedThreadsForNewEmails(accountId: number): Promise<void> {
   try {
     const linkedThreads = await db.select({

@@ -70,6 +70,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import DealsKanbanView from "@/components/admin/DealsKanbanView";
+import { ComposeEmailModal } from "@/components/ComposeEmailModal";
 
 interface Deal {
   id: number;
@@ -306,6 +307,7 @@ function DrivePushButton({ deal }: { deal: Deal }) {
 }
 
 function ExpandedDealRow({ deal, stageStats }: { deal: Deal; stageStats?: StageInfo[] }) {
+  const [composeOpen, setComposeOpen] = useState(false);
   const createdDate = new Date(deal.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const targetDate = deal.targetCloseDate
     ? new Date(deal.targetCloseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -367,12 +369,19 @@ function ExpandedDealRow({ deal, stageStats }: { deal: Deal; stageStats?: StageI
             </Link>
             <DrivePushButton deal={deal} />
             {deal.customerEmail && (
-              <a href={`mailto:${deal.customerEmail}`} onClick={(e) => e.stopPropagation()}>
-                <Button size="sm" variant="outline" className="gap-1.5 text-[13px]">
-                  <Mail className="h-3.5 w-3.5" />
-                  Email Borrower
-                </Button>
-              </a>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 text-[13px]"
+                data-testid={`button-email-borrower-${deal.id}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setComposeOpen(true);
+                }}
+              >
+                <Mail className="h-3.5 w-3.5" />
+                Email Borrower
+              </Button>
             )}
             <Link href={`/admin/deals/${deal.id}`}>
               <Button size="sm" variant="outline" className="gap-1.5 text-[13px]">
@@ -382,6 +391,15 @@ function ExpandedDealRow({ deal, stageStats }: { deal: Deal; stageStats?: StageI
             </Link>
           </div>
         </div>
+        {deal.customerEmail && (
+          <ComposeEmailModal
+            open={composeOpen}
+            onClose={() => setComposeOpen(false)}
+            defaultTo={deal.customerEmail}
+            defaultSubject={`Regarding your loan - ${deal.loanNumber || deal.projectNumber || `Deal #${deal.id}`}`}
+            dealId={deal.id}
+          />
+        )}
       </TableCell>
     </TableRow>
   );
