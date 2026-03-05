@@ -17474,6 +17474,16 @@ Return JSON only:
     }
   });
 
+  app.get('/api/super-admin/beta-signups', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const signups = await db.select().from(betaSignups).orderBy(desc(betaSignups.createdAt));
+      res.json({ signups });
+    } catch (error) {
+      console.error('Beta signups fetch error:', error);
+      res.status(500).json({ error: 'Failed to fetch beta signups' });
+    }
+  });
+
   // Migrate legacy status values to new standard (one-time)
   app.post('/api/admin/migrate-deal-statuses', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
     try {

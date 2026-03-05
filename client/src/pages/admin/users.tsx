@@ -12,12 +12,21 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Search, MoreHorizontal, UserCog, Shield, User as UserIcon, Plus, Users, Briefcase, Pencil, Mail, CheckCircle } from "lucide-react";
+import { Search, MoreHorizontal, UserCog, Shield, User as UserIcon, Plus, Users, Briefcase, Pencil, Mail, CheckCircle, Clock } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { formatPhoneNumber, getPhoneError, getEmailError } from "@/lib/validation";
+
+interface BetaSignup {
+  id: number;
+  email: string;
+  name: string | null;
+  company: string | null;
+  createdAt: string;
+}
 
 interface AdminUser {
   id: number;
@@ -773,7 +782,125 @@ function TeamTab() {
   );
 }
 
+function BetaWaitlistTab() {
+  const [search, setSearch] = useState("");
+
+  const { data, isLoading } = useQuery<{ signups: BetaSignup[] }>({
+    queryKey: ["/api/super-admin/beta-signups"],
+  });
+
+  const allSignups = data?.signups || [];
+
+  const filteredSignups = allSignups.filter((s) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      s.email?.toLowerCase().includes(q) ||
+      s.name?.toLowerCase().includes(q) ||
+      s.company?.toLowerCase().includes(q)
+    );
+  });
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Beta Waitlist Signups</CardTitle>
+          <CardDescription>
+            Users who signed up through the Coming Soon page
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name, email, or company..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10"
+              data-testid="input-search-waitlist"
+            />
+          </div>
+
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          ) : filteredSignups.length === 0 ? (
+            <p
+              className="text-center text-muted-foreground py-8"
+              data-testid="text-no-waitlist"
+            >
+              No waitlist signups found
+            </p>
+          ) : (
+            <div className="border rounded-md overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Signed Up</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredSignups.map((signup) => (
+                    <TableRow
+                      key={signup.id}
+                      data-testid={`row-waitlist-${signup.id}`}
+                    >
+                      <TableCell>
+                        <span className="font-medium">
+                          {signup.name || "No name"}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm text-muted-foreground">
+                          {signup.email}
+                        </span>
+                      </TableCell>
+                      <TableCell>{signup.company || "-"}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" data-testid={`badge-waitlist-${signup.id}`}>
+                          <Clock className="h-3 w-3 mr-1" />
+                          Waitlist
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {signup.createdAt
+                          ? format(
+                              new Date(signup.createdAt),
+                              "MMM d, yyyy"
+                            )
+                          : "-"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function AdminUsers() {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === "super_admin";
+
+  const { data: waitlistData } = useQuery<{ signups: BetaSignup[] }>({
+    queryKey: ["/api/super-admin/beta-signups"],
+    enabled: isSuperAdmin,
+  });
+
+  const waitlistCount = waitlistData?.signups?.length || 0;
+
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-3xl font-bold tracking-tight" data-testid="text-admin-users-title">User Management</h1>
@@ -788,6 +915,17 @@ export default function AdminUsers() {
             <Briefcase className="h-4 w-4 mr-2" />
             Users
           </TabsTrigger>
+          {isSuperAdmin && (
+            <TabsTrigger value="waitlist" data-testid="tab-waitlist">
+              <Clock className="h-4 w-4 mr-2" />
+              Beta Waitlist
+              {waitlistCount > 0 && (
+                <Badge variant="secondary" className="ml-2" data-testid="badge-waitlist-count">
+                  {waitlistCount}
+                </Badge>
+              )}
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="team" className="mt-4">
@@ -797,6 +935,12 @@ export default function AdminUsers() {
         <TabsContent value="users" className="mt-4">
           <UsersTab />
         </TabsContent>
+
+        {isSuperAdmin && (
+          <TabsContent value="waitlist" className="mt-4">
+            <BetaWaitlistTab />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
