@@ -6784,6 +6784,8 @@ export async function registerRoutes(
         brokerName: projects.brokerName,
         prepaymentPenalty: projects.prepaymentPenalty,
         holdbackAmount: projects.holdbackAmount,
+        googleDriveFolderId: projects.googleDriveFolderId,
+        googleDriveFolderUrl: projects.googleDriveFolderUrl,
         userName: users.fullName,
         userEmail: users.email,
       })
@@ -6920,6 +6922,8 @@ export async function registerRoutes(
         holdbackAmount: project.holdbackAmount,
         loanAmount: project.loanAmount,
         loanTermMonths: project.loanTermMonths,
+        googleDriveFolderId: project.googleDriveFolderId,
+        googleDriveFolderUrl: project.googleDriveFolderUrl,
       };
       
       const docs = await db.select()
