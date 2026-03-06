@@ -18,6 +18,7 @@ import { StageProgressBar } from "@/components/ui/phase1/stage-progress-bar";
 import { StatusBadge } from "@/components/ui/phase1/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import TabOverview from "@/components/admin/deal-v2/TabOverview";
+import DealControls from "@/components/admin/deal-v2/DealControls";
 import TabDocuments from "@/components/admin/deal-v2/TabDocuments";
 import TabTasks from "@/components/admin/deal-v2/TabTasks";
 import TabPeople from "@/components/admin/deal-v2/TabPeople";
@@ -436,6 +437,10 @@ export default function DealDetailV2() {
       <div className="px-6 py-5">
         <KpiRow deal={deal} documents={documents} tasks={tasks} />
 
+        <div className="mt-5">
+          <DealControls deal={deal} dealId={dealId!} isAdmin={!!isAdmin} stages={dealData?.stages} />
+        </div>
+
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <div className="border rounded-lg mt-5 mb-5 bg-card">
             <TabsList className="bg-transparent rounded-none w-full justify-between p-0 h-auto">
@@ -467,7 +472,7 @@ export default function DealDetailV2() {
 
           <div className="mt-5">
             <TabsContent value="overview" className="m-0">
-              <TabOverview deal={deal} properties={properties} dealId={dealId!} isAdmin={!!isAdmin} stages={dealData?.stages} />
+              <TabOverview deal={deal} properties={properties} dealId={dealId!} isAdmin={!!isAdmin} />
             </TabsContent>
             <TabsContent value="documents" className="m-0">
               <TabDocuments deal={deal} documents={documents} dealId={dealId!} stages={dealData?.stages} />
