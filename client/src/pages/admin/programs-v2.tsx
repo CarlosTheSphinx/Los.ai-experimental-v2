@@ -2,8 +2,8 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   Layers, Plus, Search, CheckCircle2, FileText, ListTodo,
-  Pencil, Copy, BarChart3, Download, ShieldCheck,
-  ChevronRight, ChevronDown, AlertTriangle, Clock
+  Pencil, Copy, ShieldCheck,
+  ChevronRight, ChevronDown, AlertTriangle, Clock, Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import { ExpandableRow } from "@/components/ui/phase1/expandable-row";
 import { SlideOverPanel } from "@/components/ui/phase1/slide-over-panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -49,6 +50,7 @@ type CreditPolicyWithRules = CreditPolicy & { rules: CreditPolicyRule[] };
 function CreditPoliciesTab() {
   const [expandedPolicyId, setExpandedPolicyId] = useState<number | null>(null);
   const [expandedDocTypes, setExpandedDocTypes] = useState<Record<string, boolean>>({});
+  const { toast } = useToast();
 
   const { data: policies = [], isLoading } = useQuery<CreditPolicy[]>({
     queryKey: ["/api/admin/credit-policies"],
@@ -57,6 +59,34 @@ function CreditPoliciesTab() {
   const { data: policyDetails } = useQuery<CreditPolicyWithRules>({
     queryKey: ["/api/admin/credit-policies", expandedPolicyId],
     enabled: !!expandedPolicyId,
+  });
+
+  const { data: programs = [] } = useQuery<LoanProgram[]>({
+    queryKey: ["/api/admin/programs"],
+  });
+
+  const usedPolicyMap = useMemo(() => {
+    const map: Record<number, string[]> = {};
+    for (const p of programs) {
+      if (p.creditPolicyId) {
+        if (!map[p.creditPolicyId]) map[p.creditPolicyId] = [];
+        map[p.creditPolicyId].push(p.name);
+      }
+    }
+    return map;
+  }, [programs]);
+
+  const deletePolicyMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/admin/credit-policies/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/credit-policies"] });
+      toast({ title: "Credit policy deleted" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete credit policy", variant: "destructive" });
+    },
   });
 
   function togglePolicy(id: number) {
@@ -151,6 +181,58 @@ function CreditPoliciesTab() {
                   <Clock className="h-3.5 w-3.5" />
                   {formatDate(policy.updatedAt)}
                 </span>
+                {usedPolicyMap[policy.id] ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 opacity-40 cursor-not-allowed"
+                          disabled
+                          data-testid={`button-delete-policy-disabled-${policy.id}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      In use by {usedPolicyMap[policy.id].join(", ")}
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => e.stopPropagation()}
+                        data-testid={`button-delete-policy-${policy.id}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Credit Policy</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to delete "{policy.name}"? This action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel data-testid="button-cancel-delete-policy">Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => deletePolicyMutation.mutate(policy.id)}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          data-testid="button-confirm-delete-policy"
+                        >
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
               </div>
             </div>
 
@@ -428,24 +510,6 @@ function ExpandedProgramDetails({
           data-testid={`button-duplicate-${program.id}`}
         >
           <Copy className="h-3.5 w-3.5 mr-2" /> Duplicate
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="text-[14px] px-4 py-2 h-auto"
-          onClick={(e) => { e.stopPropagation(); window.location.href = "/phase1/deals"; }}
-          data-testid={`button-view-deals-${program.id}`}
-        >
-          <BarChart3 className="h-3.5 w-3.5 mr-2" /> View Deals{dealCount != null ? ` (${dealCount})` : ""}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="text-[14px] px-4 py-2 h-auto"
-          onClick={(e) => e.stopPropagation()}
-          data-testid={`button-export-${program.id}`}
-        >
-          <Download className="h-3.5 w-3.5 mr-2" /> Export
         </Button>
       </div>
     </div>

@@ -1,62 +1,51 @@
 # Loan Pricing White-Label Tool
 
 ## Overview
-This project is a white-label loan pricing application designed for Sphinx Capital. Its core purpose is to automate and streamline the loan pricing process, enhance sales efficiency, and provide comprehensive tools for managing quotes, agreements, and the entire loan closing lifecycle. The application integrates with external pricing providers while maintaining confidentiality for proprietary sources. It aims to offer a robust platform for internal administrative use and a seamless borrower experience, thereby improving loan origination and management capabilities.
+This project is a white-label loan pricing application for Sphinx Capital, designed to automate loan pricing, enhance sales efficiency, and manage quotes, agreements, and the loan closing lifecycle. It integrates external pricing providers while protecting proprietary information, offering a robust platform for internal administration and a seamless borrower experience to improve loan origination and management.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
 ## System Architecture
-The application is built on a modern web stack, utilizing React 18 with TypeScript for the frontend, Express.js with TypeScript for the backend, and PostgreSQL with Drizzle ORM for data persistence.
+The application uses a modern web stack: React 18 with TypeScript for the frontend, Express.js with TypeScript for the backend, and PostgreSQL with Drizzle ORM for data persistence.
 
 **Frontend:**
--   **Technology Stack**: React 18, TypeScript, Wouter, TanStack React Query, Tailwind CSS (shadcn/ui New York style), Framer Motion, React Hook Form with Zod, Vite.
--   **Key Features**: Loan pricing forms (DSCR, Fix and Flip/Ground Up Construction), quote and agreement management (PDF, e-signatures, document timelines), multi-stage deal/loan management, borrower portal with token-based access, borrower quote flow, and a comprehensive admin back office with dashboards, user management, and loan program configuration. It includes onboarding wizards for new lenders and for creating loan programs with a customizable quote form builder. A Commercial Deal Submission Module with AI-powered pre-screener and review engine is also integrated.
+-   **Technology Stack**: React 18, TypeScript, Wouter, TanStack React Query, Tailwind CSS (shadcn/ui), Framer Motion, React Hook Form with Zod, Vite.
+-   **Key Features**: Loan pricing forms (DSCR, Fix and Flip/Ground Up Construction), quote/agreement management (PDF, e-signatures), multi-stage deal/loan management, borrower portal, borrower quote flow, and an admin back office with dashboards, user management, and loan program configuration. Includes onboarding wizards, a customizable quote form builder, and a Commercial Deal Submission Module with AI-powered pre-screener.
+-   **UI/UX**: Utilizes a "Pipeline Design System" for consistent UI elements, typography, and component styling across admin pages. Supports List, Board (Kanban), and Compact views for the pipeline.
 
 **Backend:**
 -   **Technology Stack**: Express.js, TypeScript, Drizzle ORM, RESTful API, Zod for validation.
--   **Core Functionality**: JWT-based authentication with httpOnly cookies and Google OAuth 2.0 support, multi-tenant architecture, user type differentiation (Brokers/Borrowers), deal-linked messaging, and automated notification systems. It orchestrates frontend input with external pricing requests and interest rate retrieval.
--   **SOC 2 Compliance Layer**: Includes robust security features such as account lockout, immutable audit logging for authentication events, password expiry and complexity enforcement, bcrypt hashing, JWT token invalidation, PII encryption middleware, and Content-Security-Policy.
--   **API Key Management System**: SOC 2-compliant API key infrastructure with hashed storage, scope-based access control, per-key rate limiting, and complete usage audit trails.
--   **Webhook System**: SOC 2-compliant webhook infrastructure featuring HMAC-SHA256 signature verification, SSRF protection, exponential backoff retry, and timing-safe signature comparison.
+-   **Core Functionality**: JWT-based authentication with httpOnly cookies and Google OAuth 2.0, multi-tenant architecture, user type differentiation (Brokers/Borrowers), deal-linked messaging, automated notifications, and orchestration of external pricing requests.
+-   **Security (SOC 2 Compliance Layer)**: Features account lockout, immutable audit logging, password expiry/complexity, bcrypt hashing, JWT token invalidation, PII encryption, and Content-Security-Policy.
+-   **API Key Management**: SOC 2-compliant system with hashed storage, scope-based access control, rate limiting, and audit trails.
+-   **Webhook System**: SOC 2-compliant infrastructure with HMAC-SHA256 verification, SSRF protection, exponential backoff retry, and timing-safe signature comparison.
 
-**Database Schema Highlights**: Manages users, pricing requests, quotes, documents, e-signatures, audit logs, projects (deals), tasks, activities, system settings, admin tasks, partners, loan programs, message threads, onboarding progress, loan digest configurations, and commercial loan submissions. Projects table includes dedicated loan detail columns: `ysp`, `lenderOriginationPoints`, `brokerOriginationPoints`, `brokerName`, `prepaymentPenalty`, `holdbackAmount` — populated from quote data on deal creation and editable via the Loan Details card.
+**Database Schema Highlights**: Manages users, pricing requests, quotes, documents, e-signatures, audit logs, projects (deals), tasks, activities, system settings, admin tasks, partners, loan programs, message threads, onboarding progress, loan digest configurations, and commercial loan submissions.
 
 **Key Architectural Decisions:**
--   **Google Drive Integration**: Automates folder creation and document synchronization for projects using super_admin's OAuth tokens.
--   **Multi-Property Support**: Handles multiple properties per loan with full CRUD operations and property addresses used for document linking and AI review.
--   **Program-to-Deal Sync**: Non-destructively propagates changes from loan program templates to associated existing deals.
--   **Unified Checklist System**: Implements a single source of truth for checklists across admin, broker, and borrower views using role-based filtering.
--   **Multi-Tenancy (Full Data Isolation)**: Ensures complete tenant isolation with `tenantId` columns in key tables and robust tenant resolution logic.
--   **AI Draft Messages Panel**: A floating sticky panel on the deal detail page displaying AI-generated communication drafts for approval.
--   **Deal Memory System**: A persistent right sidebar on the deal detail page that serves as the AI communication agent's historical context, injecting relevant context into AI interactions.
--   **Gmail Integration**: Opt-in email integration allowing lenders to connect Gmail accounts for syncing threads, messages, and attachments, with features like in-app inbox, deal linking, and notifications.
--   **Terminology**: While the database uses `projects`, the UI consistently refers to entities as "Deals" or "Loans". Loan numbers are auto-generated.
--   **Pipeline Design System**: A documented visual language applied across admin pages, defining consistent UI elements, typography, and component styling.
--   **Admin Dashboard**: Provides key performance indicators (KPIs), a task board, and a list of recent deals for administrative oversight.
--   **Quotes Page**: A unified interface for managing quotes, displaying KPIs, full-width quote cards with action buttons, PandaDoc status integration, and options to convert signed quotes to deals.
--   **Term Sheet Signed Notification**: In-app notifications are triggered when a PandaDoc status changes to `completed`, alerting relevant users.
--   **Loan Programs Page**: Restyled to the Pipeline design system with expanded table columns, search and filter capabilities, rich expanded row details, and an action bar for managing programs. Includes an integrated "Credit Policies" tab with 3-level progressive disclosure (policies → document type groups → individual rules).
--   **Email Compose Modal**: In-app email composition via connected Gmail/Outlook integration (`ComposeEmailModal.tsx`). Replaces `mailto:` links. If no email account is connected, prompts user to connect via Integrations page. Backend endpoint: `POST /api/email/compose` using `sendNewEmail()` in `server/services/gmail.ts`.
--   **Auto Process Pipeline (Deal Detail V2)**: The "Auto Process" button on `deal-detail-v2.tsx` triggers the AI pipeline (`POST /api/admin/agents/pipeline/start`), polls status every 3 seconds, and shows an animated emerald progress bar with percentage and current step name. Detects already-running pipelines on page load. After pipeline completes, drafted communications appear in the AI Insights tab for review/edit/approve/discard.
--   **Beta Waitlist Tracking**: Super admins can view Coming Soon page signups via a "Beta Waitlist" tab on the Users page (`/admin/users`). Data from `beta_signups` table is displayed with search functionality. Endpoint: `GET /api/super-admin/beta-signups`.
--   **Program Creation Wizard**: A multi-step wizard for creating loan programs, featuring template selection, credit policy definition, customizable quote forms, stage management, document and task assignment, AI rule configuration, pricing setup, and review and activation options. DSCR quote form defaults include comprehensive property fields (address with auto-fill state/zip, conditional refinance/purchase fields, annualHOA, auto-calculated DSCR) and borrower entity/member fields with a repeatable "Add Member" pattern.
--   **Extended QuoteFormField Type**: Supports `fieldType` values `date`, `radio`, `address` (AddressAutocomplete) plus properties `readOnly`, `autoFilledFrom`, `computedFrom`, `repeatable`, `repeatGroupKey` for computed fields, auto-filled fields, and repeatable member groups.
--   **Program-Driven Deal Detail Cards**: The deal detail Overview tab dynamically renders Loan Details, Property Details, and Borrower Details cards based on the program's `quoteFormFields` configuration. Each form field has a `displayGroup` (`loan_details`, `property_details`, or `borrower_details`) that determines which card it appears in. The Loan Details card has "locked" fields (LTV, YSP, Interest Rate, Lender/Broker Origination Points, Broker Name, Holdback Amount, Term) that always appear regardless of program config. The `GET /api/admin/deals/:id` endpoint includes the program's `quoteFormFields` in its response. When no program is set, cards fall back to hardcoded default fields. Server-side role enforcement prevents non-admin users from modifying `ysp`, `lenderOriginationPoints`, and `brokerOriginationPoints` on both PUT and PATCH project endpoints.
--   **Coming Soon / Landing Mode**: A feature-flag-gated mode activated by setting `VITE_SITE_MODE=landing` (frontend) and `SITE_MODE=landing` (backend). When active, the frontend shows a Coming Soon page at `/` with email collection, while `/login`, `/register`, `/forgot-password`, and `/reset-password/:token` remain accessible. Unknown paths return 404. Authenticated users get full app access. The backend allows `/api/subscribe`, `/api/health`, and all `/api/auth/*` endpoints; other API routes require a valid auth token. Email signups are stored in the `beta_signups` table and receive a confirmation email via Resend. Set both vars to `full` (or remove them) to restore normal app behavior.
--   **Enhanced Document Management (TabDocuments)**: The Documents tab on Deal Detail V2 features per-document upload buttons, a 5-step status lifecycle (Pending → Uploaded → AI Reviewed → Approved/Rejected → Synced to Drive), and per-document AI review triggers. Three review modes (Automatic, Timed, Manual) each have configurable settings including communication frequency and "auto-send if not reviewed by" deadline (stored as `ai_comm_auto_send` and `ai_comm_send_deadline` on the `projects` table). Manual mode includes an "Auto Process" button to batch-review all uploaded documents. API endpoints: `POST /api/admin/deals/:dealId/documents/:docId/review` (single doc AI review), `POST /api/admin/deals/:dealId/documents/review-all` (batch review). Document preview opens files in a new tab with inline Content-Disposition. Google Drive sync is explicit via a "Push to Drive" button per document (no auto-sync on upload). Action buttons use blue circle styling with white icons; synced-to-Drive links use emerald circles.
--   **People Tab (TabPeople)**: The People tab on Deal Detail V2 shows Borrower (with portal link), Broker, Team Members, and a **Third Parties** section with full CRUD for external contacts (Title Contact, Attorney, Appraiser, Insurance Agent, etc.). Uses endpoints: `GET/POST /api/admin/deals/:dealId/third-parties`, `PATCH/DELETE /api/admin/deals/:dealId/third-parties/:contactId`. Data stored in `deal_third_parties` table.
--   **Pipeline Kanban View**: The pipeline page (`deals-v2.tsx`) supports List, Board (Kanban), and Compact view modes. The Board view renders `DealsKanbanView` component which fetches from `/api/admin/pipeline` and supports drag-and-drop stage transitions via `PATCH /api/admin/projects/:id/move-stage`.
--   **Enhanced Deal Controls (TabOverview)**: The Deal Controls card on the deal detail Overview tab includes: (1) **Processor Assignment** — multi-select with badge chips showing assigned processors with X-to-remove, plus an "Add processor" dropdown for unassigned team members. Uses endpoints `GET/POST/DELETE /api/admin/projects/:projectId/processors` and `GET /api/admin/processors`. (2) **Dynamic Status/Stage Dropdowns** — Current Stage dropdown syncs with the deal's program-specific workflow stages (passed as `stages` prop from `deal-detail-v2.tsx`), falling back to hardcoded defaults when no program stages exist. Deal Status dropdown fetches admin-configured statuses from `GET /api/admin/deal-statuses` (table `deal_statuses`), falling back to defaults. (3) **Loan Program Change Confirmation** — Changing the loan program triggers an AlertDialog warning that the pipeline will be rebuilt; requires explicit confirmation. Non-admin users cannot change the program (dropdown disabled).
--   **AI Review Results Modal**: A full-screen overlay modal (`AIReviewResultsModal.tsx`) that automatically appears when the Auto Process pipeline completes. Takes up 70% of viewport width with greyed-out background. Contains two sections: (1) **Document Review Results** — shows each uploaded document with AI review status (passed/failed/needs review), confidence score, review reason, and per-document approve/reject buttons. Summary counts of passed/failed/pending at the top. (2) **AI-Generated Messages** — shows draft communications with recipient info, editable subject/body, and action buttons: Edit, Approve & Send, Schedule (with date/time picker via `POST /api/admin/communications/:commId/schedule`), and Discard. Bottom action bar has "Approve All & Close" (batch approves all documents via `POST /api/admin/deals/:dealId/documents/approve-all` and all draft comms) and "Close" button. A "Review Results" button in the deal header allows reopening the modal anytime.
+-   **Multi-Tenancy**: Full data isolation using `tenantId` columns and robust resolution logic.
+-   **Google Drive Integration**: Automated folder creation and document synchronization per project.
+-   **Multi-Property Support**: Handles multiple properties per loan with CRUD operations.
+-   **Program-to-Deal Sync**: Non-destructive propagation of loan program template changes to existing deals.
+-   **Unified Checklist System**: Single source of truth for checklists across user roles with role-based filtering.
+-   **AI Integration**: AI Draft Messages Panel for AI-generated communication drafts and a Deal Memory System for persistent AI context. An "Auto Process Pipeline" triggers AI-powered document and communication generation.
+-   **Gmail Integration**: Opt-in email integration for syncing threads, messages, and attachments, with in-app inbox and notifications.
+-   **Dynamic Deal Details**: Deal detail cards (Loan, Property, Borrower) on the Overview tab dynamically render based on program's `quoteFormFields` configuration, with role-based access control for critical fields.
+-   **Enhanced Document Management**: 5-step status lifecycle (Pending to Synced to Drive), per-document AI review triggers (Automatic, Timed, Manual modes), and explicit "Push to Drive" functionality.
+-   **People Tab**: Manages Borrower, Broker, Team Members, and Third Parties with full CRUD.
+-   **Enhanced Deal Controls**: Features processor assignment, dynamic status/stage dropdowns (program-specific or default), and confirmation for loan program changes.
+-   **Notification System**: Configurable notification preferences per tenant with fallback to global defaults, covering various app activities.
+-   **Program Creation Wizard**: Multi-step wizard for defining loan programs, including template selection, credit policies, quote forms, stages, tasks, AI rules, and pricing.
+-   **Site Modes**: Supports `landing` mode for a "Coming Soon" page with email collection and `full` mode for normal application access, controlled by feature flags.
 
 ## External Dependencies
 
--   **Apify**: Cloud-based web scraping for external pricing providers.
--   **PostgreSQL**: Primary relational database.
--   **PandaDoc**: E-signing service for agreement management, status synchronization, and document retrieval.
--   **Resend**: Email sending service.
--   **Twilio**: SMS messaging service.
--   **Google OAuth 2.0**: For user authentication and Google Drive integration.
--   **Google Drive API**: For automatic project folder creation and document synchronization.
--   **n8n / External LOS**: Optional webhook integrations for automation and Loan Origination Systems.
+-   **Apify**: Web scraping for external pricing providers.
+-   **PostgreSQL**: Primary database.
+-   **PandaDoc**: E-signing, status synchronization, and document retrieval.
+-   **Resend**: Email sending.
+-   **Twilio**: SMS messaging.
+-   **Google OAuth 2.0**: Authentication and Google Drive integration.
+-   **Google Drive API**: For folder creation and document synchronization.
+-   **n8n / External LOS**: Optional webhook integrations.

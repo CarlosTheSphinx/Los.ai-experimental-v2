@@ -23,6 +23,7 @@ import {
   documentReviewResults,
 } from "@shared/schema";
 import { eq, and, isNull } from "drizzle-orm";
+import { isNotificationEnabled } from "./notificationHelper";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -200,7 +201,7 @@ async function handleReviewFail(
       .from(users)
       .where(eq(users.email, project.borrowerEmail));
 
-    if (borrowerUser && alerts.failAlertChannels?.inApp) {
+    if (borrowerUser && alerts.failAlertChannels?.inApp && await isNotificationEnabled("doc_review_failed")) {
       await db.insert(notifications).values({
         userId: borrowerUser.id,
         type: "doc_review_failed",
@@ -237,7 +238,7 @@ async function handleReviewFail(
         .from(users)
         .where(eq(users.email, brokerEmail));
 
-      if (brokerUser && alerts.failAlertChannels?.inApp) {
+      if (brokerUser && alerts.failAlertChannels?.inApp && await isNotificationEnabled("doc_review_failed")) {
         await db.insert(notifications).values({
           userId: brokerUser.id,
           type: "doc_review_failed",
@@ -265,7 +266,7 @@ async function handleReviewFail(
   }
 
   // Always notify the lender/processor about fails too
-  if (lenderId) {
+  if (lenderId && await isNotificationEnabled("doc_review_failed")) {
     await db.insert(notifications).values({
       userId: lenderId,
       type: "doc_review_failed",
@@ -305,7 +306,7 @@ async function handleReviewPass(
   const dealName = project.projectName || `Deal #${project.id}`;
 
   // In-app notification to lender
-  if (alerts.passNotifyChannels?.inApp) {
+  if (alerts.passNotifyChannels?.inApp && await isNotificationEnabled("doc_review_passed")) {
     await db.insert(notifications).values({
       userId: lenderId,
       type: "doc_review_passed",
@@ -443,14 +444,16 @@ export async function notifyDraftReady(
     const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
     const dealName = project?.projectName || `Deal #${projectId}`;
 
-    await db.insert(notifications).values({
-      userId: config.lenderId,
-      type: "draft_ready",
-      title: `Communication Draft Ready`,
-      message: `A new communication draft for ${dealName} is ready for your review.`,
-      dealId: projectId,
-      link: `/deals/${projectId}?tab=communications`,
-    });
+    if (await isNotificationEnabled("draft_ready")) {
+      await db.insert(notifications).values({
+        userId: config.lenderId,
+        type: "draft_ready",
+        title: `Communication Draft Ready`,
+        message: `A new communication draft for ${dealName} is ready for your review.`,
+        dealId: projectId,
+        link: `/deals/${projectId}?tab=communications`,
+      });
+    }
   } catch (err: any) {
     console.error(`[DocReviewOrch] Draft ready notify error:`, err.message);
   }

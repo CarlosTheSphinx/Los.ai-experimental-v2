@@ -18,6 +18,7 @@ import {
 } from '@shared/schema';
 import { eq, and, desc, gt, isNotNull } from 'drizzle-orm';
 import { classifyEmailAttachment } from './emailDocClassifier';
+import { isNotificationEnabled } from './notificationHelper';
 
 const DEFAULT_POLL_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -250,15 +251,17 @@ export async function runEmailDocCheck(): Promise<{
                   const senderDisplay =
                     message.fromName || message.fromAddress || 'Someone';
 
-                  await db.insert(notifications).values({
-                    userId: account.userId,
-                    type: 'email_document_detected',
-                    title: `Document received: ${classification.documentTypeLabel}`,
-                    message: `${senderDisplay} sent a document on ${dealName}. I think it's a ${classification.documentTypeLabel} (${classification.confidence}% confident). Would you like to view and approve?`,
-                    dealId: link.dealId,
-                    link: `/deals/${link.dealId}?tab=emails&threadId=${thread.id}`,
-                    isRead: false,
-                  });
+                  if (await isNotificationEnabled('email_document_detected')) {
+                    await db.insert(notifications).values({
+                      userId: account.userId,
+                      type: 'email_document_detected',
+                      title: `Document received: ${classification.documentTypeLabel}`,
+                      message: `${senderDisplay} sent a document on ${dealName}. I think it's a ${classification.documentTypeLabel} (${classification.confidence}% confident). Would you like to view and approve?`,
+                      dealId: link.dealId,
+                      link: `/deals/${link.dealId}?tab=emails&threadId=${thread.id}`,
+                      isRead: false,
+                    });
+                  }
 
                   results.classified++;
                 }

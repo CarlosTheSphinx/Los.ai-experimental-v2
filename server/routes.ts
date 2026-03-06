@@ -27,6 +27,7 @@ import {
   type AuthRequest 
 } from './auth';
 import { getTenantId } from './utils/tenant';
+import { isNotificationEnabled } from './services/notificationHelper';
 import {
   runDigestJob,
   sendTestDigest,
@@ -10463,7 +10464,13 @@ Respond ONLY with valid JSON in this format:
       if (user?.role !== 'super_admin' && existingPolicy.createdBy !== req.user!.id) {
         return res.status(403).json({ error: 'Not authorized to delete this credit policy' });
       }
-      await db.update(loanPrograms).set({ creditPolicyId: null }).where(eq(loanPrograms.creditPolicyId, id));
+      const linkedPrograms = await db.select({ id: loanPrograms.id, name: loanPrograms.name })
+        .from(loanPrograms)
+        .where(eq(loanPrograms.creditPolicyId, id));
+      if (linkedPrograms.length > 0) {
+        const names = linkedPrograms.map(p => p.name).join(', ');
+        return res.status(409).json({ error: `Cannot delete: policy is in use by ${names}` });
+      }
       await storage.deleteCreditPolicy(id);
       res.json({ success: true });
     } catch (error: any) {
@@ -17932,6 +17939,9 @@ Return JSON only:
     link?: string;
   }) {
     try {
+      const enabled = await isNotificationEnabled(data.type);
+      if (!enabled) return null;
+
       const result = await db.insert(notifications).values({
         userId: data.userId,
         type: data.type,

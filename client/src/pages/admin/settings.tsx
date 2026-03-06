@@ -572,7 +572,7 @@ export default function AdminSettings() {
           <Label htmlFor={key} className="font-medium">
             {config.label}
           </Label>
-          {setting?.updatedAt && (
+          {setting?.updatedAt && !isNaN(new Date(setting.updatedAt).getTime()) && (
             <span className="text-xs text-muted-foreground">
               Updated {format(new Date(setting.updatedAt), "MMM d, yyyy")}
             </span>

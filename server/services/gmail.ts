@@ -4,6 +4,7 @@ import { db } from '../db';
 import { emailAccounts, emailThreads, emailMessages, emailThreadDealLinks, notifications } from '@shared/schema';
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import { decryptToken, encryptToken } from '../utils/encryption';
+import { isNotificationEnabled } from './notificationHelper';
 
 const GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
@@ -395,15 +396,17 @@ export async function checkLinkedThreadsForNewEmails(accountId: number): Promise
         const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
         if (recentNotif && recentNotif.createdAt > oneHourAgo) continue;
         
-        await db.insert(notifications).values({
-          userId: account.userId,
-          type: 'new_email',
-          title: 'New Email on Linked Deal',
-          message: `New email from ${emailThread.fromName || emailThread.fromAddress}: "${emailThread.subject}"`,
-          dealId: link.dealId,
-          link: `/messages?tab=email&threadId=${emailThread.id}`,
-          isRead: false,
-        });
+        if (await isNotificationEnabled('new_email')) {
+          await db.insert(notifications).values({
+            userId: account.userId,
+            type: 'new_email',
+            title: 'New Email on Linked Deal',
+            message: `New email from ${emailThread.fromName || emailThread.fromAddress}: "${emailThread.subject}"`,
+            dealId: link.dealId,
+            link: `/messages?tab=email&threadId=${emailThread.id}`,
+            isRead: false,
+          });
+        }
       }
     }
   } catch (error) {

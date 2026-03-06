@@ -1,136 +1,170 @@
 import { useTenantConfig } from "@/hooks/use-tenant-config";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { formatPhoneNumber, getPhoneError, getEmailError } from "@/lib/validation";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { useState, useEffect } from "react";
-import { Save, Plus, Trash2, Settings, Mail, MessageSquare, Bell, ChevronDown, ChevronRight } from "lucide-react";
+import {
+  Save, MessageSquare, Bell, FileUp, FileCheck, ClipboardList,
+  AtSign, Mail, Paperclip, GitBranch, Brain, CheckCircle2, XCircle,
+  FileText, type LucideIcon
+} from "lucide-react";
 
-interface EmailTemplate {
-  subject: string;
-  body: string;
+interface NotificationTypeConfig {
+  key: string;
+  label: string;
+  description: string;
+  icon: LucideIcon;
+  iconColor: string;
 }
 
-interface NotificationRule {
-  event: string;
-  roles: string[];
-  channels: string[];
-}
+const notificationGroups: { title: string; items: NotificationTypeConfig[] }[] = [
+  {
+    title: "Messaging",
+    items: [
+      {
+        key: "new_message",
+        label: "New Message",
+        description: "When a new message is received between borrower and lender",
+        icon: MessageSquare,
+        iconColor: "text-green-500",
+      },
+      {
+        key: "mention_in_note",
+        label: "Mention in Note",
+        description: "When a user is @mentioned in a deal note",
+        icon: AtSign,
+        iconColor: "text-purple-500",
+      },
+    ],
+  },
+  {
+    title: "Tasks",
+    items: [
+      {
+        key: "task_assigned",
+        label: "Task Assigned",
+        description: "When a task is assigned or reassigned to a user",
+        icon: ClipboardList,
+        iconColor: "text-orange-500",
+      },
+    ],
+  },
+  {
+    title: "Pipeline",
+    items: [
+      {
+        key: "stage_change",
+        label: "Stage Change",
+        description: "When a deal moves to a new pipeline stage",
+        icon: GitBranch,
+        iconColor: "text-blue-500",
+      },
+    ],
+  },
+  {
+    title: "Documents",
+    items: [
+      {
+        key: "document_uploaded",
+        label: "Document Uploaded",
+        description: "When a borrower or broker uploads a document",
+        icon: FileUp,
+        iconColor: "text-blue-500",
+      },
+      {
+        key: "document_approved",
+        label: "Document Approved",
+        description: "When a document is approved",
+        icon: CheckCircle2,
+        iconColor: "text-emerald-500",
+      },
+      {
+        key: "document_rejected",
+        label: "Document Rejected",
+        description: "When a document is rejected",
+        icon: XCircle,
+        iconColor: "text-red-500",
+      },
+    ],
+  },
+  {
+    title: "E-Signatures",
+    items: [
+      {
+        key: "term_sheet_signed",
+        label: "Term Sheet Signed",
+        description: "When a PandaDoc agreement is completed/signed",
+        icon: FileCheck,
+        iconColor: "text-emerald-500",
+      },
+    ],
+  },
+  {
+    title: "Email Integration",
+    items: [
+      {
+        key: "new_email",
+        label: "New Email",
+        description: "When a new email arrives on a linked deal via Gmail/Outlook",
+        icon: Mail,
+        iconColor: "text-indigo-500",
+      },
+      {
+        key: "email_document_detected",
+        label: "Email Document Detected",
+        description: "When AI detects a document in an email attachment",
+        icon: Paperclip,
+        iconColor: "text-amber-500",
+      },
+    ],
+  },
+  {
+    title: "AI Review",
+    items: [
+      {
+        key: "doc_review_failed",
+        label: "AI Review Failed",
+        description: "When AI document review finds issues with a document",
+        icon: XCircle,
+        iconColor: "text-red-500",
+      },
+      {
+        key: "doc_review_passed",
+        label: "AI Review Passed",
+        description: "When AI document review passes a document",
+        icon: CheckCircle2,
+        iconColor: "text-emerald-500",
+      },
+      {
+        key: "draft_ready",
+        label: "Draft Communication Ready",
+        description: "When AI generates a draft communication for review",
+        icon: FileText,
+        iconColor: "text-blue-500",
+      },
+    ],
+  },
+];
 
-const eventLabels: Record<string, string> = {
-  quoteCreated: "Quote Created",
-  documentSent: "Document Sent",
-  stageChanged: "Stage Changed",
-  taskCompleted: "Task Completed",
-  digestUpdate: "Digest Update",
-};
+const allKeys = notificationGroups.flatMap(g => g.items.map(i => i.key));
 
-const ruleEventLabels: Record<string, string> = {
-  quote_created: "Quote Created",
-  document_signed: "Document Signed",
-  stage_changed: "Stage Changed",
-  task_completed: "Task Completed",
-  new_message: "New Message",
-  digest_sent: "Digest Sent",
-};
-
-const defaults = {
-  senderEmail: "",
-  senderPhone: "",
-  inAppEnabled: true,
-  emailEnabled: true,
-  smsEnabled: false,
-  emailTemplates: {
-    quoteCreated: { subject: "New Quote Created", body: "A new quote has been created for {{property_address}}." },
-    documentSent: { subject: "Documents Ready for Signature", body: "Documents are ready for your review at {{portal_link}}." },
-    stageChanged: { subject: "Loan Status Update", body: "Your loan for {{property_address}} has moved to {{stage_name}}." },
-    taskCompleted: { subject: "Task Completed", body: "A task has been completed for {{property_address}}." },
-    digestUpdate: { subject: "Loan Progress Update", body: "Here is your latest loan update for {{property_address}}." },
-  } as Record<string, EmailTemplate>,
-  smsTemplates: {
-    quoteCreated: "New quote created for {{property_address}}. Check your dashboard.",
-    documentSent: "Documents ready for signing: {{portal_link}}",
-    stageChanged: "Loan update: {{property_address}} moved to {{stage_name}}",
-    taskCompleted: "Task completed for {{property_address}}",
-    digestUpdate: "Loan update for {{property_address}}: {{documents_count}} docs needed",
-  } as Record<string, string>,
-  notificationRules: [
-    { event: "quote_created", roles: ["admin", "staff"], channels: ["email", "in_app"] },
-    { event: "document_signed", roles: ["admin", "staff"], channels: ["email", "in_app", "sms"] },
-    { event: "stage_changed", roles: ["admin", "staff", "processor"], channels: ["email", "in_app"] },
-    { event: "task_completed", roles: ["admin"], channels: ["in_app"] },
-    { event: "new_message", roles: ["admin", "staff"], channels: ["in_app"] },
-  ] as NotificationRule[],
-};
+const defaultPrefs: Record<string, boolean> = {};
+allKeys.forEach(k => { defaultPrefs[k] = true; });
 
 export default function NotificationsConfig() {
-  const { config, isLoading, hasChanges, updateConfig, updateField, save, isPending, isSuccess } =
-    useTenantConfig("tenant_notifications_config", defaults);
+  const { config, isLoading, hasChanges, updateConfig, save, isPending, isSuccess } =
+    useTenantConfig("notification_preferences", defaultPrefs);
   const { toast } = useToast();
-  const [expandedEmail, setExpandedEmail] = useState<Set<string>>(new Set());
-  const [expandedSms, setExpandedSms] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (isSuccess) {
-      toast({ title: "Notification settings saved", description: "Your notifications and messaging configuration has been updated." });
+      toast({ title: "Notification preferences saved", description: "Your notification toggles have been updated." });
     }
   }, [isSuccess]);
-
-  const toggleEmailExpanded = (key: string) => {
-    setExpandedEmail(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
-  };
-
-  const toggleSmsExpanded = (key: string) => {
-    setExpandedSms(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
-  };
-
-  const updateEmailTemplate = (key: string, field: keyof EmailTemplate, value: string) => {
-    updateConfig({
-      emailTemplates: {
-        ...config.emailTemplates,
-        [key]: { ...config.emailTemplates[key], [field]: value },
-      },
-    });
-  };
-
-  const updateSmsTemplate = (key: string, value: string) => {
-    updateConfig({
-      smsTemplates: {
-        ...config.smsTemplates,
-        [key]: value,
-      },
-    });
-  };
-
-  const updateRule = (index: number, field: keyof NotificationRule, value: any) => {
-    const updated = [...config.notificationRules];
-    updated[index] = { ...updated[index], [field]: value };
-    updateField("notificationRules", updated);
-  };
-
-  const addRule = () => {
-    updateField("notificationRules", [
-      ...config.notificationRules,
-      { event: "quote_created", roles: ["admin"], channels: ["in_app"] },
-    ]);
-  };
-
-  const removeRule = (index: number) => {
-    updateField("notificationRules", config.notificationRules.filter((_: NotificationRule, i: number) => i !== index));
-  };
 
   if (isLoading) {
     return (
@@ -148,263 +182,76 @@ export default function NotificationsConfig() {
     );
   }
 
+  const enabledCount = allKeys.filter(k => config[k] !== false).length;
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle data-testid="text-notifications-config-title">Notifications & Messaging</CardTitle>
-        <CardDescription data-testid="text-notifications-config-description">
-          Configure notification channels, email/SMS templates, and notification rules.
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle data-testid="text-notifications-config-title">Notification Preferences</CardTitle>
+            <CardDescription data-testid="text-notifications-config-description">
+              Control which actions trigger in-app notifications. Toggle each notification type on or off.
+            </CardDescription>
+          </div>
+          <Badge variant="secondary" className="text-xs" data-testid="badge-notification-count">
+            {enabledCount} of {allKeys.length} enabled
+          </Badge>
+        </div>
       </CardHeader>
-      <CardContent className="space-y-8">
-        <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Settings className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-sm font-medium">Global Settings</h3>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="senderEmail">Sender Email</Label>
-              <Input
-                id="senderEmail"
-                data-testid="input-sender-email"
-                type="email"
-                value={config.senderEmail}
-                onChange={(e) => updateField("senderEmail", e.target.value)}
-                placeholder="noreply@example.com"
-              />
-              {getEmailError(config.senderEmail) && (
-                <p className="text-sm text-red-500">{getEmailError(config.senderEmail)}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="senderPhone">Sender Phone</Label>
-              <Input
-                id="senderPhone"
-                data-testid="input-sender-phone"
-                type="tel"
-                value={config.senderPhone}
-                onChange={(e) => updateField("senderPhone", formatPhoneNumber(e.target.value))}
-                placeholder="(555) 000-0000"
-              />
-              {getPhoneError(config.senderPhone) && (
-                <p className="text-sm text-red-500">{getPhoneError(config.senderPhone)}</p>
-              )}
-            </div>
-          </div>
-          <div className="grid gap-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="space-y-0.5">
-                <Label htmlFor="inAppEnabled">In-App Notifications</Label>
-                <p className="text-sm text-muted-foreground">Show notifications within the application</p>
-              </div>
-              <Switch
-                id="inAppEnabled"
-                data-testid="switch-in-app-enabled"
-                checked={config.inAppEnabled}
-                onCheckedChange={(checked) => updateField("inAppEnabled", checked)}
-              />
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <div className="space-y-0.5">
-                <Label htmlFor="emailEnabled">Email Notifications</Label>
-                <p className="text-sm text-muted-foreground">Send notifications via email</p>
-              </div>
-              <Switch
-                id="emailEnabled"
-                data-testid="switch-email-enabled"
-                checked={config.emailEnabled}
-                onCheckedChange={(checked) => updateField("emailEnabled", checked)}
-              />
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <div className="space-y-0.5">
-                <Label htmlFor="smsEnabled">SMS Notifications</Label>
-                <p className="text-sm text-muted-foreground">Send notifications via SMS</p>
-              </div>
-              <Switch
-                id="smsEnabled"
-                data-testid="switch-sms-enabled"
-                checked={config.smsEnabled}
-                onCheckedChange={(checked) => updateField("smsEnabled", checked)}
-              />
-            </div>
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Mail className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-sm font-medium">Email Templates</h3>
-          </div>
-          <div className="grid gap-2">
-            {Object.entries(config.emailTemplates).map(([key, template]) => {
-              const tmpl = template as EmailTemplate;
-              const isExpanded = expandedEmail.has(key);
-              return (
-                <div key={key} className="rounded-md border" data-testid={`card-email-template-${key}`}>
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-2 p-3 text-left flex-wrap"
-                    onClick={() => toggleEmailExpanded(key)}
-                    data-testid={`button-toggle-email-${key}`}
+      <CardContent className="space-y-6">
+        {notificationGroups.map((group) => (
+          <section key={group.title} className="space-y-3">
+            <h3 className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground" data-testid={`heading-group-${group.title.toLowerCase().replace(/\s+/g, '-')}`}>
+              {group.title}
+            </h3>
+            <div className="space-y-1">
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const isEnabled = config[item.key] !== false;
+                return (
+                  <div
+                    key={item.key}
+                    className="flex items-center justify-between gap-4 rounded-lg border border-border/50 px-4 py-3"
+                    data-testid={`row-notification-${item.key}`}
                   >
-                    {isExpanded ? (
-                      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    )}
-                    <span className="font-medium">{eventLabels[key] || key}</span>
-                  </button>
-                  {isExpanded && (
-                    <div className="border-t p-3 space-y-3">
-                      <div className="space-y-2">
-                        <Label htmlFor={`email-subject-${key}`}>Subject</Label>
-                        <Input
-                          id={`email-subject-${key}`}
-                          data-testid={`input-email-subject-${key}`}
-                          value={tmpl.subject}
-                          onChange={(e) => updateEmailTemplate(key, "subject", e.target.value)}
-                          placeholder="Email subject"
-                        />
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`flex-shrink-0 ${item.iconColor}`}>
+                        <Icon className="h-4 w-4" />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor={`email-body-${key}`}>Body</Label>
-                        <Textarea
-                          id={`email-body-${key}`}
-                          data-testid={`input-email-body-${key}`}
-                          value={tmpl.body}
-                          onChange={(e) => updateEmailTemplate(key, "body", e.target.value)}
-                          placeholder="Email body"
-                          rows={4}
-                        />
+                      <div className="min-w-0">
+                        <Label className="text-[14px] font-medium cursor-pointer" htmlFor={`switch-${item.key}`}>
+                          {item.label}
+                        </Label>
+                        <p className="text-[12px] text-muted-foreground mt-0.5">{item.description}</p>
                       </div>
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </section>
+                    <Switch
+                      id={`switch-${item.key}`}
+                      data-testid={`switch-notification-${item.key}`}
+                      checked={isEnabled}
+                      onCheckedChange={(checked) => updateConfig({ ...config, [item.key]: checked })}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ))}
 
-        <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <MessageSquare className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-sm font-medium">SMS Templates</h3>
-          </div>
-          <div className="grid gap-2">
-            {Object.entries(config.smsTemplates).map(([key, message]) => {
-              const isExpanded = expandedSms.has(key);
-              return (
-                <div key={key} className="rounded-md border" data-testid={`card-sms-template-${key}`}>
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-2 p-3 text-left flex-wrap"
-                    onClick={() => toggleSmsExpanded(key)}
-                    data-testid={`button-toggle-sms-${key}`}
-                  >
-                    {isExpanded ? (
-                      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    )}
-                    <span className="font-medium">{eventLabels[key] || key}</span>
-                  </button>
-                  {isExpanded && (
-                    <div className="border-t p-3 space-y-3">
-                      <div className="space-y-2">
-                        <Label htmlFor={`sms-body-${key}`}>Message</Label>
-                        <Textarea
-                          id={`sms-body-${key}`}
-                          data-testid={`input-sms-body-${key}`}
-                          value={message as string}
-                          onChange={(e) => updateSmsTemplate(key, e.target.value)}
-                          placeholder="SMS message"
-                          rows={3}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Bell className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-sm font-medium">Notification Rules</h3>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Available events: quote_created, document_signed, stage_changed, task_completed, new_message, digest_sent.
-            Roles: admin, super_admin, staff, processor, user.
-            Channels: email, sms, in_app.
-          </p>
-          <div className="grid gap-3">
-            {config.notificationRules.map((rule: NotificationRule, index: number) => (
-              <div key={index} className="flex items-start gap-2 rounded-md border p-3 flex-wrap">
-                <div className="grid flex-1 gap-2 sm:grid-cols-3 min-w-0">
-                  <div className="space-y-1">
-                    <Label htmlFor={`rule-event-${index}`}>Event</Label>
-                    <Input
-                      id={`rule-event-${index}`}
-                      data-testid={`input-rule-event-${index}`}
-                      value={rule.event}
-                      onChange={(e) => updateRule(index, "event", e.target.value)}
-                      placeholder="e.g. quote_created"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor={`rule-roles-${index}`}>Roles</Label>
-                    <Input
-                      id={`rule-roles-${index}`}
-                      data-testid={`input-rule-roles-${index}`}
-                      value={rule.roles.join(", ")}
-                      onChange={(e) => updateRule(index, "roles", e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean))}
-                      placeholder="admin, staff"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor={`rule-channels-${index}`}>Channels</Label>
-                    <Input
-                      id={`rule-channels-${index}`}
-                      data-testid={`input-rule-channels-${index}`}
-                      value={rule.channels.join(", ")}
-                      onChange={(e) => updateRule(index, "channels", e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean))}
-                      placeholder="email, in_app"
-                    />
-                  </div>
-                </div>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  data-testid={`button-remove-rule-${index}`}
-                  onClick={() => removeRule(index)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
+        <div className="flex items-center gap-3 pt-2">
           <Button
-            variant="outline"
-            data-testid="button-add-notification-rule"
-            onClick={addRule}
+            data-testid="button-save-notification-preferences"
+            onClick={save}
+            disabled={!hasChanges || isPending}
           >
-            <Plus className="mr-2 h-4 w-4" />
-            Add Rule
+            <Save className="mr-2 h-4 w-4" />
+            {isPending ? "Saving..." : "Save Changes"}
           </Button>
-        </section>
-
-        <Button
-          data-testid="button-save-notifications-config"
-          onClick={save}
-          disabled={!hasChanges || isPending}
-        >
-          <Save className="mr-2 h-4 w-4" />
-          {isPending ? "Saving..." : "Save Changes"}
-        </Button>
+          {hasChanges && (
+            <span className="text-[12px] text-muted-foreground">You have unsaved changes</span>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

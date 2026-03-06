@@ -168,7 +168,9 @@ export function NotificationBell() {
                     </p>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-[11px] text-muted-foreground/70">
-                        {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
+                        {notif.createdAt && !isNaN(new Date(notif.createdAt).getTime())
+                          ? formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })
+                          : "recently"}
                       </span>
                       {notif.dealId && (
                         <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
