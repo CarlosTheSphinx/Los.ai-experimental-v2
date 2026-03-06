@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { CheckCircle2, Plus, CalendarIcon } from "lucide-react";
+import { CheckCircle2, Plus, CalendarIcon, ClipboardEdit } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -45,11 +45,17 @@ export default function TabTasks({
   const [priority, setPriority] = useState("medium");
   const [assignedTo, setAssignedTo] = useState("");
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
+  const [formTemplateId, setFormTemplateId] = useState<string>("");
 
   const { data: teamData } = useQuery<{ teamMembers: { id: number; fullName: string; email: string; role: string }[] }>({
     queryKey: ["/api/admin/team-members"],
   });
   const teamMembers = teamData?.teamMembers ?? [];
+
+  const { data: formTemplatesData } = useQuery<any[]>({
+    queryKey: ["/api/admin/inquiry-form-templates"],
+  });
+  const formTemplates = Array.isArray(formTemplatesData) ? formTemplatesData : [];
 
   const updateTaskMutation = useMutation({
     mutationFn: async ({ taskId, status }: { taskId: number; status: string }) => {
@@ -64,7 +70,7 @@ export default function TabTasks({
   });
 
   const createTaskMutation = useMutation({
-    mutationFn: async (data: { taskName: string; taskDescription?: string; priority: string; assignedTo?: string; dueDate?: string }) => {
+    mutationFn: async (data: { taskName: string; taskDescription?: string; priority: string; assignedTo?: string; dueDate?: string; formTemplateId?: number }) => {
       return apiRequest("POST", `/api/admin/deals/${dealId}/tasks`, data);
     },
     onSuccess: () => {
@@ -86,6 +92,7 @@ export default function TabTasks({
     setPriority("medium");
     setAssignedTo("");
     setDueDate(undefined);
+    setFormTemplateId("");
   }
 
   function handleSubmit() {
@@ -96,6 +103,7 @@ export default function TabTasks({
       priority,
       assignedTo: assignedTo || undefined,
       dueDate: dueDate ? dueDate.toISOString() : undefined,
+      formTemplateId: formTemplateId && formTemplateId !== "none" ? parseInt(formTemplateId) : undefined,
     });
   }
 
@@ -152,6 +160,12 @@ export default function TabTasks({
           {task.borrowerActionRequired && (
             <Badge variant="outline" className="text-[12px] text-blue-600 border-blue-200">
               Borrower
+            </Badge>
+          )}
+          {task.formTemplateId && (
+            <Badge variant="secondary" className="text-[12px]">
+              <ClipboardEdit className="h-3 w-3 mr-1" />
+              Form
             </Badge>
           )}
         </div>
@@ -281,6 +295,28 @@ export default function TabTasks({
                 </PopoverContent>
               </Popover>
             </div>
+            {formTemplates.length > 0 && (
+              <div className="space-y-1.5">
+                <Label>Form Template</Label>
+                <Select value={formTemplateId} onValueChange={setFormTemplateId}>
+                  <SelectTrigger data-testid="select-task-form-template">
+                    <SelectValue placeholder="No form attached" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No form attached</SelectItem>
+                    {formTemplates.map((tpl: any) => (
+                      <SelectItem key={tpl.id} value={String(tpl.id)}>
+                        <span className="flex items-center gap-2">
+                          <ClipboardEdit className="h-3 w-3" />
+                          {tpl.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Attach a form for the borrower to fill out in their portal.</p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setDialogOpen(false); resetForm(); }} data-testid="button-cancel-task">

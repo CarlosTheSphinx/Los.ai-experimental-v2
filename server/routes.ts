@@ -8761,7 +8761,7 @@ export async function registerRoutes(
     try {
       const dealId = parseInt(req.params.dealId);
       
-      const tasks = await db.select({
+      const dtasks = await db.select({
         id: dealTasks.id,
         dealId: dealTasks.dealId,
         taskName: dealTasks.taskName,
@@ -8779,8 +8779,38 @@ export async function registerRoutes(
         .leftJoin(users, eq(dealTasks.assignedTo, users.id))
         .where(eq(dealTasks.dealId, dealId))
         .orderBy(dealTasks.createdAt);
+
+      const ptasks = await db.select().from(projectTasks)
+        .where(eq(projectTasks.projectId, dealId))
+        .orderBy(asc(projectTasks.createdAt));
+
+      const formProjectTasks = ptasks.filter(t => t.formTemplateId).map(t => ({
+        id: t.id,
+        dealId: t.projectId,
+        taskName: t.taskTitle,
+        taskTitle: t.taskTitle,
+        taskDescription: t.taskDescription,
+        status: t.status,
+        priority: t.priority,
+        assignedTo: t.assignedTo,
+        assigneeName: null,
+        assigneeEmail: null,
+        dueDate: null,
+        completedAt: t.completedAt,
+        createdAt: t.createdAt,
+        formTemplateId: t.formTemplateId,
+        borrowerActionRequired: t.borrowerActionRequired,
+        _source: 'projectTasks',
+      }));
+
+      const allTasks = [...dtasks.map(t => ({ ...t, formTemplateId: null, borrowerActionRequired: false, _source: 'dealTasks' })), ...formProjectTasks];
+      allTasks.sort((a, b) => {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return aTime - bTime;
+      });
       
-      res.json({ tasks });
+      res.json({ tasks: allTasks });
     } catch (error) {
       console.error('Admin get deal tasks error:', error);
       res.status(500).json({ error: 'Failed to load tasks' });
@@ -8791,43 +8821,61 @@ export async function registerRoutes(
   app.post('/api/admin/deals/:dealId/tasks', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const dealId = parseInt(req.params.dealId);
-      const { taskName, taskDescription, priority, assignedTo, dueDate } = req.body;
-      
-      const [task] = await db.insert(dealTasks)
-        .values({
-          dealId,
-          taskName,
-          taskDescription,
-          priority: priority || 'medium',
-          assignedTo: assignedTo ? parseInt(assignedTo) : null,
-          dueDate: dueDate ? new Date(dueDate) : null,
-          createdBy: req.user!.id,
-        })
-        .returning();
+      const { taskName, taskDescription, priority, assignedTo, dueDate, formTemplateId } = req.body;
 
-      // Notify assignee when task is created with an assigned user
-      if (assignedTo) {
-        const assigneeId = parseInt(assignedTo);
-        if (!isNaN(assigneeId) && assigneeId !== req.user!.id) {
-          try {
-            const assignerName = req.user!.fullName || req.user!.email || 'Someone';
-            const taskProj = await db.select({ loanNumber: projects.loanNumber }).from(projects).where(eq(projects.id, dealId)).limit(1);
-            const dealLabel = taskProj[0]?.loanNumber || `DEAL-${dealId}`;
-            await createNotification({
-              userId: assigneeId,
-              type: 'task_assigned',
-              title: 'New Task Assigned',
-              message: `${assignerName} assigned you "${taskName}" on ${dealLabel}`,
-              dealId,
-              link: `/admin/deals/${dealId}`,
-            });
-          } catch (notifErr) {
-            console.error('Failed to send task creation notification:', notifErr);
+      if (formTemplateId) {
+        const [ptask] = await db.insert(projectTasks)
+          .values({
+            projectId: dealId,
+            taskTitle: taskName,
+            taskDescription,
+            taskType: 'general',
+            priority: priority || 'medium',
+            assignedTo: 'borrower',
+            visibleToBorrower: true,
+            borrowerActionRequired: true,
+            status: 'pending',
+            formTemplateId: parseInt(formTemplateId),
+          })
+          .returning();
+
+        res.json({ task: { ...ptask, taskName: ptask.taskTitle, formTemplateId: ptask.formTemplateId } });
+      } else {
+        const [task] = await db.insert(dealTasks)
+          .values({
+            dealId,
+            taskName,
+            taskDescription,
+            priority: priority || 'medium',
+            assignedTo: assignedTo ? parseInt(assignedTo) : null,
+            dueDate: dueDate ? new Date(dueDate) : null,
+            createdBy: req.user!.id,
+          })
+          .returning();
+
+        if (assignedTo) {
+          const assigneeId = parseInt(assignedTo);
+          if (!isNaN(assigneeId) && assigneeId !== req.user!.id) {
+            try {
+              const assignerName = req.user!.fullName || req.user!.email || 'Someone';
+              const taskProj = await db.select({ loanNumber: projects.loanNumber }).from(projects).where(eq(projects.id, dealId)).limit(1);
+              const dealLabel = taskProj[0]?.loanNumber || `DEAL-${dealId}`;
+              await createNotification({
+                userId: assigneeId,
+                type: 'task_assigned',
+                title: 'New Task Assigned',
+                message: `${assignerName} assigned you "${taskName}" on ${dealLabel}`,
+                dealId,
+                link: `/admin/deals/${dealId}`,
+              });
+            } catch (notifErr) {
+              console.error('Failed to send task creation notification:', notifErr);
+            }
           }
         }
-      }
 
-      res.json({ task });
+        res.json({ task });
+      }
     } catch (error) {
       console.error('Admin create deal task error:', error);
       res.status(500).json({ error: 'Failed to create task' });
