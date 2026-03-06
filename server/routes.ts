@@ -8827,6 +8827,7 @@ export async function registerRoutes(
       const isBorrowerAssigned = assignedTo === "borrower";
 
       if (formTemplateId) {
+        const taskAssignedTo = isBorrowerAssigned ? 'borrower' : (assignedTo || 'borrower');
         const [ptask] = await db.insert(projectTasks)
           .values({
             projectId: dealId,
@@ -8834,7 +8835,7 @@ export async function registerRoutes(
             taskDescription,
             taskType: 'general',
             priority: priority || 'medium',
-            assignedTo: 'borrower',
+            assignedTo: taskAssignedTo,
             visibleToBorrower: true,
             borrowerActionRequired: true,
             status: 'pending',
@@ -8842,7 +8843,7 @@ export async function registerRoutes(
           })
           .returning();
 
-        res.json({ task: { ...ptask, taskName: ptask.taskTitle, formTemplateId: ptask.formTemplateId, _assignedToBorrower: true } });
+        res.json({ task: { ...ptask, taskName: ptask.taskTitle, formTemplateId: ptask.formTemplateId, _assignedToBorrower: taskAssignedTo === 'borrower' } });
       } else {
         const [task] = await db.insert(dealTasks)
           .values({

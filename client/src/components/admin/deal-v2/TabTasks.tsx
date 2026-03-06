@@ -286,7 +286,7 @@ export default function TabTasks({
             </div>
             <div className="space-y-1.5">
               <Label>Due Date</Label>
-              <Popover>
+              <Popover modal={false}>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
@@ -297,12 +297,11 @@ export default function TabTasks({
                     {dueDate ? format(dueDate, "PPP") : "Pick a date"}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
+                <PopoverContent className="w-auto p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
                   <Calendar
                     mode="single"
                     selected={dueDate}
-                    onSelect={setDueDate}
-                    initialFocus
+                    onSelect={(date) => { setDueDate(date); }}
                   />
                 </PopoverContent>
               </Popover>
