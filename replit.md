@@ -29,7 +29,7 @@ The application uses a modern web stack: React 18 with TypeScript for the fronte
 -   **Multi-Property Support**: Handles multiple properties per loan with CRUD operations.
 -   **Program-to-Deal Sync**: Non-destructive propagation of loan program template changes to existing deals.
 -   **Unified Checklist System**: Single source of truth for checklists across user roles with role-based filtering.
--   **AI Integration**: AI Draft Messages Panel for AI-generated communication drafts and a Deal Memory System for persistent AI context. An "Auto Process Pipeline" triggers AI-powered document and communication generation.
+-   **AI Integration**: AI Draft Messages Panel for AI-generated communication drafts and a Deal Memory System for persistent AI context. An "Auto Process Pipeline" triggers AI-powered document and communication generation. The "AI Reviews" tab on the deal detail page shows document review results (with approve/reject actions), AI-generated draft messages, risk flags, and recommendations — auto-navigates to this tab when the pipeline completes.
 -   **Gmail Integration**: Opt-in email integration for syncing threads, messages, and attachments, with in-app inbox and notifications.
 -   **Dynamic Deal Details**: Deal detail cards (Loan, Property, Borrower) on the Overview tab dynamically render based on program's `quoteFormFields` configuration, with role-based access control for critical fields.
 -   **Enhanced Document Management**: 5-step status lifecycle (Pending to Synced to Drive), per-document AI review triggers (Automatic, Timed, Manual modes), and explicit "Push to Drive" functionality.

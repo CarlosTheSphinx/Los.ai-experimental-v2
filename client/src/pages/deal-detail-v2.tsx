@@ -8,7 +8,7 @@ import {
   ArrowLeft, FolderOpen, RefreshCw, ExternalLink,
   LayoutDashboard, FileText, CheckSquare, Users, MessageCircle, Sparkles,
   MoreHorizontal, DollarSign,
-  Loader2, Zap
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -28,7 +28,6 @@ import TabTasks from "@/components/admin/deal-v2/TabTasks";
 import TabPeople from "@/components/admin/deal-v2/TabPeople";
 import TabComms from "@/components/admin/deal-v2/TabComms";
 import TabAIInsights from "@/components/admin/deal-v2/TabAIInsights";
-import AIReviewResultsModal from "@/components/admin/deal-v2/AIReviewResultsModal";
 
 function formatCurrency(amount: number | undefined): string {
   if (!amount) return "$0";
@@ -318,7 +317,7 @@ export default function DealDetailV2() {
   const [activeTab, setActiveTab] = useState("overview");
   const [pipelineRunning, setPipelineRunning] = useState(false);
   const [pipelineProjectId, setPipelineProjectId] = useState<number | null>(null);
-  const [showReviewModal, setShowReviewModal] = useState(false);
+  
   const { toast } = useToast();
 
   const apiBase = isAdmin ? `/api/admin/deals` : `/api/deals`;
@@ -454,7 +453,7 @@ export default function DealDetailV2() {
     if (pipelineStatusValue === "completed") {
       toast({ title: "Pipeline Complete", description: "All AI agents have finished processing." });
       setPipelineRunning(false);
-      setShowReviewModal(true);
+      setActiveTab("ai-reviews");
       queryClient.invalidateQueries({ queryKey: [apiBase, dealId] });
       queryClient.invalidateQueries({ queryKey: [apiBase, dealId, "documents"] });
       queryClient.invalidateQueries({ queryKey: [apiBase, dealId, "tasks"] });
@@ -598,18 +597,7 @@ export default function DealDetailV2() {
               )}
               {pipelineRunning ? "Processing..." : "Auto Process"}
             </Button>
-            {!pipelineRunning && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-9 px-3 text-[13px] font-medium"
-                data-testid="button-review-results"
-                onClick={() => setShowReviewModal(true)}
-              >
-                <Zap className="h-3.5 w-3.5 mr-1.5" />
-                Review Results
-              </Button>
-            )}
+            
             <Button variant="ghost" size="icon" className="h-9 w-9" data-testid="button-more-actions">
               <MoreHorizontal className="h-4 w-4" />
             </Button>
@@ -661,7 +649,7 @@ export default function DealDetailV2() {
                 { value: "tasks", label: "Tasks", icon: CheckSquare, badge: String(tasks.length) },
                 { value: "people", label: "People", icon: Users, badge: null },
                 { value: "communications", label: "Communications", icon: MessageCircle, badge: null },
-                { value: "ai-insights", label: "AI Insights", icon: Sparkles, badge: null },
+                { value: "ai-reviews", label: "AI Reviews", icon: Sparkles, badge: null },
               ].map((tab) => (
                 <TabsTrigger
                   key={tab.value}
@@ -697,19 +685,13 @@ export default function DealDetailV2() {
             <TabsContent value="communications" className="m-0">
               <TabComms deal={deal} activities={activities} dealId={dealId!} />
             </TabsContent>
-            <TabsContent value="ai-insights" className="m-0">
+            <TabsContent value="ai-reviews" className="m-0">
               <TabAIInsights deal={deal} dealId={dealId!} />
             </TabsContent>
           </div>
         </Tabs>
       </div>
 
-      <AIReviewResultsModal
-        open={showReviewModal}
-        onClose={() => setShowReviewModal(false)}
-        dealId={dealId!}
-        deal={deal}
-      />
     </div>
   );
 }

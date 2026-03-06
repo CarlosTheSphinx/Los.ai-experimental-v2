@@ -13,6 +13,8 @@ import {
   Save,
   X,
   XCircle,
+  FileText,
+  ShieldCheck,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -74,6 +76,120 @@ function InsightCard({ insight }: { insight: any }) {
       </div>
       {insight.category && (
         <Badge variant="secondary" className="text-[12px] shrink-0">{insight.category}</Badge>
+      )}
+    </div>
+  );
+}
+
+function DocumentReviewRow({
+  doc,
+  dealId,
+  onStatusChange,
+}: {
+  doc: any;
+  dealId: string;
+  onStatusChange: () => void;
+}) {
+  const { toast } = useToast();
+  const aiStatus = doc.aiReviewStatus?.toLowerCase();
+  const hasFile = !!doc.filePath || !!doc.fileUrl;
+
+  const statusIcon = () => {
+    if (aiStatus === "approved") return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
+    if (aiStatus === "denied") return <XCircle className="h-4 w-4 text-red-500" />;
+    if (aiStatus === "reviewing") return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />;
+    return <AlertTriangle className="h-4 w-4 text-amber-500" />;
+  };
+
+  const statusLabel = () => {
+    if (aiStatus === "approved") return "Passed";
+    if (aiStatus === "denied") return "Failed";
+    if (aiStatus === "reviewing") return "Reviewing";
+    if (aiStatus === "pending") return "Pending";
+    return "Needs Review";
+  };
+
+  const statusVariant = (): "default" | "secondary" | "destructive" | "outline" => {
+    if (aiStatus === "approved") return "default";
+    if (aiStatus === "denied") return "destructive";
+    return "secondary";
+  };
+
+  const approveMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("PATCH", `/api/admin/deals/${dealId}/documents/${doc.id}`, { status: "approved" });
+    },
+    onSuccess: () => {
+      onStatusChange();
+      toast({ title: `"${doc.documentName || doc.documentCategory}" approved` });
+    },
+    onError: () => toast({ title: "Failed to approve document", variant: "destructive" }),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("PATCH", `/api/admin/deals/${dealId}/documents/${doc.id}`, { status: "rejected" });
+    },
+    onSuccess: () => {
+      onStatusChange();
+      toast({ title: `"${doc.documentName || doc.documentCategory}" rejected` });
+    },
+    onError: () => toast({ title: "Failed to reject document", variant: "destructive" }),
+  });
+
+  const isActionable = hasFile && doc.status !== "approved" && doc.status !== "rejected";
+
+  return (
+    <div className="flex items-start gap-3 py-3 px-4 rounded-lg border bg-card" data-testid={`review-doc-${doc.id}`}>
+      <div className="mt-0.5">{statusIcon()}</div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-[15px] font-medium">{doc.documentName || doc.documentCategory || "Document"}</p>
+          <Badge variant={statusVariant()} className="text-[11px]">{statusLabel()}</Badge>
+          {doc.aiReviewConfidence != null && (
+            <span className="text-[12px] text-muted-foreground">
+              {Math.round(doc.aiReviewConfidence * 100)}% confidence
+            </span>
+          )}
+        </div>
+        {doc.aiReviewReason && (
+          <p className="text-[13px] text-muted-foreground mt-1 line-clamp-2">{doc.aiReviewReason}</p>
+        )}
+        {!hasFile && (
+          <p className="text-[13px] text-amber-600 mt-1 italic">No file uploaded yet</p>
+        )}
+      </div>
+      {isActionable && (
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => approveMutation.mutate()}
+            disabled={approveMutation.isPending}
+            className="text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+            data-testid={`approve-doc-${doc.id}`}
+          >
+            {approveMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
+            Approve
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => rejectMutation.mutate()}
+            disabled={rejectMutation.isPending}
+            className="text-red-700 border-red-300 hover:bg-red-50"
+            data-testid={`reject-doc-${doc.id}`}
+          >
+            {rejectMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5 mr-1" />}
+            Reject
+          </Button>
+        </div>
+      )}
+      {(doc.status === "approved") && (
+        <Badge variant="default" className="bg-emerald-100 text-emerald-800 text-[11px] shrink-0">Approved</Badge>
+      )}
+      {(doc.status === "rejected") && (
+        <Badge variant="destructive" className="text-[11px] shrink-0">Rejected</Badge>
       )}
     </div>
   );
@@ -305,6 +421,22 @@ export default function TabAIInsights({
   deal: any;
   dealId: string;
 }) {
+  const { toast } = useToast();
+
+  const { data: docsData, isLoading: docsLoading } = useQuery<{ documents: any[] }>({
+    queryKey: ["/api/admin/deals", dealId, "documents", "ai-reviews"],
+    queryFn: async () => {
+      try {
+        const res = await fetch(`/api/admin/deals/${dealId}/documents`, { credentials: "include" });
+        if (!res.ok) return { documents: [] };
+        return res.json();
+      } catch {
+        return { documents: [] };
+      }
+    },
+    enabled: !!dealId,
+  });
+
   const { data: insights, isLoading: insightsLoading } = useQuery<any[]>({
     queryKey: [`/api/deals/${dealId}/ai-insights`],
     queryFn: async () => {
@@ -333,16 +465,23 @@ export default function TabAIInsights({
     enabled: !!dealId,
   });
 
-  const isLoading = insightsLoading || commsLoading;
+  const isLoading = docsLoading || insightsLoading || commsLoading;
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12 text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin mr-2" />
-        <span className="text-[16px]">Analyzing deal...</span>
+        <span className="text-[16px]">Loading AI reviews...</span>
       </div>
     );
   }
+
+  const allDocuments = docsData?.documents ?? [];
+  const reviewedDocs = allDocuments.filter((d: any) => (d.filePath || d.fileUrl) && d.aiReviewStatus);
+  const passedDocs = reviewedDocs.filter((d: any) => d.status === "approved");
+  const failedDocs = reviewedDocs.filter((d: any) => d.aiReviewStatus === "denied");
+  const approvableDocs = allDocuments.filter((d: any) => d.status === "ai_reviewed");
+  const pendingReviewDocs = reviewedDocs.filter((d: any) => d.status !== "approved" && d.status !== "rejected");
 
   const insightsList = Array.isArray(insights) ? insights : [];
   const commsList = Array.isArray(communications) ? communications : [];
@@ -352,20 +491,93 @@ export default function TabAIInsights({
   const risks = insightsList.filter((i) => i.severity === "warning" || i.type === "risk");
   const recommendations = insightsList.filter((i) => i.severity !== "warning" && i.type !== "risk");
 
-  const hasAnyContent = insightsList.length > 0 || commsList.length > 0;
+  const hasAnyContent = reviewedDocs.length > 0 || insightsList.length > 0 || commsList.length > 0;
+
+  const invalidateDocData = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/deals", dealId, "documents", "ai-reviews"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/deals", dealId, "documents"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/deals", dealId] });
+  };
+
+  const approveAllMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/admin/deals/${dealId}/documents/approve-all`);
+    },
+    onSuccess: () => {
+      invalidateDocData();
+      toast({ title: "All documents approved" });
+    },
+    onError: () => toast({ title: "Failed to approve documents", variant: "destructive" }),
+  });
 
   if (!hasAnyContent) {
     return (
       <EmptyState
         icon={Brain}
-        title="No AI insights yet"
-        description="AI analysis will generate insights as more deal data becomes available."
+        title="No AI reviews yet"
+        description="AI reviews will appear here after running Auto Process or when documents are reviewed."
       />
     );
   }
 
   return (
     <div className="space-y-5">
+      {reviewedDocs.length > 0 && (
+        <div data-testid="section-document-reviews">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-[14px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Document Reviews ({reviewedDocs.length})
+            </h4>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 text-[13px]">
+                {passedDocs.length > 0 && (
+                  <span className="flex items-center gap-1 text-emerald-600">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> {passedDocs.length} passed
+                  </span>
+                )}
+                {failedDocs.length > 0 && (
+                  <span className="flex items-center gap-1 text-red-600">
+                    <XCircle className="h-3.5 w-3.5" /> {failedDocs.length} failed
+                  </span>
+                )}
+                {pendingReviewDocs.length > 0 && (
+                  <span className="flex items-center gap-1 text-amber-600">
+                    <AlertTriangle className="h-3.5 w-3.5" /> {pendingReviewDocs.length} pending
+                  </span>
+                )}
+              </div>
+              {approvableDocs.length > 0 && (
+                <Button
+                  size="sm"
+                  onClick={() => approveAllMutation.mutate()}
+                  disabled={approveAllMutation.isPending}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  data-testid="approve-all-docs"
+                >
+                  {approveAllMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <ShieldCheck className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  Approve All ({approvableDocs.length})
+                </Button>
+              )}
+            </div>
+          </div>
+          <div className="space-y-2">
+            {reviewedDocs.map((doc: any) => (
+              <DocumentReviewRow
+                key={doc.id}
+                doc={doc}
+                dealId={dealId}
+                onStatusChange={invalidateDocData}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {draftComms.length > 0 && (
         <div data-testid="section-drafted-communications">
           <h4 className="text-[14px] font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2 flex-wrap">
