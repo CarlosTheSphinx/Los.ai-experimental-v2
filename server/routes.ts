@@ -6797,6 +6797,7 @@ export async function registerRoutes(
         prepaymentPenalty: projects.prepaymentPenalty,
         holdbackAmount: projects.holdbackAmount,
         googleDriveFolderId: projects.googleDriveFolderId,
+        loanNumber: projects.loanNumber,
         googleDriveFolderUrl: projects.googleDriveFolderUrl,
         userName: users.fullName,
         userEmail: users.email,
@@ -6895,6 +6896,7 @@ export async function registerRoutes(
         id: project.id,
         projectId: project.id,
         projectNumber: project.projectNumber,
+        dealNumber: project.projectNumber,
         userId: project.userId,
         customerFirstName: firstName,
         customerLastName: lastName,
@@ -6934,6 +6936,7 @@ export async function registerRoutes(
         holdbackAmount: project.holdbackAmount,
         loanAmount: project.loanAmount,
         loanTermMonths: project.loanTermMonths,
+        loanNumber: project.loanNumber,
         googleDriveFolderId: project.googleDriveFolderId,
         googleDriveFolderUrl: project.googleDriveFolderUrl,
       };
