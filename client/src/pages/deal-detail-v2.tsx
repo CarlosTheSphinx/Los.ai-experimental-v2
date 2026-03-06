@@ -202,7 +202,7 @@ function DealStrip({
 
   return (
     <>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <KpiCard icon={DollarSign} label="Loan Amount" value={formatCurrency(loanAmount)} subtitle={purposeLabel} />
         <ControlCard label="Deal Status">
           <Select
@@ -251,6 +251,8 @@ function DealStrip({
             </SelectContent>
           </Select>
         </ControlCard>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
         <KpiCard
           icon={Percent}
           label="Origination"
