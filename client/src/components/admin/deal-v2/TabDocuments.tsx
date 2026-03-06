@@ -69,6 +69,113 @@ const REVIEW_MODE_DESCRIPTIONS: Record<string, string> = {
   manual: "Documents are reviewed when manually triggered",
 };
 
+const FREQUENCY_PRESETS = [
+  { value: "720", label: "Twice daily" },
+  { value: "1440", label: "Daily" },
+  { value: "2880", label: "Every 2 days" },
+  { value: "4320", label: "Every 3 days" },
+  { value: "7200", label: "Every 5 days" },
+  { value: "10080", label: "Weekly" },
+  { value: "custom", label: "Custom" },
+];
+
+const PRESET_VALUES = new Set(FREQUENCY_PRESETS.filter(p => p.value !== "custom").map(p => p.value));
+
+function deriveCustomState(val: number | null) {
+  const strVal = val ? String(val) : "1440";
+  const isPreset = PRESET_VALUES.has(strVal);
+  if (!val || isPreset) return { isCustom: false, amount: 1, unit: "days" as const };
+  const unit = val % 10080 === 0 ? "weeks" as const : "days" as const;
+  const amount = unit === "weeks" ? val / 10080 : val / 1440;
+  return { isCustom: true, amount: Math.max(1, Math.round(amount)), unit };
+}
+
+function FrequencyPicker({
+  value,
+  onChange,
+  testId,
+}: {
+  value: number | null;
+  onChange: (minutes: number) => void;
+  testId: string;
+}) {
+  const initial = deriveCustomState(value);
+  const [isCustom, setIsCustom] = useState(initial.isCustom);
+  const [customAmount, setCustomAmount] = useState(initial.amount);
+  const [customUnit, setCustomUnit] = useState<"days" | "weeks">(initial.unit);
+
+  useEffect(() => {
+    const derived = deriveCustomState(value);
+    setIsCustom(derived.isCustom);
+    setCustomAmount(derived.amount);
+    setCustomUnit(derived.unit);
+  }, [value]);
+
+  const selectValue = isCustom ? "custom" : (value ? String(value) : "1440");
+
+  const handlePresetChange = (val: string) => {
+    if (val === "custom") {
+      setIsCustom(true);
+      setCustomAmount(1);
+      setCustomUnit("days");
+      onChange(1440);
+    } else {
+      setIsCustom(false);
+      onChange(parseInt(val));
+    }
+  };
+
+  const handleCustomUpdate = (amount: number, unit: "days" | "weeks") => {
+    const clamped = Math.max(1, amount);
+    setCustomAmount(clamped);
+    setCustomUnit(unit);
+    const minutes = unit === "weeks" ? clamped * 10080 : clamped * 1440;
+    onChange(minutes);
+  };
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <Select
+        value={selectValue}
+        onValueChange={handlePresetChange}
+      >
+        <SelectTrigger className="w-[150px] h-8 text-[14px]" data-testid={testId}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {FREQUENCY_PRESETS.map((p) => (
+            <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {isCustom && (
+        <div className="flex items-center gap-1.5">
+          <Input
+            type="number"
+            min={1}
+            value={customAmount}
+            onChange={(e) => handleCustomUpdate(parseInt(e.target.value) || 1, customUnit)}
+            className="w-[60px] h-8 text-[14px]"
+            data-testid={`${testId}-custom-amount`}
+          />
+          <Select
+            value={customUnit}
+            onValueChange={(v) => handleCustomUpdate(customAmount, v as "days" | "weeks")}
+          >
+            <SelectTrigger className="w-[90px] h-8 text-[14px]" data-testid={`${testId}-custom-unit`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="days">days</SelectItem>
+              <SelectItem value="weeks">weeks</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function TabDocuments({
   deal,
   documents,
@@ -317,30 +424,17 @@ export default function TabDocuments({
             <div className="border-t pt-3 space-y-3" data-testid="panel-automatic-settings">
               <div className="flex items-center gap-4 flex-wrap">
                 <div className="flex items-center gap-2">
-                  <Label className="text-[14px] text-muted-foreground whitespace-nowrap">Update message frequency</Label>
-                  <Select
-                    value={String(reviewData?.communicationFrequencyMinutes ?? "30")}
-                    onValueChange={(val) =>
+                  <Label className="text-[14px] text-muted-foreground whitespace-nowrap">Message frequency</Label>
+                  <FrequencyPicker
+                    value={reviewData?.communicationFrequencyMinutes ?? null}
+                    onChange={(minutes) =>
                       updateReviewMode.mutate({
                         aiReviewMode: "automatic",
-                        communicationFrequencyMinutes: parseInt(val),
+                        communicationFrequencyMinutes: minutes,
                       })
                     }
-                  >
-                    <SelectTrigger className="w-[140px] h-8 text-[14px]" data-testid="select-comm-frequency">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="5">Every 5 min</SelectItem>
-                      <SelectItem value="15">Every 15 min</SelectItem>
-                      <SelectItem value="30">Every 30 min</SelectItem>
-                      <SelectItem value="60">Every 1 hour</SelectItem>
-                      <SelectItem value="120">Every 2 hours</SelectItem>
-                      <SelectItem value="360">Every 6 hours</SelectItem>
-                      <SelectItem value="720">Every 12 hours</SelectItem>
-                      <SelectItem value="1440">Every 24 hours</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    testId="select-comm-frequency"
+                  />
                 </div>
               </div>
               <div className="flex items-center gap-4 flex-wrap">
@@ -400,30 +494,18 @@ export default function TabDocuments({
                 </div>
                 <div className="flex items-center gap-2">
                   <Label className="text-[14px] text-muted-foreground whitespace-nowrap">Message frequency</Label>
-                  <Select
-                    value={String(reviewData?.communicationFrequencyMinutes ?? "60")}
-                    onValueChange={(val) =>
+                  <FrequencyPicker
+                    value={reviewData?.communicationFrequencyMinutes ?? null}
+                    onChange={(minutes) =>
                       updateReviewMode.mutate({
                         aiReviewMode: "timed",
-                        communicationFrequencyMinutes: parseInt(val),
+                        communicationFrequencyMinutes: minutes,
                         scheduledTime: reviewData?.scheduledTime || null,
                         scheduledDays: reviewData?.scheduledDays || null,
                       })
                     }
-                  >
-                    <SelectTrigger className="w-[140px] h-8 text-[14px]" data-testid="select-review-frequency">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="15">Every 15 min</SelectItem>
-                      <SelectItem value="30">Every 30 min</SelectItem>
-                      <SelectItem value="60">Every 1 hour</SelectItem>
-                      <SelectItem value="120">Every 2 hours</SelectItem>
-                      <SelectItem value="360">Every 6 hours</SelectItem>
-                      <SelectItem value="720">Every 12 hours</SelectItem>
-                      <SelectItem value="1440">Daily</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    testId="select-review-frequency"
+                  />
                 </div>
               </div>
               <div className="flex items-center gap-4 flex-wrap">

@@ -139,8 +139,8 @@ function DealStrip({
 
   const stageOptions = (programStages && programStages.length > 0)
     ? programStages.map((s: any) => ({
-        value: s.stepKey || s.key || s.label?.toLowerCase().replace(/\s+/g, "_") || `stage-${s.id}`,
-        label: s.stepName || s.name || s.label || s.stageName || `Stage ${s.id}`,
+        value: s.stageKey || s.stepKey || s.key || s.label?.toLowerCase().replace(/\s+/g, "_") || `stage-${s.id}`,
+        label: s.stageName || s.stepName || s.name || s.label || `Stage ${s.id}`,
       }))
     : defaultStageOptions;
 
