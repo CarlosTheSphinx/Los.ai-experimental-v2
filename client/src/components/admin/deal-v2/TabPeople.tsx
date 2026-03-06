@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Mail, Phone, ExternalLink, Copy, Globe, Plus, Pencil, Trash2, X, Loader2 } from "lucide-react";
+import { Mail, Phone, ExternalLink, Copy, Globe, Plus, Pencil, Trash2, X, Loader2, UserPlus } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -62,7 +63,7 @@ const THIRD_PARTY_ROLES = [
 
 const emptyForm = { name: "", email: "", phone: "", role: "", company: "", notes: "" };
 
-export default function TabPeople({ deal }: { deal: any }) {
+export default function TabPeople({ deal, isAdmin = true }: { deal: any; isAdmin?: boolean }) {
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -74,6 +75,51 @@ export default function TabPeople({ deal }: { deal: any }) {
     queryKey: ["/api/admin/team-members"],
   });
   const teamMembers = teamData?.teamMembers ?? [];
+
+  const [processorPopoverOpen, setProcessorPopoverOpen] = useState(false);
+
+  const { data: assignedProcessors, isLoading: processorsLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/projects", dealId, "processors"],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/projects/${dealId}/processors`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const { data: availableProcessors } = useQuery<any[]>({
+    queryKey: ["/api/admin/processors"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/processors", { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const addProcessorMutation = useMutation({
+    mutationFn: async (userId: number) => {
+      return apiRequest("POST", `/api/admin/projects/${dealId}/processors`, { userId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/projects", dealId, "processors"] });
+      toast({ title: "Processor assigned" });
+    },
+    onError: () => toast({ title: "Failed to assign processor", variant: "destructive" }),
+  });
+
+  const removeProcessorMutation = useMutation({
+    mutationFn: async (processorId: number) => {
+      return apiRequest("DELETE", `/api/admin/projects/${dealId}/processors/${processorId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/projects", dealId, "processors"] });
+      toast({ title: "Processor removed" });
+    },
+    onError: () => toast({ title: "Failed to remove processor", variant: "destructive" }),
+  });
+
+  const assignedIds = new Set((assignedProcessors || []).map((p: any) => p.userId));
+  const unassignedProcessors = (availableProcessors || []).filter((u: any) => !assignedIds.has(u.id));
 
   const { data: thirdPartiesData } = useQuery<ThirdParty[]>({
     queryKey: ["/api/admin/deals", dealId, "third-parties"],
@@ -310,6 +356,109 @@ export default function TabPeople({ deal }: { deal: any }) {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-[14px] font-semibold text-muted-foreground uppercase tracking-wider" data-testid="text-processors-section-title">
+            Processors ({(assignedProcessors || []).length})
+          </h3>
+          {isAdmin && unassignedProcessors.length > 0 && (
+            <Popover open={processorPopoverOpen} onOpenChange={setProcessorPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[13px]"
+                  data-testid="button-assign-processor"
+                >
+                  <UserPlus className="h-3 w-3 mr-1" /> Assign Processor
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-56 p-2" align="end">
+                <div className="space-y-1">
+                  {unassignedProcessors.map((u: any) => (
+                    <button
+                      key={u.id}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-left text-[14px] hover-elevate"
+                      onClick={() => {
+                        addProcessorMutation.mutate(u.id);
+                        setProcessorPopoverOpen(false);
+                      }}
+                      disabled={addProcessorMutation.isPending}
+                      data-testid={`button-add-processor-${u.id}`}
+                    >
+                      <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-white font-semibold text-[11px] shrink-0", getAvatarColor(u.fullName || u.email, u.id))}>
+                        {getInitials(u.fullName || u.email)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">{u.fullName || u.email}</div>
+                        {u.fullName && <div className="text-[12px] text-muted-foreground truncate">{u.email}</div>}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
+        </div>
+        <Card>
+          <CardContent className="py-3 px-5">
+            {processorsLoading ? (
+              <div className="flex items-center gap-2 py-3 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-[14px]">Loading processors...</span>
+              </div>
+            ) : (!assignedProcessors || assignedProcessors.length === 0) ? (
+              <p className="text-[16px] text-muted-foreground py-2" data-testid="text-no-processors">
+                No processors assigned yet.
+              </p>
+            ) : (
+              <div className="divide-y divide-border/50">
+                {assignedProcessors.map((p: any, idx: number) => {
+                  const name = p.user?.fullName || p.user?.email || `User ${p.userId}`;
+                  const email = p.user?.email || "";
+                  return (
+                    <div key={p.id} className="flex items-center gap-3 py-3 first:pt-1 last:pb-1" data-testid={`processor-${p.userId}`}>
+                      <div className={cn("w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-[14px] shrink-0", getAvatarColor(name, idx + 20))}>
+                        {getInitials(name)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[16px] font-medium truncate">{name}</span>
+                          <Badge variant="secondary" className="text-[12px]">Processor</Badge>
+                        </div>
+                        {email && (
+                          <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+                            <Mail className="h-2.5 w-2.5" />
+                            <span className="truncate">{email}</span>
+                          </div>
+                        )}
+                      </div>
+                      {isAdmin && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive"
+                              onClick={() => removeProcessorMutation.mutate(p.id)}
+                              disabled={removeProcessorMutation.isPending}
+                              data-testid={`button-remove-processor-${p.userId}`}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Remove Processor</TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </CardContent>
