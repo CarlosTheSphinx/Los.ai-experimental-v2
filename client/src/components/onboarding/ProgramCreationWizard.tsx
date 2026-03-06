@@ -1099,6 +1099,7 @@ function CreditPolicyStep({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState('');
   const [extractedRules, setExtractedRules] = useState<{ documentType: string; ruleTitle: string; ruleDescription: string; category?: string }[]>([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -1157,6 +1158,7 @@ function CreditPolicyStep({
     }
 
     setIsExtracting(true);
+    setExtractError(null);
     setUploadedFileName(file.name);
     setShowCreateForm(true);
     if (!newPolicyName) {
@@ -1188,7 +1190,18 @@ function CreditPolicyStep({
         toast({ title: `Extracted ${data.rules.length} rules from ${file.name}` });
       }
     } catch (error: any) {
-      toast({ title: 'Failed to extract rules', description: error.message, variant: 'destructive' });
+      let msg = 'Failed to extract rules';
+      try {
+        const jsonMatch = error.message?.match(/\{.*\}/s);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed.error) msg = parsed.error;
+        } else if (error.message) {
+          msg = error.message;
+        }
+      } catch { /* use default msg */ }
+      setExtractError(msg);
+      toast({ title: 'Analysis failed', description: msg, variant: 'destructive' });
     } finally {
       setIsExtracting(false);
     }
@@ -1374,7 +1387,33 @@ function CreditPolicyStep({
             </div>
           )}
 
-          {!isExtracting && extractedRules.length > 0 && (
+          {!isExtracting && extractError && (
+            <div className="flex flex-col items-center gap-3 py-6 text-center">
+              <div className="rounded-full bg-destructive/10 p-2">
+                <X className="h-5 w-5 text-destructive" />
+              </div>
+              <div>
+                <p className="text-[14px] font-medium text-destructive">{extractError}</p>
+                <p className="text-[13px] text-muted-foreground mt-1">You can try again or upload a different file.</p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                data-testid="button-retry-extract"
+                onClick={() => {
+                  if (fileInputRef.current?.files?.[0]) {
+                    handleFileUpload(fileInputRef.current.files[0]);
+                  } else {
+                    fileInputRef.current?.click();
+                  }
+                }}
+              >
+                Try Again
+              </Button>
+            </div>
+          )}
+
+          {!isExtracting && !extractError && extractedRules.length > 0 && (
             <div className="space-y-3">
               <div className="space-y-2">
                 <Label className="text-[14px] font-medium">Policy Name</Label>

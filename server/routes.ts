@@ -10253,8 +10253,8 @@ export async function registerRoutes(
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
       });
 
-      const response = await openai.chat.completions.create({
-        model: 'gpt-5-mini',
+      const aiPromise = openai.chat.completions.create({
+        model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
@@ -10305,6 +10305,12 @@ Respond ONLY with valid JSON in this format:
         max_completion_tokens: 8192,
       });
 
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('AI analysis timed out after 90 seconds')), 90000)
+      );
+
+      const response = await Promise.race([aiPromise, timeoutPromise]);
+
       const content = response.choices[0]?.message?.content;
       if (!content) {
         return res.status(500).json({ error: 'AI returned empty response' });
@@ -10324,6 +10330,9 @@ Respond ONLY with valid JSON in this format:
       res.json({ rules: parsed.rules, programId });
     } catch (error: any) {
       console.error('Extract rules error:', error);
+      if (error.message?.includes('timed out')) {
+        return res.status(504).json({ error: 'AI analysis timed out. Please try again with a smaller document.' });
+      }
       res.status(500).json({ error: 'Failed to extract rules from document' });
     }
   });
@@ -10509,8 +10518,8 @@ Respond ONLY with valid JSON in this format:
         baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
       });
 
-      const response = await openai.chat.completions.create({
-        model: 'gpt-5-mini',
+      const aiPromise = openai.chat.completions.create({
+        model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
@@ -10561,6 +10570,12 @@ Respond ONLY with valid JSON in this format:
         max_completion_tokens: 8192,
       });
 
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('AI analysis timed out after 90 seconds')), 90000)
+      );
+
+      const response = await Promise.race([aiPromise, timeoutPromise]);
+
       const content = response.choices[0]?.message?.content;
       if (!content) {
         return res.status(500).json({ error: 'AI returned empty response' });
@@ -10580,6 +10595,9 @@ Respond ONLY with valid JSON in this format:
       res.json({ rules: parsed.rules });
     } catch (error: any) {
       console.error('Extract rules error:', error);
+      if (error.message?.includes('timed out')) {
+        return res.status(504).json({ error: 'AI analysis timed out. Please try again with a smaller document.' });
+      }
       res.status(500).json({ error: 'Failed to extract rules from document' });
     }
   });
@@ -10652,7 +10670,7 @@ If the user provides specific criteria, extract as many rules as you can from th
       ];
 
       const response = await openai.chat.completions.create({
-        model: 'gpt-5-mini',
+        model: 'gpt-4o-mini',
         messages: chatMessages,
         response_format: { type: 'json_object' },
         max_completion_tokens: 8192,
