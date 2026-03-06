@@ -4,6 +4,7 @@ import {
   Upload, FileText, CheckCircle2, Clock, AlertCircle, Eye,
   Loader2, Zap, Hand, FolderOpen, ChevronDown, Bot, CloudUpload,
   XCircle, Shield, Play, RotateCw, HardDriveUpload, ExternalLink,
+  X, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -85,6 +86,7 @@ export default function TabDocuments({
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
+  const [previewDoc, setPreviewDoc] = useState<{ url: string; fileName: string; mimeType: string } | null>(null);
 
   const apiBase = `/api/admin/deals`;
   const numericDealId = parseInt(dealId);
@@ -534,9 +536,72 @@ export default function TabDocuments({
             dealId={dealId}
             defaultOpen={idx === activeIdx}
             currentMode={currentMode}
+            onPreview={setPreviewDoc}
           />
         ));
       })()}
+
+      {previewDoc && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+          onClick={() => setPreviewDoc(null)}
+          data-testid="preview-overlay"
+        >
+          <div
+            className="relative w-[90vw] h-[90vh] max-w-6xl bg-card rounded-lg shadow-2xl flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 shrink-0">
+              <span className="text-[15px] font-semibold truncate mr-4">{previewDoc.fileName}</span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={`${previewDoc.url}?download=true`}
+                  className="h-8 w-8 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center transition-colors"
+                  data-testid="button-download-preview"
+                >
+                  <Download className="h-4 w-4" />
+                </a>
+                <button
+                  onClick={() => setPreviewDoc(null)}
+                  className="h-8 w-8 rounded-full bg-muted hover:bg-muted/80 text-foreground flex items-center justify-center transition-colors"
+                  data-testid="button-close-preview"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto flex items-center justify-center p-4">
+              {previewDoc.mimeType?.startsWith("image/") ? (
+                <img
+                  src={previewDoc.url}
+                  alt={previewDoc.fileName}
+                  className="max-w-full max-h-full object-contain"
+                  data-testid="preview-image"
+                />
+              ) : previewDoc.mimeType === "application/pdf" ? (
+                <iframe
+                  src={previewDoc.url}
+                  title={previewDoc.fileName}
+                  className="w-full h-full border-0"
+                  data-testid="preview-pdf"
+                />
+              ) : (
+                <div className="text-center space-y-4" data-testid="preview-unsupported">
+                  <FileText className="h-16 w-16 text-muted-foreground mx-auto" />
+                  <p className="text-[16px] text-muted-foreground">Preview not available for this file type</p>
+                  <a
+                    href={`${previewDoc.url}?download=true`}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-[14px] transition-colors"
+                    data-testid="link-download-unsupported"
+                  >
+                    <Download className="h-4 w-4" /> Download File
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -551,6 +616,7 @@ function StageSection({
   dealId,
   defaultOpen = false,
   currentMode,
+  onPreview,
 }: {
   stageOrder: number;
   stageName: string;
@@ -561,6 +627,7 @@ function StageSection({
   dealId: string;
   defaultOpen?: boolean;
   currentMode: string;
+  onPreview: (doc: { url: string; fileName: string; mimeType: string }) => void;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
@@ -614,6 +681,7 @@ function StageSection({
                   doc={doc}
                   dealId={dealId}
                   currentMode={currentMode}
+                  onPreview={onPreview}
                 />
               ))}
             </tbody>
@@ -628,10 +696,12 @@ function DocumentRow({
   doc,
   dealId,
   currentMode,
+  onPreview,
 }: {
   doc: any;
   dealId: string;
   currentMode: string;
+  onPreview: (doc: { url: string; fileName: string; mimeType: string }) => void;
 }) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -883,15 +953,22 @@ function DocumentRow({
           {(doc.filePath || doc.fileName) && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <a
-                  href={downloadUrl}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  onClick={() => {
+                    const name = doc.fileName || doc.documentName || "Document";
+                    let mime = doc.mimeType || "";
+                    if (!mime) {
+                      const ext = name.split(".").pop()?.toLowerCase();
+                      if (ext === "pdf") mime = "application/pdf";
+                      else if (["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"].includes(ext || "")) mime = `image/${ext === "jpg" ? "jpeg" : ext}`;
+                    }
+                    onPreview({ url: downloadUrl, fileName: name, mimeType: mime });
+                  }}
                   className="h-7 w-7 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center transition-colors"
                   data-testid={`button-view-doc-${doc.id}`}
                 >
                   <Eye className="h-3.5 w-3.5" />
-                </a>
+                </button>
               </TooltipTrigger>
               <TooltipContent>Preview</TooltipContent>
             </Tooltip>

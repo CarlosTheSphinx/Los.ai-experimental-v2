@@ -8082,10 +8082,15 @@ export async function registerRoutes(
       // Get the file and stream it
       const objectFile = await objectStorageService.getObjectEntityFile(doc.filePath);
       
-      if (req.query.download === 'true' && doc.fileName) {
-        res.set('Content-Disposition', `attachment; filename="${doc.fileName}"`);
+      const safeDocName = doc.fileName ? doc.fileName.replace(/[^\x20-\x7E]/g, '_').replace(/\\/g, '_').replace(/"/g, "'") : null;
+      if (req.query.download === 'true' && safeDocName) {
+        res.set('Content-Disposition', `attachment; filename="${safeDocName}"`);
       } else {
-        res.set('Content-Disposition', `inline${doc.fileName ? `; filename="${doc.fileName}"` : ''}`);
+        res.set('Content-Disposition', `inline${safeDocName ? `; filename="${safeDocName}"` : ''}`);
+      }
+
+      if (doc.mimeType) {
+        res.set('Content-Type', doc.mimeType);
       }
       
       await objectStorageService.downloadObject(objectFile, res);
@@ -8104,10 +8109,14 @@ export async function registerRoutes(
         return res.status(404).json({ error: 'File not found' });
       }
       const objectFile = await objectStorageService.getObjectEntityFile(file.filePath);
-      if (req.query.download === 'true' && file.fileName) {
-        res.set('Content-Disposition', `attachment; filename="${file.fileName}"`);
+      const safeFileName = file.fileName ? file.fileName.replace(/[^\x20-\x7E]/g, '_').replace(/\\/g, '_').replace(/"/g, "'") : null;
+      if (req.query.download === 'true' && safeFileName) {
+        res.set('Content-Disposition', `attachment; filename="${safeFileName}"`);
       } else {
-        res.set('Content-Disposition', `inline${file.fileName ? `; filename="${file.fileName}"` : ''}`);
+        res.set('Content-Disposition', `inline${safeFileName ? `; filename="${safeFileName}"` : ''}`);
+      }
+      if (file.mimeType) {
+        res.set('Content-Type', file.mimeType);
       }
       await objectStorageService.downloadObject(objectFile, res);
     } catch (error) {
