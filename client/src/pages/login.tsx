@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import { SiGoogle } from 'react-icons/si';
 
 const loginSchema = z.object({
@@ -29,6 +29,7 @@ export default function LoginPage() {
   const { branding } = useBranding();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(searchString);
@@ -57,15 +58,12 @@ export default function LoginPage() {
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
+    setLoginError(null);
     try {
       await login(data.email, data.password);
       setLocation('/');
     } catch (error: any) {
-      toast({
-        title: 'Login failed',
-        description: error?.message || 'Invalid email or password',
-        variant: 'destructive',
-      });
+      setLoginError(error?.message || 'Invalid email or password');
     } finally {
       setIsLoading(false);
     }
@@ -128,6 +126,7 @@ export default function LoginPage() {
                         className="h-12 focus:ring-2 focus:ring-primary/20 transition-all duration-200"
                         data-testid="input-email"
                         {...field}
+                        onChange={(e) => { setLoginError(null); field.onChange(e); }}
                       />
                     </FormControl>
                     <FormMessage />
@@ -152,12 +151,19 @@ export default function LoginPage() {
                         className="h-12 focus:ring-2 focus:ring-primary/20 transition-all duration-200"
                         data-testid="input-password"
                         {...field}
+                        onChange={(e) => { setLoginError(null); field.onChange(e); }}
                       />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+              {loginError && (
+                <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-[14px]" data-testid="text-login-error">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{loginError}</span>
+                </div>
+              )}
               <Button
                 type="submit"
                 className="w-full h-11 text-base"
