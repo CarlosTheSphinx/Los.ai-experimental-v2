@@ -6,7 +6,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   DollarSign, FolderOpen, Clock, CheckCircle2, Search, ChevronRight, Plus,
   Building2, User, FileText, ExternalLink, Copy, MoreHorizontal, Mail,
-  List, LayoutGrid, SlidersHorizontal, ChevronDown, ArrowUpDown, Filter,
+  List, LayoutGrid, ChevronDown, ArrowUpDown, Filter,
   CalendarIcon
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -147,7 +147,10 @@ function formatDate(dateStr?: string): string {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yy = String(d.getFullYear()).slice(-2);
+  return `${dd}/${mm}/${yy}`;
 }
 
 function getLoanPurpose(deal: Deal): string {
@@ -364,7 +367,7 @@ export default function DealsV2() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
-  const [viewMode, setViewMode] = useState<"list" | "board" | "compact">("list");
+  const [viewMode, setViewMode] = useState<"list" | "board">("list");
   const [programFilter, setProgramFilter] = useState<string>("all");
   const [assignedFilter, setAssignedFilter] = useState<string>("all");
   const [amountMin, setAmountMin] = useState<string>("");
@@ -635,14 +638,6 @@ export default function DealsV2() {
                   title="Board view"
                 >
                   <LayoutGrid className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode("compact")}
-                  className={`flex items-center justify-center h-9 w-9 border-l transition-colors ${viewMode === "compact" ? "bg-blue-600 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
-                  data-testid="button-view-compact"
-                  title="Compact view"
-                >
-                  <SlidersHorizontal className="h-4 w-4" />
                 </button>
               </div>
             </div>
