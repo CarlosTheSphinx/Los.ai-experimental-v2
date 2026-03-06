@@ -75,6 +75,8 @@ function DealStrip({
 
   const [pendingProgramId, setPendingProgramId] = useState<number | null | undefined>(undefined);
   const [showProgramConfirm, setShowProgramConfirm] = useState(false);
+  const [pendingStage, setPendingStage] = useState<string | undefined>(undefined);
+  const [showStageConfirm, setShowStageConfirm] = useState(false);
 
   const invalidateDeal = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/admin/deals", dealId] });
@@ -177,6 +179,24 @@ function DealStrip({
     setPendingProgramId(undefined);
   };
 
+  const handleStageChange = (v: string) => {
+    setPendingStage(v);
+    setShowStageConfirm(true);
+  };
+
+  const confirmStageChange = () => {
+    if (pendingStage) {
+      saveControlMutation.mutate({ currentStage: pendingStage });
+    }
+    setShowStageConfirm(false);
+    setPendingStage(undefined);
+  };
+
+  const cancelStageChange = () => {
+    setShowStageConfirm(false);
+    setPendingStage(undefined);
+  };
+
   const loanAmount = deal.loanAmount || deal.loanData?.loanAmount;
   const purpose = deal.loanPurpose || deal.loanData?.loanPurpose || deal.loanType;
   const purposeLabel = purpose ? purpose.charAt(0).toUpperCase() + purpose.slice(1).replace(/_/g, " ") : undefined;
@@ -203,7 +223,7 @@ function DealStrip({
         <ControlCard label="Current Stage">
           <Select
             value={deal.stage || deal.currentStage || "application"}
-            onValueChange={(v) => saveControlMutation.mutate({ currentStage: v })}
+            onValueChange={handleStageChange}
           >
             <SelectTrigger className="h-8 border-0 shadow-none px-0 text-[18px] font-bold focus:ring-0" data-testid="select-current-stage">
               <SelectValue />
@@ -252,6 +272,27 @@ function DealStrip({
               data-testid="confirm-program-change"
             >
               Confirm Change
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showStageConfirm} onOpenChange={setShowStageConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Override Current Stage?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The current stage is normally determined automatically based on completed documents and tasks.
+              Are you sure you want to manually override it to "{stageOptions.find(o => o.value === pendingStage)?.label || pendingStage}"?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={cancelStageChange} data-testid="cancel-stage-change">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmStageChange}
+              data-testid="confirm-stage-change"
+            >
+              Override Stage
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -578,7 +619,6 @@ export default function DealDetailV2() {
         {/* Stage Progress Bar */}
         <StageProgressBar
           stages={stages}
-          progressPercent={deal.progressPercentage || deal.completionPercentage || 0}
           completedItems={
             (deal.completedDocuments || documents.filter((d: any) => d.status === "approved" || d.status === "ai_reviewed").length || 0) +
             (deal.completedTasks || tasks.filter((t: any) => t.status === "completed").length || 0)

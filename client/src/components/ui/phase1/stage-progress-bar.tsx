@@ -19,8 +19,10 @@ interface StageProgressBarProps {
 
 export function StageProgressBar({ stages, className, progressPercent: externalPercent, completedItems, totalItems }: StageProgressBarProps) {
   const completedCount = stages.filter((s) => s.completed).length;
-  const progressPercent = externalPercent ?? (stages.length > 0 ? Math.round((completedCount / stages.length) * 100) : 0);
   const hasItemsInfo = typeof completedItems === "number" && typeof totalItems === "number";
+  const progressPercent = externalPercent ?? (hasItemsInfo && totalItems > 0
+    ? Math.round((completedItems / totalItems) * 100)
+    : (stages.length > 0 ? Math.round((completedCount / stages.length) * 100) : 0));
 
   return (
     <div className={cn("bg-card border rounded-[10px] px-5 py-2.5", className)}>
