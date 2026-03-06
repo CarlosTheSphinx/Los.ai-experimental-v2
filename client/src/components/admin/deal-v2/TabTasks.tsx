@@ -52,10 +52,10 @@ export default function TabTasks({
   });
   const teamMembers = teamData?.teamMembers ?? [];
 
-  const { data: formTemplatesData } = useQuery<any[]>({
+  const { data: formTemplatesData } = useQuery<any>({
     queryKey: ["/api/admin/inquiry-form-templates"],
   });
-  const formTemplates = Array.isArray(formTemplatesData) ? formTemplatesData : [];
+  const formTemplates = Array.isArray(formTemplatesData?.templates) ? formTemplatesData.templates : (Array.isArray(formTemplatesData) ? formTemplatesData : []);
 
   const updateTaskMutation = useMutation({
     mutationFn: async ({ taskId, status }: { taskId: number; status: string }) => {
@@ -297,7 +297,7 @@ export default function TabTasks({
                     {dueDate ? format(dueDate, "PPP") : "Pick a date"}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                <PopoverContent className="w-auto p-0" align="start" style={{ pointerEvents: "auto" }} onOpenAutoFocus={(e) => e.preventDefault()}>
                   <Calendar
                     mode="single"
                     selected={dueDate}
