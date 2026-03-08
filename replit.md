@@ -13,6 +13,7 @@ The application uses a modern web stack: React 18 with TypeScript for the fronte
 -   **Technology Stack**: React 18, TypeScript, Wouter, TanStack React Query, Tailwind CSS (shadcn/ui), Framer Motion, React Hook Form with Zod, Vite.
 -   **Key Features**: Loan pricing forms (DSCR, Fix and Flip/Ground Up Construction), quote/agreement management (PDF, e-signatures), multi-stage deal/loan management, borrower portal, borrower quote flow, and an admin back office with dashboards, user management, and loan program configuration. Includes onboarding wizards, a customizable quote form builder, and a Commercial Deal Submission Module with AI-powered pre-screener.
 -   **UI/UX**: Utilizes a "Pipeline Design System" for consistent UI elements, typography, and component styling across admin pages. Supports List, Board (Kanban), and Compact views for the pipeline.
+-   **Typography**: 3 typefaces — Cormorant Garamond (`font-display`) for page titles/headings, Playfair Display (`font-sans`) for public page body text, DM Sans (`font-ui`) at 400 weight for admin sidebar nav and admin page body content (tables, labels, descriptions). Logo "LENDRY AI" uses wide letter-spacing with Cormorant Garamond. Tagline "Lending Intelligence" below logo in sidebar.
 
 **Backend:**
 -   **Technology Stack**: Express.js, TypeScript, Drizzle ORM, RESTful API, Zod for validation.

@@ -318,7 +318,7 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
             <Search className="h-5 w-5" />
           </Button>
         </SidebarHeader>
-        <SidebarContent>
+        <SidebarContent className="font-ui font-normal">
           <SidebarGroup>
             <SidebarGroupLabel className="text-[12px] uppercase tracking-[0.15em] text-muted-foreground/60 px-0 pb-2">
               {(effectiveViewAsBorrower || isBorrower) ? 'My Loans' : 'Pipeline'}
@@ -531,7 +531,7 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
           </Button>
           <NotificationBell />
         </div>
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto font-ui font-normal">
           {children}
         </main>
       </div>

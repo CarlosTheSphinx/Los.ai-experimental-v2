@@ -11,6 +11,7 @@
      ================================================ */
   --font-sans: 'Playfair Display', Georgia, serif;
   --font-display: 'Cormorant Garamond', Georgia, serif;
+  --font-ui: 'DM Sans', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
   /* Background: Warm cream (premium, financial) */
