@@ -21,12 +21,12 @@
   /* Cards: Pure white (crisp contrast against warm cream bg) */
   --card: 0 0% 100%;                /* #FFFFFF */
   --card-foreground: 220 26% 14%;   /* #1A202C */
-  --card-border: 216 20% 90%;       /* subtle gray border */
+  --card-border: 35 20% 83%;        /* warm divider */
 
   /* Popovers */
   --popover: 0 0% 100%;
   --popover-foreground: 220 26% 14%;
-  --popover-border: 216 20% 90%;
+  --popover-border: 35 20% 83%;
 
   /* Primary: Warm Gold (#C9A84C) */
   --primary: 44 54% 54%;            /* #C9A84C */
@@ -48,20 +48,20 @@
   --accent-foreground: 0 0% 100%;
   --accent-border: 148 46% 23%;
 
-  /* Destructive: Clear red */
-  --destructive: 0 84% 60%;         /* #EF4444 */
+  /* Destructive: Deepened red */
+  --destructive: 0 72% 51%;         /* #DC2626 */
   --destructive-foreground: 0 0% 100%;
-  --destructive-border: 0 84% 54%;
+  --destructive-border: 0 72% 45%;
 
   /* Borders and inputs */
-  --border: 216 20% 90%;            /* #E2E6EB */
-  --input: 216 20% 90%;
+  --border: 35 20% 83%;             /* #DDD6CC - Warm Divider */
+  --input: 35 20% 83%;
   --ring: 44 54% 54%;               /* Matches primary gold */
 
   --radius: 0.625rem;               /* 10px - modern, slightly softer */
 
-  /* Sidebar: Deep navy */
-  --sidebar: 205 50% 13%;           /* #0F2438 */
+  /* Sidebar: Deepened navy */
+  --sidebar: 216 60% 10%;           /* #0A1628 */
   --sidebar-foreground: 210 25% 92%;
   --sidebar-border: 205 40% 20%;
   --sidebar-ring: 44 54% 54%;
@@ -73,7 +73,7 @@
   /* Status colors (semantic) */
   --success: 150 44% 29%;           /* Deep Forest #2A6B4A */
   --success-foreground: 0 0% 100%;
-  --warning: 38 92% 50%;            /* Amber #F59E0B */
+  --warning: 32 95% 44%;            /* Deep Amber #D97706 */
   --warning-foreground: 0 0% 100%;
   --info: 44 54% 54%;               /* Gold #C9A84C */
   --info-foreground: 0 0% 100%;
