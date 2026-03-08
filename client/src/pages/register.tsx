@@ -110,7 +110,7 @@ export default function RegisterPage() {
         <div className="flex flex-col items-center justify-center h-full">
           <div className="flex items-center gap-0 mb-8">
             <span className="text-3xl font-bold text-white">Lendry.</span>
-            <span className="text-3xl font-bold text-blue-400">AI</span>
+            <span className="text-3xl font-bold text-amber-400">AI</span>
           </div>
           <h1 className="text-4xl font-bold tracking-tight text-center mb-4">Lending, Automated.</h1>
         </div>

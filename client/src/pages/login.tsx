@@ -86,7 +86,7 @@ export default function LoginPage() {
         <div className="flex flex-col items-center justify-center flex-1">
           <div className="flex items-center gap-0 mb-4">
             <span className="text-6xl font-bold text-white">Lendry.</span>
-            <span className="text-6xl font-bold text-blue-400">AI</span>
+            <span className="text-6xl font-bold text-amber-400">AI</span>
           </div>
           <p className="text-xl font-medium tracking-tight text-center text-white/70">
             Lending, Automated.
