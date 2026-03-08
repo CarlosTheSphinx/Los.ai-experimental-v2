@@ -7,11 +7,11 @@
   /* ================================================
      LENDRY.AI DESIGN SYSTEM — Brand Palette
      Charcoal Navy (#1A202C) + Gold (#C9A84C) + Forest (#2A6B4A)
-     Fonts: Inter (body), Manrope (H1/H2), Plus Jakarta Sans (hero), JetBrains Mono (code)
+     Fonts: DM Sans (body), Cormorant Garamond (H1/H2), Playfair Display (hero), JetBrains Mono (code)
      ================================================ */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-display: 'Manrope', system-ui, -apple-system, sans-serif;
-  --font-hero: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Cormorant Garamond', Georgia, serif;
+  --font-hero: 'Playfair Display', Georgia, serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
   /* Background: Warm cream (premium, financial) */
