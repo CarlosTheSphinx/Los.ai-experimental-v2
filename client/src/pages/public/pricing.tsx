@@ -8,7 +8,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Check, X, ArrowRight, TrendingUp, DollarSign, Clock, Users } from "lucide-react";
+import { Check, X, ArrowRight, TrendingUp, Clock, Users } from "lucide-react";
 import { motion } from "framer-motion";
 
 const itemVariants = {
@@ -34,9 +34,8 @@ export default function PublicPricingPage() {
   const tiers = [
     {
       name: "Broker",
-      price: "$299",
-      period: "/mo",
-      description: "For individual brokers getting started with automation",
+      tagline: "For individual brokers getting started with automation",
+      description: "Everything you need to automate your loan pipeline and close deals faster.",
       features: [
         "Up to 10 active loans",
         "Up to 3 users",
@@ -45,19 +44,12 @@ export default function PublicPricingPage() {
         "E-Signatures",
         "Basic reporting",
       ],
-      unavailable: [
-        "Cloud Storage Sync",
-        "Custom Integrations",
-        "Dedicated Deployment",
-      ],
-      cta: "Start Free Trial",
       highlighted: false,
     },
     {
       name: "Originator",
-      price: "$999",
-      period: "/mo",
-      description: "For growing lending teams ready to scale",
+      tagline: "For growing lending teams ready to scale",
+      description: "Unlock higher volume, cloud sync, and advanced analytics for your team.",
       features: [
         "Up to 50 active loans",
         "Unlimited users",
@@ -67,52 +59,22 @@ export default function PublicPricingPage() {
         "Cloud Storage Sync",
         "Advanced reporting",
       ],
-      unavailable: [
-        "Custom Integrations",
-        "Dedicated Deployment",
-      ],
-      cta: "Start Free Trial",
       highlighted: true,
     },
     {
-      name: "Correspondent",
-      price: "$1,799",
-      period: "/mo",
-      description: "For high-volume operations needing advanced tools",
+      name: "Enterprise",
+      tagline: "For high-volume operations needing full customization",
+      description: "Custom integrations, dedicated deployment, and white-glove onboarding.",
       features: [
-        "Up to 100 active loans",
+        "100+ active loans",
         "Unlimited users",
         "All 3 AI Agents",
         "AI Chat (29 tools)",
         "E-Signatures",
         "Cloud Storage Sync",
-        "Custom Integrations (Add-on)",
-        "Custom Development (Add-on)",
-      ],
-      unavailable: [
+        "Custom Integrations",
         "Dedicated Deployment",
       ],
-      cta: "Start Free Trial",
-      highlighted: false,
-    },
-    {
-      name: "Portfolio Manager",
-      price: "Custom",
-      period: "",
-      description: "For enterprise-scale lending operations",
-      features: [
-        "150+ active loans",
-        "Unlimited users",
-        "All 3 AI Agents",
-        "AI Chat (29 tools)",
-        "E-Signatures",
-        "Cloud Storage Sync",
-        "Custom Integrations included",
-        "Custom Development included",
-        "Dedicated Deployment",
-      ],
-      unavailable: [],
-      cta: "Contact Sales",
       highlighted: false,
     },
   ];
@@ -132,9 +94,9 @@ export default function PublicPricingPage() {
 
   const faqs = [
     {
-      question: "How does the free trial work?",
+      question: "How does the demo work?",
       answer:
-        "You get 14 days of full access to any plan you choose. No credit card required. After 14 days, your plan expires unless you add payment information. During your trial, you get full access to all features at that tier level.",
+        "We'll walk you through the platform live, tailored to your specific lending workflow. After the demo, we'll recommend the right tier for your team and provide a custom quote. No commitment required.",
     },
     {
       question: "Why is pricing loan-based instead of per-user?",
@@ -149,17 +111,17 @@ export default function PublicPricingPage() {
     {
       question: "What happens if I exceed my active loan limit?",
       answer:
-        "We'll notify you when you're approaching your limit. You have two options: upgrade to a higher plan immediately, or pay per additional loan depending on your tier. No service interruption.",
+        "We'll notify you when you're approaching your limit. You have two options: upgrade to a higher tier immediately, or pay per additional loan depending on your tier. No service interruption.",
     },
     {
       question: "Do you offer annual pricing?",
       answer:
-        "Yes, we offer a 12% discount for annual billing on Broker, Originator, and Correspondent plans. Enterprise pricing is negotiated individually.",
+        "Yes, we offer discounts for annual billing on all tiers. Request a demo and we'll share the details based on your needs.",
     },
     {
       question: "Can you build a custom plan for my team?",
       answer:
-        "Absolutely. If our standard tiers don't match your needs, our sales team can create a custom Portfolio Manager plan. Contact us and we'll work with you to build the perfect solution.",
+        "Absolutely. If our standard tiers don't match your needs, our team can create a custom Enterprise plan. Request a demo and we'll work with you to build the perfect solution.",
     },
   ];
 
@@ -175,13 +137,10 @@ export default function PublicPricingPage() {
             className="space-y-4 mb-12"
           >
             <h1 className="text-4xl lg:text-5xl font-bold tracking-tight">
-              Simple Pricing. Powerful Automation.
+              Three Tiers. One Powerful Platform.
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Loan-based pricing that scales with your business, not your headcount. All tiers include full AI capabilities and unlimited users.
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Save 12% with annual billing
+              Loan-based pricing that scales with your business, not your headcount. All tiers include full AI capabilities. Request a demo to get a custom quote.
             </p>
           </motion.div>
         </div>
@@ -189,13 +148,13 @@ export default function PublicPricingPage() {
 
       {/* Pricing Tiers */}
       <section className="py-24 lg:py-32 bg-background">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true }}
             variants={containerVariants}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+            className="grid grid-cols-1 md:grid-cols-3 gap-6"
           >
             {tiers.map((tier, idx) => (
               <motion.div key={idx} variants={itemVariants}>
@@ -212,14 +171,11 @@ export default function PublicPricingPage() {
                   <div className="mb-6">
                     <h3 className="text-xl font-bold mb-1">{tier.name}</h3>
                     <p className="text-xs text-muted-foreground mb-4">
+                      {tier.tagline}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
                       {tier.description}
                     </p>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-4xl font-bold">{tier.price}</span>
-                      <span className="text-sm text-muted-foreground">
-                        {tier.period}
-                      </span>
-                    </div>
                   </div>
 
                   <ul className="space-y-2.5 mb-6 flex-1">
@@ -229,15 +185,9 @@ export default function PublicPricingPage() {
                         <span className="text-sm">{feature}</span>
                       </li>
                     ))}
-                    {tier.unavailable.map((feature, featureIdx) => (
-                      <li key={`u-${featureIdx}`} className="flex items-start gap-2 opacity-40">
-                        <X className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
-                        <span className="text-sm">{feature}</span>
-                      </li>
-                    ))}
                   </ul>
 
-                  <Link href={tier.name === "Portfolio Manager" ? "/contact" : "/register"}>
+                  <Link href="/contact">
                     <Button
                       className={`w-full ${
                         tier.highlighted
@@ -245,8 +195,10 @@ export default function PublicPricingPage() {
                           : "bg-slate-900 hover:bg-slate-800 text-white"
                       }`}
                       size="lg"
+                      data-testid={`button-request-demo-${tier.name.toLowerCase()}`}
                     >
-                      {tier.cta}
+                      Request a Demo
+                      <ArrowRight className="w-4 h-4 ml-2" />
                     </Button>
                   </Link>
                 </Card>
@@ -270,7 +222,7 @@ export default function PublicPricingPage() {
               The ROI Argument
             </p>
             <h2 className="text-4xl font-bold tracking-tight mb-4">
-              Save $68,000+ Per Year
+              Dramatically Reduce Your Operating Costs
             </h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
               Replace manual processes and fragmented tools with a single automated platform.
@@ -291,22 +243,19 @@ export default function PublicPricingPage() {
               </h3>
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-700">1–2 processors</span>
-                  <span className="text-sm font-semibold">$72,500/yr each</span>
+                  <span className="text-sm text-gray-700">Loan processors</span>
+                  <span className="text-sm font-semibold text-red-600">High salary costs</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-700">CRM software</span>
-                  <span className="text-sm font-semibold">$5,400/yr</span>
+                  <span className="text-sm text-gray-700">CRM + LOS subscriptions</span>
+                  <span className="text-sm font-semibold text-red-600">Multiple tools</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-700">Other tools</span>
-                  <span className="text-sm font-semibold">$2,400/yr</span>
+                  <span className="text-sm text-gray-700">Manual document review</span>
+                  <span className="text-sm font-semibold text-red-600">Hours per deal</span>
                 </div>
                 <div className="border-t border-red-200 pt-4">
-                  <div className="flex justify-between items-center">
-                    <span className="font-bold text-red-700">Total</span>
-                    <span className="text-2xl font-bold text-red-700">~$80,300/year</span>
-                  </div>
+                  <p className="text-sm font-bold text-red-700">Fragmented, expensive, and slow</p>
                 </div>
               </div>
             </Card>
@@ -318,22 +267,19 @@ export default function PublicPricingPage() {
               </h3>
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-700">Lendry Originator</span>
-                  <span className="text-sm font-semibold">$999/mo</span>
+                  <span className="text-sm text-gray-700">AI-powered processing</span>
+                  <span className="text-sm font-semibold text-green-600">Automated</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-700">Annual cost</span>
-                  <span className="text-sm font-semibold">$11,988/year</span>
+                  <span className="text-sm text-gray-700">All-in-one platform</span>
+                  <span className="text-sm font-semibold text-green-600">One subscription</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-700">&nbsp;</span>
-                  <span className="text-sm">&nbsp;</span>
+                  <span className="text-sm text-gray-700">AI document review</span>
+                  <span className="text-sm font-semibold text-green-600">Seconds per deal</span>
                 </div>
                 <div className="border-t border-green-200 pt-4">
-                  <div className="flex justify-between items-center">
-                    <span className="font-bold text-green-700">Savings</span>
-                    <span className="text-2xl font-bold text-green-700">$68,312/year (85%)</span>
-                  </div>
+                  <p className="text-sm font-bold text-green-700">Unified, affordable, and instant</p>
                 </div>
               </div>
             </Card>
@@ -348,9 +294,9 @@ export default function PublicPricingPage() {
             className="grid grid-cols-1 md:grid-cols-3 gap-6"
           >
             {[
-              { icon: TrendingUp, value: "470%", label: "ROI in Year 1" },
-              { icon: Clock, value: "20 days", label: "Payback Period" },
-              { icon: Users, value: "4–6", label: "Employees Replaced at Scale" },
+              { icon: TrendingUp, value: "85%", label: "Reduction in Processing Costs" },
+              { icon: Clock, value: "10x", label: "Faster Document Review" },
+              { icon: Users, value: "4-6", label: "Employees Replaced at Scale" },
             ].map((stat, idx) => {
               const Icon = stat.icon;
               return (
@@ -486,13 +432,14 @@ export default function PublicPricingPage() {
                 Ready to Process More Deals?
               </h2>
               <p className="text-xl text-muted-foreground">
-                Start your 14-day free trial today. No credit card required.
+                See Lendry.AI in action. Request a personalized demo today.
               </p>
             </div>
 
-            <Link href="/register">
-              <Button size="lg" className="bg-primary hover:bg-primary/90">
-                Start Free Trial
+            <Link href="/contact">
+              <Button size="lg" className="bg-primary hover:bg-primary/90" data-testid="button-request-demo-cta">
+                Request a Demo
+                <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </Link>
           </motion.div>
