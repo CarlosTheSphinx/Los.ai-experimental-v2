@@ -167,7 +167,7 @@ export default function AdminOverview() {
     <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[26px] font-bold tracking-tight" data-testid="text-dashboard-title">Dashboard</h1>
+          <h1 className="text-[30px] font-display font-bold" data-testid="text-dashboard-title">Dashboard</h1>
           <p className="text-[16px] text-muted-foreground mt-0.5">Overview of your lending operations</p>
         </div>
       </div>

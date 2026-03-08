@@ -392,7 +392,7 @@ export default function QuotesUnified() {
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[26px] font-bold tracking-tight" data-testid="text-page-title">
+          <h1 className="text-[30px] font-display font-bold" data-testid="text-page-title">
             {activeView === "create" ? "New Quote" : "Quotes"}
           </h1>
           <p className="text-[16px] text-muted-foreground mt-0.5">

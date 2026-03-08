@@ -609,7 +609,7 @@ export default function MessagesPage() {
     <div className="p-4 md:p-6 h-full" data-testid="messages-page">
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-[26px] font-bold tracking-tight" data-testid="text-inbox-title">Inbox</h1>
+          <h1 className="text-[30px] font-display font-bold" data-testid="text-inbox-title">Inbox</h1>
           <p className="text-[16px] text-muted-foreground mt-0.5">
             {isAdmin ? "Communicate with borrowers and partners" : `Messages from ${branding.companyName}`}
           </p>

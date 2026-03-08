@@ -1131,7 +1131,7 @@ export default function IntegrationsPage() {
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div>
-        <h1 className="text-[26px] font-bold" data-testid="text-page-title">Integrations</h1>
+        <h1 className="text-[30px] font-display font-bold" data-testid="text-page-title">Integrations</h1>
         <p className="text-muted-foreground mt-1" data-testid="text-page-description">
           Manage your API keys and webhook subscriptions for external integrations.
         </p>

@@ -627,7 +627,7 @@ export default function ProgramsV2() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[26px] font-bold">Loan Programs</h1>
+          <h1 className="text-[30px] font-display font-bold">Loan Programs</h1>
           <p className="text-[16px] text-muted-foreground mt-0.5">
             Configure and manage your lending products.
           </p>
