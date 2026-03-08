@@ -425,7 +425,7 @@ export default function PublicPricingPage() {
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
             viewport={{ once: true }}
-            className="space-y-8"
+            className="space-y-16"
           >
             <div>
               <h2 className="text-4xl font-bold tracking-tight mb-4">

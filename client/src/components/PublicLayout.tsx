@@ -45,7 +45,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
             ))}
           </div>
 
-          <div className="hidden md:flex items-center gap-6">
+          <div className="hidden md:flex items-center gap-10">
             <Link href="/login" className="text-xl font-medium text-gray-400 hover:text-white transition-colors cursor-pointer">
               Log in
             </Link>

@@ -69,9 +69,9 @@ export default function ComingSoonPage() {
         </div>
       </header>
 
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 pb-16">
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 pb-24">
         <motion.div
-          className="max-w-2xl mx-auto text-center mb-12"
+          className="max-w-2xl mx-auto text-center mb-16"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7 }}
@@ -88,7 +88,7 @@ export default function ComingSoonPage() {
         </motion.div>
 
         <motion.div
-          className="w-full max-w-md mx-auto mb-16"
+          className="w-full max-w-md mx-auto mb-20"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.2 }}
@@ -102,7 +102,7 @@ export default function ComingSoonPage() {
               </p>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="p-8 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm space-y-4" data-testid="form-subscribe">
+            <form onSubmit={handleSubmit} className="p-8 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm space-y-5" data-testid="form-subscribe">
               <h3 className="text-lg font-semibold text-center mb-2">Get Early Access</h3>
               <p className="text-sm text-slate-400 text-center mb-4">Join the beta waitlist and be first to experience Lendry.AI.</p>
 
@@ -148,7 +148,7 @@ export default function ComingSoonPage() {
 
               <Button
                 type="submit"
-                className="w-full bg-amber-700 text-white font-medium"
+                className="w-full bg-amber-700 text-white font-medium mt-8"
                 disabled={subscribeMutation.isPending}
                 data-testid="button-subscribe"
               >

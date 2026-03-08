@@ -124,7 +124,7 @@ export default function PublicHomePage() {
               </div>
 
               {/* CTA */}
-              <div className="flex gap-4 pt-4 flex-col sm:flex-row">
+              <div className="flex gap-4 pt-16 flex-col sm:flex-row">
                 <Link href="/register">
                   <Button size="lg" className="bg-primary hover:bg-primary/90 text-white w-full sm:w-auto">
                     Start Free Trial
@@ -179,7 +179,7 @@ export default function PublicHomePage() {
       </section>
 
       {/* ===== SOCIAL PROOF (Early) ===== */}
-      <section className="py-12 bg-[#0F1729]">
+      <section className="py-20 lg:py-24 bg-[#0F1729]">
         <div className="max-w-7xl mx-auto px-4 md:px-8">
           <motion.div
             initial={{ opacity: 0 }}
@@ -464,7 +464,7 @@ export default function PublicHomePage() {
       </section>
 
       {/* ===== TRUST SECTION ===== */}
-      <section className="py-12 bg-[#0F1729]">
+      <section className="py-20 lg:py-24 bg-[#0F1729]">
         <div className="max-w-3xl mx-auto px-4 text-center">
           <motion.div
             initial={{ opacity: 0 }}
@@ -490,14 +490,14 @@ export default function PublicHomePage() {
       </section>
 
       {/* ===== FINAL CTA ===== */}
-      <section className="py-32 lg:py-40 bg-[#0F1729]">
+      <section className="py-24 lg:py-32 bg-[#0F1729]">
         <div className="max-w-3xl mx-auto px-4 text-center">
           <motion.div
             initial={{ opacity: 0, y: 40 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
             viewport={{ once: true }}
-            className="space-y-8"
+            className="space-y-16"
           >
             <div>
               <h2 className="text-4xl lg:text-5xl font-display font-bold text-white mb-4">
