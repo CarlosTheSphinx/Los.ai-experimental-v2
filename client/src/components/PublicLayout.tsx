@@ -31,7 +31,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
               <span className="text-3xl font-bold text-white">
                 Lendry.
               </span>
-              <span className="text-3xl font-bold text-blue-500">
+              <span className="text-3xl font-bold text-amber-500">
                 AI
               </span>
             </div>
@@ -51,7 +51,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
             </Link>
             <Link href="/register">
               <Button
-                className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-7 py-2.5 text-lg transition-colors"
+                className="bg-amber-700 hover:bg-amber-800 text-white rounded-full px-7 py-2.5 text-lg transition-colors"
               >
                 Sign Up
               </Button>
@@ -86,7 +86,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
                 <Link href="/register">
                   <Button
                     size="sm"
-                    className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-6 transition-colors w-full"
+                    className="bg-amber-700 hover:bg-amber-800 text-white rounded-full px-6 transition-colors w-full"
                   >
                     Sign Up
                   </Button>
@@ -107,7 +107,7 @@ export function PublicLayout({ children }: PublicLayoutProps) {
                 <span className="text-sm font-bold text-white">
                   Lendry.
                 </span>
-                <span className="text-sm font-bold text-blue-500">
+                <span className="text-sm font-bold text-amber-500">
                   AI
                 </span>
               </div>

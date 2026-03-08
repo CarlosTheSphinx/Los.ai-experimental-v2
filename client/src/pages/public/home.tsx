@@ -116,7 +116,7 @@ export default function PublicHomePage() {
                 <h1 className="font-hero text-5xl md:text-6xl font-bold text-white leading-tight mb-3">
                   Automate Your Loan Processing
                   <br />
-                  <span className="text-blue-300">in Less Than 10 Minutes.</span>
+                  <span className="text-amber-300">in Less Than 10 Minutes.</span>
                 </h1>
                 <p className="text-2xl text-white font-semibold mt-4">
                   Stop Hiring Processors. Start Growing Your Margins.
@@ -126,7 +126,7 @@ export default function PublicHomePage() {
               {/* CTA */}
               <div className="flex gap-4 pt-4 flex-col sm:flex-row">
                 <Link href="/register">
-                  <Button size="lg" className="bg-blue hover:bg-blue/90 text-white w-full sm:w-auto">
+                  <Button size="lg" className="bg-primary hover:bg-primary/90 text-white w-full sm:w-auto">
                     Start Free Trial
                   </Button>
                 </Link>
@@ -150,9 +150,9 @@ export default function PublicHomePage() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.8, delay: 0.2 }}
             >
-              <div className="relative bg-navy/30 border border-blue/30 rounded-2xl overflow-hidden">
-                <div className="aspect-video bg-gradient-to-br from-blue/20 to-navy/40 flex items-center justify-center">
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-900/50 to-navy/80 flex items-center justify-center">
+              <div className="relative bg-navy/30 border border-amber-700/30 rounded-2xl overflow-hidden">
+                <div className="aspect-video bg-gradient-to-br from-amber-700/20 to-navy/40 flex items-center justify-center">
+                  <div className="absolute inset-0 bg-gradient-to-br from-amber-900/50 to-navy/80 flex items-center justify-center">
                     <Play className="w-16 h-16 text-white fill-white/80" />
                   </div>
                 </div>
@@ -294,7 +294,7 @@ export default function PublicHomePage() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <p className="text-sm font-semibold text-blue-400 tracking-wide uppercase mb-3">
+            <p className="text-sm font-semibold text-amber-400 tracking-wide uppercase mb-3">
               The Solution
             </p>
             <h2 className="text-4xl lg:text-5xl font-display font-bold text-white mb-4">
@@ -315,8 +315,8 @@ export default function PublicHomePage() {
           >
             <motion.div variants={itemVariants} className="md:row-span-2">
               <div className="h-full bg-gradient-to-br from-[#1e3a5f] to-[#253550] rounded-3xl p-8">
-                <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center mb-4">
-                  <FileText className="w-6 h-6 text-blue-400" />
+                <div className="w-12 h-12 bg-amber-500/20 rounded-xl flex items-center justify-center mb-4">
+                  <FileText className="w-6 h-6 text-amber-400" />
                 </div>
                 <h3 className="text-xl font-bold text-white mb-3">{benefitCards[0].title}</h3>
                 <p className="text-white/60 leading-relaxed">{benefitCards[0].description}</p>
@@ -333,8 +333,8 @@ export default function PublicHomePage() {
             </motion.div>
             <motion.div variants={itemVariants}>
               <div className="h-full bg-gradient-to-br from-[#1e4040] to-[#1e3050] rounded-3xl p-8">
-                <div className="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center mb-4">
-                  <Target className="w-6 h-6 text-emerald-400" />
+                <div className="w-12 h-12 bg-green-700/20 rounded-xl flex items-center justify-center mb-4">
+                  <Target className="w-6 h-6 text-green-400" />
                 </div>
                 <h3 className="text-xl font-bold text-white mb-3">{benefitCards[2].title}</h3>
                 <p className="text-white/60 leading-relaxed">{benefitCards[2].description}</p>
@@ -419,7 +419,7 @@ export default function PublicHomePage() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <p className="text-sm font-semibold text-blue-400 tracking-wide uppercase mb-3">
+            <p className="text-sm font-semibold text-amber-400 tracking-wide uppercase mb-3">
               Quick Setup
             </p>
             <h2 className="text-4xl lg:text-5xl font-display font-bold text-white mb-4">
@@ -440,21 +440,21 @@ export default function PublicHomePage() {
           >
             <motion.div variants={itemVariants} className="md:row-span-2">
               <div className="h-full bg-gradient-to-br from-[#1e3a5f] to-[#253550] rounded-3xl p-8">
-                <div className="text-4xl font-bold text-blue-400 mb-4">{howItWorks[0].number}</div>
+                <div className="text-4xl font-bold text-amber-400 mb-4">{howItWorks[0].number}</div>
                 <h3 className="text-2xl font-bold text-white mb-3">{howItWorks[0].title}</h3>
                 <p className="text-white/60 leading-relaxed">{howItWorks[0].description}</p>
               </div>
             </motion.div>
             <motion.div variants={itemVariants}>
               <div className="h-full bg-gradient-to-br from-[#243b63] to-[#1e3050] rounded-3xl p-8">
-                <div className="text-4xl font-bold text-blue-400 mb-4">{howItWorks[1].number}</div>
+                <div className="text-4xl font-bold text-amber-400 mb-4">{howItWorks[1].number}</div>
                 <h3 className="text-2xl font-bold text-white mb-3">{howItWorks[1].title}</h3>
                 <p className="text-white/60 leading-relaxed">{howItWorks[1].description}</p>
               </div>
             </motion.div>
             <motion.div variants={itemVariants}>
               <div className="h-full bg-gradient-to-br from-[#2a3f5f] to-[#253550] rounded-3xl p-8">
-                <div className="text-4xl font-bold text-blue-400 mb-4">{howItWorks[2].number}</div>
+                <div className="text-4xl font-bold text-amber-400 mb-4">{howItWorks[2].number}</div>
                 <h3 className="text-2xl font-bold text-white mb-3">{howItWorks[2].title}</h3>
                 <p className="text-white/60 leading-relaxed">{howItWorks[2].description}</p>
               </div>
@@ -472,7 +472,7 @@ export default function PublicHomePage() {
             transition={{ duration: 0.6 }}
             viewport={{ once: true }}
           >
-            <div className="bg-blue-500/10 border border-blue-400/30 rounded-lg p-6">
+            <div className="bg-amber-500/10 border border-amber-400/30 rounded-lg p-6">
               <p className="text-white/80 font-medium">
                 <span className="font-semibold">Bank-grade security.</span> SOC2 Type II certified. Your loan programs, your data, your control. No vendor lock-in. Compliant with all lending regulations.
               </p>
@@ -480,7 +480,7 @@ export default function PublicHomePage() {
 
             <div className="mt-6">
               <Link href="/how-we-compare">
-                <p className="text-blue-400 hover:text-blue-300 font-semibold cursor-pointer">
+                <p className="text-amber-400 hover:text-amber-300 font-semibold cursor-pointer">
                   See How Lendry Compares to the Big Guys →
                 </p>
               </Link>
@@ -503,7 +503,7 @@ export default function PublicHomePage() {
               <h2 className="text-4xl lg:text-5xl font-display font-bold text-white mb-4">
                 Like Hiring Unlimited 24/7 Loan Processors
               </h2>
-              <p className="text-xl text-blue-300 font-semibold mb-2">
+              <p className="text-xl text-amber-300 font-semibold mb-2">
                 In 5 Minutes. For a Fraction of the Cost of One.
               </p>
               <p className="text-lg text-gray-300">
@@ -513,7 +513,7 @@ export default function PublicHomePage() {
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/register">
-                <Button size="lg" className="bg-blue hover:bg-blue/90 text-white w-full sm:w-auto">
+                <Button size="lg" className="bg-primary hover:bg-primary/90 text-white w-full sm:w-auto">
                   Start Free Trial
                 </Button>
               </Link>

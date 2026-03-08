@@ -51,18 +51,18 @@ export default function ComingSoonPage() {
   return (
     <div className="min-h-screen bg-[#0F1729] text-white flex flex-col" data-testid="page-coming-soon">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-blue-500/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-indigo-500/5 rounded-full blur-3xl" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-amber-500/5 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-amber-600/5 rounded-full blur-3xl" />
       </div>
 
       <header className="relative z-10 px-6 py-6">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-2xl font-bold tracking-tight">
-              Lendry<span className="text-blue-400">.AI</span>
+              Lendry<span className="text-amber-400">.AI</span>
             </span>
           </div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs font-medium" data-testid="badge-coming-soon">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-medium" data-testid="badge-coming-soon">
             <Rocket className="h-3 w-3" />
             Coming Soon
           </div>
@@ -78,7 +78,7 @@ export default function ComingSoonPage() {
         >
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-6 leading-tight" data-testid="text-headline">
             The Future of{" "}
-            <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-amber-400 to-yellow-500 bg-clip-text text-transparent">
               Loan Origination
             </span>
           </h1>
@@ -95,7 +95,7 @@ export default function ComingSoonPage() {
         >
           {submitted ? (
             <div className="text-center p-8 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm" data-testid="container-success">
-              <CheckCircle className="h-12 w-12 text-emerald-400 mx-auto mb-4" />
+              <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
               <h3 className="text-xl font-semibold mb-2" data-testid="text-success-title">You're on the list!</h3>
               <p className="text-slate-400" data-testid="text-success-message">
                 We'll send you an invite when Lendry.AI is ready for beta.
@@ -114,7 +114,7 @@ export default function ComingSoonPage() {
                   placeholder="Your name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-blue-400"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-amber-400"
                   data-testid="input-name"
                 />
               </div>
@@ -128,7 +128,7 @@ export default function ComingSoonPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-blue-400"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-amber-400"
                   data-testid="input-email"
                 />
               </div>
@@ -141,14 +141,14 @@ export default function ComingSoonPage() {
                   placeholder="Your company"
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
-                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-blue-400"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-amber-400"
                   data-testid="input-company"
                 />
               </div>
 
               <Button
                 type="submit"
-                className="w-full bg-blue-600 text-white font-medium"
+                className="w-full bg-amber-700 text-white font-medium"
                 disabled={subscribeMutation.isPending}
                 data-testid="button-subscribe"
               >
@@ -178,7 +178,7 @@ export default function ComingSoonPage() {
               className="p-6 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:border-white/10 transition-colors"
               data-testid={`card-feature-${feature.title.toLowerCase().replace(/\s+/g, '-')}`}
             >
-              <feature.icon className="h-8 w-8 text-blue-400 mb-3" />
+              <feature.icon className="h-8 w-8 text-amber-400 mb-3" />
               <h4 className="font-semibold mb-1.5 text-sm">{feature.title}</h4>
               <p className="text-xs text-slate-400 leading-relaxed">{feature.description}</p>
             </div>

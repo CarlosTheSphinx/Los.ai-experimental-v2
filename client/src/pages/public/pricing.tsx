@@ -160,11 +160,11 @@ export default function PublicPricingPage() {
               <motion.div key={idx} variants={itemVariants}>
                 <Card
                   className={`p-6 h-full flex flex-col relative bg-white ${
-                    tier.highlighted ? "ring-2 ring-blue-500 shadow-lg" : ""
+                    tier.highlighted ? "ring-2 ring-amber-600 shadow-lg" : ""
                   }`}
                 >
                   {tier.highlighted && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-xs font-semibold px-3 py-1 rounded-full">
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-700 text-white text-xs font-semibold px-3 py-1 rounded-full">
                       Most Popular
                     </div>
                   )}
@@ -191,7 +191,7 @@ export default function PublicPricingPage() {
                     <Button
                       className={`w-full ${
                         tier.highlighted
-                          ? "bg-blue-600 hover:bg-blue-700 text-white"
+                          ? "bg-amber-700 hover:bg-amber-800 text-white"
                           : "bg-slate-900 hover:bg-slate-800 text-white"
                       }`}
                       size="lg"
@@ -218,7 +218,7 @@ export default function PublicPricingPage() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <p className="text-sm font-semibold text-blue-600 tracking-wide uppercase mb-3">
+            <p className="text-sm font-semibold text-amber-700 tracking-wide uppercase mb-3">
               The ROI Argument
             </p>
             <h2 className="text-4xl font-bold tracking-tight mb-4">
@@ -301,7 +301,7 @@ export default function PublicPricingPage() {
               const Icon = stat.icon;
               return (
                 <Card key={idx} className="p-6 text-center">
-                  <Icon className="w-8 h-8 text-blue-600 mx-auto mb-3" />
+                  <Icon className="w-8 h-8 text-amber-700 mx-auto mb-3" />
                   <div className="text-3xl font-bold text-gray-900 mb-1">{stat.value}</div>
                   <p className="text-sm text-muted-foreground">{stat.label}</p>
                 </Card>
@@ -340,7 +340,7 @@ export default function PublicPricingPage() {
               <thead>
                 <tr className="border-b-2 border-gray-200">
                   <th className="text-left py-4 px-4 text-sm font-semibold text-gray-500 w-1/4">Capability</th>
-                  <th className="text-center py-4 px-4 text-sm font-bold text-blue-600 w-1/4">Lendry.AI</th>
+                  <th className="text-center py-4 px-4 text-sm font-bold text-amber-700 w-1/4">Lendry.AI</th>
                   <th className="text-center py-4 px-4 text-sm font-semibold text-gray-500 w-1/4">The Big Guys</th>
                   <th className="text-center py-4 px-4 text-sm font-semibold text-gray-500 w-1/4">Industry Standard</th>
                 </tr>
