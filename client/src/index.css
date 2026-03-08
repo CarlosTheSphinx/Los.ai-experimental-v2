@@ -6,7 +6,7 @@
 :root {
   /* ================================================
      LENDRY.AI DESIGN SYSTEM — Brand Palette
-     Navy (#1A3A52) + Gold (#C9A84C) + Forest (#2A6B4A)
+     Charcoal Navy (#1A202C) + Gold (#C9A84C) + Forest (#2A6B4A)
      Fonts: Inter (body), Manrope (H1/H2), Plus Jakarta Sans (hero), JetBrains Mono (code)
      ================================================ */
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
@@ -16,16 +16,16 @@
 
   /* Background: Warm cream (premium, financial) */
   --background: 33 36% 95%;         /* #F7F3EE */
-  --foreground: 205 35% 21%;        /* #1A3A52 - Primary Navy */
+  --foreground: 220 26% 14%;        /* #1A202C - Charcoal Navy */
 
   /* Cards: Pure white (crisp contrast against warm cream bg) */
   --card: 0 0% 100%;                /* #FFFFFF */
-  --card-foreground: 205 35% 21%;   /* #1A3A52 */
+  --card-foreground: 220 26% 14%;   /* #1A202C */
   --card-border: 216 20% 90%;       /* subtle gray border */
 
   /* Popovers */
   --popover: 0 0% 100%;
-  --popover-foreground: 205 35% 21%;
+  --popover-foreground: 220 26% 14%;
   --popover-border: 216 20% 90%;
 
   /* Primary: Warm Gold (#C9A84C) */
@@ -33,15 +33,15 @@
   --primary-foreground: 0 0% 100%;  /* White */
   --primary-border: 45 59% 45%;
 
-  /* Secondary: Soft blue-gray */
-  --secondary: 214 20% 94%;         /* #EDF1F5 */
-  --secondary-foreground: 205 35% 21%;
-  --secondary-border: 214 20% 88%;
+  /* Secondary: Warm Stone */
+  --secondary: 35 25% 91%;          /* #EDE8E1 */
+  --secondary-foreground: 220 26% 14%;
+  --secondary-border: 35 25% 85%;
 
   /* Muted: Subtle backgrounds */
-  --muted: 214 20% 94%;
+  --muted: 35 25% 91%;
   --muted-foreground: 215 14% 50%;  /* #6B7F8E - readable gray */
-  --muted-border: 214 20% 88%;
+  --muted-border: 35 25% 85%;
 
   /* Accent: Deep Forest (#2A6B4A) for success/growth */
   --accent: 150 44% 29%;            /* #2A6B4A */
@@ -81,9 +81,9 @@
   /* Chart colors */
   --chart-1: 44 54% 54%;            /* Gold */
   --chart-2: 150 44% 29%;           /* Forest */
-  --chart-3: 205 35% 21%;           /* Navy */
+  --chart-3: 220 26% 14%;           /* Charcoal Navy */
   --chart-4: 38 92% 50%;            /* Amber */
-  --chart-5: 280 60% 55%;           /* Purple accent */
+  --chart-5: 217 20% 45%;           /* Steel Blue #5C6E8B */
 }
 
 .dark {
@@ -206,7 +206,7 @@
   border-left: 3px solid hsl(150 44% 29%);
 }
 .stat-card-navy {
-  border-left: 3px solid hsl(205 35% 21%);
+  border-left: 3px solid hsl(var(--foreground));
 }
 .stat-card-amber {
   border-left: 3px solid hsl(38 92% 50%);
