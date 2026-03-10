@@ -488,6 +488,7 @@ export function PricingConfiguration({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/programs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/programs-with-pricing'] });
       const msg = pricingMode === 'external' ? 'External pricing config saved!' : 'Pricing rules saved and activated!';
       toast({ title: msg });
     },
@@ -874,7 +875,7 @@ export function PricingConfiguration({
               disabled={scanFieldsMutation.isPending}
               onClick={() => {
                 if (!extScraperUrl.trim()) {
-                  toast({ title: 'Enter a URL first', description: 'Paste the external pricing page URL above, then click Load Defaults.', variant: 'destructive' });
+                  toast({ title: 'Enter a URL first', description: 'Paste the external pricing page URL above, then click Extract Form Fields.', variant: 'destructive' });
                   return;
                 }
                 scanFieldsMutation.mutate(extScraperUrl.trim());
@@ -884,7 +885,7 @@ export function PricingConfiguration({
               {scanFieldsMutation.isPending ? (
                 <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Scanning Page...</>
               ) : (
-                <><Search className="h-3.5 w-3.5 mr-1.5" />Load Defaults</>
+                <><Search className="h-3.5 w-3.5 mr-1.5" />Extract Form Fields</>
               )}
             </Button>
           </div>
@@ -1027,7 +1028,7 @@ export function PricingConfiguration({
               </div>
             ))}
             {extTextInputs.length === 0 && (
-              <p className="text-[13px] text-muted-foreground italic">No text inputs defined. Click Add or Load Defaults.</p>
+              <p className="text-[13px] text-muted-foreground italic">No text inputs defined. Click Add or Extract Form Fields.</p>
             )}
           </div>
 
@@ -1350,7 +1351,7 @@ export function PricingConfiguration({
               </div>
             ))}
             {extDropdowns.length === 0 && (
-              <p className="text-[13px] text-muted-foreground italic">No dropdowns defined. Click Add Dropdown or Load Defaults.</p>
+              <p className="text-[13px] text-muted-foreground italic">No dropdowns defined. Click Add Dropdown or Extract Form Fields.</p>
             )}
           </div>
         </div>
