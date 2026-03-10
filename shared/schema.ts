@@ -3970,6 +3970,7 @@ export interface QuotePdfSection {
 }
 
 export interface QuotePdfTemplateConfig {
+  templateType?: 'summary' | 'loi';
   companyName: string;
   tagline: string;
   logoUrl?: string;

@@ -9,6 +9,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -17,7 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Plus, Trash2, Edit, Star, ArrowLeft, Save, GripVertical, Eye, EyeOff, ChevronUp, ChevronDown, X,
+  Plus, Trash2, Edit, Star, ArrowLeft, Save, GripVertical, Eye, EyeOff, ChevronUp, ChevronDown, X, FileText, Info,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -393,7 +400,7 @@ function TemplateEditor({
               <CardTitle className="text-base">Template Settings</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-2">
                   <Label>Template Name</Label>
                   <Input
@@ -401,6 +408,21 @@ function TemplateEditor({
                     onChange={(e) => setName(e.target.value)}
                     data-testid="input-template-name"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label>Template Type</Label>
+                  <Select
+                    value={config.templateType || "summary"}
+                    onValueChange={(v) => updateConfig("templateType", v as "summary" | "loi")}
+                  >
+                    <SelectTrigger data-testid="select-template-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="summary">Quote Summary</SelectItem>
+                      <SelectItem value="loi">Letter of Intent (LOI)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="flex items-center gap-3 pt-6">
                   <Switch
@@ -414,152 +436,183 @@ function TemplateEditor({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Branding</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Company Name</Label>
-                  <Input
-                    value={config.companyName}
-                    onChange={(e) => updateConfig("companyName", e.target.value)}
-                    data-testid="input-pdf-company-name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Tagline</Label>
-                  <Input
-                    value={config.tagline}
-                    onChange={(e) => updateConfig("tagline", e.target.value)}
-                    data-testid="input-pdf-tagline"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Logo URL</Label>
-                <Input
-                  value={config.logoUrl || ""}
-                  onChange={(e) => updateConfig("logoUrl", e.target.value)}
-                  placeholder="https://example.com/logo.png"
-                  data-testid="input-pdf-logo-url"
-                />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Primary Color</Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      value={config.primaryColor}
-                      onChange={(e) => updateConfig("primaryColor", e.target.value)}
-                      data-testid="input-pdf-primary-color"
-                    />
-                    <div
-                      className="h-9 w-9 shrink-0 rounded-md border"
-                      style={{ backgroundColor: config.primaryColor }}
-                      data-testid="preview-pdf-primary-color"
-                    />
+          {(config.templateType || "summary") === "loi" ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Letter of Intent Format
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-start gap-3 p-3 rounded-md bg-muted/50 border" data-testid="loi-info-notice">
+                  <Info className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                  <div className="text-sm text-muted-foreground space-y-2">
+                    <p>
+                      The LOI template uses a fixed 3-page format matching the Sphinx Capital BPL Term Loan Letter of Intent:
+                    </p>
+                    <ul className="list-disc pl-4 space-y-1">
+                      <li><span className="font-medium text-foreground">Page 1</span> — Letter header, Preliminary Transaction Details table, Estimated Fees table</li>
+                      <li><span className="font-medium text-foreground">Page 2</span> — Legal disclaimer and Borrower Acceptance signature block</li>
+                      <li><span className="font-medium text-foreground">Page 3</span> — Exhibit A with property addresses</li>
+                    </ul>
+                    <p>
+                      Fields like Loan Amount, Interest Rate, Property Value, LTV, FICO, and Property Type are auto-filled from quote data. Other fields are left blank for manual completion.
+                    </p>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Accent Color</Label>
-                  <div className="flex items-center gap-2">
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Branding</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Company Name</Label>
+                      <Input
+                        value={config.companyName}
+                        onChange={(e) => updateConfig("companyName", e.target.value)}
+                        data-testid="input-pdf-company-name"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Tagline</Label>
+                      <Input
+                        value={config.tagline}
+                        onChange={(e) => updateConfig("tagline", e.target.value)}
+                        data-testid="input-pdf-tagline"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Logo URL</Label>
                     <Input
-                      value={config.accentColor}
-                      onChange={(e) => updateConfig("accentColor", e.target.value)}
-                      data-testid="input-pdf-accent-color"
-                    />
-                    <div
-                      className="h-9 w-9 shrink-0 rounded-md border"
-                      style={{ backgroundColor: config.accentColor }}
-                      data-testid="preview-pdf-accent-color"
+                      value={config.logoUrl || ""}
+                      onChange={(e) => updateConfig("logoUrl", e.target.value)}
+                      placeholder="https://example.com/logo.png"
+                      data-testid="input-pdf-logo-url"
                     />
                   </div>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Header Text</Label>
-                <Input
-                  value={config.headerText}
-                  onChange={(e) => updateConfig("headerText", e.target.value)}
-                  data-testid="input-pdf-header-text"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Footer Disclaimer</Label>
-                <Textarea
-                  value={config.footerDisclaimer}
-                  onChange={(e) => updateConfig("footerDisclaimer", e.target.value)}
-                  rows={3}
-                  data-testid="input-pdf-footer-disclaimer"
-                />
-              </div>
-            </CardContent>
-          </Card>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Primary Color</Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={config.primaryColor}
+                          onChange={(e) => updateConfig("primaryColor", e.target.value)}
+                          data-testid="input-pdf-primary-color"
+                        />
+                        <div
+                          className="h-9 w-9 shrink-0 rounded-md border"
+                          style={{ backgroundColor: config.primaryColor }}
+                          data-testid="preview-pdf-primary-color"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Accent Color</Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={config.accentColor}
+                          onChange={(e) => updateConfig("accentColor", e.target.value)}
+                          data-testid="input-pdf-accent-color"
+                        />
+                        <div
+                          className="h-9 w-9 shrink-0 rounded-md border"
+                          style={{ backgroundColor: config.accentColor }}
+                          data-testid="preview-pdf-accent-color"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Header Text</Label>
+                    <Input
+                      value={config.headerText}
+                      onChange={(e) => updateConfig("headerText", e.target.value)}
+                      data-testid="input-pdf-header-text"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Footer Disclaimer</Label>
+                    <Textarea
+                      value={config.footerDisclaimer}
+                      onChange={(e) => updateConfig("footerDisclaimer", e.target.value)}
+                      rows={3}
+                      data-testid="input-pdf-footer-disclaimer"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Display Options</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between gap-4">
-                <Label>Show Points</Label>
-                <Switch
-                  checked={config.showPoints}
-                  onCheckedChange={(v) => updateConfig("showPoints", v)}
-                  data-testid="switch-show-points"
-                />
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <Label>Show YSP</Label>
-                <Switch
-                  checked={config.showYsp}
-                  onCheckedChange={(v) => updateConfig("showYsp", v)}
-                  data-testid="switch-show-ysp"
-                />
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <Label>Show Commission</Label>
-                <Switch
-                  checked={config.showCommission}
-                  onCheckedChange={(v) => updateConfig("showCommission", v)}
-                  data-testid="switch-show-commission"
-                />
-              </div>
-            </CardContent>
-          </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Display Options</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <Label>Show Points</Label>
+                    <Switch
+                      checked={config.showPoints}
+                      onCheckedChange={(v) => updateConfig("showPoints", v)}
+                      data-testid="switch-show-points"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <Label>Show YSP</Label>
+                    <Switch
+                      checked={config.showYsp}
+                      onCheckedChange={(v) => updateConfig("showYsp", v)}
+                      data-testid="switch-show-ysp"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <Label>Show Commission</Label>
+                    <Switch
+                      checked={config.showCommission}
+                      onCheckedChange={(v) => updateConfig("showCommission", v)}
+                      data-testid="switch-show-commission"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <CardTitle className="text-base">Sections</CardTitle>
-                <Button variant="outline" size="sm" onClick={addSection} data-testid="button-add-section">
-                  <Plus className="h-3 w-3 mr-1" /> Add Section
-                </Button>
-              </div>
-              <CardDescription>Toggle, reorder, and configure which sections appear in the PDF.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {config.sections.map((section, i) => (
-                <SectionEditor
-                  key={section.key}
-                  section={section}
-                  index={i}
-                  totalSections={config.sections.length}
-                  onUpdate={(updated) => updateSection(i, updated)}
-                  onMoveUp={() => moveSection(i, -1)}
-                  onMoveDown={() => moveSection(i, 1)}
-                  onRemove={() => removeSection(i)}
-                />
-              ))}
-              {config.sections.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No sections configured. Click "Add Section" to get started.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <CardTitle className="text-base">Sections</CardTitle>
+                    <Button variant="outline" size="sm" onClick={addSection} data-testid="button-add-section">
+                      <Plus className="h-3 w-3 mr-1" /> Add Section
+                    </Button>
+                  </div>
+                  <CardDescription>Toggle, reorder, and configure which sections appear in the PDF.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {config.sections.map((section, i) => (
+                    <SectionEditor
+                      key={section.key}
+                      section={section}
+                      index={i}
+                      totalSections={config.sections.length}
+                      onUpdate={(updated) => updateSection(i, updated)}
+                      onMoveUp={() => moveSection(i, -1)}
+                      onMoveDown={() => moveSection(i, 1)}
+                      onRemove={() => removeSection(i)}
+                    />
+                  ))}
+                  {config.sections.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No sections configured. Click "Add Section" to get started.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
 
         <div className="space-y-4">
@@ -660,9 +713,15 @@ export default function QuotePdfTemplateConfig() {
                           <Star className="h-3 w-3 mr-1" /> Default
                         </Badge>
                       )}
+                      <Badge variant="outline" data-testid={`badge-type-${template.id}`}>
+                        {template.config.templateType === "loi" ? "LOI" : "Summary"}
+                      </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {template.config.companyName} · {template.config.sections.filter(s => s.enabled).length} sections
+                      {template.config.templateType === "loi"
+                        ? `${template.config.companyName} · Letter of Intent format`
+                        : `${template.config.companyName} · ${template.config.sections.filter(s => s.enabled).length} sections`
+                      }
                     </p>
                   </div>
                   <Button

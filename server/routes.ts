@@ -1273,19 +1273,22 @@ export async function registerRoutes(
       }
 
       const { generateQuotePdf, DEFAULT_TEMPLATE_CONFIG } = await import('./pdf/quoteGenerator');
+      const { generateLoiPdf } = await import('./pdf/loiGenerator');
       const templateId = req.query.templateId ? parseInt(req.query.templateId as string) : null;
       let templateConfig = DEFAULT_TEMPLATE_CONFIG;
 
       if (templateId) {
         const template = await storage.getQuotePdfTemplateById(templateId);
-        if (template) templateConfig = template.config;
+        if (template && (template.tenantId === null || template.tenantId === req.user!.tenantId)) {
+          templateConfig = template.config;
+        }
       } else {
         const defaultTemplate = await storage.getDefaultQuotePdfTemplate(req.user!.tenantId || undefined);
         if (defaultTemplate) templateConfig = defaultTemplate.config;
       }
 
       const quoteDate = quote.createdAt ? new Date(quote.createdAt).toLocaleDateString('en-US') : new Date().toLocaleDateString('en-US');
-      const pdfBytes = await generateQuotePdf({
+      const pdfData = {
         quoteNumber: String(quote.id),
         quoteDate,
         customerFirstName: quote.customerFirstName,
@@ -1299,7 +1302,11 @@ export async function registerRoutes(
         yspDollarAmount: quote.yspDollarAmount || undefined,
         commission: quote.commission || undefined,
         loanData: quote.loanData as Record<string, any> || {},
-      }, templateConfig);
+      };
+
+      const pdfBytes = templateConfig.templateType === 'loi'
+        ? await generateLoiPdf(pdfData)
+        : await generateQuotePdf(pdfData, templateConfig);
 
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="Quote-${quote.id}-${quote.customerLastName || 'download'}.pdf"`);
@@ -1320,17 +1327,20 @@ export async function registerRoutes(
       }
 
       const { generateQuotePdf, DEFAULT_TEMPLATE_CONFIG } = await import('./pdf/quoteGenerator');
+      const { generateLoiPdf } = await import('./pdf/loiGenerator');
       let templateConfig = DEFAULT_TEMPLATE_CONFIG;
 
       if (templateId) {
         const template = await storage.getQuotePdfTemplateById(parseInt(templateId));
-        if (template) templateConfig = template.config;
+        if (template && (template.tenantId === null || template.tenantId === req.user!.tenantId)) {
+          templateConfig = template.config;
+        }
       } else {
         const defaultTemplate = await storage.getDefaultQuotePdfTemplate(req.user!.tenantId || undefined);
         if (defaultTemplate) templateConfig = defaultTemplate.config;
       }
 
-      const pdfBytes = await generateQuotePdf({
+      const pdfData = {
         quoteDate: new Date().toLocaleDateString('en-US'),
         interestRate: result.interestRate != null
           ? (typeof result.interestRate === 'number' ? `${result.interestRate.toFixed(3)}%` : String(result.interestRate))
@@ -1338,7 +1348,11 @@ export async function registerRoutes(
         pointsCharged: pointsCharged != null ? Number(pointsCharged) : undefined,
         yspAmount: yspAmount != null ? Number(yspAmount) : undefined,
         loanData: formData,
-      }, templateConfig);
+      };
+
+      const pdfBytes = templateConfig.templateType === 'loi'
+        ? await generateLoiPdf(pdfData)
+        : await generateQuotePdf(pdfData, templateConfig);
 
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', 'attachment; filename="Quote-Estimate.pdf"');
