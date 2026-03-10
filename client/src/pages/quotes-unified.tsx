@@ -414,8 +414,8 @@ export default function QuotesUnified() {
     }
   });
 
-  const handleDSCRSubmit = (data: LoanPricingFormData) => {
-    setDscrFormData(data);
+  const handleDSCRSubmit = (data: Record<string, any>) => {
+    setDscrFormData(data as any);
     const payload = { ...data, programId: selectedProgramId ?? undefined };
     getPricing(payload, {
       onSuccess: (response) => {

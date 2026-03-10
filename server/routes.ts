@@ -3,7 +3,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, documentReviewResults, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema, projectActivity, projectTasks, platformSettings, dealMemoryEntries, dealNotes, insertDealMemoryEntrySchema, insertDealNoteSchema, notifications, dealStatuses, insertDealStatusSchema, insertMessageTemplateSchema, dealThirdParties, systemSettings, betaSignups, insertBetaSignupSchema, inquiryFormTemplates, taskFormSubmissions } from "@shared/schema";
+import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, documentReviewResults, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema, projectActivity, projectTasks, platformSettings, dealMemoryEntries, dealNotes, insertDealMemoryEntrySchema, insertDealNoteSchema, notifications, dealStatuses, insertDealStatusSchema, insertMessageTemplateSchema, dealThirdParties, systemSettings, betaSignups, insertBetaSignupSchema, inquiryFormTemplates, taskFormSubmissions, externalPricingFormSchema } from "@shared/schema";
 import { priceQuote, validateRuleset, SAMPLE_RTL_RULESET, SAMPLE_DSCR_RULESET, type PricingInputs, analyzeGuidelines, refineProposal } from "./pricing";
 import { getDocumentTemplatesForLoanType } from "./document-templates";
 import { eq, desc, asc, inArray, and, gt, gte, lte, sql, isNull, or } from "drizzle-orm";
@@ -361,15 +361,16 @@ export async function registerRoutes(
     try {
       console.log('\n🚀 Starting Apify scrape request...');
       
-      const loanData = api.pricing.submit.input.parse(req.body);
-      
-      console.log('Loan data:', JSON.stringify(loanData, null, 2));
-
+      let loanData: any;
       let extConfig: any = null;
       let scraperUrl = 'https://www.b-diya.nqxpricer.com/69af4d475dd9d8d5dc27b54b';
-      if (loanData.programId) {
-        const [program] = await db.select().from(loanPrograms).where(eq(loanPrograms.id, loanData.programId));
+      let isExternalPricing = false;
+
+      const rawProgramId = req.body?.programId;
+      if (rawProgramId) {
+        const [program] = await db.select().from(loanPrograms).where(eq(loanPrograms.id, Number(rawProgramId)));
         if (program?.pricingMode === 'external' && program?.externalPricingConfig) {
+          isExternalPricing = true;
           extConfig = program.externalPricingConfig as any;
           if (extConfig.scraperUrl) {
             try {
@@ -382,11 +383,20 @@ export async function registerRoutes(
             } catch (urlErr) {
               console.warn('Invalid scraper URL in program config, using default:', urlErr);
               extConfig = null;
+              isExternalPricing = false;
             }
           }
           if (extConfig) console.log('Using external pricing config from program:', program.id, 'URL:', scraperUrl);
         }
       }
+
+      if (isExternalPricing) {
+        loanData = externalPricingFormSchema.parse(req.body);
+      } else {
+        loanData = api.pricing.submit.input.parse(req.body);
+      }
+      
+      console.log('Loan data:', JSON.stringify(loanData, null, 2));
 
       // Log the request start
       await storage.logPricingRequest({

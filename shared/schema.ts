@@ -186,7 +186,12 @@ export const loanPricingFormSchema = z.object({
   programId: z.coerce.number().optional(),
 });
 
+export const externalPricingFormSchema = z.object({
+  programId: z.coerce.number(),
+}).passthrough();
+
 export type LoanPricingFormData = z.infer<typeof loanPricingFormSchema>;
+export type ExternalPricingFormData = z.infer<typeof externalPricingFormSchema>;
 
 export const pricingResponseSchema = z.object({
   success: z.boolean(),
