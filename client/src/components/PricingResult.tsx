@@ -36,6 +36,33 @@ interface PricingResultProps {
   programConfig?: ProgramConfig | null;
 }
 
+function normalizeKey(key: string): string {
+  return key.replace(/[-_\s]/g, '').toLowerCase();
+}
+
+function resolveField(data: Record<string, any> | null | undefined, ...aliases: string[]): any {
+  if (!data) return undefined;
+  for (const alias of aliases) {
+    if (data[alias] !== undefined && data[alias] !== '' && data[alias] !== null) return data[alias];
+  }
+  const normalized = aliases.map(normalizeKey);
+  for (const key of Object.keys(data)) {
+    const nk = normalizeKey(key);
+    if (normalized.includes(nk) && data[key] !== undefined && data[key] !== '' && data[key] !== null) {
+      return data[key];
+    }
+  }
+  return undefined;
+}
+
+function safeNumber(value: any): number {
+  if (value === undefined || value === null || value === '') return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const cleaned = String(value).replace(/[$,%\s]/g, '');
+  const num = Number(cleaned);
+  return Number.isFinite(num) ? num : 0;
+}
+
 export function PricingResult({ result, formData, onReset, programId, programConfig }: PricingResultProps) {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -79,8 +106,23 @@ export function PricingResult({ result, formData, onReset, programId, programCon
     ? programYspFixedAmount + brokerYspValue
     : (isLender ? lenderYspOverride : programYspFixedAmount);
 
+  const fd = formData as Record<string, any> | null;
+  const resolvedLoanAmountRaw = resolveField(fd, 'loanAmount', 'requestedLoanAmount', 'loan_amount');
+  const resolvedPropertyValueRaw = resolveField(fd, 'propertyValue', 'estValuePurchasePrice', 'estimatedValue', 'purchasePrice', 'property_value');
+  const resolvedFicoScoreRaw = resolveField(fd, 'ficoScore', 'statedFicoScore', 'creditScore', 'fico_score', 'fico');
+  const resolvedLtvRaw = resolveField(fd, 'ltv', 'ltvRatio', 'ltv_ratio', 'requestedLTV');
+  const resolvedProgramName = resolveField(fd, 'loanType', 'programName', 'program', 'loan_type') || 'N/A';
+  const resolvedPropertyType = resolveField(fd, 'propertyType', 'property_type') || 'N/A';
+
+  const displayPropertyValue = safeNumber(resolvedPropertyValueRaw);
+  const displayFicoScore = resolvedFicoScoreRaw != null && resolvedFicoScoreRaw !== '' ? String(resolvedFicoScoreRaw) : '—';
+  const computedLtv = displayPropertyValue > 0 && safeNumber(resolvedLoanAmountRaw) > 0
+    ? ((safeNumber(resolvedLoanAmountRaw) / displayPropertyValue) * 100).toFixed(1) + '%'
+    : '—';
+  const displayLtv = resolvedLtvRaw != null && resolvedLtvRaw !== '' ? String(resolvedLtvRaw) : computedLtv;
+
   // Computed values
-  const loanAmount = formData?.loanAmount || 0;
+  const loanAmount = safeNumber(resolvedLoanAmountRaw);
   const tpoPremiumPercent = formData?.tpoPremium ? parseFloat(formData.tpoPremium) : 0;
   const tpoPremiumAmount = (loanAmount * tpoPremiumPercent) / 100;
 
@@ -208,27 +250,27 @@ export function PricingResult({ result, formData, onReset, programId, programCon
             <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
               <div>
                 <dt className="text-muted-foreground">Loan Amount</dt>
-                <dd className="font-medium text-foreground">${formData?.loanAmount?.toLocaleString()}</dd>
+                <dd className="font-medium text-foreground">${loanAmount.toLocaleString()}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Property Value</dt>
-                <dd className="font-medium text-foreground">${formData?.propertyValue?.toLocaleString()}</dd>
+                <dd className="font-medium text-foreground">{displayPropertyValue ? `$${displayPropertyValue.toLocaleString()}` : '—'}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">LTV</dt>
-                <dd className="font-medium text-foreground">{formData?.ltv}</dd>
+                <dd className="font-medium text-foreground">{displayLtv}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">FICO Score</dt>
-                <dd className="font-medium text-foreground">{formData?.ficoScore}</dd>
+                <dd className="font-medium text-foreground">{displayFicoScore}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Program</dt>
-                <dd className="font-medium text-foreground">{formData?.loanType}</dd>
+                <dd className="font-medium text-foreground">{resolvedProgramName}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Property Type</dt>
-                <dd className="font-medium text-foreground">{formData?.propertyType}</dd>
+                <dd className="font-medium text-foreground">{resolvedPropertyType}</dd>
               </div>
 {/* TPO Premium is auto-included but hidden from user */}
             </dl>
