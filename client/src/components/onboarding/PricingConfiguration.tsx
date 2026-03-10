@@ -55,8 +55,9 @@ interface ExternalTextInput {
 }
 
 interface ConditionalRule {
-  operator: '>=' | '>' | '<=' | '<' | '==';
+  operator: '>=' | '>' | '<=' | '<' | '==' | 'between';
   value: string;
+  value2?: string;
   option: string;
 }
 
@@ -1166,10 +1167,11 @@ export function PricingConfiguration({
                               <SelectItem value="<=">≤</SelectItem>
                               <SelectItem value="<">{'<'}</SelectItem>
                               <SelectItem value="==">=</SelectItem>
+                              <SelectItem value="between">between</SelectItem>
                             </SelectContent>
                           </Select>
                           <Input
-                            placeholder="value"
+                            placeholder={rule.operator === 'between' ? 'min' : 'value'}
                             value={rule.value}
                             onChange={(e) => {
                               const updated = [...extDropdowns];
@@ -1181,6 +1183,24 @@ export function PricingConfiguration({
                             className="w-24 font-mono text-[13px]"
                             data-testid={`input-rule-val-${ddIdx}-${rIdx}`}
                           />
+                          {rule.operator === 'between' && (
+                            <>
+                              <span className="text-[12px] text-muted-foreground whitespace-nowrap">and</span>
+                              <Input
+                                placeholder="max"
+                                value={rule.value2 || ''}
+                                onChange={(e) => {
+                                  const updated = [...extDropdowns];
+                                  const rules = [...(updated[ddIdx].conditionalRules || [])];
+                                  rules[rIdx] = { ...rules[rIdx], value2: e.target.value };
+                                  updated[ddIdx] = { ...updated[ddIdx], conditionalRules: rules };
+                                  setExtDropdowns(updated);
+                                }}
+                                className="w-24 font-mono text-[13px]"
+                                data-testid={`input-rule-val2-${ddIdx}-${rIdx}`}
+                              />
+                            </>
+                          )}
                           <span className="text-[12px] text-muted-foreground whitespace-nowrap">then select</span>
                           <Select
                             value={rule.option || ''}
