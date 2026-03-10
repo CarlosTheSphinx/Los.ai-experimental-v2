@@ -412,12 +412,12 @@ export async function registerRoutes(
 
       const dynamicTextInputs = configTextInputs.map((ti: any) => ({
         id: ti.id,
-        value: String((loanData as any)[ti.fieldKey] ?? ''),
+        value: String((loanData as any)[ti.mappedFrom || ti.fieldKey] ?? (loanData as any)[ti.fieldKey] ?? ''),
         label: ti.label,
       }));
       const dynamicDropdowns = configDropdowns.map((dd: any) => ({
         label: dd.label,
-        value: String((loanData as any)[dd.fieldKey] ?? ''),
+        value: String((loanData as any)[dd.mappedFrom || dd.fieldKey] ?? (loanData as any)[dd.fieldKey] ?? ''),
       }));
       
       // Run the Apify Puppeteer Scraper actor

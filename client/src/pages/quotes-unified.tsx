@@ -289,6 +289,8 @@ export default function QuotesUnified() {
   const [rtlResult, setRtlResult] = useState<RTLPricingResponse | null>(null);
   const [rtlFormData, setRtlFormData] = useState<RTLPricingFormData | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [testDataKey, setTestDataKey] = useState(0);
+  const [generatedTestData, setGeneratedTestData] = useState<Record<string, any> | null>(null);
   const [signingQuote, setSigningQuote] = useState<SavedQuote | null>(null);
 
   const { mutate: getPricing, isPending: dscrPending } = usePricing();
@@ -347,6 +349,63 @@ export default function QuotesUnified() {
   const handleReset = () => {
     setDscrResult(null);
     setRtlResult(null);
+  };
+
+  const generateTestData = () => {
+    const selectedProgram = allActivePrograms.find(p => p.id === selectedProgramId);
+    const quoteFields = selectedProgram?.quoteFormFields;
+    const testValues: Record<string, any> = {};
+
+    const fieldDefaults: Record<string, any> = {
+      firstName: 'John', lastName: 'Doe', email: 'test@example.com',
+      phone: '(555) 555-1234', address: '123 Main St, Miami, FL 33101',
+      propertyAddress: '456 Oak Ave, Miami, FL 33101', propertyState: 'FL', propertyZip: '33101',
+      loanAmount: 500000, propertyValue: 650000, asIsValue: 650000, purchasePrice: 650000,
+      arv: 850000, rehabBudget: 150000, originalPurchasePrice: 550000,
+      grossMonthlyRent: 4500, monthlyTaxes: 450, monthlyInsurance: 150,
+      annualTaxes: 5400, annualInsurance: 1800, annualHOA: 3600,
+      ficoScore: 740, dscr: 1.25, ltv: 75, entityName: 'Test Holdings LLC',
+      entityType: 'LLC', entityMemberCount: 2,
+      member1FirstName: 'John', member1LastName: 'Doe', member1Email: 'john@test.com',
+      member1Phone: '(555) 555-5678', member1CreditScore: 740,
+      member1MailingAddress: '123 Main St, Miami, FL 33101',
+      member1NetWorth: 1500000, member1Liquidity: 350000,
+      member1PropertiesOwned: 5, member1PropertiesSold2Yrs: 3,
+      member1IsGuarantor: 'Yes', propertyUnits: '1',
+    };
+
+    if (Array.isArray(quoteFields) && quoteFields.length > 0) {
+      quoteFields.forEach((f: any) => {
+        if (!f.visible) return;
+        if (fieldDefaults[f.fieldKey] !== undefined) {
+          testValues[f.fieldKey] = fieldDefaults[f.fieldKey];
+        } else if (f.fieldType === 'select' && f.options?.length > 0) {
+          testValues[f.fieldKey] = f.options[0];
+        } else if (f.fieldType === 'yes_no') {
+          testValues[f.fieldKey] = 'No';
+        } else if (f.fieldType === 'currency') {
+          testValues[f.fieldKey] = 500000;
+        } else if (f.fieldType === 'number') {
+          testValues[f.fieldKey] = 100;
+        } else if (f.fieldType === 'percentage') {
+          testValues[f.fieldKey] = 7.5;
+        } else if (f.fieldType === 'date') {
+          testValues[f.fieldKey] = '2024-01-15';
+        } else if (f.fieldType === 'email') {
+          testValues[f.fieldKey] = 'test@example.com';
+        } else if (f.fieldType === 'phone') {
+          testValues[f.fieldKey] = '(555) 555-0000';
+        } else {
+          testValues[f.fieldKey] = 'Test';
+        }
+      });
+    } else {
+      Object.assign(testValues, fieldDefaults);
+    }
+
+    setGeneratedTestData(testValues);
+    setTestDataKey(prev => prev + 1);
+    toast({ title: 'Test data generated', description: 'Form filled with sample values. Review and submit.' });
   };
 
   const handleEditQuote = (quote: SavedQuote) => {
@@ -595,6 +654,20 @@ export default function QuotesUnified() {
                 </div>
               </div>
 
+              {selectedProgramId && (
+                <div className="flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={generateTestData}
+                    data-testid="button-generate-test-quote"
+                  >
+                    <Calculator className="h-3.5 w-3.5 mr-1.5" />
+                    Generate Test Quote
+                  </Button>
+                </div>
+              )}
+
               {selectedProgramId && (() => {
                 const selectedProgram = allActivePrograms.find(p => p.id === selectedProgramId);
                 const quoteFields = selectedProgram?.quoteFormFields;
@@ -604,7 +677,7 @@ export default function QuotesUnified() {
                   <div className="max-w-4xl mx-auto">
                     {hasDynamicFields ? (
                       <DynamicQuoteForm
-                        key={selectedProgramId}
+                        key={`${selectedProgramId}-${testDataKey}`}
                         fields={quoteFields}
                         onSubmit={(data) => {
                           if (loanProductType === "dscr") {
@@ -614,21 +687,23 @@ export default function QuotesUnified() {
                           }
                         }}
                         isLoading={loanProductType === "dscr" ? dscrPending : rtlPricingMutation.isPending}
-                        defaultData={loanProductType === "dscr" ? dscrFormData : rtlFormData}
+                        defaultData={generatedTestData || (loanProductType === "dscr" ? dscrFormData : rtlFormData)}
                         programName={selectedProgram?.name}
                       />
                     ) : loanProductType === "dscr" ? (
                       <LoanForm
+                        key={`dscr-${testDataKey}`}
                         onSubmit={handleDSCRSubmit}
                         isLoading={dscrPending}
-                        defaultData={dscrFormData}
+                        defaultData={generatedTestData || dscrFormData}
                         visibleFields={quoteFields as any}
                       />
                     ) : (
                       <RTLLoanForm
+                        key={`rtl-${testDataKey}`}
                         onSubmit={handleRTLSubmit}
                         isLoading={rtlPricingMutation.isPending}
-                        defaultData={rtlFormData}
+                        defaultData={generatedTestData || rtlFormData}
                         visibleFields={quoteFields as any}
                       />
                     )}
