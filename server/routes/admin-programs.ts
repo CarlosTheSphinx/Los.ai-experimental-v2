@@ -291,8 +291,9 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
   app.put('/api/admin/programs/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
+      const programId = parseInt(id);
 
-      const [existingProgram] = await db.select().from(loanPrograms).where(eq(loanPrograms.id, parseInt(id)));
+      const [existingProgram] = await db.select().from(loanPrograms).where(eq(loanPrograms.id, programId));
       if (!existingProgram) return res.status(404).json({ error: 'Program not found' });
       const user = await storage.getUserById(req.user!.id);
       if (user?.role !== 'super_admin' && existingProgram.createdBy !== req.user!.id) {
@@ -307,36 +308,133 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         minDscr, minFico,
         minUnits, maxUnits,
         termOptions, eligiblePropertyTypes,
-        isActive, quoteFormFields, reviewGuidelines, creditPolicyId
+        isActive, quoteFormFields, reviewGuidelines, creditPolicyId,
+        steps, documents, tasks
       } = req.body;
 
-      const updateData: any = { updatedAt: new Date() };
-      if (name !== undefined) updateData.name = name;
-      if (description !== undefined) updateData.description = description;
-      if (loanType !== undefined) updateData.loanType = loanType;
-      if (minLoanAmount !== undefined) updateData.minLoanAmount = parseFloat(minLoanAmount);
-      if (maxLoanAmount !== undefined) updateData.maxLoanAmount = parseFloat(maxLoanAmount);
-      if (minLtv !== undefined) updateData.minLtv = parseFloat(minLtv);
-      if (maxLtv !== undefined) updateData.maxLtv = parseFloat(maxLtv);
-      if (minInterestRate !== undefined) updateData.minInterestRate = parseFloat(minInterestRate);
-      if (maxInterestRate !== undefined) updateData.maxInterestRate = parseFloat(maxInterestRate);
-      if (minDscr !== undefined) updateData.minDscr = minDscr ? parseFloat(minDscr) : null;
-      if (minFico !== undefined) updateData.minFico = minFico ? parseInt(minFico) : null;
-      if (minUnits !== undefined) updateData.minUnits = minUnits ? parseInt(minUnits) : null;
-      if (maxUnits !== undefined) updateData.maxUnits = maxUnits ? parseInt(maxUnits) : null;
-      if (termOptions !== undefined) updateData.termOptions = termOptions;
-      if (eligiblePropertyTypes !== undefined) updateData.eligiblePropertyTypes = eligiblePropertyTypes;
-      if (quoteFormFields !== undefined) updateData.quoteFormFields = quoteFormFields ? JSON.stringify(quoteFormFields) : null;
-      if (isActive !== undefined) updateData.isActive = isActive;
-      if (reviewGuidelines !== undefined) updateData.reviewGuidelines = reviewGuidelines;
-      if (creditPolicyId !== undefined) updateData.creditPolicyId = creditPolicyId ? parseInt(creditPolicyId) : null;
+      const result = await db.transaction(async (tx) => {
+        const updateData: any = { updatedAt: new Date() };
+        if (name !== undefined) updateData.name = name;
+        if (description !== undefined) updateData.description = description;
+        if (loanType !== undefined) updateData.loanType = loanType;
+        if (minLoanAmount !== undefined) updateData.minLoanAmount = parseFloat(minLoanAmount);
+        if (maxLoanAmount !== undefined) updateData.maxLoanAmount = parseFloat(maxLoanAmount);
+        if (minLtv !== undefined) updateData.minLtv = parseFloat(minLtv);
+        if (maxLtv !== undefined) updateData.maxLtv = parseFloat(maxLtv);
+        if (minInterestRate !== undefined) updateData.minInterestRate = parseFloat(minInterestRate);
+        if (maxInterestRate !== undefined) updateData.maxInterestRate = parseFloat(maxInterestRate);
+        if (minDscr !== undefined) updateData.minDscr = minDscr ? parseFloat(minDscr) : null;
+        if (minFico !== undefined) updateData.minFico = minFico ? parseInt(minFico) : null;
+        if (minUnits !== undefined) updateData.minUnits = minUnits ? parseInt(minUnits) : null;
+        if (maxUnits !== undefined) updateData.maxUnits = maxUnits ? parseInt(maxUnits) : null;
+        if (termOptions !== undefined) updateData.termOptions = termOptions;
+        if (eligiblePropertyTypes !== undefined) updateData.eligiblePropertyTypes = eligiblePropertyTypes;
+        if (quoteFormFields !== undefined) updateData.quoteFormFields = quoteFormFields ? JSON.stringify(quoteFormFields) : null;
+        if (isActive !== undefined) updateData.isActive = isActive;
+        if (reviewGuidelines !== undefined) updateData.reviewGuidelines = reviewGuidelines;
+        if (creditPolicyId !== undefined) updateData.creditPolicyId = creditPolicyId ? parseInt(creditPolicyId) : null;
 
-      const [program] = await db.update(loanPrograms)
-        .set(updateData)
-        .where(eq(loanPrograms.id, parseInt(id)))
-        .returning();
+        const [program] = await tx.update(loanPrograms)
+          .set(updateData)
+          .where(eq(loanPrograms.id, programId))
+          .returning();
 
-      res.json({ program });
+        let createdStepIds: number[] = [];
+        if (steps && Array.isArray(steps)) {
+          await tx.delete(programWorkflowSteps).where(eq(programWorkflowSteps.programId, programId));
+
+          for (let i = 0; i < steps.length; i++) {
+            const step = steps[i];
+            let stepDefId = step.stepDefinitionId;
+
+            if (!stepDefId && step.stepName?.trim()) {
+              const key = step.stepName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+              const existing = await tx.select().from(workflowStepDefinitions).where(eq(workflowStepDefinitions.key, key));
+              if (existing.length > 0) {
+                stepDefId = existing[0].id;
+              } else {
+                const maxOrder = await tx.select({ max: sql<number>`COALESCE(MAX(sort_order), 0)` }).from(workflowStepDefinitions);
+                const [newStep] = await tx.insert(workflowStepDefinitions).values({
+                  name: step.stepName.trim(),
+                  key,
+                  sortOrder: (maxOrder[0]?.max || 0) + 1,
+                  isActive: true,
+                  isDefault: false,
+                }).returning();
+                stepDefId = newStep.id;
+              }
+            }
+
+            if (stepDefId) {
+              const [createdStep] = await tx.insert(programWorkflowSteps).values({
+                programId,
+                stepDefinitionId: stepDefId,
+                stepOrder: i + 1,
+                isRequired: step.isRequired !== false,
+                estimatedDays: step.estimatedDays ? parseInt(step.estimatedDays) : null,
+              }).returning();
+              createdStepIds.push(createdStep.id);
+            } else {
+              createdStepIds.push(-1);
+            }
+          }
+        }
+
+        if (createdStepIds.length === 0 && (documents || tasks)) {
+          const existingSteps = await tx.select({ id: programWorkflowSteps.id })
+            .from(programWorkflowSteps)
+            .where(eq(programWorkflowSteps.programId, programId))
+            .orderBy(programWorkflowSteps.stepOrder);
+          createdStepIds = existingSteps.map(s => s.id);
+        }
+
+        if (documents && Array.isArray(documents)) {
+          await tx.delete(programDocumentTemplates).where(eq(programDocumentTemplates.programId, programId));
+
+          const validDocs = documents.filter((doc: any) => doc.documentName?.trim());
+          if (validDocs.length > 0) {
+            const documentEntries = validDocs.map((doc: any, index: number) => ({
+              programId,
+              documentName: doc.documentName.trim(),
+              documentCategory: doc.documentCategory || 'other',
+              documentDescription: doc.documentDescription || null,
+              isRequired: doc.isRequired !== false,
+              sortOrder: index,
+              stepId: doc.stepIndex !== null && doc.stepIndex !== undefined && doc.stepIndex >= 0 && doc.stepIndex < createdStepIds.length && createdStepIds[doc.stepIndex] > 0 ? createdStepIds[doc.stepIndex] : null,
+            }));
+            await tx.insert(programDocumentTemplates).values(documentEntries);
+          }
+        }
+
+        if (tasks && Array.isArray(tasks)) {
+          await tx.delete(programTaskTemplates).where(eq(programTaskTemplates.programId, programId));
+
+          const validTasks = tasks.filter((task: any) => task.taskName?.trim());
+          if (validTasks.length > 0) {
+            const taskEntries = validTasks.map((task: any, index: number) => ({
+              programId,
+              taskName: task.taskName.trim(),
+              taskDescription: task.taskDescription || null,
+              taskCategory: task.taskCategory || 'other',
+              priority: task.priority || 'medium',
+              sortOrder: index,
+              stepId: task.stepIndex !== null && task.stepIndex !== undefined && task.stepIndex >= 0 && task.stepIndex < createdStepIds.length && createdStepIds[task.stepIndex] > 0 ? createdStepIds[task.stepIndex] : null,
+              assignToRole: task.assignToRole || task.assignee || null,
+              formTemplateId: task.formTemplateId || null,
+            }));
+            await tx.insert(programTaskTemplates).values(taskEntries);
+          }
+        }
+
+        return program;
+      });
+
+      res.json({ program: result });
+
+      if (steps || documents || tasks) {
+        const { syncProgramToProjects } = await import('../services/projectPipeline');
+        syncProgramToProjects(programId).catch(err => console.error('[ProgramSync] Error syncing after program update:', err));
+      }
     } catch (error) {
       console.error('Update program error:', error);
       res.status(500).json({ error: 'Failed to update program' });

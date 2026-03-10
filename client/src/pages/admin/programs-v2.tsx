@@ -344,6 +344,8 @@ interface LoanProgram {
   eligiblePropertyTypes: string[];
   documents?: any[];
   tasks?: any[];
+  documentCount?: number;
+  taskCount?: number;
   quoteFormFields?: any;
   createdAt: string;
 }
@@ -556,8 +558,8 @@ export default function ProgramsV2() {
   const metrics = useMemo(() => {
     const total = programs.length;
     const active = programs.filter((p) => p.isActive).length;
-    const docCount = programs.reduce((sum, p) => sum + (p.documents?.length || 0), 0);
-    const taskCount = programs.reduce((sum, p) => sum + (p.tasks?.length || 0), 0);
+    const docCount = programs.reduce((sum, p) => sum + (p.documentCount || 0), 0);
+    const taskCount = programs.reduce((sum, p) => sum + (p.taskCount || 0), 0);
     return { total, active, docCount, taskCount };
   }, [programs]);
 
@@ -584,6 +586,8 @@ export default function ProgramsV2() {
     if (activeFilter === "active") result = result.filter((p) => p.isActive);
     if (activeFilter === "inactive") result = result.filter((p) => !p.isActive);
     if (activeFilter === "template") result = result.filter((p) => p.isTemplate);
+    if (activeFilter === "has_documents") result = result.filter((p) => (p.documentCount || 0) > 0);
+    if (activeFilter === "has_tasks") result = result.filter((p) => (p.taskCount || 0) > 0);
 
     if (propertyTypeFilter !== "all") {
       result = result.filter((p) => (p.propertyTypes || p.eligiblePropertyTypes || []).includes(propertyTypeFilter));
@@ -673,14 +677,16 @@ export default function ProgramsV2() {
           label="Documents"
           value={metrics.docCount}
           subtitle="Across all programs"
-          isActive={false}
+          isActive={activeFilter === "has_documents"}
+          onClick={() => setActiveFilter(activeFilter === "has_documents" ? "all" : "has_documents")}
         />
         <SummaryCard
           icon={ListTodo}
           label="Tasks"
           value={metrics.taskCount}
           subtitle="Workflow tasks"
-          isActive={false}
+          isActive={activeFilter === "has_tasks"}
+          onClick={() => setActiveFilter(activeFilter === "has_tasks" ? "all" : "has_tasks")}
         />
       </SummaryStrip>
 
