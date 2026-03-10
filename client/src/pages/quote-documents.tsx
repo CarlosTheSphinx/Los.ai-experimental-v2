@@ -302,10 +302,6 @@ export default function QuoteDocuments() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleOpenEdit} data-testid="button-edit-quote">
-              <Pencil className="mr-2 h-3.5 w-3.5" />
-              Edit Quote
-            </Button>
             <Button variant="outline" onClick={() => setLocation('/quotes')} data-testid="button-back-quotes">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Quotes
@@ -405,6 +401,15 @@ export default function QuoteDocuments() {
           )}
 
           <div className="mt-auto pt-3 space-y-2">
+            <Button
+              className="w-full"
+              variant="outline"
+              onClick={handleOpenEdit}
+              data-testid="button-edit-quote"
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit Quote
+            </Button>
             <Button
               className="w-full"
               variant="outline"
