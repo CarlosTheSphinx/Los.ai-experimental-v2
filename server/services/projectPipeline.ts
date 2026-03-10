@@ -344,14 +344,18 @@ export async function syncProgramToProjects(
   tx?: NodePgDatabase<typeof schemaTypes>
 ): Promise<{ projectsSynced: number }> {
   const dbOrTx = tx || db;
+  console.log(`[ProgramSync] Starting sync for program ${programId}`);
 
   const linkedProjects = await dbOrTx.select({ id: projects.id })
     .from(projects)
     .where(eq(projects.programId, programId));
 
   if (linkedProjects.length === 0) {
+    console.log(`[ProgramSync] No linked projects found for program ${programId}`);
     return { projectsSynced: 0 };
   }
+
+  console.log(`[ProgramSync] Found ${linkedProjects.length} linked project(s) for program ${programId}`);
 
   const workflowSteps = await dbOrTx.select({
     stepId: programWorkflowSteps.id,
@@ -377,11 +381,19 @@ export async function syncProgramToProjects(
     .where(eq(programTaskTemplates.programId, programId))
     .orderBy(asc(programTaskTemplates.sortOrder));
 
+  let successCount = 0;
   for (const project of linkedProjects) {
-    await syncSingleProject(project.id, workflowSteps, docTemplates, taskTemplates, tx);
+    try {
+      await syncSingleProject(project.id, workflowSteps, docTemplates, taskTemplates, tx);
+      successCount++;
+      console.log(`[ProgramSync] Successfully synced project ${project.id}`);
+    } catch (err) {
+      console.error(`[ProgramSync] Failed to sync project ${project.id} for program ${programId}:`, err);
+    }
   }
 
-  return { projectsSynced: linkedProjects.length };
+  console.log(`[ProgramSync] Completed sync for program ${programId}: ${successCount}/${linkedProjects.length} projects synced`);
+  return { projectsSynced: successCount };
 }
 
 async function syncSingleProject(

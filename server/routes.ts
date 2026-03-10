@@ -8831,7 +8831,7 @@ export async function registerRoutes(
         .where(eq(projectTasks.projectId, dealId))
         .orderBy(asc(projectTasks.createdAt));
 
-      const formProjectTasks = ptasks.filter(t => t.formTemplateId).map(t => ({
+      const mappedProjectTasks = ptasks.map(t => ({
         id: t.id,
         dealId: t.projectId,
         taskName: t.taskTitle,
@@ -8842,16 +8842,19 @@ export async function registerRoutes(
         assignedTo: t.assignedTo,
         assigneeName: null,
         assigneeEmail: null,
-        dueDate: null,
+        dueDate: t.dueDate,
         completedAt: t.completedAt,
         createdAt: t.createdAt,
+        stageId: t.stageId,
+        taskType: t.taskType,
         formTemplateId: t.formTemplateId,
         borrowerActionRequired: t.borrowerActionRequired,
+        programTaskTemplateId: t.programTaskTemplateId,
         _assignedToBorrower: t.assignedTo === 'borrower',
         _source: 'projectTasks',
       }));
 
-      const allTasks = [...dtasks.map(t => ({ ...t, formTemplateId: null, borrowerActionRequired: false, _source: 'dealTasks' })), ...formProjectTasks];
+      const allTasks = [...dtasks.map(t => ({ ...t, formTemplateId: null, borrowerActionRequired: false, _source: 'dealTasks' })), ...mappedProjectTasks];
       allTasks.sort((a, b) => {
         const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;

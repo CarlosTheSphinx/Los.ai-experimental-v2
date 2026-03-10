@@ -659,7 +659,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
 
       res.json({ document: doc });
       const { syncProgramToProjects } = await import('../services/projectPipeline');
-      syncProgramToProjects(pid).catch(err => console.error('Sync error:', err));
+      syncProgramToProjects(pid).catch(err => console.error('[ProgramSync] Error syncing after document add:', err));
     } catch (error) {
       console.error('Add program document error:', error);
       res.status(500).json({ error: 'Failed to add document template' });
@@ -684,7 +684,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
       });
       res.json({ success: true });
       const { syncProgramToProjects } = await import('../services/projectPipeline');
-      syncProgramToProjects(parseInt(programId)).catch(err => console.error('Sync error:', err));
+      syncProgramToProjects(parseInt(programId)).catch(err => console.error('[ProgramSync] Error syncing after document batch-step update:', err));
     } catch (error) {
       console.error('Batch update document steps error:', error);
       res.status(500).json({ error: 'Failed to update document assignments' });
@@ -715,7 +715,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
 
       res.json({ document: doc });
       const { syncProgramToProjects } = await import('../services/projectPipeline');
-      syncProgramToProjects(parseInt(req.params.programId)).catch(err => console.error('Sync error:', err));
+      syncProgramToProjects(parseInt(req.params.programId)).catch(err => console.error('[ProgramSync] Error syncing after document update:', err));
     } catch (error) {
       console.error('Update program document error:', error);
       res.status(500).json({ error: 'Failed to update document template' });
@@ -732,7 +732,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
 
       res.json({ success: true });
       const { syncProgramToProjects } = await import('../services/projectPipeline');
-      syncProgramToProjects(parseInt(programId)).catch(err => console.error('Sync error:', err));
+      syncProgramToProjects(parseInt(programId)).catch(err => console.error('[ProgramSync] Error syncing after document delete:', err));
     } catch (error) {
       console.error('Delete program document error:', error);
       res.status(500).json({ error: 'Failed to delete document template' });
@@ -913,7 +913,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
 
       res.json({ task });
       const { syncProgramToProjects } = await import('../services/projectPipeline');
-      syncProgramToProjects(parseInt(programId)).catch(err => console.error('Sync error:', err));
+      syncProgramToProjects(parseInt(programId)).catch(err => console.error('[ProgramSync] Error syncing after task add:', err));
     } catch (error) {
       console.error('Add program task error:', error);
       res.status(500).json({ error: 'Failed to add task template' });
@@ -940,7 +940,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
       });
       res.json({ success: true });
       const { syncProgramToProjects } = await import('../services/projectPipeline');
-      syncProgramToProjects(parseInt(programId)).catch(err => console.error('Sync error:', err));
+      syncProgramToProjects(parseInt(programId)).catch(err => console.error('[ProgramSync] Error syncing after task batch-step update:', err));
     } catch (error) {
       console.error('Batch update task steps error:', error);
       res.status(500).json({ error: 'Failed to update task assignments' });
@@ -971,7 +971,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
 
       res.json({ task });
       const { syncProgramToProjects } = await import('../services/projectPipeline');
-      syncProgramToProjects(parseInt(req.params.programId)).catch(err => console.error('Sync error:', err));
+      syncProgramToProjects(parseInt(req.params.programId)).catch(err => console.error('[ProgramSync] Error syncing after task update:', err));
     } catch (error) {
       console.error('Update program task error:', error);
       res.status(500).json({ error: 'Failed to update task template' });
@@ -988,7 +988,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
 
       res.json({ success: true });
       const { syncProgramToProjects } = await import('../services/projectPipeline');
-      syncProgramToProjects(parseInt(programId)).catch(err => console.error('Sync error:', err));
+      syncProgramToProjects(parseInt(programId)).catch(err => console.error('[ProgramSync] Error syncing after task delete:', err));
     } catch (error) {
       console.error('Delete program task error:', error);
       res.status(500).json({ error: 'Failed to delete task template' });
@@ -1228,7 +1228,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         .orderBy(programWorkflowSteps.stepOrder);
       res.json(updated);
       const { syncProgramToProjects } = await import('../services/projectPipeline');
-      syncProgramToProjects(parseInt(programId)).catch(err => console.error('Sync error:', err));
+      syncProgramToProjects(parseInt(programId)).catch(err => console.error('[ProgramSync] Error syncing after workflow steps update:', err));
     } catch (error) {
       console.error('Save program workflow steps error:', error);
       res.status(500).json({ error: 'Failed to save workflow steps' });
