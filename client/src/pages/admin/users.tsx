@@ -878,12 +878,7 @@ function BetaWaitlistTab() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {signup.createdAt
-                          ? format(
-                              new Date(signup.createdAt),
-                              "MMM d, yyyy"
-                            )
-                          : "-"}
+                        {safeFormat(signup.createdAt, "MMM d, yyyy") || "-"}
                       </TableCell>
                     </TableRow>
                   ))}
