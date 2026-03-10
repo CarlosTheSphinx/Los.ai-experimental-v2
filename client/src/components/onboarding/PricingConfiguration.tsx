@@ -256,14 +256,6 @@ export function PricingConfiguration({
 
   const effectiveProgramId = selectedProgramId ?? propProgramId ?? null;
 
-  const quoteFormVariables: { key: string; label: string }[] = (() => {
-    const prog = programs.find((p: any) => p.id === effectiveProgramId) || editProgramData?.program;
-    if (!prog?.quoteFormFields || !Array.isArray(prog.quoteFormFields)) return [];
-    return prog.quoteFormFields
-      .filter((f: any) => f.fieldKey && f.visible !== false)
-      .map((f: any) => ({ key: f.fieldKey, label: f.label || f.fieldKey }));
-  })();
-
   const { data: existingRuleset, isFetched: rulesetsFetched } = useQuery<{ rulesets: any[] }>({
     queryKey: ['/api/admin/programs', effectiveProgramId, 'rulesets'],
     enabled: !!effectiveProgramId,
@@ -281,6 +273,14 @@ export function PricingConfiguration({
       return res.json();
     },
   });
+
+  const quoteFormVariables: { key: string; label: string }[] = (() => {
+    const prog = programs.find((p: any) => p.id === effectiveProgramId) || editProgramData?.program;
+    if (!prog?.quoteFormFields || !Array.isArray(prog.quoteFormFields)) return [];
+    return prog.quoteFormFields
+      .filter((f: any) => f.fieldKey && f.visible !== false)
+      .map((f: any) => ({ key: f.fieldKey, label: f.label || f.fieldKey }));
+  })();
 
   const [pricingDataLoaded, setPricingDataLoaded] = useState(false);
   useEffect(() => {
