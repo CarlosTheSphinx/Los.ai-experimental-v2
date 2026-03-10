@@ -148,6 +148,7 @@ export const savedQuotes = pgTable("saved_quotes", {
     "NOT_ENABLED",
   ),
   driveSyncError: text("drive_sync_error"),
+  loanNumber: text("loan_number").unique(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -158,6 +159,7 @@ export const insertSavedQuoteSchema = createInsertSchema(savedQuotes).omit({
   googleDriveFolderUrl: true,
   driveSyncStatus: true,
   driveSyncError: true,
+  loanNumber: true,
 });
 export type SavedQuote = typeof savedQuotes.$inferSelect;
 export type InsertSavedQuote = z.infer<typeof insertSavedQuoteSchema>;

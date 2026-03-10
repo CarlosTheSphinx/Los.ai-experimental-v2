@@ -1344,7 +1344,7 @@ export async function registerRoutes(
 
       const quoteDate = quote.createdAt ? new Date(quote.createdAt).toLocaleDateString('en-US') : new Date().toLocaleDateString('en-US');
       const pdfData = {
-        quoteNumber: String(quote.id),
+        quoteNumber: quote.loanNumber || String(quote.id),
         quoteDate,
         customerFirstName: quote.customerFirstName,
         customerLastName: quote.customerLastName,

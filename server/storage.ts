@@ -221,8 +221,27 @@ export class DatabaseStorage implements IStorage {
     return log;
   }
 
+  async generateQuoteLoanNumber(): Promise<string> {
+    const START_NUMBER = 1124;
+    const result = await db.select({ loanNumber: savedQuotes.loanNumber })
+      .from(savedQuotes)
+      .where(sql`${savedQuotes.loanNumber} IS NOT NULL AND ${savedQuotes.loanNumber} LIKE 'SPX-%'`)
+      .orderBy(desc(savedQuotes.id))
+      .limit(100);
+
+    let maxNum = START_NUMBER - 1;
+    for (const row of result) {
+      if (row.loanNumber) {
+        const num = parseInt(row.loanNumber.replace('SPX-', ''), 10);
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      }
+    }
+    return `SPX-${maxNum + 1}`;
+  }
+
   async saveQuote(quote: InsertSavedQuote, userId: number): Promise<SavedQuote> {
-    const [saved] = await db.insert(savedQuotes).values({ ...quote, userId }).returning();
+    const loanNumber = await this.generateQuoteLoanNumber();
+    const [saved] = await db.insert(savedQuotes).values({ ...quote, userId, loanNumber }).returning();
     return saved;
   }
 

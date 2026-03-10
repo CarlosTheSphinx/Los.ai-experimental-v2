@@ -190,7 +190,7 @@ export default function QuoteDocuments() {
       const blobUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl;
-      a.download = `Quote-${quoteId}.pdf`;
+      a.download = `${quote?.loanNumber || `Quote-${quoteId}`}.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -321,7 +321,7 @@ export default function QuoteDocuments() {
               </div>
               <div className="flex items-center gap-6 flex-1 min-w-0 text-sm">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-foreground">Quote #{quote.id}</span>
+                  <span className="font-semibold text-foreground">{quote.loanNumber || `Quote #${quote.id}`}</span>
                   <span className="text-lg font-bold text-primary">{quote.interestRate || 'N/A'}</span>
                 </div>
                 <div>
