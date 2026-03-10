@@ -2617,6 +2617,11 @@ export async function registerRoutes(
         return;
       }
 
+      if (signer.tokenExpiresAt && new Date(signer.tokenExpiresAt) < new Date()) {
+        res.status(410).json({ success: false, error: 'Signing link has expired' });
+        return;
+      }
+
       if (signer.status === 'signed') {
         res.status(400).json({ success: false, error: 'Already signed' });
         return;
@@ -2628,9 +2633,16 @@ export async function registerRoutes(
         return;
       }
 
-      // Update field values
+      // Validate field ownership - only allow updating fields belonging to this signer's document
+      const signerFields = await storage.getFieldsBySignerId(signer.id);
+      const validFieldIds = new Set(signerFields.map(f => f.id));
+
       for (const [fieldIdStr, value] of Object.entries(fieldValues)) {
         const fieldId = parseInt(fieldIdStr);
+        if (!validFieldIds.has(fieldId)) {
+          res.status(403).json({ success: false, error: 'Invalid field access' });
+          return;
+        }
         await storage.updateField(fieldId, { value: value as string });
       }
 
