@@ -427,6 +427,8 @@ export async function registerRoutes(
       }
 
       const resolveFieldValue = (fieldKey: string, sourceType?: string, defaultValue?: string, formula?: string, options?: string[]) => {
+        if (sourceType === 'default' && defaultValue) return defaultValue;
+
         const exactVal = (loanData as any)[fieldKey];
         if (exactVal !== undefined && exactVal !== null && exactVal !== '') return String(exactVal);
 
@@ -493,8 +495,6 @@ export async function registerRoutes(
           }
         }
 
-        if (sourceType === 'default' && defaultValue) return defaultValue;
-
         return '';
       };
 
@@ -510,9 +510,17 @@ export async function registerRoutes(
       }));
 
       const resolvedDropdownValues: Record<string, string> = {};
+      const labelToCamelCase = (label: string) => {
+        const words = label.replace(/[^a-zA-Z0-9]+/g, ' ').trim().split(/\s+/);
+        return words.map((w, i) => i === 0 ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('');
+      };
       for (const dd of dynamicDropdowns) {
         if (dd.fieldKey && dd.value) {
           resolvedDropdownValues[dd.fieldKey] = dd.value;
+          const camelKey = labelToCamelCase(dd.label || dd.fieldKey);
+          if (camelKey && camelKey !== dd.fieldKey) {
+            resolvedDropdownValues[camelKey] = dd.value;
+          }
         }
       }
 
