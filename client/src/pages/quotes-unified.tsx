@@ -80,13 +80,23 @@ function normalizeFieldKey(key: string): string {
   return key.replace(/[-_]/g, '').toLowerCase();
 }
 
-function buildPricingFields(program: ProgramWithPricing): { pricingFields: any[]; pricingNormalizedKeys: Set<string> } {
+function buildPricingFields(program: ProgramWithPricing, baseQuoteFields?: any[]): {
+  pricingFields: any[];
+  pricingNormalizedKeys: Set<string>;
+  keyAliases: Record<string, string>;
+} {
   if (program.pricingMode !== 'external' || !program.externalPricingConfig) {
-    return { pricingFields: [], pricingNormalizedKeys: new Set() };
+    return { pricingFields: [], pricingNormalizedKeys: new Set(), keyAliases: {} };
   }
   const cfg = program.externalPricingConfig;
   const pricingFields: any[] = [];
   const pricingNormalizedKeys = new Set<string>();
+  const keyAliases: Record<string, string> = {};
+
+  const baseKeysByNormalized: Record<string, string> = {};
+  (baseQuoteFields || []).forEach((f: any) => {
+    baseKeysByNormalized[normalizeFieldKey(f.fieldKey)] = f.fieldKey;
+  });
 
   (cfg.textInputs || []).forEach(ti => {
     if (ti.sourceType !== 'borrower') return;
@@ -103,6 +113,10 @@ function buildPricingFields(program: ProgramWithPricing): { pricingFields: any[]
       displayGroup: 'pricing_questions',
     });
     pricingNormalizedKeys.add(normalized);
+    const origKey = baseKeysByNormalized[normalized];
+    if (origKey && origKey !== formKey) {
+      keyAliases[formKey] = origKey;
+    }
   });
 
   (cfg.dropdowns || []).forEach(dd => {
@@ -120,9 +134,23 @@ function buildPricingFields(program: ProgramWithPricing): { pricingFields: any[]
       displayGroup: 'pricing_questions',
     });
     pricingNormalizedKeys.add(normalized);
+    const origKey = baseKeysByNormalized[normalized];
+    if (origKey && origKey !== formKey) {
+      keyAliases[formKey] = origKey;
+    }
   });
 
-  return { pricingFields, pricingNormalizedKeys };
+  return { pricingFields, pricingNormalizedKeys, keyAliases };
+}
+
+function applyKeyAliases(data: Record<string, any>, aliases: Record<string, string>): Record<string, any> {
+  const result = { ...data };
+  for (const [pricingKey, origKey] of Object.entries(aliases)) {
+    if (pricingKey in result && !(origKey in result)) {
+      result[origKey] = result[pricingKey];
+    }
+  }
+  return result;
 }
 
 function formatShortDate(dateStr: string | null | undefined) {
@@ -726,9 +754,9 @@ export default function QuotesUnified() {
               {selectedProgramId && (() => {
                 const selectedProgram = allActivePrograms.find(p => p.id === selectedProgramId);
                 const baseQuoteFields = selectedProgram?.quoteFormFields;
-                const { pricingFields, pricingNormalizedKeys } = selectedProgram
-                  ? buildPricingFields(selectedProgram)
-                  : { pricingFields: [], pricingNormalizedKeys: new Set<string>() };
+                const { pricingFields, pricingNormalizedKeys, keyAliases } = selectedProgram
+                  ? buildPricingFields(selectedProgram, Array.isArray(baseQuoteFields) ? baseQuoteFields : undefined)
+                  : { pricingFields: [], pricingNormalizedKeys: new Set<string>(), keyAliases: {} as Record<string, string> };
                 const filteredBaseFields = Array.isArray(baseQuoteFields) && pricingNormalizedKeys.size > 0
                   ? baseQuoteFields.filter((f: any) => !pricingNormalizedKeys.has(normalizeFieldKey(f.fieldKey)))
                   : baseQuoteFields;
@@ -744,10 +772,11 @@ export default function QuotesUnified() {
                         key={`${selectedProgramId}-${testDataKey}`}
                         fields={quoteFields}
                         onSubmit={(data) => {
+                          const augmented = applyKeyAliases(data as Record<string, any>, keyAliases);
                           if (loanProductType === "dscr") {
-                            handleDSCRSubmit(data as any);
+                            handleDSCRSubmit(augmented as any);
                           } else {
-                            handleRTLSubmit(data as any);
+                            handleRTLSubmit(augmented as any);
                           }
                         }}
                         isLoading={loanProductType === "dscr" ? dscrPending : rtlPricingMutation.isPending}
