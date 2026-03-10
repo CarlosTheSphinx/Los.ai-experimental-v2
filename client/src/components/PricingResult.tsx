@@ -160,13 +160,18 @@ export function PricingResult({ result, formData, onReset, programId, programCon
       });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       toast({
         title: "Quote Saved!",
         description: "Your quote has been saved successfully.",
       });
       queryClient.invalidateQueries({ queryKey: ['/api/quotes'] });
-      setLocation('/quotes');
+      const savedId = data?.quote?.id;
+      if (savedId) {
+        setLocation(`/quotes/${savedId}/documents`);
+      } else {
+        setLocation('/quotes');
+      }
     },
     onError: (error) => {
       toast({

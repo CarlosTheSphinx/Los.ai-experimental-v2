@@ -69,6 +69,7 @@ import OnboardingConfigPage from "@/pages/admin/onboarding-config";
 
 import BrokerContactsPage from "@/pages/broker-contacts";
 import BrokerOutreachPage from "@/pages/broker-outreach";
+import QuoteDocuments from "@/pages/quote-documents";
 
 import { AppLayout } from "@/components/AppLayout";
 import PublicHomePage from "@/pages/public/home";
@@ -207,6 +208,7 @@ function MainRoutes() {
         <Switch>
           <Route path="/" component={() => <ProtectedRoute component={Home} />} />
           <Route path="/quotes" component={() => <ProtectedRoute component={Quotes} />} />
+          <Route path="/quotes/:id/documents" component={() => <ProtectedRoute component={QuoteDocuments} />} />
           <Route path="/agreements" component={() => <Redirect to="/quotes?tab=term-sheets" />} />
           <Route path="/agreements/:id" component={() => <ProtectedRoute component={AgreementDetail} />} />
           <Route path="/commissions" component={() => <ProtectedRoute component={CommissionsPage} />} />
