@@ -9,7 +9,6 @@ import { CheckCircle2, ArrowLeft, Download, AlertCircle, FileText, Save, DollarS
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -71,7 +70,7 @@ export function PricingResult({ result, formData, onReset, programId, programCon
   const [customerFirstName, setCustomerFirstName] = useState("");
   const [customerLastName, setCustomerLastName] = useState("");
   const [customerCompanyName, setCustomerCompanyName] = useState("");
-  const [propertyAddress, setPropertyAddress] = useState("");
+  const propertyAddress = resolveField(formData, 'propertyAddress', 'property_address', 'address') || "";
   const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   // Determine user role
@@ -150,7 +149,7 @@ export function PricingResult({ result, formData, onReset, programId, programCon
         customerLastName,
         customerCompanyName,
         propertyAddress,
-        loanData: formData,
+        loanData: result.loanData || formData,
         interestRate: formattedRate,
         pointsCharged: totalPointsCharged,
         programId: programId || null,
@@ -219,7 +218,7 @@ export function PricingResult({ result, formData, onReset, programId, programCon
   };
 
   const handleSaveQuote = () => {
-    if (!customerFirstName.trim() || !customerLastName.trim() || !propertyAddress.trim()) {
+    if (!customerFirstName.trim() || !customerLastName.trim()) {
       toast({
         title: "Missing Information",
         description: "Please fill in all customer details.",
@@ -364,17 +363,6 @@ export function PricingResult({ result, formData, onReset, programId, programCon
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="address">Property Address</Label>
-                <AddressAutocomplete
-                  id="address"
-                  value={propertyAddress}
-                  onChange={setPropertyAddress}
-                  placeholder="Start typing an address..."
-                  data-testid="input-property-address"
-                />
-              </div>
-
               {/* ═══ ORIGINATION POINTS ═══ */}
               <div className="space-y-4">
                 <Label className="flex items-center gap-1 text-base font-semibold">
@@ -387,7 +375,7 @@ export function PricingResult({ result, formData, onReset, programId, programCon
                   {isLender ? (
                     <>
                       <div className="flex items-center justify-between">
-                        <Label className="text-sm">Automatic Points Included</Label>
+                        <Label className="text-sm">Lender Points</Label>
                         <div className="flex items-center gap-2">
                           <Input
                             type="number"
@@ -423,18 +411,18 @@ export function PricingResult({ result, formData, onReset, programId, programCon
                     </>
                   ) : (
                     <div className="flex items-center justify-between bg-muted/40 rounded-lg p-3 border">
-                      <span className="text-sm text-muted-foreground">Automatic Points Included</span>
+                      <span className="text-sm text-muted-foreground">Lender Points</span>
                       <span className="font-bold text-lg">{programBasePoints}</span>
                     </div>
                   )}
                 </div>
 
-                {/* Broker Additional Points — only if enabled */}
+                {/* Broker Points — only if enabled */}
                 {programBrokerPointsEnabled && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label className="text-sm">
-                        {isLender ? "Additional Points" : "Your Additional Points"}
+                        Broker Points
                       </Label>
                       <div className="flex items-center gap-2">
                         <Input
@@ -611,14 +599,14 @@ export function PricingResult({ result, formData, onReset, programId, programCon
 
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Automatic Points ({basePointsValue.toFixed(3)} pts)</span>
+                    <span className="text-muted-foreground">Lender Points ({basePointsValue.toFixed(3)} pts)</span>
                     <span className="font-medium">
                       ${basePointsAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
                   {programBrokerPointsEnabled && brokerPointsValue > 0 && (
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Additional Points ({brokerPointsValue.toFixed(3)} pts)</span>
+                      <span className="text-muted-foreground">Broker Points ({brokerPointsValue.toFixed(3)} pts)</span>
                       <span className="font-medium">
                         ${brokerPointsAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>

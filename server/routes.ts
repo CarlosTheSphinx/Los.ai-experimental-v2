@@ -505,8 +505,16 @@ export async function registerRoutes(
       }));
       const dynamicDropdowns = configDropdowns.map((dd: any) => ({
         label: dd.label,
+        fieldKey: dd.fieldKey,
         value: resolveFieldValue(dd.fieldKey, dd.sourceType, dd.defaultValue, dd.formula, dd.options),
       }));
+
+      const resolvedDropdownValues: Record<string, string> = {};
+      for (const dd of dynamicDropdowns) {
+        if (dd.fieldKey && dd.value) {
+          resolvedDropdownValues[dd.fieldKey] = dd.value;
+        }
+      }
 
       const scraperPayload = {
         url: scraperUrl,
@@ -1045,12 +1053,14 @@ export async function registerRoutes(
           status: 'success'
         });
 
+        const enrichedLoanData = { ...result.loanData, ...resolvedDropdownValues };
+
         if (result.isIneligible) {
           res.json({
             success: false,
             isIneligible: true,
             message: 'Loan is ineligible',
-            loanData: result.loanData,
+            loanData: enrichedLoanData,
             apifyRunId: run.id,
             scraperPayload,
           });
@@ -1059,7 +1069,7 @@ export async function registerRoutes(
           res.json({
             success: true,
             interestRate: parsedRate,
-            loanData: result.loanData,
+            loanData: enrichedLoanData,
             apifyRunId: run.id,
             scraperPayload,
           });

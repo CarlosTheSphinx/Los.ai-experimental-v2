@@ -311,7 +311,7 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId,
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <Label className="text-foreground font-medium">
-                    Automatic Points Included
+                    Lender Points
                   </Label>
                   <span className="text-lg font-bold text-foreground">{basePointsValue.toFixed(2)}</span>
                 </div>
@@ -334,7 +334,7 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId,
                   </>
                 ) : (
                   <div className="bg-background rounded-lg p-3 border border-border text-sm text-muted-foreground">
-                    Automatic points — {programBasePoints.toFixed(2)} points
+                    Lender points — {programBasePoints.toFixed(2)} points
                     <span className="ml-2 text-foreground font-medium">
                       (${basePointsAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })})
                     </span>
@@ -348,7 +348,7 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId,
                   <div className="flex items-center justify-between mb-2">
                     <Label className="flex items-center gap-1 text-foreground font-medium">
                       <Percent className="w-3 h-3" />
-                      Additional Broker Points
+                      Broker Points
                     </Label>
                     <div className="flex items-center gap-2">
                       <Input
@@ -390,12 +390,12 @@ export function RTLPricingResult({ result, formData, onReset, onEdit, programId,
               {/* Points Summary */}
               <div className="bg-background rounded-lg p-4 border border-border space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Automatic Points Included</span>
+                  <span className="text-muted-foreground">Lender Points</span>
                   <span className="font-medium">{basePointsValue.toFixed(2)} (${basePointsAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })})</span>
                 </div>
                 {programBrokerPointsEnabled && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Additional Broker Points</span>
+                    <span className="text-muted-foreground">Broker Points</span>
                     <span className="font-medium">+{brokerPointsValue.toFixed(2)} (${brokerPointsAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })})</span>
                   </div>
                 )}
