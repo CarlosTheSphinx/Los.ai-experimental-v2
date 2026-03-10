@@ -88,7 +88,106 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   };
 }
 
+function LoiPreviewRow({ label, value }: { label: string; value?: string }) {
+  return (
+    <div className="flex border-b border-gray-200 last:border-b-0">
+      <div className="w-[45%] py-0.5 px-1.5 text-[9px] text-muted-foreground border-r border-gray-200">{label}</div>
+      <div className="w-[55%] py-0.5 px-1.5 text-[9px] font-medium">{value || "—"}</div>
+    </div>
+  );
+}
+
+function LoiPreview() {
+  const navy = "rgb(15, 23, 41)";
+  const gold = "rgb(201, 168, 76)";
+
+  return (
+    <div
+      className="border rounded-md overflow-hidden text-xs space-y-0"
+      style={{ maxWidth: 320, fontFamily: "Helvetica, Arial, sans-serif" }}
+      data-testid="template-preview"
+    >
+      <div className="px-3 py-1 text-center border-b" style={{ backgroundColor: navy }}>
+        <span className="font-bold text-white text-[10px] tracking-wider">SPHINX CAPITAL</span>
+      </div>
+
+      <div className="px-3 pt-2 pb-1">
+        <div className="font-bold text-[11px] text-center" style={{ color: navy }}>
+          Letter of Intent – BPL Term Loan
+        </div>
+        <div className="text-[9px] text-muted-foreground mt-1">Date: _______________</div>
+        <div className="text-[9px] text-muted-foreground">Re: Loan # ________</div>
+      </div>
+
+      <div className="px-3 pb-1">
+        <div className="text-[9px] text-muted-foreground italic">Dear _______________,</div>
+        <div className="text-[8px] text-muted-foreground mt-0.5 line-clamp-2">
+          Thank you for providing Sphinx Capital ("Originator") with the opportunity to present...
+        </div>
+      </div>
+
+      <div className="px-3 pb-1">
+        <div className="px-2 py-0.5 rounded-sm mb-0.5" style={{ backgroundColor: navy }}>
+          <span className="font-bold text-[9px] text-white">Preliminary Transaction Details</span>
+        </div>
+        <div className="border border-gray-200 rounded-sm overflow-hidden">
+          <LoiPreviewRow label="Loan Amount" />
+          <LoiPreviewRow label="Interest Rate*" />
+          <LoiPreviewRow label="Loan Program" value="BPL Term" />
+          <LoiPreviewRow label="Borrower FICO" />
+          <LoiPreviewRow label="Est. Property Value" />
+          <LoiPreviewRow label="LTV" />
+          <LoiPreviewRow label="Property Type" />
+          <LoiPreviewRow label="Loan Term" value="360 Months" />
+          <LoiPreviewRow label="Prepayment Penalty" />
+          <LoiPreviewRow label="Est. DSCR" />
+        </div>
+      </div>
+
+      <div className="px-3 pb-1">
+        <div className="px-2 py-0.5 rounded-sm mb-0.5" style={{ backgroundColor: navy }}>
+          <span className="font-bold text-[9px] text-white">Estimated Fees & Other Details</span>
+        </div>
+        <div className="border border-gray-200 rounded-sm overflow-hidden">
+          <LoiPreviewRow label="Rate Buydown" value="0% of Loan Amt" />
+          <LoiPreviewRow label="Origination Fee" value="__% of Loan Amt" />
+          <LoiPreviewRow label="Underwriting Fee" value="$1,500" />
+          <LoiPreviewRow label="Legal/Doc Fee" value="$750" />
+        </div>
+      </div>
+
+      <div className="px-3 py-1 border-t border-dashed border-gray-300">
+        <div className="text-[8px] text-muted-foreground text-center font-medium">— Page 2 —</div>
+        <div className="px-2 py-0.5 rounded-sm mt-0.5 mb-0.5" style={{ backgroundColor: "#f5f5f5" }}>
+          <span className="font-bold text-[9px]" style={{ color: navy }}>Disclaimer</span>
+        </div>
+        <div className="text-[8px] text-muted-foreground line-clamp-2">
+          This Letter of Intent is non-binding and does not constitute a commitment to lend...
+        </div>
+        <div className="mt-1 pt-1 border-t border-gray-200">
+          <div className="font-bold text-[9px]" style={{ color: navy }}>Borrower Acceptance</div>
+          <div className="grid grid-cols-2 gap-x-2 mt-0.5">
+            <div className="text-[8px] text-muted-foreground">Name: ___________</div>
+            <div className="text-[8px] text-muted-foreground">Date: ___________</div>
+          </div>
+          <div className="text-[8px] text-muted-foreground mt-0.5">Signature: ___________</div>
+        </div>
+      </div>
+
+      <div className="px-3 py-1 border-t border-dashed border-gray-300">
+        <div className="text-[8px] text-muted-foreground text-center font-medium">— Page 3 —</div>
+        <div className="font-bold text-[9px] mt-0.5" style={{ color: navy }}>Exhibit A – Property Address</div>
+        <div className="text-[8px] text-muted-foreground mt-0.5">Addresses: ___________________________</div>
+      </div>
+    </div>
+  );
+}
+
 function TemplatePreview({ config }: { config: TemplateConfig }) {
+  if ((config.templateType || "summary") === "loi") {
+    return <LoiPreview />;
+  }
+
   const primary = hexToRgb(config.primaryColor) || { r: 15, g: 23, b: 41 };
   const accent = hexToRgb(config.accentColor) || { r: 201, g: 168, b: 76 };
   const primaryBg = `rgb(${primary.r}, ${primary.g}, ${primary.b})`;
