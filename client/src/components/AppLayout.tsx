@@ -549,7 +549,7 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
       {messagesOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" data-testid="messages-modal-overlay">
           <div className="absolute inset-0 bg-black/50" onClick={() => setMessagesOpen(false)} />
-          <div className="relative z-10 bg-card rounded-xl shadow-2xl w-full max-w-4xl max-h-[80vh] overflow-hidden flex flex-col" data-testid="messages-modal">
+          <div className="relative z-10 bg-card rounded-xl shadow-2xl w-full max-w-6xl max-h-[80vh] overflow-hidden flex flex-col" data-testid="messages-modal">
             <div className="flex items-center justify-between px-5 py-3 border-b shrink-0">
               <h2 className="text-lg font-semibold">Messages</h2>
               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setMessagesOpen(false)} data-testid="button-close-messages-modal">
