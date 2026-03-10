@@ -214,16 +214,24 @@ export function PricingConfiguration({
     },
     onSuccess: (data: any) => {
       if (data.success) {
-        const scannedTextInputs: ExternalTextInput[] = (data.textInputs || []).map((ti: any) => ({
-          id: ti.id || '',
-          fieldKey: (ti.placeholder || ti.label || ti.name || '').toLowerCase().replace(/[^a-z0-9]+/g, ''),
-          label: ti.label || ti.placeholder || ti.name || '',
-        }));
         const scannedDropdowns: ExternalDropdown[] = (data.dropdowns || []).map((dd: any) => ({
           label: dd.label || '',
           fieldKey: (dd.label || '').toLowerCase().replace(/[^a-z0-9]+/g, ''),
           options: dd.options || [],
         }));
+        const dropdownLabels = new Set(scannedDropdowns.map(d => d.label.toLowerCase()));
+        const dropdownKeys = new Set(scannedDropdowns.map(d => d.fieldKey));
+        const scannedTextInputs: ExternalTextInput[] = (data.textInputs || [])
+          .filter((ti: any) => {
+            const label = (ti.label || ti.placeholder || '').toLowerCase();
+            const key = label.replace(/[^a-z0-9]+/g, '');
+            return !dropdownLabels.has(label) && !dropdownKeys.has(key);
+          })
+          .map((ti: any) => ({
+            id: ti.id || '',
+            fieldKey: (ti.placeholder || ti.label || ti.name || '').toLowerCase().replace(/[^a-z0-9]+/g, ''),
+            label: ti.label || ti.placeholder || ti.name || '',
+          }));
         setExtTextInputs(scannedTextInputs);
         setExtDropdowns(scannedDropdowns);
         toast({ title: `Scan complete`, description: `Found ${scannedTextInputs.length} text inputs and ${scannedDropdowns.length} dropdowns.` });
