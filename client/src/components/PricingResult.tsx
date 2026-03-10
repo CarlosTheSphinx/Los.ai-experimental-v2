@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { PricingResponse, LoanPricingFormData } from "@shared/schema";
-import { CheckCircle2, ArrowLeft, Download, AlertCircle, FileText, Save, DollarSign, Percent, User, Info } from "lucide-react";
+import { CheckCircle2, ArrowLeft, Download, AlertCircle, FileText, Save, DollarSign, Percent, User, Info, Loader2 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -72,6 +72,7 @@ export function PricingResult({ result, formData, onReset, programId, programCon
   const [customerLastName, setCustomerLastName] = useState("");
   const [customerCompanyName, setCustomerCompanyName] = useState("");
   const [propertyAddress, setPropertyAddress] = useState("");
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   // Determine user role
   const isLender = user?.role === 'admin' || user?.role === 'super_admin';
@@ -179,6 +180,43 @@ export function PricingResult({ result, formData, onReset, programId, programCon
       });
     }
   });
+
+  const handleDownloadPdf = async () => {
+    setDownloadingPdf(true);
+    try {
+      const rate = result.interestRate;
+      const formattedRate = typeof rate === 'string' ? rate : (rate ? `${rate.toFixed(3)}%` : "N/A");
+      const res = await fetch('/api/pricing/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          formData,
+          result: { ...result, interestRate: formattedRate },
+          pointsCharged: totalPointsCharged,
+          yspAmount: totalYspValue,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to generate PDF');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `quote-${new Date().toISOString().slice(0, 10)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to download PDF",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
 
   const handleSaveQuote = () => {
     if (!customerFirstName.trim() || !customerLastName.trim() || !propertyAddress.trim()) {
@@ -655,11 +693,17 @@ export function PricingResult({ result, formData, onReset, programId, programCon
             Edit Loan
           </Button>
           <Button
-            onClick={() => window.print()}
+            onClick={handleDownloadPdf}
+            disabled={downloadingPdf}
             className="flex-1 h-12 text-lg font-semibold shadow-lg shadow-primary/20 bg-gradient-to-r from-primary to-primary"
+            data-testid="button-download-pdf"
           >
-            <Download className="mr-2 h-5 w-5" />
-            Download PDF
+            {downloadingPdf ? (
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-5 w-5" />
+            )}
+            {downloadingPdf ? "Generating..." : "Download PDF"}
           </Button>
         </div>
       </CardFooter>

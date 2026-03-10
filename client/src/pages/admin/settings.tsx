@@ -68,6 +68,7 @@ import AICustomizationConfig from "@/components/admin/config/AICustomizationConf
 import MagicLinksConfig from "@/components/admin/config/MagicLinksConfig";
 import DocumentReviewConfig from "@/components/admin/config/DocumentReviewConfig";
 import InquiryFormTemplatesConfig from "@/components/admin/config/InquiryFormTemplatesConfig";
+import QuotePdfTemplateConfig from "@/components/admin/config/QuotePdfTemplateConfig";
 
 interface DealStage {
   id: number;
@@ -122,6 +123,7 @@ const CONFIG_TABS = [
   { id: "doc-review", label: "Doc Review & Comms", icon: FileSearch },
   { id: "magic-links", label: "Magic Links", icon: Link2 },
   { id: "inquiry-forms", label: "Inquiry Forms", icon: FileText },
+  { id: "quote-pdfs", label: "Quote PDFs", icon: FileText },
   { id: "custom-fields", label: "Custom Fields", icon: LayoutList },
   { id: "billing", label: "Billing & Plans", icon: CreditCard },
 ] as const;
@@ -1214,6 +1216,8 @@ export default function AdminSettings() {
           {activeTab === "magic-links" && <MagicLinksConfig />}
 
           {activeTab === "inquiry-forms" && <InquiryFormTemplatesConfig />}
+
+          {activeTab === "quote-pdfs" && <QuotePdfTemplateConfig />}
 
           {activeTab === "custom-fields" && <CustomFieldsConfig />}
 

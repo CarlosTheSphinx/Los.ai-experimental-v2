@@ -979,6 +979,35 @@ function QuoteCard({
   onMessage: () => void;
   deleteIsPending: boolean;
 }) {
+  const { toast } = useToast();
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    setDownloadingPdf(true);
+    try {
+      const res = await fetch(`/api/quotes/${quote.id}/pdf`, {
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('Failed to generate PDF');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `quote-${quote.id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to download PDF",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
   const loanData = quote.loanData as Record<string, any>;
   const isRTLQuote = loanData?.asIsValue || loanData?.arv || loanData?.rehabBudget !== undefined;
 
@@ -1074,6 +1103,21 @@ function QuoteCard({
                   </Button>
                 )}
                 <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadPdf}
+                  disabled={downloadingPdf}
+                  className="h-8 rounded-full text-[14px] gap-1.5 px-3"
+                  data-testid={`button-download-quote-pdf-${quote.id}`}
+                >
+                  {downloadingPdf ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5" />
+                  )}
+                  {downloadingPdf ? "Generating..." : "PDF"}
+                </Button>
+                <Button
                   variant="ghost"
                   size="icon"
                   onClick={onDelete}
@@ -1084,6 +1128,23 @@ function QuoteCard({
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </>
+            )}
+            {isBorrower && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadPdf}
+                disabled={downloadingPdf}
+                className="h-8 rounded-full text-[14px] gap-1.5 px-3"
+                data-testid={`button-download-quote-pdf-borrower-${quote.id}`}
+              >
+                {downloadingPdf ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Download className="h-3.5 w-3.5" />
+                )}
+                {downloadingPdf ? "Generating..." : "PDF"}
+              </Button>
             )}
             {isBorrower && latestEnvelope?.signingUrl && envelopeStatus !== 'completed' && (
               <Button

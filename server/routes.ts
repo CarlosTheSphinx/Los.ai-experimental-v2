@@ -1262,6 +1262,167 @@ export async function registerRoutes(
     }
   });
 
+  // Download PDF for a saved quote
+  app.get('/api/quotes/:id/pdf', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const quote = await storage.getQuoteById(id, req.user!.id);
+      if (!quote) {
+        res.status(404).json({ success: false, error: 'Quote not found' });
+        return;
+      }
+
+      const { generateQuotePdf, DEFAULT_TEMPLATE_CONFIG } = await import('./pdf/quoteGenerator');
+      const templateId = req.query.templateId ? parseInt(req.query.templateId as string) : null;
+      let templateConfig = DEFAULT_TEMPLATE_CONFIG;
+
+      if (templateId) {
+        const template = await storage.getQuotePdfTemplateById(templateId);
+        if (template) templateConfig = template.config;
+      } else {
+        const defaultTemplate = await storage.getDefaultQuotePdfTemplate(req.user!.tenantId || undefined);
+        if (defaultTemplate) templateConfig = defaultTemplate.config;
+      }
+
+      const quoteDate = quote.createdAt ? new Date(quote.createdAt).toLocaleDateString('en-US') : new Date().toLocaleDateString('en-US');
+      const pdfBytes = await generateQuotePdf({
+        quoteNumber: String(quote.id),
+        quoteDate,
+        customerFirstName: quote.customerFirstName,
+        customerLastName: quote.customerLastName,
+        customerCompanyName: quote.customerCompanyName || undefined,
+        propertyAddress: quote.propertyAddress,
+        interestRate: quote.interestRate || undefined,
+        pointsCharged: quote.pointsCharged || undefined,
+        pointsAmount: quote.pointsAmount || undefined,
+        yspAmount: quote.yspAmount || undefined,
+        yspDollarAmount: quote.yspDollarAmount || undefined,
+        commission: quote.commission || undefined,
+        loanData: quote.loanData as Record<string, any> || {},
+      }, templateConfig);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="Quote-${quote.id}-${quote.customerLastName || 'download'}.pdf"`);
+      res.send(Buffer.from(pdfBytes));
+    } catch (error) {
+      console.error('Error generating quote PDF:', error);
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'PDF generation failed' });
+    }
+  });
+
+  // Generate PDF for unsaved pricing result
+  app.post('/api/pricing/pdf', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const { formData, result, templateId, pointsCharged, yspAmount } = req.body;
+      if (!formData || !result) {
+        res.status(400).json({ success: false, error: 'formData and result are required' });
+        return;
+      }
+
+      const { generateQuotePdf, DEFAULT_TEMPLATE_CONFIG } = await import('./pdf/quoteGenerator');
+      let templateConfig = DEFAULT_TEMPLATE_CONFIG;
+
+      if (templateId) {
+        const template = await storage.getQuotePdfTemplateById(parseInt(templateId));
+        if (template) templateConfig = template.config;
+      } else {
+        const defaultTemplate = await storage.getDefaultQuotePdfTemplate(req.user!.tenantId || undefined);
+        if (defaultTemplate) templateConfig = defaultTemplate.config;
+      }
+
+      const pdfBytes = await generateQuotePdf({
+        quoteDate: new Date().toLocaleDateString('en-US'),
+        interestRate: result.interestRate != null
+          ? (typeof result.interestRate === 'number' ? `${result.interestRate.toFixed(3)}%` : String(result.interestRate))
+          : undefined,
+        pointsCharged: pointsCharged != null ? Number(pointsCharged) : undefined,
+        yspAmount: yspAmount != null ? Number(yspAmount) : undefined,
+        loanData: formData,
+      }, templateConfig);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename="Quote-Estimate.pdf"');
+      res.send(Buffer.from(pdfBytes));
+    } catch (error) {
+      console.error('Error generating pricing PDF:', error);
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'PDF generation failed' });
+    }
+  });
+
+  // ==================== QUOTE PDF TEMPLATES ====================
+  app.get('/api/quote-pdf-templates', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const templates = await storage.getQuotePdfTemplates(req.user!.tenantId || undefined);
+      res.json(templates);
+    } catch (error) {
+      console.error('Error fetching quote PDF templates:', error);
+      res.status(500).json({ success: false, error: 'Failed to fetch templates' });
+    }
+  });
+
+  app.post('/api/quote-pdf-templates', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      if (req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
+        res.status(403).json({ success: false, error: 'Admin access required' });
+        return;
+      }
+      const data = { ...req.body, tenantId: req.user!.tenantId || null };
+      const template = await storage.createQuotePdfTemplate(data);
+      res.json(template);
+    } catch (error) {
+      console.error('Error creating quote PDF template:', error);
+      res.status(500).json({ success: false, error: 'Failed to create template' });
+    }
+  });
+
+  app.patch('/api/quote-pdf-templates/:id', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      if (req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
+        res.status(403).json({ success: false, error: 'Admin access required' });
+        return;
+      }
+      const id = parseInt(req.params.id);
+      const existing = await storage.getQuotePdfTemplateById(id);
+      if (!existing) {
+        res.status(404).json({ success: false, error: 'Template not found' });
+        return;
+      }
+      if (existing.tenantId && existing.tenantId !== (req.user!.tenantId || null)) {
+        res.status(403).json({ success: false, error: 'Access denied' });
+        return;
+      }
+      const template = await storage.updateQuotePdfTemplate(id, req.body);
+      res.json(template);
+    } catch (error) {
+      console.error('Error updating quote PDF template:', error);
+      res.status(500).json({ success: false, error: 'Failed to update template' });
+    }
+  });
+
+  app.delete('/api/quote-pdf-templates/:id', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      if (req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
+        res.status(403).json({ success: false, error: 'Admin access required' });
+        return;
+      }
+      const id = parseInt(req.params.id);
+      const existing = await storage.getQuotePdfTemplateById(id);
+      if (!existing) {
+        res.status(404).json({ success: false, error: 'Template not found' });
+        return;
+      }
+      if (existing.tenantId && existing.tenantId !== (req.user!.tenantId || null)) {
+        res.status(403).json({ success: false, error: 'Access denied' });
+        return;
+      }
+      await storage.deleteQuotePdfTemplate(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error deleting quote PDF template:', error);
+      res.status(500).json({ success: false, error: 'Failed to delete template' });
+    }
+  });
+
   // Accept a quote (borrower flow) — creates a project/deal on the admin dashboard
   app.post('/api/quotes/:id/accept', authenticateUser, async (req: AuthRequest, res) => {
     try {

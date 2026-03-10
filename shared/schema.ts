@@ -3959,3 +3959,40 @@ export const taskFormSubmissions = pgTable("task_form_submissions", {
 export const insertTaskFormSubmissionSchema = createInsertSchema(taskFormSubmissions).omit({ id: true, createdAt: true });
 export type TaskFormSubmission = typeof taskFormSubmissions.$inferSelect;
 export type InsertTaskFormSubmission = z.infer<typeof insertTaskFormSubmissionSchema>;
+
+// ==================== QUOTE PDF TEMPLATES ====================
+
+export interface QuotePdfSection {
+  key: string;
+  label: string;
+  enabled: boolean;
+  fields: Array<{ key: string; label: string; aliases?: string[] }>;
+}
+
+export interface QuotePdfTemplateConfig {
+  companyName: string;
+  tagline: string;
+  logoUrl?: string;
+  primaryColor: string;
+  accentColor: string;
+  headerText: string;
+  footerDisclaimer: string;
+  sections: QuotePdfSection[];
+  showYsp: boolean;
+  showPoints: boolean;
+  showCommission: boolean;
+}
+
+export const quotePdfTemplates = pgTable("quote_pdf_templates", {
+  id: serial("id").primaryKey(),
+  tenantId: varchar("tenant_id", { length: 100 }),
+  name: varchar("name", { length: 255 }).notNull(),
+  isDefault: boolean("is_default").default(false).notNull(),
+  config: jsonb("config").notNull().$type<QuotePdfTemplateConfig>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertQuotePdfTemplateSchema = createInsertSchema(quotePdfTemplates).omit({ id: true, createdAt: true, updatedAt: true });
+export type QuotePdfTemplate = typeof quotePdfTemplates.$inferSelect;
+export type InsertQuotePdfTemplate = z.infer<typeof insertQuotePdfTemplateSchema>;

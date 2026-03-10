@@ -40,6 +40,8 @@ import {
   type SubmissionNotification, type InsertSubmissionNotification,
   messageTemplates,
   type MessageTemplate, type InsertMessageTemplate,
+  quotePdfTemplates,
+  type QuotePdfTemplate, type InsertQuotePdfTemplate,
 } from "@shared/schema";
 import { desc, eq, and, gt, like, sql, asc, or, isNull, count, inArray } from "drizzle-orm";
 
@@ -171,6 +173,14 @@ export interface IStorage {
   createMessageTemplate(data: InsertMessageTemplate): Promise<MessageTemplate>;
   updateMessageTemplate(id: number, userId: number, data: Partial<InsertMessageTemplate>): Promise<MessageTemplate | undefined>;
   deleteMessageTemplate(id: number, userId: number): Promise<boolean>;
+
+  // Quote PDF Templates
+  getQuotePdfTemplates(tenantId?: string): Promise<QuotePdfTemplate[]>;
+  getQuotePdfTemplateById(id: number): Promise<QuotePdfTemplate | undefined>;
+  getDefaultQuotePdfTemplate(tenantId?: string): Promise<QuotePdfTemplate | undefined>;
+  createQuotePdfTemplate(data: InsertQuotePdfTemplate): Promise<QuotePdfTemplate>;
+  updateQuotePdfTemplate(id: number, data: Partial<InsertQuotePdfTemplate>): Promise<QuotePdfTemplate | undefined>;
+  deleteQuotePdfTemplate(id: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1478,6 +1488,60 @@ export class DatabaseStorage implements IStorage {
     const result = await db.delete(messageTemplates)
       .where(and(eq(messageTemplates.id, id), eq(messageTemplates.createdBy, userId)))
       .returning();
+    return result.length > 0;
+  }
+
+  async getQuotePdfTemplates(tenantId?: string): Promise<QuotePdfTemplate[]> {
+    if (tenantId) {
+      return await db.select().from(quotePdfTemplates)
+        .where(or(eq(quotePdfTemplates.tenantId, tenantId), isNull(quotePdfTemplates.tenantId)))
+        .orderBy(desc(quotePdfTemplates.createdAt));
+    }
+    return await db.select().from(quotePdfTemplates).orderBy(desc(quotePdfTemplates.createdAt));
+  }
+
+  async getQuotePdfTemplateById(id: number): Promise<QuotePdfTemplate | undefined> {
+    const [template] = await db.select().from(quotePdfTemplates).where(eq(quotePdfTemplates.id, id));
+    return template;
+  }
+
+  async getDefaultQuotePdfTemplate(tenantId?: string): Promise<QuotePdfTemplate | undefined> {
+    const conditions = [eq(quotePdfTemplates.isDefault, true)];
+    if (tenantId) {
+      conditions.push(eq(quotePdfTemplates.tenantId, tenantId));
+    }
+    const [template] = await db.select().from(quotePdfTemplates).where(and(...conditions));
+    return template;
+  }
+
+  async createQuotePdfTemplate(data: InsertQuotePdfTemplate): Promise<QuotePdfTemplate> {
+    if (data.isDefault) {
+      await db.update(quotePdfTemplates)
+        .set({ isDefault: false })
+        .where(data.tenantId ? eq(quotePdfTemplates.tenantId, data.tenantId) : sql`true`);
+    }
+    const [created] = await db.insert(quotePdfTemplates).values(data).returning();
+    return created;
+  }
+
+  async updateQuotePdfTemplate(id: number, data: Partial<InsertQuotePdfTemplate>): Promise<QuotePdfTemplate | undefined> {
+    if (data.isDefault) {
+      const existing = await this.getQuotePdfTemplateById(id);
+      if (existing) {
+        await db.update(quotePdfTemplates)
+          .set({ isDefault: false })
+          .where(existing.tenantId ? eq(quotePdfTemplates.tenantId, existing.tenantId) : sql`true`);
+      }
+    }
+    const [updated] = await db.update(quotePdfTemplates)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(quotePdfTemplates.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteQuotePdfTemplate(id: number): Promise<boolean> {
+    const result = await db.delete(quotePdfTemplates).where(eq(quotePdfTemplates.id, id)).returning();
     return result.length > 0;
   }
 }
