@@ -8,8 +8,9 @@ import { FileText, Check, AlertCircle, PenTool, Loader2, ChevronLeft, ChevronRig
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Document, Page, pdfjs } from "react-pdf";
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 interface SigningData {
   success: boolean;
