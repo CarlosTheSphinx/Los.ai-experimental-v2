@@ -925,12 +925,12 @@ export function ProgramCreationWizard({
       )}
 
       <div className="flex gap-6">
-        <div className="w-72 min-w-[288px] shrink-0 flex flex-col border-r border-border pr-6 bg-blue-50/40 rounded-l-[10px] p-6">
-          <h3 className="text-[19px] font-semibold mb-6 text-center">
+        <div className="w-48 min-w-[192px] shrink-0 flex flex-col border-r border-border pr-4 bg-blue-50/40 rounded-l-[10px] p-4">
+          <h3 className="text-[15px] font-semibold mb-4 text-center">
             {isEditMode ? 'Edit Program' : 'New Program'}
           </h3>
 
-          <div className="space-y-2 flex-1 flex flex-col items-center">
+          <div className="space-y-1 flex-1 flex flex-col">
             {wizardSteps.map((step, i) => {
               const isCompleted = i < currentStepIndex;
               const isCurrent = i === currentStepIndex;
@@ -938,26 +938,26 @@ export function ProgramCreationWizard({
                 <button
                   key={step.key}
                   onClick={() => setWizardStep(step.key)}
-                  className="flex items-center gap-3 w-full py-2.5 px-2 rounded-md transition-colors text-left"
+                  className="flex items-center gap-2 w-full py-1.5 px-1.5 rounded-md transition-colors text-left"
                   data-testid={`sidebar-step-${step.key}`}
                 >
                   <div
                     className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center text-[15px] font-semibold shrink-0 transition-colors",
+                      "w-6 h-6 rounded-full flex items-center justify-center text-[12px] font-semibold shrink-0 transition-colors",
                       isCompleted && "bg-emerald-500 text-white",
                       isCurrent && "bg-primary text-white",
                       !isCompleted && !isCurrent && "border-2 border-muted-foreground/30 text-muted-foreground"
                     )}
                   >
                     {isCompleted ? (
-                      <Check className="h-4 w-4" />
+                      <Check className="h-3 w-3" />
                     ) : (
                       step.number
                     )}
                   </div>
                   <span
                     className={cn(
-                      "text-[17px]",
+                      "text-[13px]",
                       isCurrent && "font-medium text-foreground",
                       !isCurrent && "text-muted-foreground"
                     )}
@@ -971,9 +971,9 @@ export function ProgramCreationWizard({
 
           <div className="mt-6 pt-4 border-t">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[15px] font-medium text-muted-foreground">Progress</span>
-              <span className="text-[15px] text-muted-foreground">
-                {currentStepIndex + 1} of {wizardSteps.length} steps
+              <span className="text-[12px] font-medium text-muted-foreground">Progress</span>
+              <span className="text-[12px] text-muted-foreground">
+                {currentStepIndex + 1}/{wizardSteps.length}
               </span>
             </div>
             <Progress value={progressPercent} className="h-2" />
