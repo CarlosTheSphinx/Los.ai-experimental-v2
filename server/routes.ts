@@ -6961,10 +6961,31 @@ export async function registerRoutes(
         if (newProp) props = [newProp];
       }
       
-      const dealStages = await db.select()
+      const allDealStages = await db.select()
         .from(projectStages)
         .where(eq(projectStages.projectId, projectId))
         .orderBy(asc(projectStages.stageOrder));
+
+      let dealStages = allDealStages.filter(s => s.status !== 'skipped');
+      if (project.programId) {
+        const seenKeys = new Map<string, typeof dealStages[0]>();
+        const filtered: typeof dealStages = [];
+        for (const s of dealStages) {
+          const key = s.stageKey || `_id_${s.id}`;
+          const existing = seenKeys.get(key);
+          if (existing) {
+            if (s.programStepId && !existing.programStepId) {
+              const idx = filtered.indexOf(existing);
+              if (idx !== -1) filtered[idx] = s;
+              seenKeys.set(key, s);
+            }
+          } else {
+            seenKeys.set(key, s);
+            filtered.push(s);
+          }
+        }
+        dealStages = filtered;
+      }
 
       res.json({ deal, documents: docs, project, properties: props, stages: dealStages });
     } catch (error) {
