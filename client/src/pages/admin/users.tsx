@@ -15,6 +15,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Search, MoreHorizontal, UserCog, Shield, User as UserIcon, Plus, Users, Briefcase, Pencil, Mail, CheckCircle, Clock } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
+
+function safeFormat(dateVal: any, fmt: string): string {
+  if (!dateVal) return '';
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) return '';
+  return format(d, fmt);
+}
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -304,10 +311,10 @@ function UsersTab() {
                       </TableCell>
                       <TableCell>{user.companyName || "-"}</TableCell>
                       <TableCell>
-                        {user.createdAt ? format(new Date(user.createdAt), "MMM d, yyyy") : "-"}
+                        {safeFormat(user.createdAt, "MMM d, yyyy") || "-"}
                       </TableCell>
                       <TableCell>
-                        {user.lastLoginAt ? format(new Date(user.lastLoginAt), "MMM d, yyyy") : "Never"}
+                        {safeFormat(user.lastLoginAt, "MMM d, yyyy") || "Never"}
                       </TableCell>
                       <TableCell>
                         <Switch
@@ -648,7 +655,7 @@ function TeamTab() {
                               Accepted
                             </Badge>
                           ) : member.lastLoginAt ? (
-                            <span className="text-sm text-muted-foreground">{format(new Date(member.lastLoginAt), "MMM d, yyyy")}</span>
+                            <span className="text-sm text-muted-foreground">{safeFormat(member.lastLoginAt, "MMM d, yyyy")}</span>
                           ) : (
                             <span className="text-sm text-muted-foreground">Active</span>
                           )}
