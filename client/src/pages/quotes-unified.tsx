@@ -68,6 +68,53 @@ interface ProgramWithPricing {
   activeRulesetId?: number;
   activeRulesetVersion?: number;
   quoteFormFields?: any[];
+  pricingMode?: string;
+  externalPricingConfig?: {
+    scraperUrl?: string;
+    textInputs?: Array<{ id: string; fieldKey: string; label: string; sourceType?: string; mappedFrom?: string }>;
+    dropdowns?: Array<{ label: string; fieldKey: string; options: string[]; sourceType?: string; mappedFrom?: string }>;
+  } | null;
+}
+
+function buildPricingFields(program: ProgramWithPricing): any[] {
+  if (program.pricingMode !== 'external' || !program.externalPricingConfig) return [];
+  const cfg = program.externalPricingConfig;
+  const existingKeys = new Set((program.quoteFormFields || []).map((f: any) => f.fieldKey));
+  const pricingFields: any[] = [];
+
+  (cfg.textInputs || []).forEach(ti => {
+    if (ti.sourceType !== 'borrower') return;
+    const formKey = ti.mappedFrom || ti.fieldKey;
+    if (existingKeys.has(formKey)) return;
+    const isCurrency = /amount|value|price|budget/i.test(ti.label);
+    pricingFields.push({
+      fieldKey: formKey,
+      label: ti.label,
+      fieldType: isCurrency ? 'currency' : 'text',
+      required: false,
+      visible: true,
+      displayGroup: 'pricing_questions',
+    });
+    existingKeys.add(formKey);
+  });
+
+  (cfg.dropdowns || []).forEach(dd => {
+    if (dd.sourceType !== 'borrower') return;
+    const formKey = dd.mappedFrom || dd.fieldKey;
+    if (existingKeys.has(formKey)) return;
+    pricingFields.push({
+      fieldKey: formKey,
+      label: dd.label,
+      fieldType: 'select',
+      options: dd.options.filter(o => o),
+      required: false,
+      visible: true,
+      displayGroup: 'pricing_questions',
+    });
+    existingKeys.add(formKey);
+  });
+
+  return pricingFields;
 }
 
 function formatShortDate(dateStr: string | null | undefined) {
@@ -670,7 +717,11 @@ export default function QuotesUnified() {
 
               {selectedProgramId && (() => {
                 const selectedProgram = allActivePrograms.find(p => p.id === selectedProgramId);
-                const quoteFields = selectedProgram?.quoteFormFields;
+                const baseQuoteFields = selectedProgram?.quoteFormFields;
+                const pricingFields = selectedProgram ? buildPricingFields(selectedProgram) : [];
+                const quoteFields = Array.isArray(baseQuoteFields) && baseQuoteFields.length > 0
+                  ? [...baseQuoteFields, ...pricingFields]
+                  : pricingFields.length > 0 ? pricingFields : baseQuoteFields;
                 const hasDynamicFields = Array.isArray(quoteFields) && quoteFields.length > 0;
 
                 return (

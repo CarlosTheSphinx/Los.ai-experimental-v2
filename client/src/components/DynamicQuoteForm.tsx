@@ -7,7 +7,7 @@ import { CurrencyInput } from "@/components/ui/currency-input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Calculator, DollarSign, Building, User } from "lucide-react";
+import { Loader2, Calculator, DollarSign, Building, User, Gauge } from "lucide-react";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { useMemo } from "react";
 
@@ -41,6 +41,7 @@ const GROUP_CONFIG: Record<string, { label: string; icon: typeof DollarSign }> =
   loan_details: { label: 'Loan Details', icon: DollarSign },
   property_details: { label: 'Property Details', icon: Building },
   borrower_details: { label: 'Borrower Details', icon: User },
+  pricing_questions: { label: 'Pricing Questions', icon: Gauge },
 };
 
 function ConditionalField({ field, control, children }: { field: QuoteFormField; control: any; children: React.ReactNode }) {
@@ -300,7 +301,7 @@ export function DynamicQuoteForm({ fields, onSubmit, isLoading, defaultData, pro
   }, [visibleFields]);
 
   const groupOrder = useMemo(() => {
-    const known = ['loan_details', 'property_details', 'borrower_details'];
+    const known = ['loan_details', 'property_details', 'borrower_details', 'pricing_questions'];
     const extra = Object.keys(groups).filter(g => !known.includes(g));
     return [...known, ...extra];
   }, [groups]);
@@ -342,12 +343,17 @@ export function DynamicQuoteForm({ fields, onSubmit, isLoading, defaultData, pro
               const config = GROUP_CONFIG[groupKey] || { label: groupKey.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), icon: DollarSign };
               const Icon = config.icon;
 
+              const isPricing = groupKey === 'pricing_questions';
+
               return (
                 <div key={groupKey}>
                   {groupIdx > 0 && <div className="h-px bg-border mb-8" />}
-                  <div className="space-y-6">
-                    <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                      <Icon className="w-5 h-5 text-muted-foreground" />
+                  <div className={isPricing ? "space-y-6 bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-800/30 rounded-lg p-5 -mx-1" : "space-y-6"}>
+                    <h3 className={isPricing
+                      ? "text-lg font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-2"
+                      : "text-lg font-semibold text-foreground flex items-center gap-2"
+                    }>
+                      <Icon className={isPricing ? "w-5 h-5 text-amber-600 dark:text-amber-400" : "w-5 h-5 text-muted-foreground"} />
                       {config.label}
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
