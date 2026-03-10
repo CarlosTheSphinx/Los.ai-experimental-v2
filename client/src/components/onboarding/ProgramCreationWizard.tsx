@@ -2188,7 +2188,15 @@ function QuoteFormBuilderStep({
   const [configuringIndex, setConfiguringIndex] = useState<string | null>(null);
 
   const contactFields = quoteFormFields.filter((f) => CONTACT_FIELD_KEYS.has(f.fieldKey));
-  const programFields = quoteFormFields.filter((f) => !CONTACT_FIELD_KEYS.has(f.fieldKey));
+  const programFieldsUnsorted = quoteFormFields.filter((f) => !CONTACT_FIELD_KEYS.has(f.fieldKey));
+  const programFields = [...programFieldsUnsorted].sort((a, b) => {
+    const rank = (f: QuoteFormField) => {
+      if (!f.visible) return 2;
+      if (f.required) return 0;
+      return 1;
+    };
+    return rank(a) - rank(b);
+  });
 
   const addCustomField = () => {
     const name = newFieldName.trim();
@@ -2235,13 +2243,10 @@ function QuoteFormBuilderStep({
 
   const moveField = (fromIdx: number, toIdx: number) => {
     if (fromIdx === toIdx) return;
-    const contactCount = contactFields.length;
-    const actualFrom = contactCount + fromIdx;
-    const actualTo = contactCount + toIdx;
-    const updated = [...quoteFormFields];
-    const [moved] = updated.splice(actualFrom, 1);
-    updated.splice(actualTo, 0, moved);
-    setQuoteFormFields(updated);
+    const sorted = [...programFields];
+    const [moved] = sorted.splice(fromIdx, 1);
+    sorted.splice(toIdx, 0, moved);
+    setQuoteFormFields([...contactFields, ...sorted]);
   };
 
   const handleDragStart = (idx: number) => setDragIndex(idx);
@@ -2606,7 +2611,42 @@ function QuoteFormBuilderStep({
 
       <div className="rounded-[10px] border bg-white overflow-hidden">
         {contactFields.map((field, cIdx) => renderFieldRow(field, cIdx, false))}
-        {programFields.map((field, pIdx) => renderFieldRow(field, pIdx, true))}
+        {(() => {
+          const requiredFields = programFields.filter(f => f.required && f.visible);
+          const optionalFields = programFields.filter(f => !f.required && f.visible);
+          const hiddenFields = programFields.filter(f => !f.visible);
+          return (
+            <>
+              {requiredFields.length > 0 && (
+                <div className="px-4 py-2 bg-red-50/60 border-b border-red-200/40">
+                  <span className="text-[11px] font-semibold text-red-500 uppercase tracking-wider">Required Fields ({requiredFields.length})</span>
+                </div>
+              )}
+              {requiredFields.map((field) => {
+                const pIdx = programFields.indexOf(field);
+                return renderFieldRow(field, pIdx, true);
+              })}
+              {optionalFields.length > 0 && (
+                <div className="px-4 py-2 bg-slate-50/80 border-b border-border/40">
+                  <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Optional Fields ({optionalFields.length})</span>
+                </div>
+              )}
+              {optionalFields.map((field) => {
+                const pIdx = programFields.indexOf(field);
+                return renderFieldRow(field, pIdx, true);
+              })}
+              {hiddenFields.length > 0 && (
+                <div className="px-4 py-2 bg-slate-100/60 border-b border-border/40">
+                  <span className="text-[11px] font-semibold text-muted-foreground/50 uppercase tracking-wider">Hidden Fields ({hiddenFields.length})</span>
+                </div>
+              )}
+              {hiddenFields.map((field) => {
+                const pIdx = programFields.indexOf(field);
+                return renderFieldRow(field, pIdx, true);
+              })}
+            </>
+          );
+        })()}
       </div>
 
       <div className="rounded-[10px] border border-blue-200 bg-blue-50/60 p-4 flex gap-3">
