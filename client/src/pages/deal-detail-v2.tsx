@@ -677,13 +677,14 @@ export default function DealDetailV2() {
         </div>
       </div>
 
-      {/* Deal Strip + Tab Content */}
+      {/* Tab Content */}
       <div className="px-6 py-5">
-        <DealStrip deal={deal} dealId={dealId!} isAdmin={!!isAdmin} stages={dealData?.stages} />
-
-        <div className="mt-5">
+        <div>
           <TabsContent value="overview" className="m-0">
-            <TabOverview deal={deal} properties={properties} dealId={dealId!} isAdmin={!!isAdmin} />
+            <DealStrip deal={deal} dealId={dealId!} isAdmin={!!isAdmin} stages={dealData?.stages} />
+            <div className="mt-5">
+              <TabOverview deal={deal} properties={properties} dealId={dealId!} isAdmin={!!isAdmin} />
+            </div>
           </TabsContent>
           <TabsContent value="documents" className="m-0">
             <TabDocuments deal={deal} documents={documents} dealId={dealId!} stages={dealData?.stages} />
