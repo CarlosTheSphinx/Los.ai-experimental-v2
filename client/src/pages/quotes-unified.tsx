@@ -76,16 +76,23 @@ interface ProgramWithPricing {
   } | null;
 }
 
-function buildPricingFields(program: ProgramWithPricing): any[] {
-  if (program.pricingMode !== 'external' || !program.externalPricingConfig) return [];
+function normalizeFieldKey(key: string): string {
+  return key.replace(/[-_]/g, '').toLowerCase();
+}
+
+function buildPricingFields(program: ProgramWithPricing): { pricingFields: any[]; pricingNormalizedKeys: Set<string> } {
+  if (program.pricingMode !== 'external' || !program.externalPricingConfig) {
+    return { pricingFields: [], pricingNormalizedKeys: new Set() };
+  }
   const cfg = program.externalPricingConfig;
-  const existingKeys = new Set((program.quoteFormFields || []).map((f: any) => f.fieldKey));
   const pricingFields: any[] = [];
+  const pricingNormalizedKeys = new Set<string>();
 
   (cfg.textInputs || []).forEach(ti => {
     if (ti.sourceType !== 'borrower') return;
     const formKey = ti.fieldKey;
-    if (existingKeys.has(formKey)) return;
+    const normalized = normalizeFieldKey(formKey);
+    if (pricingNormalizedKeys.has(normalized)) return;
     const isCurrency = /amount|value|price|budget/i.test(ti.label);
     pricingFields.push({
       fieldKey: formKey,
@@ -95,13 +102,14 @@ function buildPricingFields(program: ProgramWithPricing): any[] {
       visible: true,
       displayGroup: 'pricing_questions',
     });
-    existingKeys.add(formKey);
+    pricingNormalizedKeys.add(normalized);
   });
 
   (cfg.dropdowns || []).forEach(dd => {
     if (dd.sourceType !== 'borrower') return;
     const formKey = dd.fieldKey;
-    if (existingKeys.has(formKey)) return;
+    const normalized = normalizeFieldKey(formKey);
+    if (pricingNormalizedKeys.has(normalized)) return;
     pricingFields.push({
       fieldKey: formKey,
       label: dd.label,
@@ -111,10 +119,10 @@ function buildPricingFields(program: ProgramWithPricing): any[] {
       visible: true,
       displayGroup: 'pricing_questions',
     });
-    existingKeys.add(formKey);
+    pricingNormalizedKeys.add(normalized);
   });
 
-  return pricingFields;
+  return { pricingFields, pricingNormalizedKeys };
 }
 
 function formatShortDate(dateStr: string | null | undefined) {
@@ -718,10 +726,15 @@ export default function QuotesUnified() {
               {selectedProgramId && (() => {
                 const selectedProgram = allActivePrograms.find(p => p.id === selectedProgramId);
                 const baseQuoteFields = selectedProgram?.quoteFormFields;
-                const pricingFields = selectedProgram ? buildPricingFields(selectedProgram) : [];
-                const quoteFields = Array.isArray(baseQuoteFields) && baseQuoteFields.length > 0
-                  ? [...baseQuoteFields, ...pricingFields]
-                  : pricingFields.length > 0 ? pricingFields : baseQuoteFields;
+                const { pricingFields, pricingNormalizedKeys } = selectedProgram
+                  ? buildPricingFields(selectedProgram)
+                  : { pricingFields: [], pricingNormalizedKeys: new Set<string>() };
+                const filteredBaseFields = Array.isArray(baseQuoteFields) && pricingNormalizedKeys.size > 0
+                  ? baseQuoteFields.filter((f: any) => !pricingNormalizedKeys.has(normalizeFieldKey(f.fieldKey)))
+                  : baseQuoteFields;
+                const quoteFields = Array.isArray(filteredBaseFields) && filteredBaseFields.length > 0
+                  ? [...filteredBaseFields, ...pricingFields]
+                  : pricingFields.length > 0 ? pricingFields : filteredBaseFields;
                 const hasDynamicFields = Array.isArray(quoteFields) && quoteFields.length > 0;
 
                 return (
