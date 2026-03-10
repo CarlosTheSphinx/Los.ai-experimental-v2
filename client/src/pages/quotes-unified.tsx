@@ -31,6 +31,7 @@ import { DocumentSigningModal } from "@/components/DocumentSigningModal";
 import type { SavedQuote } from "@shared/schema";
 import { LoanForm } from "@/components/LoanForm";
 import { RTLLoanForm } from "@/components/RTLLoanForm";
+import { DynamicQuoteForm } from "@/components/DynamicQuoteForm";
 import { PricingResult } from "@/components/PricingResult";
 import { RTLPricingResult } from "@/components/RTLPricingResult";
 import { usePricing } from "@/hooks/use-pricing";
@@ -66,6 +67,7 @@ interface ProgramWithPricing {
   hasActiveRuleset: boolean;
   activeRulesetId?: number;
   activeRulesetVersion?: number;
+  quoteFormFields?: any[];
 }
 
 function formatShortDate(dateStr: string | null | undefined) {
@@ -592,25 +594,46 @@ export default function QuotesUnified() {
                 </div>
               </div>
 
-              {selectedProgramId && (
-              <div className="max-w-4xl mx-auto">
-                {loanProductType === "dscr" ? (
-                  <LoanForm
-                    onSubmit={handleDSCRSubmit}
-                    isLoading={dscrPending}
-                    defaultData={dscrFormData}
-                    visibleFields={allActivePrograms.find(p => p.id === selectedProgramId)?.quoteFormFields as any}
-                  />
-                ) : (
-                  <RTLLoanForm
-                    onSubmit={handleRTLSubmit}
-                    isLoading={rtlPricingMutation.isPending}
-                    defaultData={rtlFormData}
-                    visibleFields={allActivePrograms.find(p => p.id === selectedProgramId)?.quoteFormFields as any}
-                  />
-                )}
-              </div>
-              )}
+              {selectedProgramId && (() => {
+                const selectedProgram = allActivePrograms.find(p => p.id === selectedProgramId);
+                const quoteFields = selectedProgram?.quoteFormFields;
+                const hasDynamicFields = Array.isArray(quoteFields) && quoteFields.length > 0;
+
+                return (
+                  <div className="max-w-4xl mx-auto">
+                    {hasDynamicFields ? (
+                      <DynamicQuoteForm
+                        key={selectedProgramId}
+                        fields={quoteFields}
+                        onSubmit={(data) => {
+                          if (loanProductType === "dscr") {
+                            handleDSCRSubmit(data as any);
+                          } else {
+                            handleRTLSubmit(data as any);
+                          }
+                        }}
+                        isLoading={loanProductType === "dscr" ? dscrPending : rtlPricingMutation.isPending}
+                        defaultData={loanProductType === "dscr" ? dscrFormData : rtlFormData}
+                        programName={selectedProgram?.name}
+                      />
+                    ) : loanProductType === "dscr" ? (
+                      <LoanForm
+                        onSubmit={handleDSCRSubmit}
+                        isLoading={dscrPending}
+                        defaultData={dscrFormData}
+                        visibleFields={quoteFields as any}
+                      />
+                    ) : (
+                      <RTLLoanForm
+                        onSubmit={handleRTLSubmit}
+                        isLoading={rtlPricingMutation.isPending}
+                        defaultData={rtlFormData}
+                        visibleFields={quoteFields as any}
+                      />
+                    )}
+                  </div>
+                );
+              })()}
 
               {!selectedProgramId && (
                 <div className="bg-card border rounded-[10px] shadow-sm overflow-hidden">
