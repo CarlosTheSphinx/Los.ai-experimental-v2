@@ -40,6 +40,45 @@ interface AdjusterCategory {
   tiers: TierEntry[];
 }
 
+// ─── External Pricing Config Types ──────────────────────────────
+
+interface ExternalTextInput {
+  id: string;
+  fieldKey: string;
+  label: string;
+}
+
+interface ExternalDropdown {
+  label: string;
+  fieldKey: string;
+  options: string[];
+}
+
+interface ExternalPricingConfig {
+  scraperUrl: string;
+  textInputs: ExternalTextInput[];
+  dropdowns: ExternalDropdown[];
+}
+
+const NQX_DEFAULTS: ExternalPricingConfig = {
+  scraperUrl: 'https://www.b-diya.nqxpricer.com/69af4d475dd9d8d5dc27b54b',
+  textInputs: [
+    { id: ':r0:', fieldKey: 'loanAmount', label: 'Loan Amount' },
+    { id: ':r1:', fieldKey: 'propertyValue', label: 'Property Value' },
+  ],
+  dropdowns: [
+    { label: 'LTV', fieldKey: 'ltv', options: ['≤ 50%', '50.01% - 55%', '55.01% - 60%', '60.01% - 65%', '65.01% - 70%', '70.01% - 75%', '75.01% - 80%'] },
+    { label: 'Loan Type', fieldKey: 'loanType', options: ['30 YR Fixed Rate', '10/6 ARM (30 YR)', '7/6 ARM (30 YR)', '5/6 ARM (30 YR)'] },
+    { label: 'Interest Only', fieldKey: 'interestOnly', options: ['Yes', 'No'] },
+    { label: 'Loan Purpose', fieldKey: 'loanPurpose', options: ['Purchase', 'Rate/Term Refinance', 'Cash Out Refinance'] },
+    { label: 'Property Type', fieldKey: 'propertyType', options: ['Single Family Residence', 'Condo (Warrantable)', 'Condo (Non-Warrantable)', '2-4 Unit', 'Multifamily (5+ Units)'] },
+    { label: 'Est. DSCR', fieldKey: 'dscr', options: ['≥ 1.50', '1.25 - 1.49', '1.00 - 1.24', '0.75 - 0.99', '< 0.75', 'No Ratio'] },
+    { label: 'Stated FICO Score', fieldKey: 'ficoScore', options: ['≥ 780', '760 - 779', '740 - 759', '720 - 739', '700 - 719', '680 - 699', '660 - 679'] },
+    { label: 'Prepayment Penalty', fieldKey: 'prepaymentPenalty', options: ['5 Years', '4 Years', '3 Years', '2 Years', '1 Year', 'None'] },
+    { label: 'TPO Premium', fieldKey: 'tpoPremium', options: ['1', '2', '3'] },
+  ],
+};
+
 // ─── Default tier-based adjuster categories ─────────────────────
 
 const DEFAULT_CATEGORIES: AdjusterCategory[] = [
@@ -162,6 +201,11 @@ export function PricingConfiguration({
   const [pointsStep, setPointsStep] = useState('0.25');
   const [pointsBrokerAdjustable, setPointsBrokerAdjustable] = useState(true);
 
+  const [extScraperUrl, setExtScraperUrl] = useState('');
+  const [extTextInputs, setExtTextInputs] = useState<ExternalTextInput[]>([]);
+  const [extDropdowns, setExtDropdowns] = useState<ExternalDropdown[]>([]);
+  const [extExpandedDropdown, setExtExpandedDropdown] = useState<number | null>(null);
+
   const effectiveProgramId = selectedProgramId ?? propProgramId ?? null;
 
   const { data: existingRuleset, isFetched: rulesetsFetched } = useQuery<{ rulesets: any[] }>({
@@ -201,6 +245,17 @@ export function PricingConfiguration({
       setPointsMax(String(prog.basePointsMax ?? '3.00'));
       setPointsBrokerAdjustable(prog.brokerPointsEnabled ?? true);
       setPointsStep(String(prog.brokerPointsStep ?? '0.25'));
+
+      if (prog.pricingMode) {
+        const modeMap: Record<string, PricingMode> = { rule_based: 'rule-based', external: 'external', none: 'none' };
+        setPricingMode(modeMap[prog.pricingMode] || (prog.pricingMode as PricingMode));
+      }
+      if (prog.externalPricingConfig) {
+        const cfg = prog.externalPricingConfig as ExternalPricingConfig;
+        setExtScraperUrl(cfg.scraperUrl || '');
+        setExtTextInputs(cfg.textInputs || []);
+        setExtDropdowns(cfg.dropdowns || []);
+      }
     }
 
     const activeRuleset = existingRuleset?.rulesets?.find((r: any) => r.status === 'active') || existingRuleset?.rulesets?.[0];
@@ -262,43 +317,51 @@ export function PricingConfiguration({
       const program = programs.find((p: any) => p.id === saveProgramId) || editProgramData?.program;
       const loanType = program?.loanType || 'rtl';
 
-      const allAdjusters = categories.flatMap((cat) =>
-        cat.tiers.filter((t) => !t.isDisqualified && t.label.trim()).map((t) => ({
-          id: t.id,
-          label: t.label,
-          category: cat.name,
-          rateAdd: parseFloat(t.rateAdd) || 0,
-          pointsAdd: 0,
-        }))
-      );
-      const eligibilityRules = categories.flatMap((cat) =>
-        cat.tiers.filter((t) => t.isDisqualified && t.label.trim()).map((t) => ({
-          id: t.id,
-          label: t.label,
-          category: cat.name,
-          result: 'ineligible' as const,
-        }))
-      );
+      const pricingModeDb = pricingMode === 'rule-based' ? 'rule_based' : pricingMode;
 
-      const rulesJson: any = {
-        product: loanType.toUpperCase(),
-        baseRates: { [loanType]: parseFloat(baseRate) || 7.125 },
-        rateFloor: parseFloat(rateFloor) || 6.5,
-        rateCeiling: parseFloat(rateCeiling) || 10,
-        adjusters: allAdjusters,
-        eligibilityRules,
-      };
+      if (pricingMode === 'rule-based') {
+        const allAdjusters = categories.flatMap((cat) =>
+          cat.tiers.filter((t) => !t.isDisqualified && t.label.trim()).map((t) => ({
+            id: t.id,
+            label: t.label,
+            category: cat.name,
+            rateAdd: parseFloat(t.rateAdd) || 0,
+            pointsAdd: 0,
+          }))
+        );
+        const eligibilityRules = categories.flatMap((cat) =>
+          cat.tiers.filter((t) => t.isDisqualified && t.label.trim()).map((t) => ({
+            id: t.id,
+            label: t.label,
+            category: cat.name,
+            result: 'ineligible' as const,
+          }))
+        );
 
-      const res = await apiRequest('POST', `/api/admin/programs/${saveProgramId}/rulesets`, {
-        name: 'Initial Pricing Rules',
-        description: 'Created during onboarding',
-        rulesJson,
-      });
-      const data = await res.json();
+        const rulesJson: any = {
+          product: loanType.toUpperCase(),
+          baseRates: { [loanType]: parseFloat(baseRate) || 7.125 },
+          rateFloor: parseFloat(rateFloor) || 6.5,
+          rateCeiling: parseFloat(rateCeiling) || 10,
+          adjusters: allAdjusters,
+          eligibilityRules,
+        };
 
-      if (data.ruleset?.id) {
-        await apiRequest('PATCH', `/api/admin/programs/${saveProgramId}/rulesets/${data.ruleset.id}`, { status: 'active' });
+        const res = await apiRequest('POST', `/api/admin/programs/${saveProgramId}/rulesets`, {
+          name: 'Initial Pricing Rules',
+          description: 'Created during onboarding',
+          rulesJson,
+        });
+        const data = await res.json();
+
+        if (data.ruleset?.id) {
+          await apiRequest('PATCH', `/api/admin/programs/${saveProgramId}/rulesets/${data.ruleset.id}`, { status: 'active' });
+        }
       }
+
+      const extConfig: ExternalPricingConfig | null = pricingMode === 'external'
+        ? { scraperUrl: extScraperUrl, textInputs: extTextInputs, dropdowns: extDropdowns }
+        : null;
 
       await apiRequest('PUT', `/api/admin/programs/${saveProgramId}`, {
         yspEnabled,
@@ -311,16 +374,19 @@ export function PricingConfiguration({
         basePointsMax: parseFloat(pointsMax) || 3,
         brokerPointsEnabled: pointsBrokerAdjustable,
         brokerPointsStep: parseFloat(pointsStep) || 0.25,
+        pricingMode: pricingModeDb,
+        externalPricingConfig: extConfig,
       });
 
-      return data;
+      return {};
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/programs'] });
-      toast({ title: 'Pricing rules saved and activated!' });
+      const msg = pricingMode === 'external' ? 'External pricing config saved!' : 'Pricing rules saved and activated!';
+      toast({ title: msg });
     },
     onError: (error: any) => {
-      toast({ title: 'Failed to save pricing rules', description: error?.message, variant: 'destructive' });
+      toast({ title: 'Failed to save pricing config', description: error?.message, variant: 'destructive' });
     },
   });
 
@@ -414,6 +480,18 @@ export function PricingConfiguration({
                     setPointsMax(String(prog.basePointsMax ?? '3.00'));
                     setPointsBrokerAdjustable(prog.brokerPointsEnabled ?? true);
                     setPointsStep(String(prog.brokerPointsStep ?? '0.25'));
+                    const modeMap: Record<string, PricingMode> = { rule_based: 'rule-based', external: 'external', none: 'none' };
+                    setPricingMode(modeMap[prog.pricingMode] || 'none');
+                    if (prog.externalPricingConfig) {
+                      const cfg = prog.externalPricingConfig as ExternalPricingConfig;
+                      setExtScraperUrl(cfg.scraperUrl || '');
+                      setExtTextInputs(cfg.textInputs || []);
+                      setExtDropdowns(cfg.dropdowns || []);
+                    } else {
+                      setExtScraperUrl('');
+                      setExtTextInputs([]);
+                      setExtDropdowns([]);
+                    }
                   }
                 }}
                 data-testid="select-program"
@@ -679,16 +757,210 @@ export function PricingConfiguration({
       )}
 
       {pricingMode === 'external' && (
-        <div className="border-t pt-5">
-          <div className="rounded-[10px] border bg-white p-6 text-center space-y-3">
-            <Globe className="h-8 w-8 text-muted-foreground/40 mx-auto" />
-            <h4 className="text-[16px] font-semibold">External Pricing API</h4>
-            <p className="text-[14px] text-muted-foreground max-w-md mx-auto">
-              Connect to a third-party pricing tool. When a quote comes in, we submit the borrower's data and pull back the rate automatically.
-            </p>
-            <p className="text-[13px] text-muted-foreground">
-              Contact Lendry support to configure your external pricing integration.
-            </p>
+        <div className="border-t pt-5 space-y-5">
+          <div className="flex items-center justify-between">
+            <h3 className="text-[13px] uppercase tracking-wider font-semibold text-muted-foreground" data-testid="section-external-config">
+              External Pricing Configuration
+            </h3>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setExtScraperUrl(NQX_DEFAULTS.scraperUrl);
+                setExtTextInputs(NQX_DEFAULTS.textInputs.map(t => ({ ...t })));
+                setExtDropdowns(NQX_DEFAULTS.dropdowns.map(d => ({ ...d, options: [...d.options] })));
+              }}
+              data-testid="button-load-defaults"
+            >
+              <Globe className="h-3.5 w-3.5 mr-1.5" />
+              Load NQX Defaults
+            </Button>
+          </div>
+
+          <div className="rounded-[10px] border bg-white p-5 space-y-4">
+            <h4 className="text-[16px] font-bold">Scraper URL</h4>
+            <Input
+              placeholder="https://www.b-diya.nqxpricer.com/..."
+              value={extScraperUrl}
+              onChange={(e) => setExtScraperUrl(e.target.value)}
+              data-testid="input-scraper-url"
+            />
+          </div>
+
+          <div className="rounded-[10px] border bg-white p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-[16px] font-bold">Text Input Mappings</h4>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setExtTextInputs(prev => [...prev, { id: '', fieldKey: '', label: '' }])}
+                data-testid="button-add-text-input"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Add
+              </Button>
+            </div>
+            <p className="text-[13px] text-muted-foreground">Map element IDs on the external site to field keys in the quote form.</p>
+            {extTextInputs.map((ti, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <Input
+                  placeholder="Element ID (e.g. :r0:)"
+                  value={ti.id}
+                  onChange={(e) => {
+                    const updated = [...extTextInputs];
+                    updated[idx] = { ...updated[idx], id: e.target.value };
+                    setExtTextInputs(updated);
+                  }}
+                  className="w-36"
+                  data-testid={`input-text-id-${idx}`}
+                />
+                <Input
+                  placeholder="Field Key"
+                  value={ti.fieldKey}
+                  onChange={(e) => {
+                    const updated = [...extTextInputs];
+                    updated[idx] = { ...updated[idx], fieldKey: e.target.value };
+                    setExtTextInputs(updated);
+                  }}
+                  className="w-36"
+                  data-testid={`input-text-fieldkey-${idx}`}
+                />
+                <Input
+                  placeholder="Label"
+                  value={ti.label}
+                  onChange={(e) => {
+                    const updated = [...extTextInputs];
+                    updated[idx] = { ...updated[idx], label: e.target.value };
+                    setExtTextInputs(updated);
+                  }}
+                  className="flex-1"
+                  data-testid={`input-text-label-${idx}`}
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setExtTextInputs(prev => prev.filter((_, i) => i !== idx))}
+                  data-testid={`button-remove-text-${idx}`}
+                >
+                  <X className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              </div>
+            ))}
+            {extTextInputs.length === 0 && (
+              <p className="text-[13px] text-muted-foreground italic">No text inputs defined. Click Add or Load NQX Defaults.</p>
+            )}
+          </div>
+
+          <div className="rounded-[10px] border bg-white p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-[16px] font-bold">Dropdown Field Definitions</h4>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setExtDropdowns(prev => [...prev, { label: '', fieldKey: '', options: [] }])}
+                data-testid="button-add-dropdown"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Add Dropdown
+              </Button>
+            </div>
+            <p className="text-[13px] text-muted-foreground">Define each dropdown on the external pricing form with its label, field key, and option values.</p>
+
+            {extDropdowns.map((dd, ddIdx) => (
+              <div key={ddIdx} className="rounded-lg border p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="Dropdown Label (e.g. LTV)"
+                    value={dd.label}
+                    onChange={(e) => {
+                      const updated = [...extDropdowns];
+                      updated[ddIdx] = { ...updated[ddIdx], label: e.target.value };
+                      setExtDropdowns(updated);
+                    }}
+                    className="w-48"
+                    data-testid={`input-dd-label-${ddIdx}`}
+                  />
+                  <Input
+                    placeholder="Field Key (e.g. ltv)"
+                    value={dd.fieldKey}
+                    onChange={(e) => {
+                      const updated = [...extDropdowns];
+                      updated[ddIdx] = { ...updated[ddIdx], fieldKey: e.target.value };
+                      setExtDropdowns(updated);
+                    }}
+                    className="w-48"
+                    data-testid={`input-dd-fieldkey-${ddIdx}`}
+                  />
+                  <div className="flex-1" />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setExtExpandedDropdown(extExpandedDropdown === ddIdx ? null : ddIdx)}
+                    data-testid={`button-toggle-dd-${ddIdx}`}
+                  >
+                    <ChevronDown className={cn('h-4 w-4 transition-transform', extExpandedDropdown === ddIdx && 'rotate-180')} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setExtDropdowns(prev => prev.filter((_, i) => i !== ddIdx))}
+                    data-testid={`button-remove-dd-${ddIdx}`}
+                  >
+                    <X className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                </div>
+                <div className="text-[12px] text-muted-foreground">{dd.options.length} option{dd.options.length !== 1 ? 's' : ''}</div>
+
+                {extExpandedDropdown === ddIdx && (
+                  <div className="pl-4 space-y-2 border-l-2 border-primary/20">
+                    {dd.options.map((opt, optIdx) => (
+                      <div key={optIdx} className="flex items-center gap-2">
+                        <Input
+                          value={opt}
+                          onChange={(e) => {
+                            const updated = [...extDropdowns];
+                            const opts = [...updated[ddIdx].options];
+                            opts[optIdx] = e.target.value;
+                            updated[ddIdx] = { ...updated[ddIdx], options: opts };
+                            setExtDropdowns(updated);
+                          }}
+                          className="flex-1"
+                          data-testid={`input-dd-opt-${ddIdx}-${optIdx}`}
+                        />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            const updated = [...extDropdowns];
+                            updated[ddIdx] = { ...updated[ddIdx], options: updated[ddIdx].options.filter((_, i) => i !== optIdx) };
+                            setExtDropdowns(updated);
+                          }}
+                          data-testid={`button-remove-opt-${ddIdx}-${optIdx}`}
+                        >
+                          <X className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const updated = [...extDropdowns];
+                        updated[ddIdx] = { ...updated[ddIdx], options: [...updated[ddIdx].options, ''] };
+                        setExtDropdowns(updated);
+                      }}
+                      data-testid={`button-add-opt-${ddIdx}`}
+                    >
+                      <Plus className="h-3.5 w-3.5 mr-1" />
+                      Add Option
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ))}
+            {extDropdowns.length === 0 && (
+              <p className="text-[13px] text-muted-foreground italic">No dropdowns defined. Click Add Dropdown or Load NQX Defaults.</p>
+            )}
           </div>
         </div>
       )}
@@ -785,7 +1057,7 @@ export function PricingConfiguration({
         </div>
       </div>
 
-      {!hideNavigation && pricingMode === 'rule-based' && selectedProgramId && (
+      {!hideNavigation && (pricingMode === 'rule-based' || pricingMode === 'external') && selectedProgramId && (
         <div className="flex items-center gap-3">
           <Button
             onClick={() => saveRulesetMutation.mutate()}
@@ -794,6 +1066,8 @@ export function PricingConfiguration({
           >
             {saveRulesetMutation.isPending ? (
               <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</>
+            ) : pricingMode === 'external' ? (
+              <><CheckCircle2 className="h-4 w-4 mr-2" />Save External Pricing Config</>
             ) : (
               <><CheckCircle2 className="h-4 w-4 mr-2" />Save & Activate Pricing Rules</>
             )}

@@ -131,7 +131,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         documents,
         tasks,
         steps,
-        creditPolicyId
+        creditPolicyId,
+        pricingMode, externalPricingConfig,
       } = req.body;
 
       if (!name || !loanType) {
@@ -160,6 +161,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
           isActive: isActive !== false,
           creditPolicyId: creditPolicyId ? parseInt(creditPolicyId) : null,
           createdBy: req.user!.id,
+          pricingMode: pricingMode || 'none',
+          externalPricingConfig: externalPricingConfig || null,
         }).returning();
 
         // Create inline workflow steps if provided (must be created before docs/tasks to resolve stepIndex)
@@ -309,7 +312,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         minUnits, maxUnits,
         termOptions, eligiblePropertyTypes,
         isActive, quoteFormFields, reviewGuidelines, creditPolicyId,
-        steps, documents, tasks
+        steps, documents, tasks,
+        pricingMode, externalPricingConfig,
       } = req.body;
 
       const result = await db.transaction(async (tx) => {
@@ -333,6 +337,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         if (isActive !== undefined) updateData.isActive = isActive;
         if (reviewGuidelines !== undefined) updateData.reviewGuidelines = reviewGuidelines;
         if (creditPolicyId !== undefined) updateData.creditPolicyId = creditPolicyId ? parseInt(creditPolicyId) : null;
+        if (pricingMode !== undefined) updateData.pricingMode = pricingMode;
+        if (externalPricingConfig !== undefined) updateData.externalPricingConfig = externalPricingConfig;
 
         const [program] = await tx.update(loanPrograms)
           .set(updateData)

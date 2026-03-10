@@ -183,6 +183,7 @@ export const loanPricingFormSchema = z.object({
   ficoScore: z.string().min(1, "FICO Score is required"),
   prepaymentPenalty: z.string().min(1, "Prepayment penalty is required"),
   tpoPremium: z.string().optional(),
+  programId: z.coerce.number().optional(),
 });
 
 export type LoanPricingFormData = z.infer<typeof loanPricingFormSchema>;
@@ -983,6 +984,9 @@ export const loanPrograms = pgTable("loan_programs", {
   eligiblePropertyTypes: text("eligible_property_types").array(), // ['single-family-residence', '2-4-unit', 'multifamily-5-plus', etc.]
 
   quoteFormFields: jsonb("quote_form_fields"), // JSON array of field configs for quote form
+
+  pricingMode: varchar("pricing_mode", { length: 50 }).default("none"), // none, rule_based, external, manual
+  externalPricingConfig: jsonb("external_pricing_config"), // { scraperUrl, textInputs, dropdowns }
 
   // YSP (Yield Spread Premium) Configuration
   yspEnabled: boolean("ysp_enabled").default(false),

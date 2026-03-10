@@ -365,17 +365,65 @@ export async function registerRoutes(
       
       console.log('Loan data:', JSON.stringify(loanData, null, 2));
 
+      let extConfig: any = null;
+      let scraperUrl = 'https://www.b-diya.nqxpricer.com/69af4d475dd9d8d5dc27b54b';
+      if (loanData.programId) {
+        const [program] = await db.select().from(loanPrograms).where(eq(loanPrograms.id, loanData.programId));
+        if (program?.pricingMode === 'external' && program?.externalPricingConfig) {
+          extConfig = program.externalPricingConfig as any;
+          if (extConfig.scraperUrl) {
+            try {
+              const parsed = new URL(extConfig.scraperUrl);
+              if (parsed.protocol !== 'https:') throw new Error('Only HTTPS URLs allowed');
+              if (['localhost', '127.0.0.1', '0.0.0.0', '169.254.169.254'].includes(parsed.hostname)) {
+                throw new Error('Invalid host');
+              }
+              scraperUrl = extConfig.scraperUrl;
+            } catch (urlErr) {
+              console.warn('Invalid scraper URL in program config, using default:', urlErr);
+              extConfig = null;
+            }
+          }
+          if (extConfig) console.log('Using external pricing config from program:', program.id, 'URL:', scraperUrl);
+        }
+      }
+
       // Log the request start
       await storage.logPricingRequest({
         requestData: loanData,
         status: 'pending'
       });
+
+      const configTextInputs = extConfig?.textInputs || [
+        { id: ':r0:', fieldKey: 'loanAmount', label: 'Loan Amount' },
+        { id: ':r1:', fieldKey: 'propertyValue', label: 'Property Value' },
+      ];
+      const configDropdowns = extConfig?.dropdowns || [
+        { label: 'LTV', fieldKey: 'ltv' },
+        { label: 'Loan Type', fieldKey: 'loanType' },
+        { label: 'Interest Only', fieldKey: 'interestOnly' },
+        { label: 'Loan Purpose', fieldKey: 'loanPurpose' },
+        { label: 'Property Type', fieldKey: 'propertyType' },
+        { label: 'Est. DSCR', fieldKey: 'dscr' },
+        { label: 'Stated FICO Score', fieldKey: 'ficoScore' },
+        { label: 'Prepayment Penalty', fieldKey: 'prepaymentPenalty' },
+        { label: 'TPO Premium', fieldKey: 'tpoPremium' },
+      ];
+
+      const dynamicTextInputs = configTextInputs.map((ti: any) => ({
+        id: ti.id,
+        value: String((loanData as any)[ti.fieldKey] ?? ''),
+        label: ti.label,
+      }));
+      const dynamicDropdowns = configDropdowns.map((dd: any) => ({
+        label: dd.label,
+        value: String((loanData as any)[dd.fieldKey] ?? ''),
+      }));
       
       // Run the Apify Puppeteer Scraper actor
-      // We construct the pageFunction exactly as in the reference code
       const run = await client.actor('apify/puppeteer-scraper').call({
         startUrls: [{
-          url: 'https://www.b-diya.nqxpricer.com/698e56b8d1a8ab83b327b498'
+          url: scraperUrl
         }],
         pageFunction: `async function pageFunction(context) {
           const { page, request, log } = context;
@@ -395,10 +443,7 @@ export async function registerRoutes(
             // STEP 1: Fill text inputs using page.type() for proper React event handling
             log.info('Step 1: Filling text inputs...');
             
-            const textInputs = [
-              { id: ':r0:', value: loanData.loanAmount.toString(), label: 'Loan Amount' },
-              { id: ':r1:', value: loanData.propertyValue.toString(), label: 'Property Value' }
-            ];
+            const textInputs = ${JSON.stringify(dynamicTextInputs)};
             
             const textResult = [];
             
@@ -451,17 +496,7 @@ export async function registerRoutes(
             // STEP 2: Fill each dropdown ONE BY ONE
             log.info('Step 2: Filling dropdowns...');
             
-            const dropdowns = [
-              { label: 'LTV', value: ${JSON.stringify(loanData.ltv)} },
-              { label: 'Loan Type', value: ${JSON.stringify(loanData.loanType)} },
-              { label: 'Interest Only', value: ${JSON.stringify(loanData.interestOnly)} },
-              { label: 'Loan Purpose', value: ${JSON.stringify(loanData.loanPurpose)} },
-              { label: 'Property Type', value: ${JSON.stringify(loanData.propertyType)} },
-              { label: 'Est. DSCR', value: ${JSON.stringify(loanData.dscr)} },
-              { label: 'Stated FICO Score', value: ${JSON.stringify(loanData.ficoScore)} },
-              { label: 'Prepayment Penalty', value: ${JSON.stringify(loanData.prepaymentPenalty)} },
-              { label: 'TPO Premium', value: ${JSON.stringify(loanData.tpoPremium)} }
-            ];
+            const dropdowns = ${JSON.stringify(dynamicDropdowns)};
             
             const dropdownResults = [];
             
@@ -9505,6 +9540,8 @@ export async function registerRoutes(
         // Points configuration
         basePoints, basePointsMin, basePointsMax,
         brokerPointsEnabled, brokerPointsMax, brokerPointsStep,
+        // Pricing mode & external config
+        pricingMode, externalPricingConfig,
       } = req.body;
 
       if (!name || !loanType) {
@@ -9541,6 +9578,9 @@ export async function registerRoutes(
           brokerPointsEnabled: brokerPointsEnabled !== false,
           brokerPointsMax: brokerPointsMax != null ? parseFloat(brokerPointsMax) : 2,
           brokerPointsStep: brokerPointsStep != null ? parseFloat(brokerPointsStep) : 0.125,
+          // Pricing mode & external config
+          pricingMode: pricingMode || 'none',
+          externalPricingConfig: externalPricingConfig || null,
         }).returning();
 
         const stepIndexToId = new Map<number, number>();
@@ -9634,6 +9674,8 @@ export async function registerRoutes(
         // Points configuration
         basePoints, basePointsMin, basePointsMax,
         brokerPointsEnabled, brokerPointsMax, brokerPointsStep,
+        // Pricing mode & external config
+        pricingMode, externalPricingConfig,
       } = req.body;
 
       const updateData: any = { updatedAt: new Date() };
@@ -9665,6 +9707,8 @@ export async function registerRoutes(
       if (brokerPointsEnabled !== undefined) updateData.brokerPointsEnabled = brokerPointsEnabled !== false;
       if (brokerPointsMax !== undefined) updateData.brokerPointsMax = parseFloat(brokerPointsMax) || 2;
       if (brokerPointsStep !== undefined) updateData.brokerPointsStep = parseFloat(brokerPointsStep) || 0.125;
+      if (pricingMode !== undefined) updateData.pricingMode = pricingMode;
+      if (externalPricingConfig !== undefined) updateData.externalPricingConfig = externalPricingConfig;
       
       await db.transaction(async (tx) => {
         await tx.update(loanPrograms)
