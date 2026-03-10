@@ -11743,6 +11743,243 @@ If the user provides specific criteria, extract as many rules as you can from th
     }
   });
 
+  // ==================== SCAN EXTERNAL PRICING FIELDS ====================
+
+  app.post('/api/admin/programs/scan-pricing-fields', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { url } = req.body;
+      if (!url || typeof url !== 'string') {
+        return res.status(400).json({ error: 'URL is required' });
+      }
+
+      try {
+        const parsed = new URL(url);
+        if (parsed.protocol !== 'https:') return res.status(400).json({ error: 'Only HTTPS URLs are allowed' });
+        if (['localhost', '127.0.0.1', '0.0.0.0', '169.254.169.254'].includes(parsed.hostname)) {
+          return res.status(400).json({ error: 'Invalid host' });
+        }
+      } catch {
+        return res.status(400).json({ error: 'Invalid URL format' });
+      }
+
+      if (!APIFY_TOKEN) {
+        return res.status(500).json({ error: 'Apify is not configured' });
+      }
+
+      console.log(`\n🔍 Scanning pricing page fields: ${url}`);
+
+      const run = await client.actor('apify/puppeteer-scraper').call({
+        startUrls: [{ url }],
+        pageFunction: `async function pageFunction(context) {
+          const { page, log } = context;
+          const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+          try {
+            log.info('Waiting for page to render...');
+            await wait(5000);
+
+            // Try to wait for form elements
+            try {
+              await page.waitForSelector('input, [role="combobox"]', { timeout: 15000 });
+            } catch (e) {
+              log.info('Timeout waiting for form elements, proceeding anyway...');
+            }
+
+            await wait(2000);
+
+            // Step 1: Find all text-like inputs (text, number, tel, search, etc.)
+            log.info('Step 1: Finding text inputs...');
+            const textInputs = await page.evaluate(() => {
+              const textTypes = ['text', 'number', 'tel', 'search', 'email', 'url', ''];
+              const inputs = Array.from(document.querySelectorAll('input'));
+              return inputs
+                .filter(inp => {
+                  const t = (inp.type || '').toLowerCase();
+                  if (!textTypes.includes(t)) return false;
+                  const parent = inp.closest('[role="combobox"]');
+                  const isInsideCombobox = !!parent;
+                  const hasListbox = inp.getAttribute('role') === 'combobox' || inp.getAttribute('aria-haspopup') === 'listbox';
+                  return !isInsideCombobox && !hasListbox;
+                })
+                .map(inp => ({
+                  id: inp.id || '',
+                  placeholder: inp.placeholder || '',
+                  label: inp.getAttribute('aria-label') || inp.placeholder || '',
+                  name: inp.name || '',
+                }))
+                .filter(inp => inp.id || inp.placeholder || inp.name);
+            });
+
+            log.info('Found ' + textInputs.length + ' text inputs: ' + JSON.stringify(textInputs));
+
+            // Step 2: Find all dropdowns (comboboxes)
+            log.info('Step 2: Finding dropdowns...');
+            const dropdownInputs = await page.evaluate(() => {
+              const inputs = Array.from(document.querySelectorAll('input'));
+              const results = [];
+              for (const inp of inputs) {
+                const parent = inp.closest('[role="combobox"]');
+                const isCombobox = !!parent || inp.getAttribute('role') === 'combobox' || inp.getAttribute('aria-haspopup') === 'listbox';
+                if (isCombobox) {
+                  results.push({
+                    placeholder: inp.placeholder || '',
+                    label: inp.getAttribute('aria-label') || inp.placeholder || '',
+                    id: (parent ? parent.id : inp.id) || '',
+                    inputId: inp.id || '',
+                  });
+                }
+              }
+              // Also check for native <select> elements
+              const selects = Array.from(document.querySelectorAll('select'));
+              for (const sel of selects) {
+                const label = sel.getAttribute('aria-label') || sel.name || '';
+                const options = Array.from(sel.querySelectorAll('option')).map(o => o.textContent.trim()).filter(t => t.length > 0);
+                results.push({
+                  placeholder: label,
+                  label: label,
+                  id: sel.id || '',
+                  inputId: sel.id || '',
+                  nativeOptions: options,
+                });
+              }
+              return results;
+            });
+
+            log.info('Found ' + dropdownInputs.length + ' dropdowns: ' + JSON.stringify(dropdownInputs));
+
+            // Step 3: For each dropdown, click to open and read options
+            log.info('Step 3: Reading dropdown options...');
+            const dropdowns = [];
+
+            for (let i = 0; i < dropdownInputs.length; i++) {
+              const dd = dropdownInputs[i];
+              log.info('Opening dropdown: ' + dd.label + ' (id: ' + dd.id + ')');
+
+              // If native <select> already has options from DOM, use those directly
+              if (dd.nativeOptions && dd.nativeOptions.length > 0) {
+                log.info(dd.label + ': using native select options (' + dd.nativeOptions.length + ')');
+                dropdowns.push({ label: dd.label || dd.placeholder, options: dd.nativeOptions });
+                continue;
+              }
+
+              try {
+                // Click the combobox to open it
+                let clicked = false;
+                if (dd.id) {
+                  try {
+                    await page.click('[id="' + dd.id + '"]');
+                    clicked = true;
+                  } catch (e) {
+                    log.info('Could not click by id, trying input...');
+                  }
+                }
+                if (!clicked && dd.inputId) {
+                  try {
+                    await page.click('[id="' + dd.inputId + '"]');
+                    clicked = true;
+                  } catch (e) {
+                    log.info('Could not click by inputId either');
+                  }
+                }
+                if (!clicked) {
+                  // Try clicking by placeholder
+                  try {
+                    await page.click('input[placeholder="' + dd.placeholder + '"]');
+                    clicked = true;
+                  } catch (e) {
+                    log.info('Could not click by placeholder');
+                  }
+                }
+
+                if (!clicked) {
+                  log.info('Skipping dropdown: ' + dd.label + ' (could not click)');
+                  dropdowns.push({ label: dd.label || dd.placeholder, options: [] });
+                  continue;
+                }
+
+                // Wait for options to appear
+                try {
+                  await page.waitForSelector('[role="option"], .MuiMenuItem-root, ul[role="listbox"] li', { timeout: 3000 });
+                } catch (e) {
+                  log.info('Timeout waiting for options for ' + dd.label);
+                }
+
+                await wait(500);
+
+                // Read options
+                const options = await page.evaluate(() => {
+                  let opts = Array.from(document.querySelectorAll('[role="option"]'));
+                  if (opts.length === 0) opts = Array.from(document.querySelectorAll('.MuiMenuItem-root'));
+                  if (opts.length === 0) opts = Array.from(document.querySelectorAll('ul[role="listbox"] li'));
+                  return opts.map(o => o.textContent.trim()).filter(t => t.length > 0);
+                });
+
+                log.info(dd.label + ': found ' + options.length + ' options: ' + JSON.stringify(options));
+
+                dropdowns.push({
+                  label: dd.label || dd.placeholder,
+                  options: options,
+                });
+
+                // Close the dropdown
+                await page.keyboard.press('Escape');
+                await wait(500);
+
+                // Make sure listbox is gone before next
+                try {
+                  await page.waitForFunction(() => {
+                    return document.querySelector('[role="listbox"]') === null;
+                  }, { timeout: 2000 });
+                } catch (e) {
+                  await page.keyboard.press('Escape');
+                  await wait(300);
+                }
+
+              } catch (err) {
+                log.info('Error reading dropdown ' + dd.label + ': ' + err.message);
+                dropdowns.push({ label: dd.label || dd.placeholder, options: [] });
+              }
+            }
+
+            return {
+              success: true,
+              textInputs: textInputs,
+              dropdowns: dropdowns,
+            };
+
+          } catch (error) {
+            log.error('Error scanning page: ' + error.message);
+            return { success: false, error: error.message };
+          }
+        }`,
+        proxyConfiguration: { useApifyProxy: true },
+        maxRequestsPerCrawl: 1,
+        maxConcurrency: 1,
+      });
+
+      console.log(`✅ Apify scan run started: ${run.id}`);
+      await client.run(run.id).waitForFinish();
+      const { items } = await client.dataset(run.defaultDatasetId).listItems();
+
+      if (items && items.length > 0 && items[0].success) {
+        const result = items[0];
+        console.log(`📊 Scan results: ${result.textInputs?.length} text inputs, ${result.dropdowns?.length} dropdowns`);
+        res.json({
+          success: true,
+          textInputs: result.textInputs || [],
+          dropdowns: result.dropdowns || [],
+        });
+      } else {
+        const errorMsg = items?.[0]?.error || 'No results from scanner';
+        console.error('Scan failed:', errorMsg);
+        res.status(500).json({ success: false, error: errorMsg });
+      }
+    } catch (error) {
+      console.error('Scan pricing fields error:', error);
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to scan pricing page' });
+    }
+  });
+
   // ==================== AI RULE PROPOSAL ROUTES ====================
   
   // Analyze guidelines and generate rule proposal

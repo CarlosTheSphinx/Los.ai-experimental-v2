@@ -21,6 +21,7 @@ import {
   X,
   Ban,
   AlertTriangle,
+  Search,
 } from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -205,6 +206,35 @@ export function PricingConfiguration({
   const [extTextInputs, setExtTextInputs] = useState<ExternalTextInput[]>([]);
   const [extDropdowns, setExtDropdowns] = useState<ExternalDropdown[]>([]);
   const [extExpandedDropdown, setExtExpandedDropdown] = useState<number | null>(null);
+
+  const scanFieldsMutation = useMutation({
+    mutationFn: async (scanUrl: string) => {
+      const res = await apiRequest('POST', '/api/admin/programs/scan-pricing-fields', { url: scanUrl });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      if (data.success) {
+        const scannedTextInputs: ExternalTextInput[] = (data.textInputs || []).map((ti: any) => ({
+          id: ti.id || '',
+          fieldKey: (ti.placeholder || ti.label || ti.name || '').toLowerCase().replace(/[^a-z0-9]+/g, ''),
+          label: ti.label || ti.placeholder || ti.name || '',
+        }));
+        const scannedDropdowns: ExternalDropdown[] = (data.dropdowns || []).map((dd: any) => ({
+          label: dd.label || '',
+          fieldKey: (dd.label || '').toLowerCase().replace(/[^a-z0-9]+/g, ''),
+          options: dd.options || [],
+        }));
+        setExtTextInputs(scannedTextInputs);
+        setExtDropdowns(scannedDropdowns);
+        toast({ title: `Scan complete`, description: `Found ${scannedTextInputs.length} text inputs and ${scannedDropdowns.length} dropdowns.` });
+      } else {
+        toast({ title: 'Scan failed', description: data.error || 'Unknown error', variant: 'destructive' });
+      }
+    },
+    onError: (error: any) => {
+      toast({ title: 'Scan failed', description: error?.message || 'Could not scan the pricing page', variant: 'destructive' });
+    },
+  });
 
   const effectiveProgramId = selectedProgramId ?? propProgramId ?? null;
 
@@ -765,15 +795,21 @@ export function PricingConfiguration({
             <Button
               variant="outline"
               size="sm"
+              disabled={scanFieldsMutation.isPending}
               onClick={() => {
-                setExtScraperUrl(NQX_DEFAULTS.scraperUrl);
-                setExtTextInputs(NQX_DEFAULTS.textInputs.map(t => ({ ...t })));
-                setExtDropdowns(NQX_DEFAULTS.dropdowns.map(d => ({ ...d, options: [...d.options] })));
+                if (!extScraperUrl.trim()) {
+                  toast({ title: 'Enter a URL first', description: 'Paste the external pricing page URL above, then click Load Defaults.', variant: 'destructive' });
+                  return;
+                }
+                scanFieldsMutation.mutate(extScraperUrl.trim());
               }}
               data-testid="button-load-defaults"
             >
-              <Globe className="h-3.5 w-3.5 mr-1.5" />
-              Load NQX Defaults
+              {scanFieldsMutation.isPending ? (
+                <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Scanning Page...</>
+              ) : (
+                <><Search className="h-3.5 w-3.5 mr-1.5" />Load Defaults</>
+              )}
             </Button>
           </div>
 
@@ -847,7 +883,7 @@ export function PricingConfiguration({
               </div>
             ))}
             {extTextInputs.length === 0 && (
-              <p className="text-[13px] text-muted-foreground italic">No text inputs defined. Click Add or Load NQX Defaults.</p>
+              <p className="text-[13px] text-muted-foreground italic">No text inputs defined. Click Add or Load Defaults.</p>
             )}
           </div>
 
@@ -959,7 +995,7 @@ export function PricingConfiguration({
               </div>
             ))}
             {extDropdowns.length === 0 && (
-              <p className="text-[13px] text-muted-foreground italic">No dropdowns defined. Click Add Dropdown or Load NQX Defaults.</p>
+              <p className="text-[13px] text-muted-foreground italic">No dropdowns defined. Click Add Dropdown or Load Defaults.</p>
             )}
           </div>
         </div>
