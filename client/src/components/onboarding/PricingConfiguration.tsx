@@ -954,37 +954,22 @@ export function PricingConfiguration({
                       data-testid={`input-text-formula-${idx}`}
                     />
                     {(() => {
-                      const pricingVars = [...extTextInputs.filter((_, i) => i !== idx).map(f => ({ key: f.fieldKey, label: f.label, group: 'pricing' })),
-                        ...extDropdowns.map(f => ({ key: f.fieldKey, label: f.label, group: 'pricing' }))].filter(f => f.key);
-                      const quoteVars = quoteFormVariables.filter(qf => !pricingVars.some(pv => pv.key === qf.key)).map(f => ({ ...f, group: 'quote' }));
-                      return (
-                        <div className="space-y-1.5">
-                          {pricingVars.length > 0 && (
-                            <div>
-                              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Pricing Fields</span>
-                              <div className="flex flex-wrap gap-1 mt-0.5">
-                                {pricingVars.map((f, fi) => (
-                                  <button key={`p-${fi}`} type="button" className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-mono hover:bg-primary/20 transition-colors cursor-pointer" onClick={() => { const updated = [...extTextInputs]; updated[idx] = { ...updated[idx], formula: (updated[idx].formula || '') + `{${f.key}}` }; setExtTextInputs(updated); }} data-testid={`chip-text-var-${idx}-p${fi}`}>
-                                    {`{${f.key}}`} <span className="opacity-60 font-sans">{f.label}</span>
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          {quoteVars.length > 0 && (
-                            <div>
-                              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Quote Form Fields</span>
-                              <div className="flex flex-wrap gap-1 mt-0.5">
-                                {quoteVars.map((f, fi) => (
-                                  <button key={`q-${fi}`} type="button" className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 text-[11px] font-mono hover:bg-amber-500/20 transition-colors cursor-pointer" onClick={() => { const updated = [...extTextInputs]; updated[idx] = { ...updated[idx], formula: (updated[idx].formula || '') + `{${f.key}}` }; setExtTextInputs(updated); }} data-testid={`chip-text-var-${idx}-q${fi}`}>
-                                    {`{${f.key}}`} <span className="opacity-60 font-sans">{f.label}</span>
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
+                      const pricingVars = [...extTextInputs.filter((_, i) => i !== idx).map(f => ({ key: f.fieldKey, label: f.label })),
+                        ...extDropdowns.map(f => ({ key: f.fieldKey, label: f.label }))].filter(f => f.key);
+                      const quoteVars = quoteFormVariables.filter(qf => !pricingVars.some(pv => pv.key === qf.key));
+                      const allVars = [...pricingVars, ...quoteVars];
+                      return allVars.length > 0 ? (
+                        <div>
+                          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Available Variables</span>
+                          <div className="flex flex-wrap gap-1 mt-0.5">
+                            {allVars.map((f, fi) => (
+                              <button key={fi} type="button" className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-mono hover:bg-primary/20 transition-colors cursor-pointer" onClick={() => { const updated = [...extTextInputs]; updated[idx] = { ...updated[idx], formula: (updated[idx].formula || '') + `{${f.key}}` }; setExtTextInputs(updated); }} data-testid={`chip-text-var-${idx}-${fi}`}>
+                                {`{${f.key}}`} <span className="opacity-60 font-sans">{f.label}</span>
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      );
+                      ) : null;
                     })()}
                     <p className="text-[11px] text-muted-foreground">Use {'{fieldKey}'} to reference other fields. Supports +, -, *, /, parentheses.</p>
                   </div>
@@ -1110,37 +1095,22 @@ export function PricingConfiguration({
                       data-testid={`input-dd-formula-${ddIdx}`}
                     />
                     {(() => {
-                      const pricingVars = [...extTextInputs.map(f => ({ key: f.fieldKey, label: f.label, group: 'pricing' })),
-                        ...extDropdowns.filter((_, i) => i !== ddIdx).map(f => ({ key: f.fieldKey, label: f.label, group: 'pricing' }))].filter(f => f.key);
-                      const quoteVars = quoteFormVariables.filter(qf => !pricingVars.some(pv => pv.key === qf.key)).map(f => ({ ...f, group: 'quote' }));
-                      return (
-                        <div className="space-y-1.5">
-                          {pricingVars.length > 0 && (
-                            <div>
-                              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Pricing Fields</span>
-                              <div className="flex flex-wrap gap-1 mt-0.5">
-                                {pricingVars.map((f, fi) => (
-                                  <button key={`p-${fi}`} type="button" className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-mono hover:bg-primary/20 transition-colors cursor-pointer" onClick={() => { const updated = [...extDropdowns]; updated[ddIdx] = { ...updated[ddIdx], formula: (updated[ddIdx].formula || '') + `{${f.key}}` }; setExtDropdowns(updated); }} data-testid={`chip-dd-var-${ddIdx}-p${fi}`}>
-                                    {`{${f.key}}`} <span className="opacity-60 font-sans">{f.label}</span>
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          {quoteVars.length > 0 && (
-                            <div>
-                              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Quote Form Fields</span>
-                              <div className="flex flex-wrap gap-1 mt-0.5">
-                                {quoteVars.map((f, fi) => (
-                                  <button key={`q-${fi}`} type="button" className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 text-[11px] font-mono hover:bg-amber-500/20 transition-colors cursor-pointer" onClick={() => { const updated = [...extDropdowns]; updated[ddIdx] = { ...updated[ddIdx], formula: (updated[ddIdx].formula || '') + `{${f.key}}` }; setExtDropdowns(updated); }} data-testid={`chip-dd-var-${ddIdx}-q${fi}`}>
-                                    {`{${f.key}}`} <span className="opacity-60 font-sans">{f.label}</span>
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
+                      const pricingVars = [...extTextInputs.map(f => ({ key: f.fieldKey, label: f.label })),
+                        ...extDropdowns.filter((_, i) => i !== ddIdx).map(f => ({ key: f.fieldKey, label: f.label }))].filter(f => f.key);
+                      const quoteVars = quoteFormVariables.filter(qf => !pricingVars.some(pv => pv.key === qf.key));
+                      const allVars = [...pricingVars, ...quoteVars];
+                      return allVars.length > 0 ? (
+                        <div>
+                          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Available Variables</span>
+                          <div className="flex flex-wrap gap-1 mt-0.5">
+                            {allVars.map((f, fi) => (
+                              <button key={fi} type="button" className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-mono hover:bg-primary/20 transition-colors cursor-pointer" onClick={() => { const updated = [...extDropdowns]; updated[ddIdx] = { ...updated[ddIdx], formula: (updated[ddIdx].formula || '') + `{${f.key}}` }; setExtDropdowns(updated); }} data-testid={`chip-dd-var-${ddIdx}-${fi}`}>
+                                {`{${f.key}}`} <span className="opacity-60 font-sans">{f.label}</span>
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      );
+                      ) : null;
                     })()}
                     <p className="text-[11px] text-muted-foreground">Use {'{fieldKey}'} to reference other fields. Supports +, -, *, /, parentheses.</p>
                   </div>
