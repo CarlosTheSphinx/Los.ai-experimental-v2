@@ -690,7 +690,7 @@ export default function DealDetailV2() {
             <TabDocuments deal={deal} documents={documents} dealId={dealId!} stages={dealData?.stages} />
           </TabsContent>
           <TabsContent value="tasks" className="m-0">
-            <TabTasks deal={deal} tasks={tasks} dealId={dealId!} />
+            <TabTasks deal={deal} tasks={tasks} dealId={dealId!} stages={dealData?.stages} />
           </TabsContent>
           <TabsContent value="people" className="m-0">
             <TabPeople deal={deal} isAdmin={!!isAdmin} />

@@ -8827,9 +8827,19 @@ export async function registerRoutes(
         .where(eq(dealTasks.dealId, dealId))
         .orderBy(dealTasks.createdAt);
 
-      const ptasks = await db.select().from(projectTasks)
+      const ptasksRaw = await db.select().from(projectTasks)
         .where(eq(projectTasks.projectId, dealId))
         .orderBy(asc(projectTasks.createdAt));
+
+      const seenTemplateIds = new Set<number>();
+      const ptasks = ptasksRaw.filter(t => {
+        if (t.status === 'not_applicable') return false;
+        if (t.programTaskTemplateId) {
+          if (seenTemplateIds.has(t.programTaskTemplateId)) return false;
+          seenTemplateIds.add(t.programTaskTemplateId);
+        }
+        return true;
+      });
 
       const mappedProjectTasks = ptasks.map(t => ({
         id: t.id,

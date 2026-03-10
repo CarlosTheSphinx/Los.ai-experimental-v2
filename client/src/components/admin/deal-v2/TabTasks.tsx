@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { CheckCircle2, Plus, CalendarIcon, ClipboardEdit } from "lucide-react";
+import { CheckCircle2, Plus, CalendarIcon, ClipboardEdit, ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,10 +12,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { EmptyState } from "@/components/ui/phase1/empty-state";
-import { CollapsibleSection } from "@/components/ui/phase1/collapsible-section";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 function getPriorityColor(priority: string): string {
   switch (priority?.toLowerCase()) {
@@ -33,10 +33,12 @@ export default function TabTasks({
   deal,
   tasks,
   dealId,
+  stages = [],
 }: {
   deal: any;
   tasks: any[];
   dealId: string;
+  stages?: any[];
 }) {
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -107,10 +109,6 @@ export default function TabTasks({
     });
   }
 
-  const todo = tasks.filter((t) => t.status === "pending" || t.status === "to_do");
-  const inProgress = tasks.filter((t) => t.status === "in_progress");
-  const done = tasks.filter((t) => t.status === "completed" || t.status === "done");
-
   const getAssigneeName = (task: any) => {
     if (task._assignedToBorrower || task.assignedTo === "borrower") {
       return deal?.customerFirstName && deal?.customerLastName
@@ -132,7 +130,7 @@ export default function TabTasks({
     return (
       <div
         key={task.id}
-        className="flex items-center gap-3 py-2 px-3 rounded-md hover:bg-muted/50"
+        className="flex items-center gap-3 py-2.5 px-4 border-b border-border/30 last:border-b-0 hover:bg-muted/30"
         data-testid={`task-item-${task.id}`}
       >
         <Checkbox
@@ -146,15 +144,17 @@ export default function TabTasks({
           data-testid={`checkbox-task-${task.id}`}
         />
         <div className="flex-1 min-w-0">
-          <p className={`text-[16px] font-medium ${task.status === "completed" || task.status === "done" ? "line-through text-muted-foreground" : ""}`}>
+          <p className={`text-[15px] font-medium ${task.status === "completed" || task.status === "done" ? "line-through text-muted-foreground" : ""}`}>
             {task.taskTitle || task.taskName || task.title}
           </p>
-          {assignee && (
-            <p className="text-[13px] text-muted-foreground">Assigned to: {assignee}</p>
-          )}
-          {task.dueDate && !isNaN(new Date(task.dueDate).getTime()) && (
-            <p className="text-[13px] text-muted-foreground">Due: {format(new Date(task.dueDate), "MMM d, yyyy")}</p>
-          )}
+          <div className="flex items-center gap-3 mt-0.5">
+            {assignee && (
+              <p className="text-[13px] text-muted-foreground">Assigned to: {assignee}</p>
+            )}
+            {task.dueDate && !isNaN(new Date(task.dueDate).getTime()) && (
+              <p className="text-[13px] text-muted-foreground">Due: {format(new Date(task.dueDate), "MMM d, yyyy")}</p>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {task.priority && (
@@ -178,10 +178,47 @@ export default function TabTasks({
     );
   };
 
+  const stageMap = new Map<number, any>();
+  stages.forEach((s: any) => stageMap.set(s.id, s));
+
+  const tasksByStage = new Map<number | null, any[]>();
+  tasks.forEach((task) => {
+    const key = task.stageId || null;
+    if (!tasksByStage.has(key)) tasksByStage.set(key, []);
+    tasksByStage.get(key)!.push(task);
+  });
+
+  const sortedStageKeys: (number | null)[] = [];
+  const stageIds = stages
+    .sort((a: any, b: any) => (a.stageOrder ?? 0) - (b.stageOrder ?? 0))
+    .map((s: any) => s.id);
+  stageIds.forEach((id: number) => {
+    sortedStageKeys.push(id);
+  });
+  tasksByStage.forEach((_, key) => {
+    if (key !== null && !sortedStageKeys.includes(key)) sortedStageKeys.push(key);
+  });
+  if (tasksByStage.has(null)) sortedStageKeys.push(null);
+
+  const stageData = sortedStageKeys.map((stageId) => {
+    const stageTasks = tasksByStage.get(stageId) || [];
+    const stage = stageId ? stageMap.get(stageId) : null;
+    const stageOrder = stage?.stageOrder ?? 0;
+    const stageName = stage?.stageName || "General Tasks";
+    const completedCount = stageTasks.filter((t) => t.status === "completed" || t.status === "done").length;
+    const allComplete = completedCount === stageTasks.length && stageTasks.length > 0;
+    return { stageId, stageOrder, stageName, completedCount, totalCount: stageTasks.length, allComplete, tasks: stageTasks };
+  });
+  const activeIdx = stageData.findIndex((s) => !s.allComplete);
+
+  const completedTotal = tasks.filter((t) => t.status === "completed" || t.status === "done").length;
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-muted-foreground">Tasks ({tasks.length})</h3>
+        <h3 className="text-sm font-semibold text-muted-foreground" data-testid="text-tasks-count">
+          Tasks ({completedTotal}/{tasks.length} complete)
+        </h3>
         <Button
           size="sm"
           variant="outline"
@@ -200,23 +237,21 @@ export default function TabTasks({
           description="Tasks will appear here once the deal workflow is configured."
         />
       ) : (
-        <>
-          {todo.length > 0 && (
-            <CollapsibleSection title="To Do" badge={String(todo.length)} defaultOpen={true}>
-              <div className="space-y-0.5">{todo.map(renderTask)}</div>
-            </CollapsibleSection>
-          )}
-          {inProgress.length > 0 && (
-            <CollapsibleSection title="In Progress" badge={String(inProgress.length)} defaultOpen={true}>
-              <div className="space-y-0.5">{inProgress.map(renderTask)}</div>
-            </CollapsibleSection>
-          )}
-          {done.length > 0 && (
-            <CollapsibleSection title="Completed" badge={String(done.length)} defaultOpen={false}>
-              <div className="space-y-0.5">{done.map(renderTask)}</div>
-            </CollapsibleSection>
-          )}
-        </>
+        <div className="space-y-3">
+          {stageData.map((s, idx) => (
+            <TaskStageSection
+              key={s.stageId ?? "general"}
+              stageOrder={s.stageOrder}
+              stageName={s.stageName}
+              completedCount={s.completedCount}
+              totalCount={s.totalCount}
+              allComplete={s.allComplete}
+              tasks={s.tasks}
+              defaultOpen={idx === activeIdx || idx === 0}
+              renderTask={renderTask}
+            />
+          ))}
+        </div>
       )}
 
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
@@ -343,6 +378,68 @@ export default function TabTasks({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function TaskStageSection({
+  stageOrder,
+  stageName,
+  completedCount,
+  totalCount,
+  allComplete,
+  tasks,
+  defaultOpen = false,
+  renderTask,
+}: {
+  stageOrder: number;
+  stageName: string;
+  completedCount: number;
+  totalCount: number;
+  allComplete: boolean;
+  tasks: any[];
+  defaultOpen?: boolean;
+  renderTask: (task: any) => JSX.Element;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <div className="border rounded-md bg-card" data-testid={`task-stage-section-${stageOrder}`}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors"
+        data-testid={`button-toggle-task-stage-${stageOrder}`}
+      >
+        <div className="flex items-center gap-2.5">
+          {allComplete ? (
+            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+          ) : (
+            <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/40 flex items-center justify-center text-[12px] font-bold text-muted-foreground">
+              {stageOrder || "—"}
+            </div>
+          )}
+          <span className="text-[16px] font-semibold text-muted-foreground">
+            {stageOrder ? `Stage ${stageOrder}: ` : ""}{stageName}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[14px] text-muted-foreground">
+            {completedCount}/{totalCount} complete
+          </span>
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 text-muted-foreground transition-transform duration-200",
+              !isOpen && "-rotate-90"
+            )}
+          />
+        </div>
+      </button>
+
+      {isOpen && (
+        <div className="border-t border-border/50">
+          {tasks.map(renderTask)}
+        </div>
+      )}
     </div>
   );
 }
