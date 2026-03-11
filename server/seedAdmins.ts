@@ -27,7 +27,7 @@ export async function seedSuperAdmins() {
           role: 'super_admin',
           firstName: admin.firstName,
           lastName: admin.lastName,
-          userType: 'admin',
+          userType: 'super_admin',
         });
         console.log(`✅ Created super_admin: ${admin.email}`);
       }

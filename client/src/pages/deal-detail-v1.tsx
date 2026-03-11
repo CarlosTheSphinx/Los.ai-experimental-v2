@@ -188,7 +188,7 @@ export default function ProjectDetail() {
   const projectId = params?.id;
   const { toast } = useToast();
   const { user } = useAuth();
-  const isBorrower = user?.userType === 'borrower';
+  const isBorrower = user?.role === 'borrower';
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dealDocFileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);

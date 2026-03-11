@@ -356,7 +356,7 @@ function UserDetailPanel({ userId, onClose }: { userId: number; onClose: () => v
             )}
           </div>
           <Badge variant="secondary" className="capitalize shrink-0" data-testid="badge-detail-type">
-            {user.userType || "broker"}
+            {user.role || "broker"}
           </Badge>
         </div>
         <div className="flex items-center gap-1.5">
@@ -589,7 +589,7 @@ function UserDetailPanel({ userId, onClose }: { userId: number; onClose: () => v
         </Button>
       </div>
 
-      {user.userType === "broker" && (
+      {user.role === "broker" && (
         <Collapsible open={brokerPermsOpen} onOpenChange={setBrokerPermsOpen}>
           <CollapsibleTrigger asChild>
             <button className="flex items-center justify-between w-full border rounded-lg p-4 hover:bg-muted/50 transition-colors" data-testid="button-broker-permissions">
@@ -755,7 +755,7 @@ function UsersTab() {
     fullName: "",
     companyName: "",
     phone: "",
-    role: "user",
+    role: "broker",
     userType: "broker",
   });
   const { toast } = useToast();
@@ -798,7 +798,7 @@ function UsersTab() {
       setIsAddDialogOpen(false);
       setShowDraft(false);
       setPendingInvite(null);
-      setNewUser({ email: "", fullName: "", companyName: "", phone: "", role: "user", userType: "broker" });
+      setNewUser({ email: "", fullName: "", companyName: "", phone: "", role: "broker", userType: "broker" });
     },
     onError: (error: any) => {
       setPendingInvite(null);
@@ -841,11 +841,11 @@ function UsersTab() {
   };
 
   const allUsers = data?.users || [];
-  const externalUsers = allUsers.filter(u => u.role === "user" || u.userType === "borrower");
+  const externalUsers = allUsers.filter(u => ['broker', 'borrower', 'user'].includes(u.role));
 
   const filteredUsers = externalUsers.filter(u => {
     if (typeFilter !== "all") {
-      const ut = u.userType || "broker";
+      const ut = u.role || "broker";
       if (ut !== typeFilter) return false;
     }
     if (search) {
@@ -904,8 +904,8 @@ function UsersTab() {
                         data-testid="input-new-user-fullname"
                       />
                     </div>
-                    <Select value={newUser.userType} onValueChange={(v) => setNewUser({ ...newUser, userType: v })}>
-                      <SelectTrigger className="w-[120px] h-8" data-testid="select-new-user-type">
+                    <Select value={newUser.role} onValueChange={(v) => setNewUser({ ...newUser, role: v, userType: v })}>
+                      <SelectTrigger className="w-[120px] h-8" data-testid="select-new-user-role">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1100,7 +1100,7 @@ function UsersTab() {
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary" className="capitalize">
-                            {user.userType || "broker"}
+                            {user.role || "broker"}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">

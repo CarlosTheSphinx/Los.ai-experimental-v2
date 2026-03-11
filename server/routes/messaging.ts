@@ -7,7 +7,7 @@ import { messageThreads, messages, messageReads, users, projects } from '@shared
 export function registerMessagingRoutes(app: Express, deps: RouteDeps) {
   const { storage, db, authenticateUser, requireAdmin } = deps;
 
-  const isAdminRole = (role: string | undefined) => role === 'admin' || role === 'super_admin' || role === 'staff';
+  const isAdminRole = (role: string | undefined) => role === 'admin' || role === 'super_admin' || role === 'staff' || role === 'lender' || role === 'processor';
 
   // Get all threads (admin sees all, user sees only their own)
   app.get('/api/messages/threads', authenticateUser, async (req: AuthRequest, res: Response) => {
@@ -44,7 +44,7 @@ export function registerMessagingRoutes(app: Express, deps: RouteDeps) {
 
       const currentUserId = userId;
       const threadsWithContext = await Promise.all(threads.map(async (thread) => {
-        const threadUser = await db.select({ fullName: users.fullName, email: users.email, userType: users.userType })
+        const threadUser = await db.select({ fullName: users.fullName, email: users.email, userType: users.role })
           .from(users).where(eq(users.id, thread.userId)).limit(1);
 
         let dealName = null;

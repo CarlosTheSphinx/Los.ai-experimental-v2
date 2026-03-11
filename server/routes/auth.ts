@@ -191,7 +191,7 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
   // Register
   app.post('/api/auth/register', async (req: Request, res: Response) => {
     try {
-      const { email, password, fullName, firstName, lastName, companyName, phone, userType } = req.body;
+      const { email, password, fullName, firstName, lastName, companyName, phone, userType: requestedRole } = req.body;
 
       // Support both fullName and firstName/lastName
       const resolvedFullName = fullName || (firstName && lastName ? `${firstName} ${lastName}` : null);
@@ -207,8 +207,8 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         });
       }
 
-      // Validate userType - default to broker if not provided
-      const validUserType = (userType === 'broker' || userType === 'borrower' || userType === 'lender') ? userType : 'broker';
+      const validRoles = ['broker', 'borrower', 'lender'];
+      const userRole = validRoles.includes(requestedRole) ? requestedRole : 'broker';
 
       const existingUser = await storage.getUserByEmail(email.toLowerCase());
       if (existingUser) {
@@ -217,11 +217,7 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
 
       const passwordHash = await hashPassword(password);
 
-      // Borrowers don't need onboarding, brokers and lenders do
-      const onboardingCompleted = validUserType === 'borrower';
-
-      // Lenders get admin role by default
-      const userRole = validUserType === 'lender' ? 'admin' : 'user';
+      const onboardingCompleted = userRole === 'borrower';
 
       const user = await storage.createUser({
         email: email.toLowerCase(),
@@ -234,7 +230,7 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         isActive: true,
         passwordResetToken: null,
         passwordResetExpires: null,
-        userType: validUserType,
+        userType: userRole,
         onboardingCompleted,
         passwordExpiresAt: calculatePasswordExpiry(),
       });
@@ -268,7 +264,7 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
           lastName: respLastName,
           fullName: user.fullName,
           companyName: user.companyName,
-          userType: user.userType,
+          userType: user.role,
           onboardingCompleted: user.onboardingCompleted
         },
         token
@@ -674,11 +670,10 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         }
         await storage.updateUser(user.id, { lastLoginAt: new Date(), emailVerified: true });
       } else {
-        const assignedUserType = requestedUserType && ['broker', 'borrower', 'lender'].includes(requestedUserType)
+        const assignedRole = requestedUserType && ['broker', 'borrower', 'lender'].includes(requestedUserType)
           ? requestedUserType
           : null;
-        const assignedRole = assignedUserType === 'lender' ? 'admin' : 'user';
-        const onboardingCompleted = assignedUserType === 'borrower';
+        const onboardingCompleted = assignedRole === 'borrower';
 
         user = await storage.createUser({
           email,
@@ -688,13 +683,13 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
           avatarUrl,
           emailVerified: true,
           isActive: true,
-          userType: assignedUserType,
+          userType: assignedRole,
           onboardingCompleted,
           companyName: null,
           phone: null,
           passwordResetToken: null,
           passwordResetExpires: null,
-          role: assignedRole,
+          role: assignedRole || 'broker',
         });
       }
 
@@ -704,11 +699,11 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
       const returnTo = oauthState.returnTo || null;
       if (returnTo && returnTo.startsWith('/')) {
         res.redirect(returnTo);
-      } else if (!user.userType) {
+      } else if (!user.role || user.role === 'user') {
         res.redirect('/select-role');
-      } else if (user.userType === 'lender' || ['admin', 'staff', 'super_admin'].includes(user.role || '')) {
+      } else if (['lender', 'super_admin', 'admin', 'staff', 'processor'].includes(user.role)) {
         res.redirect('/admin/onboarding');
-      } else if (user.userType === 'broker' && !user.onboardingCompleted) {
+      } else if (user.role === 'broker' && !user.onboardingCompleted) {
         res.redirect('/onboarding');
       } else {
         res.redirect('/');
@@ -743,7 +738,7 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
           companyName: user.companyName,
           phone: user.phone,
           role: user.role,
-          userType: user.userType,
+          userType: user.role,
           onboardingCompleted: user.onboardingCompleted,
           createdAt: user.createdAt
         }
@@ -796,18 +791,18 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
       if (!req.user) {
         return res.status(401).json({ error: 'Authentication required' });
       }
-      const { userType } = req.body;
-      if (userType !== 'broker' && userType !== 'borrower') {
-        return res.status(400).json({ error: 'Invalid user type. Must be broker or borrower.' });
+      const { userType: selectedRole } = req.body;
+      if (!['broker', 'borrower', 'lender'].includes(selectedRole)) {
+        return res.status(400).json({ error: 'Invalid role. Must be broker, borrower, or lender.' });
       }
       const user = await storage.getUserById(req.user.id);
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
-      if (user.userType) {
-        return res.status(400).json({ error: 'User type already set' });
+      if (user.role && user.role !== 'user') {
+        return res.status(400).json({ error: 'Role already set' });
       }
-      await storage.updateUser(user.id, { userType });
+      await storage.updateUser(user.id, { role: selectedRole, userType: selectedRole });
       const updatedUser = await storage.getUserById(user.id);
       res.json({ success: true, user: updatedUser });
     } catch (error) {

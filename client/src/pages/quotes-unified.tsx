@@ -420,7 +420,7 @@ export default function QuotesUnified() {
   const { toast } = useToast();
   const { user } = useAuth();
   const [, navigate] = useLocation();
-  const isBorrower = user?.userType === 'borrower';
+  const isBorrower = user?.role === 'borrower';
 
   const [loanProductType, setLoanProductType] = useState<"dscr" | "rtl">("dscr");
   const [selectedProgramId, setSelectedProgramId] = useState<number | null>(null);

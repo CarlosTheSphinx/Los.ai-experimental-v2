@@ -22,6 +22,8 @@ The application is built with a modern web stack: React 18 with TypeScript for t
 
 **Database Schema Highlights**: Manages users, pricing requests, quotes, documents, e-signatures, audit logs, projects (deals), tasks, activities, system settings, partners, loan programs, message threads, and commercial loan submissions.
 
+**Consolidated Role System**: Single `role` field on users table (replaces old separate `role`+`userType` fields). Valid roles: `super_admin` (Lendry platform admin, full access), `lender` (lending company admin), `processor` (loan processor), `broker` (external broker), `borrower` (external borrower). The `userType` column is deprecated but kept in sync for backward compatibility. Admin access (`requireAdmin` middleware) is granted to: super_admin, lender, processor. The `role` field drives all permission checks, navigation routing, and portal access.
+
 **Key Architectural Decisions:**
 -   **Multi-Tenancy**: Ensures full data isolation using `tenantId`.
 -   **Google Drive Integration**: Automates folder creation and document synchronization per project.

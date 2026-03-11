@@ -7,7 +7,7 @@ export async function getTenantId(user: { id: number; role: string; invitedBy?: 
     return null;
   }
 
-  if (user.role === "admin" && user.invitedBy == null) {
+  if ((user.role === "lender" || user.role === "admin") && user.invitedBy == null) {
     return user.id;
   }
 

@@ -172,7 +172,7 @@ export async function registerRoutes(
       }
       
       const user = await storage.getUserById(req.user.id);
-      if (!user || !['admin', 'staff', 'super_admin', 'processor'].includes(user.role)) {
+      if (!user || !['super_admin', 'lender', 'processor', 'admin', 'staff'].includes(user.role)) {
         return res.status(403).json({ error: 'Admin access required' });
       }
       
@@ -219,7 +219,7 @@ export async function registerRoutes(
           return next();
         }
 
-        const hasTeamRole = userRoles.some(r => ['admin', 'staff', 'processor'].includes(r));
+        const hasTeamRole = userRoles.some(r => ['admin', 'staff', 'processor', 'lender'].includes(r));
         if (!hasTeamRole) {
           return res.status(403).json({ error: 'Admin access required' });
         }
@@ -251,17 +251,17 @@ export async function registerRoutes(
       }
       
       // Team members are exempt from onboarding requirement
-      if (['admin', 'staff', 'super_admin', 'processor'].includes(user.role)) {
+      if (['admin', 'staff', 'super_admin', 'lender', 'processor'].includes(user.role)) {
         return next();
       }
       
       // Borrowers don't need onboarding (they have onboardingCompleted=true by default)
-      if (user.userType === 'borrower') {
+      if (user.role === 'borrower') {
         return next();
       }
       
       // Brokers must complete onboarding
-      if (user.userType === 'broker' && !user.onboardingCompleted) {
+      if (user.role === 'broker' && !user.onboardingCompleted) {
         return res.status(403).json({ 
           error: 'Onboarding required',
           code: 'ONBOARDING_REQUIRED',
@@ -3519,7 +3519,7 @@ export async function registerRoutes(
       );
 
       const currentUser = await storage.getUserById(userId);
-      if (currentUser && currentUser.email && currentUser.userType === 'borrower') {
+      if (currentUser && currentUser.email && currentUser.role === 'borrower') {
         const userEmail = currentUser.email.toLowerCase().trim();
         let emailConditions: any[] = [
           sql`LOWER(TRIM(${projects.borrowerEmail})) = ${userEmail}`
@@ -4001,7 +4001,7 @@ export async function registerRoutes(
           email: borrowerEmail.toLowerCase().trim(),
           fullName: project.borrowerName || null,
           phone: project.borrowerPhone || null,
-          role: 'user',
+          role: 'borrower',
           userType: 'borrower',
           isActive: true,
           emailVerified: true,
@@ -4717,7 +4717,7 @@ export async function registerRoutes(
   app.get('/api/borrower/profile', authenticateUser, async (req: AuthRequest, res: Response) => {
     try {
       const user = req.user!;
-      if (user.userType !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
+      if (user.role !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
 
       const email = user.email.toLowerCase();
       let [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
@@ -4742,7 +4742,7 @@ export async function registerRoutes(
   app.put('/api/borrower/profile', authenticateUser, async (req: AuthRequest, res: Response) => {
     try {
       const user = req.user!;
-      if (user.userType !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
+      if (user.role !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
 
       const email = user.email.toLowerCase();
       const updates = { ...req.body };
@@ -4776,7 +4776,7 @@ export async function registerRoutes(
   app.get('/api/borrower/documents', authenticateUser, async (req: AuthRequest, res: Response) => {
     try {
       const user = req.user!;
-      if (user.userType !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
+      if (user.role !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
 
       const email = user.email.toLowerCase();
       const [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
@@ -4796,7 +4796,7 @@ export async function registerRoutes(
   app.post('/api/borrower/documents', authenticateUser, async (req: AuthRequest, res: Response) => {
     try {
       const user = req.user!;
-      if (user.userType !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
+      if (user.role !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
 
       const email = user.email.toLowerCase();
       let [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
@@ -4827,7 +4827,7 @@ export async function registerRoutes(
   app.delete('/api/borrower/documents/:docId', authenticateUser, async (req: AuthRequest, res: Response) => {
     try {
       const user = req.user!;
-      if (user.userType !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
+      if (user.role !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
 
       const email = user.email.toLowerCase();
       const [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
@@ -4921,6 +4921,8 @@ export async function registerRoutes(
   registerAdminProgramsRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
 
   // Note: Old messaging routes code has been moved to routes/messaging.ts
+
+  const isAdminRole = (role: string | undefined) => ['admin', 'super_admin', 'staff', 'lender', 'processor'].includes(role || '');
 
   // Get single thread with messages
   app.get('/api/messages/threads/:id', authenticateUser, async (req: AuthRequest, res: Response) => {
@@ -5375,7 +5377,7 @@ export async function registerRoutes(
         title: u.title,
         role: u.role,
         roles: u.roles || [u.role],
-        userType: u.userType,
+        userType: u.role,
         createdAt: u.createdAt,
         lastLoginAt: u.lastLoginAt,
         emailVerified: u.emailVerified,
@@ -5393,7 +5395,7 @@ export async function registerRoutes(
   // Admin - Create user manually
   app.post('/api/admin/users', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
-      const { email, fullName, companyName, phone, role, roles, title, userType, skipInviteEmail } = req.body;
+      const { email, fullName, companyName, phone, role, roles, title, skipInviteEmail } = req.body;
       
       if (!email) {
         return res.status(400).json({ error: 'Email is required' });
@@ -5405,7 +5407,7 @@ export async function registerRoutes(
       }
 
       const { getPrimaryRole } = await import('@shared/schema');
-      const userRoles: string[] = roles?.length ? roles : (role ? [role] : ['user']);
+      const userRoles: string[] = roles?.length ? roles : (role ? [role] : ['broker']);
       const primaryRole = getPrimaryRole(userRoles);
 
       const inviteToken = generateRandomToken();
@@ -5419,7 +5421,7 @@ export async function registerRoutes(
         title: title || null,
         role: primaryRole,
         roles: userRoles,
-        userType: userType || 'broker',
+        userType: primaryRole,
         isActive: true,
         emailVerified: true,
         inviteToken,
@@ -5492,7 +5494,7 @@ export async function registerRoutes(
         currentStage: projects.currentStage,
         createdAt: projects.createdAt,
       }).from(projects).where(
-        user.userType === 'borrower'
+        user.role === 'borrower'
           ? eq(projects.borrowerEmail, user.email)
           : eq(projects.userId, user.id)
       );
@@ -5510,7 +5512,7 @@ export async function registerRoutes(
           companyName: user.companyName,
           phone: user.phone,
           role: user.role,
-          userType: user.userType,
+          userType: user.role,
           isActive: user.isActive,
           createdAt: user.createdAt,
           lastLoginAt: user.lastLoginAt,
@@ -5600,7 +5602,7 @@ export async function registerRoutes(
       const userId = parseInt(req.params.id);
       const [user] = await db.select().from(users).where(eq(users.id, userId));
       if (!user) return res.status(404).json({ error: 'User not found' });
-      if (user.userType !== 'broker') return res.status(400).json({ error: 'User is not a broker' });
+      if (user.role !== 'broker') return res.status(400).json({ error: 'User is not a broker' });
 
       const { brokerSettings } = req.body;
       await db.update(users).set({ brokerSettings }).where(eq(users.id, userId));
@@ -5661,7 +5663,7 @@ export async function registerRoutes(
         dealName: projects.projectName,
         status: projects.status,
       }).from(projects).where(
-        user.userType === 'borrower'
+        user.role === 'borrower'
           ? eq(projects.borrowerEmail, user.email)
           : eq(projects.userId, user.id)
       );
@@ -5669,7 +5671,7 @@ export async function registerRoutes(
       res.json({
         email: user.email,
         fullName: user.fullName,
-        userType: user.userType,
+        userType: user.role,
         hasPassword: !!user.passwordHash,
         onboardingCompleted: user.onboardingCompleted,
         dealCount: userDeals.length,
@@ -5712,7 +5714,7 @@ export async function registerRoutes(
       const authToken = generateToken(user.id, user.email, user.tokenVersion ?? 0);
       setAuthCookie(res, authToken);
 
-      res.json({ success: true, userType: user.userType });
+      res.json({ success: true, userType: user.role });
     } catch (error) {
       console.error('Personal invite register error:', error);
       res.status(500).json({ error: 'Failed to complete registration' });
@@ -5728,7 +5730,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'First name, last name, and email are required' });
       }
       
-      const validRoles = ['processor', 'admin'];
+      const validRoles = ['processor', 'lender', 'admin'];
       const assignedRole = validRoles.includes(role) ? role : 'processor';
       
       const existingUser = await storage.getUserByEmail(email.toLowerCase().trim());
@@ -5753,7 +5755,7 @@ export async function registerRoutes(
         title: null,
         role: primaryRole,
         roles: userRoles,
-        userType: 'broker',
+        userType: primaryRole,
         isActive: true,
         emailVerified: false,
         inviteToken,
@@ -5945,7 +5947,7 @@ export async function registerRoutes(
       if (rolesInput !== undefined && Array.isArray(rolesInput)) {
         updates.roles = rolesInput;
         updates.role = getPrimaryRole(rolesInput);
-      } else if (role !== undefined && ['user', 'admin', 'staff', 'super_admin', 'processor'].includes(role)) {
+      } else if (role !== undefined && ['super_admin', 'lender', 'processor', 'broker', 'borrower', 'admin', 'staff', 'user'].includes(role)) {
         updates.role = role;
         updates.roles = [role];
       }
@@ -6614,7 +6616,7 @@ export async function registerRoutes(
       }
 
       const userRole = req.user!.role;
-      const isAdminRole = userRole === 'admin' || userRole === 'super_admin' || userRole === 'staff';
+      const isAdminUser = ['admin', 'super_admin', 'staff', 'lender', 'processor'].includes(userRole || '');
 
       const baseFields: Record<string, (v: any) => any> = {
         loanAmount: (v) => v !== null && v !== '' ? Number(v) : null,
@@ -6641,7 +6643,7 @@ export async function registerRoutes(
         brokerOriginationPoints: (v) => v !== null && v !== '' ? Number(v) : null,
       };
 
-      const allowedFields = isAdminRole ? { ...baseFields, ...adminOnlyFields } : baseFields;
+      const allowedFields = isAdminUser ? { ...baseFields, ...adminOnlyFields } : baseFields;
 
       const updateData: Record<string, any> = {};
       for (const [field, transform] of Object.entries(allowedFields)) {
@@ -8295,8 +8297,8 @@ export async function registerRoutes(
     try {
       const userId = req.user!.id;
       const projectId = parseInt(req.params.id);
-      const viewerRole = req.user!.role === 'super_admin' || req.user!.role === 'admin' ? 'admin' : 
-                         req.user!.userType === 'borrower' ? 'borrower' : 'broker';
+      const viewerRole = ['super_admin', 'lender', 'admin', 'staff', 'processor'].includes(req.user!.role) ? 'admin' : 
+                         req.user!.role === 'borrower' ? 'borrower' : 'broker';
 
       const project = await storage.getProjectById(projectId, userId);
       if (!project) return res.status(404).json({ error: 'Deal not found' });
@@ -12354,7 +12356,7 @@ If the user provides specific criteria, extract as many rules as you can from th
         phone: users.phone,
         role: users.role,
         roles: users.roles,
-        userType: users.userType,
+        userType: users.role,
       })
         .from(users)
         .where(
@@ -13289,7 +13291,7 @@ If the user provides specific criteria, extract as many rules as you can from th
         .from(onboardingDocuments)
         .where(and(
           eq(onboardingDocuments.isActive, true),
-          sql`(${onboardingDocuments.targetUserType} = ${user.userType} OR ${onboardingDocuments.targetUserType} = 'all')`
+          sql`(${onboardingDocuments.targetUserType} = ${user.role} OR ${onboardingDocuments.targetUserType} = 'all')`
         ))
         .orderBy(onboardingDocuments.sortOrder);
       
@@ -13322,7 +13324,7 @@ If the user provides specific criteria, extract as many rules as you can from th
       res.json({
         user: {
           id: user.id,
-          userType: user.userType,
+          userType: user.role,
           onboardingCompleted: user.onboardingCompleted,
           partnershipAgreementSignedAt: user.partnershipAgreementSignedAt,
           trainingCompletedAt: user.trainingCompletedAt
@@ -13330,7 +13332,7 @@ If the user provides specific criteria, extract as many rules as you can from th
         documents: documentsWithProgress,
         agreementSigned,
         trainingCompleted,
-        canProceed: user.userType === 'borrower' || (agreementSigned && trainingCompleted)
+        canProceed: user.role === 'borrower' || (agreementSigned && trainingCompleted)
       });
     } catch (error) {
       console.error('Get onboarding status error:', error);
@@ -13420,7 +13422,7 @@ If the user provides specific criteria, extract as many rules as you can from th
         .where(and(
           eq(onboardingDocuments.isActive, true),
           eq(onboardingDocuments.isRequired, true),
-          sql`(${onboardingDocuments.targetUserType} = ${user.userType} OR ${onboardingDocuments.targetUserType} = 'all')`
+          sql`(${onboardingDocuments.targetUserType} = ${user.role} OR ${onboardingDocuments.targetUserType} = 'all')`
         ));
       
       const progress = await db.select()
@@ -13632,7 +13634,7 @@ If the user provides specific criteria, extract as many rules as you can from th
         id: users.id,
         email: users.email,
         fullName: users.fullName,
-        userType: users.userType,
+        userType: users.role,
         onboardingCompleted: users.onboardingCompleted,
         partnershipAgreementSignedAt: users.partnershipAgreementSignedAt,
         trainingCompletedAt: users.trainingCompletedAt,
@@ -18308,7 +18310,7 @@ Return JSON only:
           fullName: `${firstName} ${lastName}`,
           phone: phone || null,
           userType: 'borrower',
-          role: 'user',
+          role: 'borrower',
         });
       }
 
@@ -18892,7 +18894,7 @@ Return JSON only:
           email: borrowerEmail.toLowerCase().trim(),
           fullName: project.borrowerName || null,
           phone: project.borrowerPhone || null,
-          role: 'user',
+          role: 'borrower',
           userType: 'borrower',
           isActive: true,
           emailVerified: true,
@@ -18995,11 +18997,11 @@ Return JSON only:
 
       const totalBrokers = await db.select({ count: sql<number>`count(*)` })
         .from(users)
-        .where(eq(users.userType, 'broker'));
+        .where(eq(users.role, 'broker'));
 
       const totalBorrowers = await db.select({ count: sql<number>`count(*)` })
         .from(users)
-        .where(eq(users.userType, 'borrower'));
+        .where(eq(users.role, 'borrower'));
 
       const totalDeals = await db.select({ count: sql<number>`count(*)` })
         .from(projects);
@@ -19061,7 +19063,7 @@ Return JSON only:
         email: users.email,
         fullName: users.fullName,
         role: users.role,
-        userType: users.userType,
+        userType: users.role,
         companyName: users.companyName,
         createdAt: users.createdAt,
       })
@@ -19173,7 +19175,7 @@ Return JSON only:
         email: users.email,
         fullName: users.fullName,
         role: users.role,
-        userType: users.userType,
+        userType: users.role,
         isActive: users.isActive,
         createdAt: users.createdAt,
         lastLoginAt: users.lastLoginAt,
@@ -19212,7 +19214,7 @@ Return JSON only:
           onboardingCompleted: tenant.onboardingCompleted,
         },
         teamMembers: [
-          { id: tenant.id, email: tenant.email, fullName: tenant.fullName, role: tenant.role, userType: tenant.userType, isActive: tenant.isActive, createdAt: tenant.createdAt, lastLoginAt: tenant.lastLoginAt, inviteStatus: 'owner' },
+          { id: tenant.id, email: tenant.email, fullName: tenant.fullName, role: tenant.role, userType: tenant.role, isActive: tenant.isActive, createdAt: tenant.createdAt, lastLoginAt: tenant.lastLoginAt, inviteStatus: 'owner' },
           ...teamMembers,
         ],
         deals: tenantDeals.map(d => ({
@@ -19939,7 +19941,7 @@ Return JSON only:
             email: email.toLowerCase().trim(),
             fullName: portalType === 'borrower' ? (project.borrowerName || null) : (project.brokerName || null),
             phone: portalType === 'borrower' ? (project.borrowerPhone || null) : null,
-            role: 'user',
+            role: portalType,
             userType: portalType,
             isActive: true,
             emailVerified: true,

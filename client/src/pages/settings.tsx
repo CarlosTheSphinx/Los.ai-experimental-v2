@@ -37,7 +37,7 @@ function BorrowerProfileTab() {
 
   const { data: profile, isLoading } = useQuery<any>({
     queryKey: ["/api/borrower/profile"],
-    enabled: user?.userType === "borrower",
+    enabled: user?.role === "borrower",
   });
 
   const [form, setForm] = useState<Record<string, any>>({});
@@ -351,7 +351,7 @@ function BrokerProfileTab() {
           <div>
             <p className="font-semibold text-lg">{user?.fullName || "—"}</p>
             <div className="flex items-center gap-2 mt-1">
-              <Badge variant="outline" className="text-xs capitalize">{(user as any)?.userType || "broker"}</Badge>
+              <Badge variant="outline" className="text-xs capitalize">{user?.role || "broker"}</Badge>
             </div>
           </div>
         </div>
@@ -425,7 +425,7 @@ export default function SettingsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("profile");
-  const isBorrower = (user as any)?.userType === "borrower";
+  const isBorrower = user?.role === "borrower";
 
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",

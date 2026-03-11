@@ -84,7 +84,7 @@ export default function Home() {
   const [progressMessage, setProgressMessage] = useState("");
   
   // If user is a borrower, show the borrower dashboard instead
-  if (user?.userType === 'borrower') {
+  if (user?.role === 'borrower') {
     return <BorrowerDashboard />;
   }
   

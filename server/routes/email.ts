@@ -520,7 +520,7 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
       const dealId = parseInt(req.params.dealId);
       if (isNaN(dealId)) return res.status(400).json({ error: 'Invalid deal ID' });
 
-      const isAdminUser = req.user!.role && ['admin', 'staff', 'super_admin'].includes(req.user!.role);
+      const isAdminUser = req.user!.role && ['admin', 'staff', 'super_admin', 'lender', 'processor'].includes(req.user!.role);
       if (!isAdminUser) {
         const [deal] = await db.select({ id: projects.id }).from(projects)
           .where(and(eq(projects.id, dealId), eq(projects.userId, req.user!.id)));

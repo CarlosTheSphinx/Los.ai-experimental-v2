@@ -214,8 +214,8 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
     localStorage.setItem(VIEW_AS_STORAGE_KEY, viewAsMode);
   }, [viewAsMode]);
 
-  const isAdmin = user?.role && ['admin', 'staff', 'super_admin', 'processor'].includes(user.role);
-  const isBorrower = user?.userType === 'borrower';
+  const isAdmin = user?.role && ['admin', 'staff', 'super_admin', 'lender', 'processor'].includes(user.role);
+  const isBorrower = user?.role === 'borrower';
 
   const userIsSuperAdmin = isSuperAdmin || user?.role === 'super_admin';
 

@@ -929,8 +929,8 @@ function UsersStatus() {
   });
 
   const users = usersData?.users || [];
-  const brokersPendingOnboarding = users.filter(u => u.userType === 'broker' && !u.onboardingCompleted);
-  const brokersCompleted = users.filter(u => u.userType === 'broker' && u.onboardingCompleted);
+  const brokersPendingOnboarding = users.filter(u => u.role === 'broker' && !u.onboardingCompleted);
+  const brokersCompleted = users.filter(u => u.role === 'broker' && u.onboardingCompleted);
 
   return (
     <div className="space-y-6">

@@ -29,7 +29,7 @@ export default function SelectRolePage() {
     return null;
   }
 
-  if (user?.userType) {
+  if (user?.role && user.role !== 'user') {
     navigate('/');
     return null;
   }

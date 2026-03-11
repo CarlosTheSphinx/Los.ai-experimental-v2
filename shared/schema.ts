@@ -25,9 +25,9 @@ export const users = pgTable("users", {
   companyName: varchar("company_name", { length: 255 }),
   phone: varchar("phone", { length: 50 }),
   title: varchar("title", { length: 255 }),
-  role: varchar("role", { length: 50 }).default("user").notNull(), // user, processor, staff, admin, super_admin
+  role: varchar("role", { length: 50 }).default("broker").notNull(), // super_admin, lender, processor, broker, borrower
   roles: text("roles").array(),
-  userType: varchar("user_type", { length: 50 }).default("broker"), // broker, borrower, lender
+  userType: varchar("user_type", { length: 50 }).default("broker"), // DEPRECATED - use role instead
   createdAt: timestamp("created_at").defaultNow(),
   lastLoginAt: timestamp("last_login_at"),
   emailVerified: boolean("email_verified").default(false),
@@ -2192,6 +2192,7 @@ export type InsertTeamPermission = z.infer<typeof insertTeamPermissionSchema>;
 // All available permission keys for the team permission system
 export const TEAM_ROLES = [
   "processor",
+  "lender",
   "staff",
   "admin",
   "super_admin",
@@ -2199,15 +2200,18 @@ export const TEAM_ROLES = [
 export type TeamRole = (typeof TEAM_ROLES)[number];
 
 export const ROLE_HIERARCHY: Record<string, number> = {
+  borrower: 0,
+  broker: 1,
+  processor: 2,
+  lender: 3,
+  super_admin: 4,
   user: 0,
-  processor: 1,
   staff: 2,
   admin: 3,
-  super_admin: 4,
 };
 
 export function getPrimaryRole(roles: string[]): string {
-  let highest = "user";
+  let highest = "borrower";
   for (const r of roles) {
     if ((ROLE_HIERARCHY[r] ?? 0) > (ROLE_HIERARCHY[highest] ?? 0)) {
       highest = r;

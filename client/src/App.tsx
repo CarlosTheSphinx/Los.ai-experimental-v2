@@ -149,11 +149,11 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     return <Redirect to="/login" />;
   }
 
-  if (!user?.userType) {
+  if (!user?.role || user.role === 'user') {
     return <Redirect to="/select-role" />;
   }
 
-  const isAdmin = user?.role && ['admin', 'staff', 'super_admin'].includes(user.role);
+  const isAdmin = user?.role && ['admin', 'staff', 'super_admin', 'lender', 'processor'].includes(user.role);
   if (isAdmin && !user?.onboardingCompleted) {
     return <Redirect to="/admin/onboarding" />;
   }
@@ -181,11 +181,11 @@ function AdminProtectedRoute({ component: Component, skipOnboardingRedirect }: {
     return <Redirect to="/login" />;
   }
 
-  if (!user?.userType) {
+  if (!user?.role || user.role === 'user') {
     return <Redirect to="/select-role" />;
   }
 
-  const isAdmin = user?.role && ['admin', 'staff', 'super_admin'].includes(user.role);
+  const isAdmin = user?.role && ['admin', 'staff', 'super_admin', 'lender', 'processor'].includes(user.role);
   if (!isAdmin) {
     return <Redirect to="/" />;
   }
@@ -216,7 +216,7 @@ function SuperAdminProtectedRoute({ component: Component }: { component: React.C
     return <Redirect to="/login" />;
   }
 
-  if (!user?.userType) {
+  if (!user?.role || user.role === 'user') {
     return <Redirect to="/select-role" />;
   }
 

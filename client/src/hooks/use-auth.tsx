@@ -9,7 +9,7 @@ interface User {
   lastName: string;
   fullName?: string;
   role?: string;
-  userType?: 'broker' | 'borrower' | null;
+  userType?: string;
   onboardingCompleted?: boolean;
 }
 
@@ -27,7 +27,7 @@ interface RegisterData {
   password: string;
   firstName: string;
   lastName: string;
-  userType: 'broker' | 'borrower' | 'lender';
+  userType: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);

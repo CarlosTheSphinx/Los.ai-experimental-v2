@@ -1237,7 +1237,7 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
           email: borrowerEmail.toLowerCase().trim(),
           fullName: project.borrowerName || null,
           phone: project.borrowerPhone || null,
-          role: 'user',
+          role: 'borrower',
           userType: 'borrower',
           isActive: true,
           emailVerified: true,
