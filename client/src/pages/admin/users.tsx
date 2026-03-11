@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Slider } from "@/components/ui/slider";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Search, MoreHorizontal, UserCog, Shield, User as UserIcon, Plus, Users, Briefcase, Pencil, Mail, CheckCircle, Clock, Link2, Send, Phone, Copy, ChevronDown, ChevronRight, ExternalLink, MessageSquare, Check, X, KeyRound } from "lucide-react";
+import { Search, MoreHorizontal, UserCog, Shield, User as UserIcon, Plus, Users, Briefcase, Pencil, Mail, CheckCircle, Clock, Link2, Send, Phone, Copy, ChevronDown, ChevronRight, ExternalLink, MessageSquare, Check, X, KeyRound, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 
@@ -790,6 +790,19 @@ function UsersTab() {
     },
   });
 
+  const deleteUserMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return await apiRequest("DELETE", `/api/admin/users/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "User removed" });
+    },
+    onError: () => {
+      toast({ title: "Failed to remove user", variant: "destructive" });
+    },
+  });
+
   const handleActiveToggle = (userId: number, isActive: boolean) => {
     updateUserMutation.mutate({ id: userId, updates: { isActive } });
   };
@@ -964,6 +977,7 @@ function UsersTab() {
                     <TableHead>Link Status</TableHead>
                     <TableHead>Last Login</TableHead>
                     <TableHead>Active</TableHead>
+                    <TableHead className="w-[40px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1007,6 +1021,17 @@ function UsersTab() {
                             onClick={(e) => e.stopPropagation()}
                             data-testid={`switch-active-${user.id}`}
                           />
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                            onClick={(e) => { e.stopPropagation(); if (confirm("Remove this user?")) deleteUserMutation.mutate(user.id); }}
+                            data-testid={`button-remove-user-${user.id}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     );
@@ -1104,6 +1129,19 @@ function TeamTab() {
     },
     onError: () => {
       toast({ title: "Failed to update team member", variant: "destructive" });
+    },
+  });
+
+  const deleteMemberMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return await apiRequest("DELETE", `/api/admin/users/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "Team member removed" });
+    },
+    onError: () => {
+      toast({ title: "Failed to remove team member", variant: "destructive" });
     },
   });
 
@@ -1290,6 +1328,7 @@ function TeamTab() {
                     <TableHead>Status</TableHead>
                     <TableHead>Active</TableHead>
                     <TableHead className="w-[50px]"></TableHead>
+                    <TableHead className="w-[40px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1370,6 +1409,17 @@ function TeamTab() {
                               )}
                             </DropdownMenuContent>
                           </DropdownMenu>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => { if (confirm("Remove this team member?")) deleteMemberMutation.mutate(member.id); }}
+                            data-testid={`button-remove-team-${member.id}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     );
@@ -1471,9 +1521,23 @@ function TeamTab() {
 
 function BetaWaitlistTab() {
   const [search, setSearch] = useState("");
+  const { toast } = useToast();
 
-  const { data, isLoading } = useQuery<{ signups: BetaSignup[] }>({
+  const { data, isLoading, refetch } = useQuery<{ signups: BetaSignup[] }>({
     queryKey: ["/api/super-admin/beta-signups"],
+  });
+
+  const deleteSignupMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return await apiRequest("DELETE", `/api/super-admin/beta-signups/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/super-admin/beta-signups"] });
+      toast({ title: "Signup removed" });
+    },
+    onError: () => {
+      toast({ title: "Failed to remove signup", variant: "destructive" });
+    },
   });
 
   const allSignups = data?.signups || [];
@@ -1532,6 +1596,7 @@ function BetaWaitlistTab() {
                     <TableHead>Company</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead>Signed Up</TableHead>
+                    <TableHead className="w-[40px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1559,6 +1624,17 @@ function BetaWaitlistTab() {
                       </TableCell>
                       <TableCell>
                         {safeFormat(signup.createdAt, "MMM d, yyyy") || "-"}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => { if (confirm("Remove this signup?")) deleteSignupMutation.mutate(signup.id); }}
+                          data-testid={`button-remove-waitlist-${signup.id}`}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}

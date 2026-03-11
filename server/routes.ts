@@ -19130,6 +19130,17 @@ Return JSON only:
     }
   });
 
+  app.delete('/api/super-admin/beta-signups/:id', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const signupId = parseInt(req.params.id);
+      await db.delete(betaSignups).where(eq(betaSignups.id, signupId));
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Delete beta signup error:', error);
+      res.status(500).json({ error: 'Failed to delete signup' });
+    }
+  });
+
   // Migrate legacy status values to new standard (one-time)
   app.post('/api/admin/migrate-deal-statuses', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
     try {
