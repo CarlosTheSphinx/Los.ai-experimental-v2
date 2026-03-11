@@ -121,22 +121,39 @@ export async function buildProjectPipelineFromProgram(
     .orderBy(asc(programDocumentTemplates.sortOrder));
 
   if (docTemplates.length > 0) {
-    const newDocuments = docTemplates.map((doc, index) => ({
-      dealId: projectId,
-      programDocumentTemplateId: doc.id,
-      documentName: doc.documentName,
-      documentCategory: doc.documentCategory,
-      documentDescription: doc.documentDescription,
-      isRequired: doc.isRequired ?? true,
-      assignedTo: doc.assignedTo || 'borrower',
-      visibility: doc.visibility || 'all',
-      sortOrder: doc.sortOrder || index,
-      status: 'pending' as const,
-      stageId: doc.stepId ? (stageIdByStepId.get(doc.stepId) || stageIdByOrder.get(doc.stepId) || null) : null,
-    }));
+    const existingDocs = await dbOrTx.select({
+      id: dealDocuments.id,
+      programDocumentTemplateId: dealDocuments.programDocumentTemplateId,
+      documentName: dealDocuments.documentName,
+    }).from(dealDocuments).where(eq(dealDocuments.dealId, projectId));
 
-    await dbOrTx.insert(dealDocuments).values(newDocuments);
-    documentsCreated = newDocuments.length;
+    const existingByTemplateId = new Set(existingDocs.filter(d => d.programDocumentTemplateId).map(d => d.programDocumentTemplateId));
+    const existingByName = new Set(existingDocs.map(d => (d.documentName || '').trim().toLowerCase()));
+
+    const docsToInsert = docTemplates.filter((doc) => {
+      if (existingByTemplateId.has(doc.id)) return false;
+      if (existingByName.has((doc.documentName || '').trim().toLowerCase())) return false;
+      return true;
+    });
+
+    if (docsToInsert.length > 0) {
+      const newDocuments = docsToInsert.map((doc, index) => ({
+        dealId: projectId,
+        programDocumentTemplateId: doc.id,
+        documentName: doc.documentName,
+        documentCategory: doc.documentCategory,
+        documentDescription: doc.documentDescription,
+        isRequired: doc.isRequired ?? true,
+        assignedTo: doc.assignedTo || 'borrower',
+        visibility: doc.visibility || 'all',
+        sortOrder: doc.sortOrder || index,
+        status: 'pending' as const,
+        stageId: doc.stepId ? (stageIdByStepId.get(doc.stepId) || stageIdByOrder.get(doc.stepId) || null) : null,
+      }));
+
+      await dbOrTx.insert(dealDocuments).values(newDocuments);
+      documentsCreated = newDocuments.length;
+    }
   }
 
   // Always ensure a "Signed Agreement" placeholder exists in Stage 1
@@ -146,19 +163,24 @@ export async function buildProjectPipelineFromProgram(
       d => d.documentName === 'Signed Agreement'
     );
     if (!hasSignedAgreement) {
-      await dbOrTx.insert(dealDocuments).values({
-        dealId: projectId,
-        stageId: stage1Id,
-        documentName: 'Signed Agreement',
-        documentCategory: 'closing_docs',
-        documentDescription: 'PandaDoc signed agreement — auto-populated when the borrower signs',
-        status: 'pending',
-        isRequired: true,
-        assignedTo: 'admin',
-        visibility: 'all',
-        sortOrder: 0,
-      });
-      documentsCreated++;
+      const existingSignedAgreement = await dbOrTx.select({ id: dealDocuments.id })
+        .from(dealDocuments)
+        .where(and(eq(dealDocuments.dealId, projectId), eq(dealDocuments.documentName, 'Signed Agreement')));
+      if (existingSignedAgreement.length === 0) {
+        await dbOrTx.insert(dealDocuments).values({
+          dealId: projectId,
+          stageId: stage1Id,
+          documentName: 'Signed Agreement',
+          documentCategory: 'closing_docs',
+          documentDescription: 'PandaDoc signed agreement — auto-populated when the borrower signs',
+          status: 'pending',
+          isRequired: true,
+          assignedTo: 'admin',
+          visibility: 'all',
+          sortOrder: 0,
+        });
+        documentsCreated++;
+      }
     }
   }
 

@@ -313,49 +313,41 @@ export function LoanChecklist({
 
   return (
     <div className="space-y-6">
-      {docItems.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-medium">Documents</span>
-            <span className="text-sm font-semibold text-foreground" data-testid="text-doc-progress">
-              {approvedDocs} of {totalDocs} complete
-            </span>
+      {(docItems.length > 0 || taskItems.length > 0) && (() => {
+        const totalItems = totalDocs + totalTasks;
+        const completedItems = approvedDocs + completedTasks;
+        const pct = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+        return (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium">Progress</span>
+              <span className="text-sm font-semibold text-foreground" data-testid="text-checklist-progress">
+                {completedItems} of {totalItems} complete
+              </span>
+            </div>
+            <Progress value={pct} className="h-2" />
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">{pct}% complete</p>
+              {mode === "admin" && aiReviewedCount > 0 && onApproveAll && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={onApproveAll}
+                  disabled={isApprovingAll}
+                  data-testid="button-approve-all-docs"
+                >
+                  {isApprovingAll ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                  )}
+                  Approve All & Push To Drive ({aiReviewedCount})
+                </Button>
+              )}
+            </div>
           </div>
-          <Progress value={(approvedDocs / totalDocs) * 100} className="h-2" />
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">{Math.round((approvedDocs / totalDocs) * 100)}% complete</p>
-            {mode === "admin" && aiReviewedCount > 0 && onApproveAll && (
-              <Button
-                variant="default"
-                size="sm"
-                onClick={onApproveAll}
-                disabled={isApprovingAll}
-                data-testid="button-approve-all-docs"
-              >
-                {isApprovingAll ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                )}
-                Approve All & Push To Drive ({aiReviewedCount})
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {showTasks && taskItems.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-medium">Tasks</span>
-            <span className="text-sm font-semibold text-foreground" data-testid="text-task-progress">
-              {completedTasks} of {totalTasks} complete
-            </span>
-          </div>
-          <Progress value={(completedTasks / totalTasks) * 100} className="h-2" />
-          <p className="text-xs text-muted-foreground">{Math.round((completedTasks / totalTasks) * 100)}% complete</p>
-        </div>
-      )}
+        );
+      })()}
 
       {itemsByStage.map(({ stage, items: stageItems }) => (
         <Card key={stage.id} data-testid={`card-checklist-stage-${stage.id}`}>
