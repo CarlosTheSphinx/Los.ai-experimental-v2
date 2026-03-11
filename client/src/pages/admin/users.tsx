@@ -241,7 +241,8 @@ function UserDetailPanel({ userId, onClose }: { userId: number; onClose: () => v
   const programs = data?.programs || [];
   const settings: BrokerSettings = (user?.brokerSettings as BrokerSettings) || {};
 
-  const inviteLink = generatedLink || (user?.inviteToken ? `${window.location.origin}/join/personal/${user.inviteToken}` : null);
+  const siteBaseUrl = import.meta.env.VITE_BASE_URL || window.location.origin;
+  const inviteLink = generatedLink || (user?.inviteToken ? `${siteBaseUrl}/join/personal/${user.inviteToken}` : null);
 
   const copyLink = () => {
     if (inviteLink) {
