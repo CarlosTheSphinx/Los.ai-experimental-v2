@@ -198,12 +198,17 @@ export default function TabPeople({ deal, isAdmin = true }: { deal: any; isAdmin
   const borrowerName = deal.borrowerName || `${deal.customerFirstName || ""} ${deal.customerLastName || ""}`.trim();
   const borrowerEmail = deal.borrowerEmail || deal.customerEmail;
   const borrowerPhone = deal.borrowerPhone || deal.customerPhone;
-  const borrowerPortalUrl = deal.borrowerPortalToken
-    ? `${window.location.origin}/portal/${deal.borrowerPortalToken}`
-    : null;
-  const brokerPortalUrl = deal.brokerPortalToken
-    ? `${window.location.origin}/broker-portal/${deal.brokerPortalToken}`
-    : null;
+
+  const { data: borrowerLinkData } = useQuery<{ token: string; url: string }>({
+    queryKey: ["/api/admin/projects", deal.id, "borrower-link"],
+    queryFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/projects/${deal.id}/generate-borrower-link`);
+      return res.json();
+    },
+    enabled: !!borrowerEmail && deal.borrowerPortalEnabled,
+    staleTime: Infinity,
+  });
+  const borrowerPortalUrl = borrowerLinkData?.url || null;
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
