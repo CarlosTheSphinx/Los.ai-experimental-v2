@@ -101,13 +101,13 @@ export function NotificationBell() {
       <Button
         size="icon"
         onClick={() => setIsOpen(!isOpen)}
-        className="relative h-10 w-10 rounded-full bg-primary hover:bg-primary/90 text-white"
+        className="relative h-7 w-7 rounded-full bg-primary hover:bg-primary/90 text-white"
         data-testid="button-notification-bell"
       >
-        <Bell className="!h-5 !w-5" />
+        <Bell className="!h-3.5 !w-3.5" />
         {unreadCount > 0 && (
           <span
-            className="absolute -top-1 -right-1 flex items-center justify-center min-w-[20px] h-[20px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none ring-2 ring-background"
+            className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[16px] h-[16px] px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none ring-2 ring-background"
             data-testid="badge-notification-count"
           >
             {unreadCount > 99 ? "99+" : unreadCount}

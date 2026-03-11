@@ -578,8 +578,8 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
           </div>
         )}
         <div className="flex items-center justify-end gap-2 px-4 py-2 border-b shrink-0">
-          <Button size="icon" className="relative h-10 w-10 rounded-full bg-primary hover:bg-primary/90 text-white" data-testid="button-header-messages" onClick={() => setMessagesOpen(!messagesOpen)}>
-            <MessageSquare className="!h-5 !w-5" />
+          <Button size="icon" className="relative h-7 w-7 rounded-full bg-primary hover:bg-primary/90 text-white" data-testid="button-header-messages" onClick={() => setMessagesOpen(!messagesOpen)}>
+            <MessageSquare className="!h-3.5 !w-3.5" />
             <InboxBadge />
           </Button>
           <NotificationBell />
