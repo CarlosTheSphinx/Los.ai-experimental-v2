@@ -29,8 +29,6 @@ import {
   MessageSquare,
   BotMessageSquare,
   Home,
-  ExternalLink,
-  ClipboardCheck,
 } from "lucide-react";
 import {
   Select,
@@ -138,8 +136,6 @@ const adminNavItemsV2: NavItem[] = [
 
 const borrowerViewNavItems: NavItem[] = [
   { href: "/borrower-preview", label: "Borrower Dashboard", icon: Home },
-  { href: "/borrower-preview/portal", label: "Borrower Portal", icon: ExternalLink },
-  { href: "/borrower-preview/checklist", label: "Loan Checklist", icon: ClipboardCheck },
 ];
 
 // Lendry admin items — only visible to super_admin role (Lendry platform team)

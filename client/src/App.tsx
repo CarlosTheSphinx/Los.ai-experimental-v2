@@ -233,7 +233,6 @@ function MainRoutes() {
           {/* Broker CRM Routes */}
           <Route path="/broker/contacts" component={() => <ProtectedRoute component={BrokerContactsPage} />} />
           <Route path="/broker/outreach" component={() => <ProtectedRoute component={BrokerOutreachPage} />} />
-          <Route path="/borrower-preview/:rest*" component={() => <AdminProtectedRoute component={BorrowerPreview} />} />
           <Route path="/borrower-preview" component={() => <AdminProtectedRoute component={BorrowerPreview} />} />
 
           {/* Admin Routes */}
