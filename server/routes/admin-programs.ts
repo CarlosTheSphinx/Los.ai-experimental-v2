@@ -3,6 +3,7 @@ import type { AuthRequest } from '../auth';
 import type { RouteDeps } from './types';
 import multer from 'multer';
 import { eq, sql, inArray, and } from 'drizzle-orm';
+import { getTenantId } from '../utils/tenant';
 import {
   loanPrograms,
   programDocumentTemplates,
@@ -20,6 +21,12 @@ import {
 export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
   const { storage, db, authenticateUser, requireAdmin, requirePermission, objectStorageService } = deps;
 
+  async function resolveUserTenantId(userId: number): Promise<number | null> {
+    const user = await storage.getUserById(userId);
+    if (!user) return null;
+    return getTenantId({ id: user.id, role: user.role, invitedBy: user.invitedBy ?? undefined });
+  }
+
   async function verifyProgramOwnership(req: AuthRequest, res: Response, programId: number): Promise<boolean> {
     const [program] = await db.select().from(loanPrograms).where(eq(loanPrograms.id, programId));
     if (!program) {
@@ -27,11 +34,18 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
       return false;
     }
     const user = await storage.getUserById(req.user!.id);
-    if (user?.role !== 'super_admin' && program.createdBy !== req.user!.id) {
-      res.status(403).json({ error: 'Not authorized to access this program' });
-      return false;
+    if (user?.role === 'super_admin') {
+      return true;
     }
-    return true;
+    const userTenantId = await resolveUserTenantId(req.user!.id);
+    if (program.tenantId != null && userTenantId != null && program.tenantId === userTenantId) {
+      return true;
+    }
+    if (program.createdBy === req.user!.id) {
+      return true;
+    }
+    res.status(403).json({ error: 'Not authorized to access this program' });
+    return false;
   }
 
   // ==================== LOAN PROGRAMS ROUTES ====================
@@ -40,8 +54,9 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
     try {
       const user = await storage.getUserById(req.user!.id);
       const isSuperAdmin = user?.role === 'super_admin';
+      const userTenantId = isSuperAdmin ? null : await resolveUserTenantId(req.user!.id);
       const programs = await db.select().from(loanPrograms)
-        .where(isSuperAdmin ? undefined : eq(loanPrograms.createdBy, req.user!.id))
+        .where(isSuperAdmin ? undefined : (userTenantId != null ? eq(loanPrograms.tenantId, userTenantId) : eq(loanPrograms.createdBy, req.user!.id)))
         .orderBy(loanPrograms.sortOrder);
 
       const programsWithCounts = await Promise.all(programs.map(async (program) => {
@@ -161,6 +176,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
           isActive: isActive !== false,
           creditPolicyId: creditPolicyId ? parseInt(creditPolicyId) : null,
           createdBy: req.user!.id,
+          tenantId: await resolveUserTenantId(req.user!.id),
           pricingMode: pricingMode || 'none',
           externalPricingConfig: externalPricingConfig || null,
         }).returning();
@@ -582,8 +598,12 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
       }
 
       const user = await storage.getUserById(req.user!.id);
-      if (user?.role !== 'super_admin' && sourceProgram.createdBy !== req.user!.id) {
-        return res.status(403).json({ error: 'Not authorized to duplicate this program' });
+      if (user?.role !== 'super_admin') {
+        const userTenantId = await resolveUserTenantId(req.user!.id);
+        const hasTenantAccess = sourceProgram.tenantId != null && userTenantId != null && sourceProgram.tenantId === userTenantId;
+        if (!hasTenantAccess && sourceProgram.createdBy !== req.user!.id) {
+          return res.status(403).json({ error: 'Not authorized to duplicate this program' });
+        }
       }
 
       const sourceDocs = await db.select().from(programDocumentTemplates)
@@ -631,6 +651,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
           isActive: false,
           creditPolicyId: sourceProgram.creditPolicyId,
           createdBy: req.user!.id,
+          tenantId: await resolveUserTenantId(req.user!.id),
           reviewGuidelines: sourceProgram.reviewGuidelines,
         }).returning();
 

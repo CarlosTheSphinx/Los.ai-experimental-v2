@@ -1027,6 +1027,7 @@ export const loanPrograms = pgTable("loan_programs", {
   createdBy: integer("created_by").references(() => users.id, {
     onDelete: "set null",
   }),
+  tenantId: integer("tenant_id").references(() => users.id, { onDelete: "set null" }),
 
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

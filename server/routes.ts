@@ -12806,11 +12806,12 @@ If the user provides specific criteria, extract as many rules as you can from th
     try {
       const user = await storage.getUserById(req.user!.id);
       const isSuperAdmin = user?.role === 'super_admin';
+      const userTenantId = isSuperAdmin ? null : await getTenantId({ id: user!.id, role: user!.role, invitedBy: user!.invitedBy ?? undefined });
       const programs = await db.select()
         .from(loanPrograms)
         .where(isSuperAdmin 
           ? eq(loanPrograms.isActive, true)
-          : and(eq(loanPrograms.isActive, true), eq(loanPrograms.createdBy, req.user!.id))
+          : and(eq(loanPrograms.isActive, true), userTenantId != null ? eq(loanPrograms.tenantId, userTenantId) : eq(loanPrograms.createdBy, req.user!.id))
         )
         .orderBy(loanPrograms.sortOrder);
       
