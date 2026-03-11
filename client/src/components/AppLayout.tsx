@@ -97,7 +97,7 @@ const brokerNavItems: NavItem[] = [
   { href: "/commercial/dashboard", label: "Commercial", icon: Building2, shortcut: undefined },
   { href: "/broker/contacts", label: "Contacts", icon: Users, shortcut: undefined },
   { href: "/broker/outreach", label: "Smart Prospect", icon: Target, shortcut: undefined },
-  { href: "/inbox", label: "Inbox", icon: Inbox, showBadge: true, shortcut: undefined },
+  { href: "/inbox", label: "Inbox", icon: Inbox, shortcut: undefined },
   { href: "/resources", label: "Resources", icon: BookOpen, shortcut: undefined },
   { href: "/admin/settings", label: "Settings", icon: Settings, requiredPermission: "settings.view", shortcut: undefined },
 ];
@@ -105,7 +105,7 @@ const brokerNavItems: NavItem[] = [
 const borrowerNavItems: NavItem[] = [
   { href: "/", label: "My Loans", icon: FolderKanban },
   { href: "/quotes", label: "Quotes", icon: FileText },
-  { href: "/inbox", label: "Inbox", icon: Inbox, showBadge: true },
+  { href: "/inbox", label: "Inbox", icon: Inbox },
   { href: "/resources", label: "Resources", icon: BookOpen },
 ];
 
@@ -115,7 +115,7 @@ const adminNavItems: NavItem[] = [
   { href: "/admin", label: "Pipeline", icon: LayoutDashboard, shortcut: "⌘1" },
   { href: "/admin/programs", label: "Programs", icon: Settings2, requiredPermission: "programs.view" },
   { href: "/quotes", label: "Quotes", icon: FileText },
-  { href: "/inbox", label: "Messages", icon: Inbox, showBadge: true, requiredPermission: "messages.view" },
+  { href: "/inbox", label: "Messages", icon: Inbox, requiredPermission: "messages.view" },
   { href: "/admin/users", label: "Users", icon: Users, requiredPermission: "users.view", shortcut: "⌘2" },
   { href: "/admin/onboarding", label: "Onboarding", icon: BookOpen, requiredPermission: "onboarding.view" },
   { href: "/admin/settings", label: "Settings", icon: Settings, requiredPermission: "settings.view" },
@@ -127,7 +127,7 @@ const adminNavItemsV2: NavItem[] = [
   { href: "/admin", label: "Pipeline", icon: LayoutDashboard, shortcut: "⌘1" },
   { href: "/admin/programs", label: "Programs", icon: Settings2, requiredPermission: "programs.view" },
   { href: "/quotes", label: "Quotes", icon: FileText },
-  { href: "/inbox", label: "Messages", icon: Inbox, showBadge: true, requiredPermission: "messages.view" },
+  { href: "/inbox", label: "Messages", icon: Inbox, requiredPermission: "messages.view" },
   { href: "/admin/users", label: "Users", icon: Users, requiredPermission: "users.view", shortcut: "⌘2" },
   { href: "/admin/onboarding", label: "Onboarding", icon: BookOpen, requiredPermission: "onboarding.view" },
   { href: "/admin/settings", label: "Settings", icon: Settings, requiredPermission: "settings.view" },
