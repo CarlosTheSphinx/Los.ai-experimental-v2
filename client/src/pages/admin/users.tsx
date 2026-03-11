@@ -131,7 +131,7 @@ function UserDetailPanel({ userId, onClose }: { userId: number; onClose: () => v
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
-  const [editingField, setEditingField] = useState<"email" | "phone" | "fullName" | null>(null);
+  const [editingField, setEditingField] = useState<"email" | "phone" | "fullName" | "companyName" | null>(null);
   const [editValue, setEditValue] = useState("");
 
   const { data, isLoading, refetch } = useQuery<{
@@ -204,11 +204,12 @@ function UserDetailPanel({ userId, onClose }: { userId: number; onClose: () => v
     },
   });
 
-  const startEditing = (field: "email" | "phone" | "fullName") => {
+  const startEditing = (field: "email" | "phone" | "fullName" | "companyName") => {
     setEditingField(field);
     if (field === "email") setEditValue(user?.email || "");
     else if (field === "phone") setEditValue(user?.phone || "");
     else if (field === "fullName") setEditValue(user?.fullName || "");
+    else if (field === "companyName") setEditValue(user?.companyName || "");
   };
 
   const saveEdit = () => {
@@ -356,9 +357,34 @@ function UserDetailPanel({ userId, onClose }: { userId: number; onClose: () => v
             {user.userType || "broker"}
           </Badge>
         </div>
-        {user.companyName && (
-          <p className="text-sm text-muted-foreground">{user.companyName}</p>
-        )}
+        <div className="flex items-center gap-1.5">
+          {editingField === "companyName" ? (
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              <Input
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                className="h-7 text-sm flex-1"
+                autoFocus
+                placeholder="Company name"
+                onKeyDown={(e) => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditingField(null); }}
+                data-testid="input-edit-company"
+              />
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={saveEdit} disabled={updateFieldMutation.isPending} data-testid="button-save-company">
+                <Check className="h-3.5 w-3.5 text-green-600" />
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={() => setEditingField(null)} data-testid="button-cancel-edit-company">
+                <X className="h-3.5 w-3.5 text-muted-foreground" />
+              </Button>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">{user.companyName || "No company"}</p>
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 shrink-0" onClick={() => startEditing("companyName")} data-testid="button-edit-company">
+                <Pencil className="h-3 w-3 text-muted-foreground" />
+              </Button>
+            </>
+          )}
+        </div>
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
