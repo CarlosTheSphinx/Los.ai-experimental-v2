@@ -1,7 +1,7 @@
 import { Inbox, FileText, DollarSign, FolderOpen, UserCircle, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type PortalView = "dashboard" | "inbox" | "loans" | "commissions" | "documents" | "profile";
+export type PortalView = "dashboard" | "inbox" | "loans" | "commissions" | "documents" | "profile" | "deal-detail";
 
 interface PortalSidebarProps {
   portalType: "broker" | "borrower";
@@ -51,7 +51,7 @@ export function PortalSidebar({ portalType, activeView, onViewChange, dealName, 
       <nav className="flex-1 p-2 space-y-0.5">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = activeView === item.id;
+          const isActive = activeView === item.id || (item.id === "loans" && activeView === "deal-detail");
           return (
             <button
               key={item.id}

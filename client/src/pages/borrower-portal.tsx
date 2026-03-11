@@ -17,6 +17,8 @@ import {
   Trash2,
   Save,
   X,
+  ArrowRight,
+  ArrowLeft,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -184,7 +186,16 @@ export default function BorrowerPortal({ token: propToken, isPreview }: Borrower
     if (!token) return false;
     return !hasCompletedOnboarding("borrower", token);
   });
-  const [activeView, setActiveView] = useState<PortalView>("loans");
+  const [activeView, setActiveView] = useState<PortalView>(() => {
+    if (typeof window !== 'undefined') {
+      const pending = sessionStorage.getItem('portal_open_deal');
+      if (pending === token) {
+        sessionStorage.removeItem('portal_open_deal');
+        return "deal-detail";
+      }
+    }
+    return "loans";
+  });
   const [expandedDealId, setExpandedDealId] = useState<number | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState<Partial<BorrowerProfile>>({});
@@ -413,7 +424,7 @@ export default function BorrowerPortal({ token: propToken, isPreview }: Borrower
       />
 
       <div className="flex-1 flex flex-col min-h-screen">
-        {activeView !== "loans" && (
+        {activeView !== "loans" && activeView !== "deal-detail" && (
           <header className="bg-background border-b">
             <div className="px-4 md:px-6 py-3 md:py-4">
               <div className="flex items-center justify-between gap-2">
@@ -489,121 +500,89 @@ export default function BorrowerPortal({ token: propToken, isPreview }: Borrower
                               </>
                             }
                             details={
-                              <div className="space-y-5">
-                                {isCurrent && sections.stageProgress && stages.length > 0 && (
-                                  <div>
-                                    <div className="flex items-center justify-between mb-3">
-                                      <h4 className="text-sm font-semibold">Loan Progress</h4>
-                                      <span className="text-sm font-bold" data-testid={`text-progress-${deal.id}`}>
-                                        {(() => {
-                                          let totalItems = 0;
-                                          let completedItems = 0;
-                                          stages.forEach(stage => {
-                                            const completed = (stage.tasks || []).filter((t: Task) => t.status === 'completed').length;
-                                            totalItems += (stage.tasks || []).length;
-                                            completedItems += completed;
-                                          });
-                                          return totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
-                                        })()}% Complete
-                                      </span>
-                                    </div>
-                                    <div className="flex items-start justify-between relative">
-                                      {stages.map((stage, i) => {
-                                        const completedTasks = (stage.tasks || []).filter((t: Task) => t.status === 'completed').length;
-                                        const totalItems = (stage.tasks || []).length;
-                                        const isCompleted = totalItems > 0 && completedTasks >= totalItems;
-                                        const isActiveStage = stage.status === 'in_progress';
-                                        return (
-                                          <div key={stage.id} className="flex flex-col items-center relative flex-1">
-                                            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold border-2 flex-shrink-0 z-10 ${
-                                              isCompleted ? 'bg-success border-success text-white' :
-                                              isActiveStage ? 'bg-primary border-primary text-white' :
-                                              'bg-muted border-border text-muted-foreground'
-                                            }`}>
-                                              {isCompleted ? <CheckCircle2 className="h-3.5 w-3.5" /> : i + 1}
-                                            </div>
-                                            <div className="mt-1.5 text-center max-w-[90px]">
-                                              <div className={`text-[10px] font-medium leading-tight ${
-                                                isCompleted ? 'text-success' : isActiveStage ? 'text-primary font-semibold' : 'text-muted-foreground'
-                                              }`}>{stage.stageName}</div>
-                                              {totalItems > 0 && <div className="text-[10px] text-muted-foreground">{completedTasks}/{totalItems}</div>}
-                                            </div>
-                                            {i < stages.length - 1 && (
-                                              <div className={`absolute top-4 left-[calc(50%+16px)] h-[2px] z-0 ${isCompleted ? 'bg-success/50' : 'bg-border'}`} style={{ width: 'calc(100% - 32px)' }} />
-                                            )}
+                              <div className="space-y-4">
+                                {isCurrent && stages.length > 0 && (
+                                  <div className="flex items-center gap-3 flex-wrap">
+                                    {stages.map((stage, i) => {
+                                      const completedTasks = (stage.tasks || []).filter((t: Task) => t.status === 'completed').length;
+                                      const totalItems = (stage.tasks || []).length;
+                                      const isCompleted = totalItems > 0 && completedTasks >= totalItems;
+                                      const isActiveStage = stage.status === 'in_progress';
+                                      return (
+                                        <div key={stage.id} className="flex items-center gap-2">
+                                          <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-semibold border-2 flex-shrink-0 ${
+                                            isCompleted ? 'bg-success border-success text-white' :
+                                            isActiveStage ? 'bg-primary border-primary text-white' :
+                                            'bg-muted border-border text-muted-foreground'
+                                          }`}>
+                                            {isCompleted ? <CheckCircle2 className="h-3 w-3" /> : i + 1}
                                           </div>
-                                        );
-                                      })}
+                                          <span className={`text-xs ${isCompleted ? 'text-success' : isActiveStage ? 'text-primary font-medium' : 'text-muted-foreground'}`}>
+                                            {stage.stageName}
+                                          </span>
+                                          {i < stages.length - 1 && <div className="w-4 h-[1px] bg-border" />}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                  {deal.loanAmount && (
+                                    <div className="flex items-center gap-2">
+                                      <DollarSign className="h-4 w-4 text-success flex-shrink-0" />
+                                      <div>
+                                        <div className="text-[10px] text-muted-foreground">Loan Amount</div>
+                                        <div className="text-sm font-semibold">{formatCurrency(deal.loanAmount)}</div>
+                                      </div>
                                     </div>
-                                  </div>
-                                )}
+                                  )}
+                                  {isCurrent && project.interestRate && (
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-info font-semibold text-xs flex-shrink-0">%</span>
+                                      <div>
+                                        <div className="text-[10px] text-muted-foreground">Interest Rate</div>
+                                        <div className="text-sm font-semibold">{project.interestRate}%</div>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {isCurrent && project.targetCloseDate && (
+                                    <div className="flex items-center gap-2">
+                                      <Calendar className="h-4 w-4 text-primary flex-shrink-0" />
+                                      <div>
+                                        <div className="text-[10px] text-muted-foreground">Target Close</div>
+                                        <div className="text-sm font-semibold">{formatDate(project.targetCloseDate)}</div>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {deal.propertyAddress && (
+                                    <div className="flex items-center gap-2">
+                                      <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                      <div>
+                                        <div className="text-[10px] text-muted-foreground">Property</div>
+                                        <div className="text-sm font-semibold truncate">{deal.propertyAddress}</div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
 
-                                {isCurrent && sections.dealOverview && (
-                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                    {fieldVisibility.loanAmount && (
-                                      <div className="flex items-center gap-2">
-                                        <DollarSign className="h-4 w-4 text-success flex-shrink-0" />
-                                        <div>
-                                          <div className="text-[10px] text-muted-foreground">Loan Amount</div>
-                                          <div className="text-sm font-semibold">{formatCurrency(project.loanAmount)}</div>
-                                        </div>
-                                      </div>
-                                    )}
-                                    {fieldVisibility.interestRate && (
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-info font-semibold text-xs flex-shrink-0">%</span>
-                                        <div>
-                                          <div className="text-[10px] text-muted-foreground">Interest Rate</div>
-                                          <div className="text-sm font-semibold">{project.interestRate ? `${project.interestRate}%` : '—'}</div>
-                                        </div>
-                                      </div>
-                                    )}
-                                    {fieldVisibility.targetCloseDate && (
-                                      <div className="flex items-center gap-2">
-                                        <Calendar className="h-4 w-4 text-primary flex-shrink-0" />
-                                        <div>
-                                          <div className="text-[10px] text-muted-foreground">Target Close</div>
-                                          <div className="text-sm font-semibold">{formatDate(project.targetCloseDate)}</div>
-                                        </div>
-                                      </div>
-                                    )}
-                                    {fieldVisibility.propertyAddress && project.propertyAddress && (
-                                      <div className="flex items-center gap-2">
-                                        <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                                        <div>
-                                          <div className="text-[10px] text-muted-foreground">Property</div>
-                                          <div className="text-sm font-semibold truncate">{project.propertyAddress}</div>
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-
-                                {isCurrent && sections.loanChecklist && (
-                                  <div>
-                                    <LoanChecklist
-                                      dealId={project.id}
-                                      mode="borrower"
-                                      portalToken={token}
-                                      onUploadDoc={handleUploadClick}
-                                      pollingInterval={15000}
-                                      showTasks={true}
-                                    />
-                                  </div>
-                                )}
-
-                                {!isCurrent && (
-                                  <div className="text-center py-4">
-                                    <p className="text-sm text-muted-foreground">Switch to this loan to view details and documents.</p>
-                                    <button
-                                      onClick={() => handleDealSwitch(deal.portalToken)}
-                                      className="text-sm text-primary font-medium mt-2 hover:underline"
-                                      data-testid={`btn-switch-deal-${deal.id}`}
-                                    >
-                                      Open this loan
-                                    </button>
-                                  </div>
-                                )}
+                                <div className="pt-1">
+                                  <Button
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (isCurrent) {
+                                        setActiveView("deal-detail");
+                                      } else {
+                                        sessionStorage.setItem('portal_open_deal', deal.portalToken);
+                                        handleDealSwitch(deal.portalToken);
+                                      }
+                                    }}
+                                    data-testid={`btn-open-deal-${deal.id}`}
+                                  >
+                                    Open Deal <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                                  </Button>
+                                </div>
                               </div>
                             }
                           />
@@ -614,6 +593,138 @@ export default function BorrowerPortal({ token: propToken, isPreview }: Borrower
                 </table>
               </div>
             </>
+          )}
+
+          {activeView === "deal-detail" && (
+            <div className="space-y-5">
+              <div className="flex items-center gap-3 mb-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setActiveView("loans")}
+                  data-testid="btn-back-to-loans"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5 mr-1.5" /> Back to My Loans
+                </Button>
+              </div>
+
+              <div className="border-b pb-4">
+                <div className="text-xs text-muted-foreground font-mono">{project.loanNumber || `DEAL-${project.id}`}</div>
+                <div className="flex items-center gap-2 flex-wrap mt-1">
+                  <h2 className="text-xl font-bold font-ui" data-testid="text-deal-title">{project.projectName}</h2>
+                  {project.programName && (
+                    <Badge variant="outline" className="text-xs" data-testid="badge-program-name">
+                      {project.programName}
+                    </Badge>
+                  )}
+                  <Badge variant={project.status === 'active' ? 'default' : 'secondary'} className="text-xs" data-testid="badge-deal-status">
+                    {project.status}
+                  </Badge>
+                </div>
+              </div>
+
+              {sections.stageProgress && stages.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold font-ui">Loan Progress</h4>
+                    <span className="text-sm font-bold" data-testid="text-deal-progress">
+                      {(() => {
+                        let totalItems = 0;
+                        let completedItems = 0;
+                        stages.forEach(stage => {
+                          const completed = (stage.tasks || []).filter((t: Task) => t.status === 'completed').length;
+                          totalItems += (stage.tasks || []).length;
+                          completedItems += completed;
+                        });
+                        return totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+                      })()}% Complete
+                    </span>
+                  </div>
+                  <div className="flex items-start justify-between relative">
+                    {stages.map((stage, i) => {
+                      const completedTasks = (stage.tasks || []).filter((t: Task) => t.status === 'completed').length;
+                      const totalItems = (stage.tasks || []).length;
+                      const isCompleted = totalItems > 0 && completedTasks >= totalItems;
+                      const isActiveStage = stage.status === 'in_progress';
+                      return (
+                        <div key={stage.id} className="flex flex-col items-center relative flex-1">
+                          <div className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold border-2 flex-shrink-0 z-10 ${
+                            isCompleted ? 'bg-success border-success text-white' :
+                            isActiveStage ? 'bg-primary border-primary text-white' :
+                            'bg-muted border-border text-muted-foreground'
+                          }`}>
+                            {isCompleted ? <CheckCircle2 className="h-3.5 w-3.5" /> : i + 1}
+                          </div>
+                          <div className="mt-1.5 text-center max-w-[90px]">
+                            <div className={`text-[10px] font-medium leading-tight ${
+                              isCompleted ? 'text-success' : isActiveStage ? 'text-primary font-semibold' : 'text-muted-foreground'
+                            }`}>{stage.stageName}</div>
+                            {totalItems > 0 && <div className="text-[10px] text-muted-foreground">{completedTasks}/{totalItems}</div>}
+                          </div>
+                          {i < stages.length - 1 && (
+                            <div className={`absolute top-4 left-[calc(50%+16px)] h-[2px] z-0 ${isCompleted ? 'bg-success/50' : 'bg-border'}`} style={{ width: 'calc(100% - 32px)' }} />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {sections.dealOverview && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {fieldVisibility.loanAmount && (
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-4 w-4 text-success flex-shrink-0" />
+                      <div>
+                        <div className="text-[10px] text-muted-foreground">Loan Amount</div>
+                        <div className="text-sm font-semibold">{formatCurrency(project.loanAmount)}</div>
+                      </div>
+                    </div>
+                  )}
+                  {fieldVisibility.interestRate && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-info font-semibold text-xs flex-shrink-0">%</span>
+                      <div>
+                        <div className="text-[10px] text-muted-foreground">Interest Rate</div>
+                        <div className="text-sm font-semibold">{project.interestRate ? `${project.interestRate}%` : '—'}</div>
+                      </div>
+                    </div>
+                  )}
+                  {fieldVisibility.targetCloseDate && (
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-primary flex-shrink-0" />
+                      <div>
+                        <div className="text-[10px] text-muted-foreground">Target Close</div>
+                        <div className="text-sm font-semibold">{formatDate(project.targetCloseDate)}</div>
+                      </div>
+                    </div>
+                  )}
+                  {fieldVisibility.propertyAddress && project.propertyAddress && (
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <div>
+                        <div className="text-[10px] text-muted-foreground">Property</div>
+                        <div className="text-sm font-semibold truncate">{project.propertyAddress}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {sections.loanChecklist && (
+                <div>
+                  <LoanChecklist
+                    dealId={project.id}
+                    mode="borrower"
+                    portalToken={token}
+                    onUploadDoc={handleUploadClick}
+                    pollingInterval={15000}
+                    showTasks={true}
+                  />
+                </div>
+              )}
+            </div>
           )}
 
           {activeView === "inbox" && (
