@@ -12,7 +12,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Search, MoreHorizontal, UserCog, Shield, User as UserIcon, Plus, Users, Briefcase, Pencil, Mail, CheckCircle, Clock } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Slider } from "@/components/ui/slider";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Search, MoreHorizontal, UserCog, Shield, User as UserIcon, Plus, Users, Briefcase, Pencil, Mail, CheckCircle, Clock, Link2, Send, Phone, Copy, ChevronDown, ChevronRight, ExternalLink, MessageSquare } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 
@@ -50,6 +53,36 @@ interface AdminUser {
   emailVerified: boolean;
   isActive: boolean;
   inviteStatus?: string;
+  inviteToken?: string | null;
+  inviteTokenSentAt?: string | null;
+  brokerSettings?: BrokerSettings | null;
+  onboardingCompleted?: boolean;
+}
+
+interface BrokerSettings {
+  yspEnabled?: boolean;
+  yspMaxPercent?: number;
+  brokerPointsEnabled?: boolean;
+  brokerPointsMaxPercent?: number;
+  programOverrides?: Record<string, {
+    yspMaxPercent?: number;
+    brokerPointsMaxPercent?: number;
+  }>;
+}
+
+interface UserDeal {
+  id: number;
+  dealName: string | null;
+  loanAmount: string | null;
+  propertyAddress: string | null;
+  status: string | null;
+  currentStage: string | null;
+  createdAt: string | null;
+}
+
+interface LoanProgram {
+  id: number;
+  name: string;
 }
 
 const roleColors: Record<string, string> = {
@@ -82,10 +115,349 @@ const roleDescriptions: Record<string, string> = {
   super_admin: "Full unrestricted access to all features",
 };
 
+const inviteStatusConfig: Record<string, { label: string; color: string }> = {
+  none: { label: "Not Sent", color: "bg-muted text-muted-foreground" },
+  sent: { label: "Sent", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+  opened: { label: "Opened", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
+  joined: { label: "Joined", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+  pending: { label: "Pending", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+};
+
+function UserDetailPanel({ userId, onClose }: { userId: number; onClose: () => void }) {
+  const { toast } = useToast();
+  const [brokerPermsOpen, setBrokerPermsOpen] = useState(false);
+  const [programOverridesOpen, setProgramOverridesOpen] = useState(false);
+
+  const { data, isLoading, refetch } = useQuery<{
+    user: AdminUser;
+    deals: UserDeal[];
+    programs: LoanProgram[];
+  }>({
+    queryKey: ["/api/admin/users", userId, "details"],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/users/${userId}/details`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load");
+      return res.json();
+    },
+  });
+
+  const sendInviteMutation = useMutation({
+    mutationFn: async (method: string) => {
+      const res = await apiRequest("POST", `/api/admin/users/${userId}/send-invite`, { method });
+      return res.json();
+    },
+    onSuccess: () => {
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "Invite sent successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to send invite", variant: "destructive" });
+    },
+  });
+
+  const saveBrokerSettingsMutation = useMutation({
+    mutationFn: async (settings: BrokerSettings) => {
+      return await apiRequest("PATCH", `/api/admin/users/${userId}/broker-settings`, { brokerSettings: settings });
+    },
+    onSuccess: () => {
+      refetch();
+      toast({ title: "Broker settings saved" });
+    },
+    onError: () => {
+      toast({ title: "Failed to save settings", variant: "destructive" });
+    },
+  });
+
+  const user = data?.user;
+  const deals = data?.deals || [];
+  const programs = data?.programs || [];
+  const settings: BrokerSettings = (user?.brokerSettings as BrokerSettings) || {};
+
+  const inviteLink = user?.inviteToken ? `${window.location.origin}/join/personal/${user.inviteToken}` : null;
+
+  const copyLink = () => {
+    if (inviteLink) {
+      navigator.clipboard.writeText(inviteLink);
+      toast({ title: "Link copied to clipboard" });
+    }
+  };
+
+  const updateSettings = (patch: Partial<BrokerSettings>) => {
+    const updated = { ...settings, ...patch };
+    saveBrokerSettingsMutation.mutate(updated);
+  };
+
+  const updateProgramOverride = (programId: string, field: string, value: number) => {
+    const overrides = { ...(settings.programOverrides || {}) };
+    overrides[programId] = { ...(overrides[programId] || {}), [field]: value };
+    updateSettings({ programOverrides: overrides });
+  };
+
+  const removeProgramOverride = (programId: string) => {
+    const overrides = { ...(settings.programOverrides || {}) };
+    delete overrides[programId];
+    updateSettings({ programOverrides: overrides });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4 p-2">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-24 w-full" />
+      </div>
+    );
+  }
+
+  if (!user) return null;
+
+  const status = inviteStatusConfig[user.inviteStatus || "none"] || inviteStatusConfig.none;
+
+  return (
+    <div className="space-y-6 overflow-y-auto max-h-[calc(100vh-80px)]">
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
+            {(user.fullName || user.email).charAt(0).toUpperCase()}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold truncate" data-testid="text-detail-name">{user.fullName || "No name"}</p>
+            <p className="text-sm text-muted-foreground truncate">{user.email}</p>
+          </div>
+          <Badge variant="secondary" className="capitalize shrink-0" data-testid="badge-detail-type">
+            {user.userType || "broker"}
+          </Badge>
+        </div>
+        {user.companyName && (
+          <p className="text-sm text-muted-foreground">{user.companyName}</p>
+        )}
+        {user.phone && (
+          <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+            <Phone className="h-3.5 w-3.5" /> {user.phone}
+          </p>
+        )}
+        <div className="flex gap-2 text-xs text-muted-foreground">
+          <span>Joined {safeFormat(user.createdAt, "MMM d, yyyy")}</span>
+          {user.lastLoginAt && <span>· Last login {safeFormat(user.lastLoginAt, "MMM d, yyyy")}</span>}
+        </div>
+      </div>
+
+      <div className="border rounded-lg p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-semibold flex items-center gap-1.5">
+            <Link2 className="h-4 w-4" /> Invite Link
+          </h4>
+          <Badge className={`text-xs ${status.color}`} data-testid="badge-invite-status">
+            {status.label}
+          </Badge>
+        </div>
+
+        {inviteLink ? (
+          <div className="flex items-center gap-2">
+            <Input
+              value={inviteLink}
+              readOnly
+              className="text-xs h-8 font-mono"
+              data-testid="input-invite-link"
+            />
+            <Button variant="outline" size="sm" onClick={copyLink} className="shrink-0 h-8" data-testid="button-copy-link">
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">No invite link generated yet. Send an invite to create one.</p>
+        )}
+
+        {user.inviteTokenSentAt && (
+          <p className="text-xs text-muted-foreground">
+            Last sent: {safeFormat(user.inviteTokenSentAt, "MMM d, yyyy 'at' h:mm a")}
+          </p>
+        )}
+
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            onClick={() => sendInviteMutation.mutate("email")}
+            disabled={sendInviteMutation.isPending}
+            className="flex-1"
+            data-testid="button-send-email-invite"
+          >
+            <Mail className="h-3.5 w-3.5 mr-1.5" />
+            {sendInviteMutation.isPending ? "Sending..." : "Send via Email"}
+          </Button>
+          {user.phone && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => sendInviteMutation.mutate("sms")}
+              disabled={sendInviteMutation.isPending}
+              className="flex-1"
+              data-testid="button-send-sms-invite"
+            >
+              <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
+              Send via SMS
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {user.userType === "broker" && (
+        <Collapsible open={brokerPermsOpen} onOpenChange={setBrokerPermsOpen}>
+          <CollapsibleTrigger asChild>
+            <button className="flex items-center justify-between w-full border rounded-lg p-4 hover:bg-muted/50 transition-colors" data-testid="button-broker-permissions">
+              <h4 className="text-sm font-semibold">Broker Permissions</h4>
+              {brokerPermsOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="border border-t-0 rounded-b-lg p-4 space-y-5 -mt-[1px]">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm">Yield Spread Premium (YSP)</Label>
+                <Switch
+                  checked={settings.yspEnabled || false}
+                  onCheckedChange={(checked) => updateSettings({ yspEnabled: checked })}
+                  data-testid="switch-ysp-enabled"
+                />
+              </div>
+              {settings.yspEnabled && (
+                <div className="space-y-2 pl-1">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Max YSP</span>
+                    <span>{settings.yspMaxPercent || 0}%</span>
+                  </div>
+                  <Slider
+                    value={[settings.yspMaxPercent || 0]}
+                    onValueChange={([v]) => updateSettings({ yspMaxPercent: v })}
+                    max={5}
+                    step={0.25}
+                    className="w-full"
+                    data-testid="slider-ysp-max"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm">Broker Points</Label>
+                <Switch
+                  checked={settings.brokerPointsEnabled || false}
+                  onCheckedChange={(checked) => updateSettings({ brokerPointsEnabled: checked })}
+                  data-testid="switch-broker-points-enabled"
+                />
+              </div>
+              {settings.brokerPointsEnabled && (
+                <div className="space-y-2 pl-1">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Max Points</span>
+                    <span>{settings.brokerPointsMaxPercent || 0}%</span>
+                  </div>
+                  <Slider
+                    value={[settings.brokerPointsMaxPercent || 0]}
+                    onValueChange={([v]) => updateSettings({ brokerPointsMaxPercent: v })}
+                    max={5}
+                    step={0.25}
+                    className="w-full"
+                    data-testid="slider-broker-points-max"
+                  />
+                </div>
+              )}
+            </div>
+
+            {programs.length > 0 && (
+              <Collapsible open={programOverridesOpen} onOpenChange={setProgramOverridesOpen}>
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="button-program-overrides">
+                    {programOverridesOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                    Program Overrides ({Object.keys(settings.programOverrides || {}).length})
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-3 space-y-3">
+                  {programs.map((prog) => {
+                    const override = settings.programOverrides?.[String(prog.id)];
+                    return (
+                      <div key={prog.id} className="border rounded p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium">{prog.name}</span>
+                          {override ? (
+                            <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => removeProgramOverride(String(prog.id))} data-testid={`button-remove-override-${prog.id}`}>
+                              Remove
+                            </Button>
+                          ) : (
+                            <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => updateProgramOverride(String(prog.id), "yspMaxPercent", settings.yspMaxPercent || 0)} data-testid={`button-add-override-${prog.id}`}>
+                              Add Override
+                            </Button>
+                          )}
+                        </div>
+                        {override && (
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>YSP Max</span>
+                              <span>{override.yspMaxPercent ?? settings.yspMaxPercent ?? 0}%</span>
+                            </div>
+                            <Slider
+                              value={[override.yspMaxPercent ?? 0]}
+                              onValueChange={([v]) => updateProgramOverride(String(prog.id), "yspMaxPercent", v)}
+                              max={5}
+                              step={0.25}
+                              className="w-full"
+                            />
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>Points Max</span>
+                              <span>{override.brokerPointsMaxPercent ?? settings.brokerPointsMaxPercent ?? 0}%</span>
+                            </div>
+                            <Slider
+                              value={[override.brokerPointsMaxPercent ?? 0]}
+                              onValueChange={([v]) => updateProgramOverride(String(prog.id), "brokerPointsMaxPercent", v)}
+                              max={5}
+                              step={0.25}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+
+      {deals.length > 0 && (
+        <div className="border rounded-lg p-4 space-y-3">
+          <h4 className="text-sm font-semibold">Linked Deals ({deals.length})</h4>
+          <div className="space-y-2">
+            {deals.map((deal) => (
+              <div key={deal.id} className="flex items-center justify-between py-1.5 border-b last:border-0">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{deal.dealName || `Deal #${deal.id}`}</p>
+                  <p className="text-xs text-muted-foreground truncate">{deal.propertyAddress || "No address"}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {deal.status && (
+                    <Badge variant="outline" className="text-xs capitalize">{deal.status}</Badge>
+                  )}
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" asChild>
+                    <a href={`/admin/deals/${deal.id}`} data-testid={`link-deal-${deal.id}`}>
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function UsersTab() {
   const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState<string>("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [newUser, setNewUser] = useState({
     email: "",
     password: "",
@@ -93,6 +465,7 @@ function UsersTab() {
     companyName: "",
     phone: "",
     role: "user",
+    userType: "broker",
   });
   const { toast } = useToast();
 
@@ -107,7 +480,7 @@ function UsersTab() {
     onSuccess: () => {
       refetch();
       setIsAddDialogOpen(false);
-      setNewUser({ email: "", password: "", fullName: "", companyName: "", phone: "", role: "user" });
+      setNewUser({ email: "", password: "", fullName: "", companyName: "", phone: "", role: "user", userType: "broker" });
       toast({ title: "User created successfully" });
     },
     onError: (error: any) => {
@@ -132,10 +505,6 @@ function UsersTab() {
     },
   });
 
-  const handleRoleChange = (userId: number, newRole: string) => {
-    updateUserMutation.mutate({ id: userId, updates: { role: newRole } });
-  };
-
   const handleActiveToggle = (userId: number, isActive: boolean) => {
     updateUserMutation.mutate({ id: userId, updates: { isActive } });
   };
@@ -144,7 +513,6 @@ function UsersTab() {
   const externalUsers = allUsers.filter(u => u.role === "user" || u.userType === "borrower");
 
   const filteredUsers = externalUsers.filter(u => {
-    if (roleFilter !== "all" && u.role !== roleFilter) return false;
     if (search) {
       const s = search.toLowerCase();
       return (u.email?.toLowerCase().includes(s) || u.fullName?.toLowerCase().includes(s));
@@ -179,6 +547,18 @@ function UsersTab() {
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label>User Type</Label>
+                <Select value={newUser.userType} onValueChange={(v) => setNewUser({ ...newUser, userType: v })}>
+                  <SelectTrigger data-testid="select-new-user-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="broker">Broker</SelectItem>
+                    <SelectItem value="borrower">Borrower</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="user-email">Email *</Label>
                 <Input
@@ -257,7 +637,7 @@ function UsersTab() {
       <Card>
         <CardHeader>
           <CardTitle>Brokers & Borrowers</CardTitle>
-          <CardDescription>Manage external user accounts and access</CardDescription>
+          <CardDescription>Manage external user accounts, invite links, and broker permissions</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-col sm:flex-row gap-4">
@@ -288,69 +668,77 @@ function UsersTab() {
                   <TableRow>
                     <TableHead>User</TableHead>
                     <TableHead>Type</TableHead>
-                    <TableHead>Company</TableHead>
-                    <TableHead>Joined</TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead>Link Status</TableHead>
                     <TableHead>Last Login</TableHead>
                     <TableHead>Active</TableHead>
-                    <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredUsers.map((user) => (
-                    <TableRow key={user.id} data-testid={`row-user-${user.id}`}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{user.fullName || "No name"}</p>
-                          <p className="text-sm text-muted-foreground">{user.email}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="capitalize">
-                          {user.userType || "broker"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{user.companyName || "-"}</TableCell>
-                      <TableCell>
-                        {safeFormat(user.createdAt, "MMM d, yyyy") || "-"}
-                      </TableCell>
-                      <TableCell>
-                        {safeFormat(user.lastLoginAt, "MMM d, yyyy") || "Never"}
-                      </TableCell>
-                      <TableCell>
-                        <Switch
-                          checked={user.isActive}
-                          onCheckedChange={(checked) => handleActiveToggle(user.id, checked)}
-                          data-testid={`switch-active-${user.id}`}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" data-testid={`button-user-actions-${user.id}`}>
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleRoleChange(user.id, "user")}>
-                              Set as User
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleRoleChange(user.id, "staff")}>
-                              Promote to Staff
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleRoleChange(user.id, "admin")}>
-                              Promote to Admin
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {filteredUsers.map((user) => {
+                    const status = inviteStatusConfig[user.inviteStatus || "none"] || inviteStatusConfig.none;
+                    return (
+                      <TableRow
+                        key={user.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => setSelectedUserId(user.id)}
+                        data-testid={`row-user-${user.id}`}
+                      >
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{user.fullName || "No name"}</p>
+                            <p className="text-sm text-muted-foreground">{user.email}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="capitalize">
+                            {user.userType || "broker"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {user.phone || "-"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={`text-xs ${status.color}`} data-testid={`badge-status-${user.id}`}>
+                            {status.label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {safeFormat(user.lastLoginAt, "MMM d, yyyy") || "Never"}
+                        </TableCell>
+                        <TableCell>
+                          <Switch
+                            checked={user.isActive}
+                            onCheckedChange={(checked) => {
+                              handleActiveToggle(user.id, checked);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            data-testid={`switch-active-${user.id}`}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
           )}
         </CardContent>
       </Card>
+
+      <Sheet open={selectedUserId !== null} onOpenChange={(open) => { if (!open) setSelectedUserId(null); }}>
+        <SheetContent side="right" className="sm:max-w-md w-full overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>User Details</SheetTitle>
+            <SheetDescription>Manage invite links, permissions, and view linked deals</SheetDescription>
+          </SheetHeader>
+          {selectedUserId && (
+            <div className="mt-4">
+              <UserDetailPanel userId={selectedUserId} onClose={() => setSelectedUserId(null)} />
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

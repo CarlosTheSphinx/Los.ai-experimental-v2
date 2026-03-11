@@ -52,6 +52,8 @@ export const users = pgTable("users", {
   inviteTokenExpires: timestamp("invite_token_expires"),
   invitedBy: integer("invited_by"),
   inviteStatus: varchar("invite_status", { length: 50 }).default("none"),
+  inviteTokenSentAt: timestamp("invite_token_sent_at"),
+  brokerSettings: jsonb("broker_settings"),
   emailConsent: boolean("email_consent").default(false),
   smsConsent: boolean("sms_consent").default(false),
   // Magic Links — lender-scoped shareable URLs for borrower/broker self-registration

@@ -5268,6 +5268,232 @@ export async function registerRoutes(
     }
   });
 
+  // Admin - Get user details with linked deals
+  app.get('/api/admin/users/:id/details', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = parseInt(req.params.id);
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
+      const userDeals = await db.select({
+        id: projects.id,
+        dealName: projects.projectName,
+        loanAmount: projects.loanAmount,
+        propertyAddress: projects.propertyAddress,
+        status: projects.status,
+        currentStage: projects.currentStage,
+        createdAt: projects.createdAt,
+      }).from(projects).where(
+        user.userType === 'borrower'
+          ? eq(projects.borrowerEmail, user.email)
+          : eq(projects.userId, user.id)
+      );
+
+      const programs = await db.select({
+        id: loanPrograms.id,
+        name: loanPrograms.name,
+      }).from(loanPrograms).where(eq(loanPrograms.isActive, true));
+
+      res.json({
+        user: {
+          id: user.id,
+          email: user.email,
+          fullName: user.fullName,
+          companyName: user.companyName,
+          phone: user.phone,
+          role: user.role,
+          userType: user.userType,
+          isActive: user.isActive,
+          createdAt: user.createdAt,
+          lastLoginAt: user.lastLoginAt,
+          inviteToken: user.inviteToken,
+          inviteStatus: user.inviteStatus,
+          inviteTokenSentAt: user.inviteTokenSentAt,
+          brokerSettings: user.brokerSettings,
+          onboardingCompleted: user.onboardingCompleted,
+        },
+        deals: userDeals,
+        programs,
+      });
+    } catch (error) {
+      console.error('Admin get user details error:', error);
+      res.status(500).json({ error: 'Failed to load user details' });
+    }
+  });
+
+  // Admin - Send personal invite link
+  app.post('/api/admin/users/:id/send-invite', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = parseInt(req.params.id);
+      const { method } = req.body; // 'email' or 'sms'
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
+      let token = user.inviteToken;
+      if (!token) {
+        token = generateRandomToken();
+      }
+
+      await db.update(users).set({
+        inviteToken: token,
+        inviteTokenSentAt: new Date(),
+        inviteStatus: 'sent',
+      }).where(eq(users.id, userId));
+
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+      const inviteLink = `${baseUrl}/join/personal/${token}`;
+
+      let companyName = 'Lendry.AI';
+      try {
+        const brandingSetting = await storage.getSystemSetting('tenant_branding');
+        if (brandingSetting?.value) {
+          const branding = typeof brandingSetting.value === 'string' ? JSON.parse(brandingSetting.value) : brandingSetting.value;
+          if (branding.companyName) companyName = branding.companyName;
+        }
+      } catch (e) {}
+
+      const portalType = user.userType === 'borrower' ? 'Borrower' : 'Broker';
+      const recipientName = user.fullName || user.email;
+
+      if (method === 'sms' && user.phone) {
+        try {
+          const { sendSms } = await import('./smsService');
+          await sendSms(user.phone, `You've been invited to ${companyName}'s ${portalType} Portal. Access your account here: ${inviteLink}`);
+        } catch (smsErr) {
+          console.error('SMS send failed:', smsErr);
+          return res.status(500).json({ error: 'Failed to send SMS' });
+        }
+      } else {
+        try {
+          const { getResendClient } = await import('./email');
+          const { client, fromEmail } = await getResendClient();
+          await client.emails.send({
+            from: fromEmail,
+            to: user.email,
+            subject: `You're invited to ${companyName}`,
+            html: `
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px;">
+                <h1 style="color: #0F1729; font-size: 24px; margin-bottom: 8px;">${companyName}</h1>
+                <p style="color: #64748b; font-size: 15px; line-height: 1.6;">Hi ${recipientName},</p>
+                <p style="color: #64748b; font-size: 15px; line-height: 1.6;">You've been invited to access the ${portalType} Portal. Click the link below to get started:</p>
+                <div style="margin: 24px 0;">
+                  <a href="${inviteLink}" style="display: inline-block; background: #C9A84C; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 15px;">Access Your Portal</a>
+                </div>
+                <p style="color: #94a3b8; font-size: 13px;">If you have questions, reply to this email.</p>
+              </div>
+            `,
+          });
+        } catch (emailErr) {
+          console.error('Email send failed:', emailErr);
+          return res.status(500).json({ error: 'Failed to send invite email' });
+        }
+      }
+
+      res.json({ success: true, inviteLink, inviteStatus: 'sent' });
+    } catch (error) {
+      console.error('Admin send invite error:', error);
+      res.status(500).json({ error: 'Failed to send invite' });
+    }
+  });
+
+  // Admin - Update broker settings
+  app.patch('/api/admin/users/:id/broker-settings', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = parseInt(req.params.id);
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      if (user.userType !== 'broker') return res.status(400).json({ error: 'User is not a broker' });
+
+      const { brokerSettings } = req.body;
+      await db.update(users).set({ brokerSettings }).where(eq(users.id, userId));
+
+      res.json({ success: true, brokerSettings });
+    } catch (error) {
+      console.error('Admin update broker settings error:', error);
+      res.status(500).json({ error: 'Failed to update broker settings' });
+    }
+  });
+
+  // Public - Personal invite link resolution
+  app.get('/api/join/personal/:token/info', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const [user] = await db.select().from(users).where(eq(users.inviteToken, token));
+      if (!user) return res.status(404).json({ error: 'Invalid invite link' });
+
+      if (user.inviteStatus === 'sent') {
+        await db.update(users).set({ inviteStatus: 'opened' }).where(eq(users.id, user.id));
+      }
+
+      const userDeals = await db.select({
+        id: projects.id,
+        dealName: projects.projectName,
+        status: projects.status,
+      }).from(projects).where(
+        user.userType === 'borrower'
+          ? eq(projects.borrowerEmail, user.email)
+          : eq(projects.userId, user.id)
+      );
+
+      res.json({
+        email: user.email,
+        fullName: user.fullName,
+        userType: user.userType,
+        hasPassword: !!user.passwordHash,
+        onboardingCompleted: user.onboardingCompleted,
+        dealCount: userDeals.length,
+      });
+    } catch (error) {
+      console.error('Personal invite info error:', error);
+      res.status(500).json({ error: 'Failed to load invite info' });
+    }
+  });
+
+  // Public - Complete personal invite registration
+  app.post('/api/join/personal/:token/register', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const { password, fullName, phone, companyName } = req.body;
+      const [user] = await db.select().from(users).where(eq(users.inviteToken, token));
+      if (!user) return res.status(404).json({ error: 'Invalid invite link' });
+
+      if (user.passwordHash) {
+        return res.status(400).json({ error: 'Account already set up. Please log in instead.' });
+      }
+
+      const validStates = ['sent', 'opened', 'pending'];
+      if (!validStates.includes(user.inviteStatus || '')) {
+        return res.status(400).json({ error: 'This invite link has already been used' });
+      }
+
+      if (!password || password.length < 8) {
+        return res.status(400).json({ error: 'Password must be at least 8 characters' });
+      }
+
+      const bcrypt = await import('bcrypt');
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      await db.update(users).set({
+        passwordHash,
+        fullName: fullName || user.fullName,
+        phone: phone || user.phone,
+        companyName: companyName || user.companyName,
+        inviteStatus: 'joined',
+        inviteToken: null,
+        emailVerified: true,
+        onboardingCompleted: true,
+      }).where(eq(users.id, user.id));
+
+      const authToken = generateToken(user.id, user.email, user.tokenVersion ?? 0);
+      setAuthCookie(res, authToken);
+
+      res.json({ success: true, userType: user.userType });
+    } catch (error) {
+      console.error('Personal invite register error:', error);
+      res.status(500).json({ error: 'Failed to complete registration' });
+    }
+  });
+
   // Admin - Invite team member via email
   app.post('/api/admin/invite-member', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {

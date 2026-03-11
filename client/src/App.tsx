@@ -20,6 +20,7 @@ import BorrowerPortal from "@/pages/borrower-portal";
 import BrokerPortal from "@/pages/broker-portal";
 import JoinBorrowerPage from "@/pages/join-borrower";
 import JoinBrokerPage from "@/pages/join-broker";
+import JoinPersonalPage from "@/pages/join-personal";
 import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
 import ForgotPasswordPage from "@/pages/forgot-password";
@@ -288,6 +289,7 @@ function LandingModeContent() {
   const [isBrokerPortalPage] = useRoute("/broker-portal/:token");
   const [isJoinBorrowerPage] = useRoute("/join/borrower/:token");
   const [isJoinBrokerPage] = useRoute("/join/broker/:token");
+  const [isJoinPersonalPage] = useRoute("/join/personal/:token");
   const [isApplyPage] = useRoute("/apply");
   const [isApplyProgramPage] = useRoute("/apply/:programId");
 
@@ -312,6 +314,9 @@ function LandingModeContent() {
   }
   if (isJoinBrokerPage) {
     return <Switch><Route path="/join/broker/:token" component={JoinBrokerPage} /></Switch>;
+  }
+  if (isJoinPersonalPage) {
+    return <Switch><Route path="/join/personal/:token" component={JoinPersonalPage} /></Switch>;
   }
   if (isPublicAuthPage) {
     return (
@@ -368,6 +373,7 @@ function FullAppContent() {
   const [isBrokerPortalPage] = useRoute("/broker-portal/:token");
   const [isJoinBorrowerPage] = useRoute("/join/borrower/:token");
   const [isJoinBrokerPage] = useRoute("/join/broker/:token");
+  const [isJoinPersonalPage] = useRoute("/join/personal/:token");
   const [isLoginPage] = useRoute("/login");
   const [isRegisterPage] = useRoute("/register");
   const [isForgotPasswordPage] = useRoute("/forgot-password");
@@ -433,6 +439,14 @@ function FullAppContent() {
     return (
       <Switch>
         <Route path="/join/broker/:token" component={JoinBrokerPage} />
+      </Switch>
+    );
+  }
+
+  if (isJoinPersonalPage) {
+    return (
+      <Switch>
+        <Route path="/join/personal/:token" component={JoinPersonalPage} />
       </Switch>
     );
   }
