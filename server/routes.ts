@@ -93,6 +93,20 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  async function getProjectWithBorrowerAccess(projectId: number, userId: number, userRole: string): Promise<any> {
+    let project = await storage.getProjectById(projectId, userId);
+    if (!project && userRole === 'borrower') {
+      const borrowerUser = await storage.getUserById(userId);
+      if (borrowerUser?.email) {
+        const internal = await storage.getProjectByIdInternal(projectId);
+        if (internal && internal.borrowerEmail && internal.borrowerEmail.toLowerCase().trim() === borrowerUser.email.toLowerCase().trim()) {
+          project = internal;
+        }
+      }
+    }
+    return project;
+  }
+
   // ==================== URL REWRITE: deals → projects ====================
   // The frontend uses "deals" terminology but the backend routes are registered as "projects"
   // This middleware transparently rewrites deal-based paths to project-based paths
@@ -3537,9 +3551,9 @@ export async function registerRoutes(
         }
       }
 
-      // Batch-fetch task stats for all projects to avoid N+1
       const projectIds = projectsList.map(p => p.id);
       const taskStatsMap = new Map<number, { completed: number; total: number }>();
+      const docStatsMap = new Map<number, { completed: number; total: number }>();
       if (projectIds.length > 0) {
         const allTasks = await db.select({
           projectId: projectTasks.projectId,
@@ -3552,6 +3566,19 @@ export async function registerRoutes(
           if (task.status === 'completed') existing.completed++;
           taskStatsMap.set(task.projectId, existing);
         }
+
+        const allDocs = await db.select({
+          dealId: dealDocuments.dealId,
+          status: dealDocuments.status,
+        }).from(dealDocuments).where(inArray(dealDocuments.dealId, projectIds));
+
+        for (const doc of allDocs) {
+          if (!doc.dealId) continue;
+          const existing = docStatsMap.get(doc.dealId) || { completed: 0, total: 0 };
+          existing.total++;
+          if (doc.status === 'approved' || doc.status === 'uploaded' || doc.status === 'waived' || doc.status === 'not_applicable') existing.completed++;
+          docStatsMap.set(doc.dealId, existing);
+        }
       }
 
       const projectsWithStats = projectsList.map(project => {
@@ -3561,6 +3588,8 @@ export async function registerRoutes(
         }
         serialized.completedTasks = taskStatsMap.get(project.id)?.completed || 0;
         serialized.totalTasks = taskStatsMap.get(project.id)?.total || 0;
+        serialized.completedDocs = docStatsMap.get(project.id)?.completed || 0;
+        serialized.totalDocs = docStatsMap.get(project.id)?.total || 0;
         return serialized;
       });
 
@@ -3716,7 +3745,7 @@ export async function registerRoutes(
       const userId = req.user!.id;
       const projectId = parseInt(req.params.id);
       
-      const project = await storage.getProjectById(projectId, userId);
+      const project = await getProjectWithBorrowerAccess(projectId, userId, req.user!.role);
       if (!project) {
         return res.status(404).json({ error: 'Project not found' });
       }
@@ -3731,6 +3760,10 @@ export async function registerRoutes(
       const tasks = await storage.getTasksByProjectId(projectId);
       const activity = await storage.getActivityByProjectId(projectId);
       const documents = await storage.getDocumentsByProjectId(projectId);
+
+      const dealDocs = await db.select().from(dealDocuments)
+        .where(eq(dealDocuments.dealId, projectId))
+        .orderBy(asc(dealDocuments.sortOrder));
 
       const processors = await db.select({
         id: dealProcessors.id,
@@ -3758,6 +3791,7 @@ export async function registerRoutes(
         stages: stagesWithTasks,
         activity,
         documents,
+        dealDocuments: dealDocs,
         processors,
       });
     } catch (error) {
@@ -4048,7 +4082,7 @@ export async function registerRoutes(
       const projectId = parseInt(req.params.id);
       const { name, size, contentType, documentType, documentCategory } = req.body;
 
-      const project = await storage.getProjectById(projectId, userId);
+      const project = await getProjectWithBorrowerAccess(projectId, userId, req.user!.role);
       if (!project) {
         return res.status(404).json({ error: 'Project not found' });
       }
@@ -4113,7 +4147,7 @@ export async function registerRoutes(
       const projectId = parseInt(req.params.id);
       const { objectPath, fileName, fileSize, mimeType, documentType, documentCategory } = req.body;
 
-      const project = await storage.getProjectById(projectId, userId);
+      const project = await getProjectWithBorrowerAccess(projectId, userId, req.user!.role);
       if (!project) {
         return res.status(404).json({ error: 'Project not found' });
       }
@@ -4213,7 +4247,7 @@ export async function registerRoutes(
       const userId = req.user!.id;
       const projectId = parseInt(req.params.id);
 
-      const project = await storage.getProjectById(projectId, userId);
+      const project = await getProjectWithBorrowerAccess(projectId, userId, req.user!.role);
       if (!project) {
         return res.status(404).json({ error: 'Project not found' });
       }
@@ -4229,14 +4263,13 @@ export async function registerRoutes(
     }
   });
 
-  // Mark deal document upload complete (broker accessible)
   app.post('/api/projects/:id/deal-documents/:docId/upload-complete', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const userId = req.user!.id;
       const projectId = parseInt(req.params.id);
       const docId = parseInt(req.params.docId);
 
-      const project = await storage.getProjectById(projectId, userId);
+      const project = await getProjectWithBorrowerAccess(projectId, userId, req.user!.role);
       if (!project) return res.status(404).json({ error: 'Project not found' });
 
       const { objectPath, fileName, fileSize, mimeType } = req.body;
