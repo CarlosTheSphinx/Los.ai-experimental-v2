@@ -413,26 +413,28 @@ export default function BorrowerPortal({ token: propToken, isPreview }: Borrower
       />
 
       <div className="flex-1 flex flex-col min-h-screen">
-        <header className="bg-background border-b">
-          <div className="px-4 md:px-6 py-3 md:py-4">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <div className="text-xs md:text-sm text-muted-foreground font-mono truncate">{project.loanNumber || `DEAL-${project.id}`}</div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-lg md:text-xl font-semibold truncate">{project.projectName}</h1>
-                  {project.programName && (
-                    <Badge variant="outline" className="text-xs shrink-0" data-testid="badge-program-name">
-                      {project.programName}
-                    </Badge>
-                  )}
+        {activeView !== "loans" && (
+          <header className="bg-background border-b">
+            <div className="px-4 md:px-6 py-3 md:py-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-xs md:text-sm text-muted-foreground font-mono truncate">{project.loanNumber || `DEAL-${project.id}`}</div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h1 className="text-lg md:text-xl font-semibold truncate">{project.projectName}</h1>
+                    {project.programName && (
+                      <Badge variant="outline" className="text-xs shrink-0" data-testid="badge-program-name">
+                        {project.programName}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
+                <Badge variant={project.status === 'active' ? 'default' : 'secondary'} className="shrink-0" data-testid="badge-deal-status">
+                  {project.status}
+                </Badge>
               </div>
-              <Badge variant={project.status === 'active' ? 'default' : 'secondary'} className="shrink-0" data-testid="badge-deal-status">
-                {project.status}
-              </Badge>
             </div>
-          </div>
-        </header>
+          </header>
+        )}
 
         <main className="flex-1 px-4 md:px-6 py-4 md:py-8 space-y-4 md:space-y-6">
           {activeView === "loans" && (
