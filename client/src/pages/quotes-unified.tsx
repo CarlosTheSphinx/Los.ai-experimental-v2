@@ -62,6 +62,20 @@ interface Envelope {
   }>;
 }
 
+interface InternalDocStatus {
+  quoteId: number;
+  documentId: number;
+  documentName: string;
+  status: string;
+  sentAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  signerStatus: string | null;
+  signerEmail: string | null;
+  signerName: string | null;
+  hasProject: boolean;
+}
+
 interface ProgramWithPricing {
   id: number;
   name: string;
@@ -176,6 +190,16 @@ function getEnvelopeStatusDisplay(envelope: Envelope | null) {
   if (s === 'draft') return { label: 'Draft', color: 'bg-gray-100 text-gray-600', dotColor: 'bg-gray-400' };
   if (s === 'declined') return { label: 'Declined', color: 'bg-red-50 text-red-700', dotColor: 'bg-red-500' };
   return { label: envelope.status, color: 'bg-gray-100 text-gray-600', dotColor: 'bg-gray-400' };
+}
+
+function getInternalDocStatusDisplay(doc: InternalDocStatus | null) {
+  if (!doc) return { label: 'No Term Sheet', color: 'bg-gray-100 text-gray-600', dotColor: 'bg-gray-400', step: 0 };
+  const signerStatus = doc.signerStatus?.toLowerCase() || '';
+  const docStatus = doc.status.toLowerCase();
+  if (docStatus === 'completed' || signerStatus === 'signed') return { label: 'Signed', color: 'bg-emerald-50 text-emerald-700', dotColor: 'bg-emerald-500', step: 3 };
+  if (signerStatus === 'viewed') return { label: 'Opened', color: 'bg-blue-50 text-blue-700', dotColor: 'bg-blue-500', step: 2 };
+  if (docStatus === 'sent' || signerStatus === 'sent') return { label: 'Sent', color: 'bg-amber-50 text-amber-700', dotColor: 'bg-amber-500', step: 1 };
+  return { label: 'Draft', color: 'bg-gray-100 text-gray-600', dotColor: 'bg-gray-400', step: 0 };
 }
 
 function QuoteCardEnvelope({ envelope, isBorrower, onSendTermSheet }: { envelope: Envelope | null; isBorrower: boolean; onSendTermSheet?: () => void }) {
@@ -351,6 +375,20 @@ function useBulkEnvelopes(quoteIds: number[]) {
   });
 }
 
+function useBulkInternalDocs(quoteIds: number[]) {
+  const quoteIdsStr = quoteIds.join(',');
+  return useQuery<{ documents: InternalDocStatus[] }>({
+    queryKey: ['/api/internal-documents/bulk', quoteIdsStr],
+    queryFn: async () => {
+      if (quoteIds.length === 0) return { documents: [] };
+      const res = await fetch(`/api/internal-documents/bulk?quoteIds=${quoteIdsStr}`, { credentials: 'include' });
+      return res.json();
+    },
+    staleTime: 15000,
+    enabled: quoteIds.length > 0,
+  });
+}
+
 function buildEnvelopeMap(envelopes: Envelope[]): Map<number, Envelope> {
   const map = new Map<number, Envelope>();
   for (const env of envelopes) {
@@ -358,6 +396,14 @@ function buildEnvelopeMap(envelopes: Envelope[]): Map<number, Envelope> {
     if (!existing || new Date(env.createdAt) > new Date(existing.createdAt)) {
       map.set(env.quoteId, env);
     }
+  }
+  return map;
+}
+
+function buildInternalDocMap(docs: InternalDocStatus[]): Map<number, InternalDocStatus> {
+  const map = new Map<number, InternalDocStatus>();
+  for (const doc of docs) {
+    map.set(doc.quoteId, doc);
   }
   return map;
 }
@@ -543,7 +589,9 @@ export default function QuotesUnified() {
   const quotes = quotesData?.quotes || [];
   const quoteIds = quotes.map(q => q.id);
   const { data: bulkEnvData } = useBulkEnvelopes(quoteIds);
+  const { data: bulkInternalDocData } = useBulkInternalDocs(quoteIds);
   const envelopeMap = buildEnvelopeMap(bulkEnvData?.envelopes || []);
+  const internalDocMap = buildInternalDocMap(bulkInternalDocData?.documents || []);
 
   const filteredQuotes = quotes.filter(q => {
     if (!searchQuery) return true;
@@ -557,9 +605,13 @@ export default function QuotesUnified() {
 
   const totalCommission = quotes.reduce((sum, q) => sum + (q.commission || 0), 0);
 
-  const pending = Array.from(envelopeMap.values()).filter(e => ['sent', 'viewed'].includes(e.status.toLowerCase())).length;
-  const signed = Array.from(envelopeMap.values()).filter(e => e.status.toLowerCase() === 'completed').length;
-  const noTermSheet = quotes.length - envelopeMap.size;
+  const envPending = Array.from(envelopeMap.values()).filter(e => ['sent', 'viewed'].includes(e.status.toLowerCase())).length;
+  const envSigned = Array.from(envelopeMap.values()).filter(e => e.status.toLowerCase() === 'completed').length;
+  const intPending = Array.from(internalDocMap.values()).filter(d => ['sent', 'in_progress'].includes(d.status.toLowerCase()) && d.signerStatus !== 'signed').length;
+  const intSigned = Array.from(internalDocMap.values()).filter(d => d.status.toLowerCase() === 'completed' || d.signerStatus === 'signed').length;
+  const pending = envPending + intPending;
+  const signed = envSigned + intSigned;
+  const noTermSheet = quotes.length - envelopeMap.size - internalDocMap.size + Array.from(internalDocMap.keys()).filter(k => envelopeMap.has(k)).length;
 
   const [activeView, setActiveView] = useState<"quotes" | "create">("quotes");
   const hasResult = (loanProductType === "dscr" && dscrResult) || (loanProductType === "rtl" && rtlResult);
@@ -696,6 +748,7 @@ export default function QuotesUnified() {
                   quote={quote}
                   isBorrower={isBorrower}
                   latestEnvelope={envelopeMap.get(quote.id) || null}
+                  internalDoc={internalDocMap.get(quote.id) || null}
                   onEdit={() => handleEditQuote(quote)}
                   onDelete={() => deleteMutation.mutate(quote.id)}
                   onSendTermSheet={() => navigate(`/quotes/${quote.id}/documents`)}
@@ -964,6 +1017,7 @@ function QuoteCard({
   quote,
   isBorrower,
   latestEnvelope,
+  internalDoc,
   onEdit,
   onDelete,
   onSendTermSheet,
@@ -973,6 +1027,7 @@ function QuoteCard({
   quote: SavedQuote;
   isBorrower: boolean;
   latestEnvelope: Envelope | null;
+  internalDoc: InternalDocStatus | null;
   onEdit: () => void;
   onDelete: () => void;
   onSendTermSheet: () => void;
@@ -1033,8 +1088,12 @@ function QuoteCard({
 
   const createdAt = quote.createdAt ? formatShortDate(quote.createdAt) : 'N/A';
   const quoteNumber = formatQuoteNumber(quote.id, quote.createdAt);
-  const statusDisplay = getEnvelopeStatusDisplay(latestEnvelope);
+  const internalDocStatus = getInternalDocStatusDisplay(internalDoc);
+  const hasInternalDoc = !!internalDoc;
+  const statusDisplay = hasInternalDoc ? internalDocStatus : getEnvelopeStatusDisplay(latestEnvelope);
   const envelopeStatus = latestEnvelope?.status.toLowerCase() || '';
+  const internalSignerStatus = internalDoc?.signerStatus?.toLowerCase() || '';
+  const hasAnyTermSheet = hasInternalDoc || !!latestEnvelope;
 
   return (
     <div className="bg-card border rounded-[10px] shadow-sm overflow-hidden" data-testid={`card-quote-${quote.id}`}>
@@ -1079,7 +1138,7 @@ function QuoteCard({
                   <MessageSquare className="h-3.5 w-3.5" />
                   Message Borrower
                 </Button>
-                {(!latestEnvelope || envelopeStatus === 'draft') && (
+                {!hasAnyTermSheet && (
                   <Button
                     onClick={onSendTermSheet}
                     size="sm"
@@ -1090,13 +1149,25 @@ function QuoteCard({
                     Send Term Sheet
                   </Button>
                 )}
-                {(envelopeStatus === 'sent' || envelopeStatus === 'viewed') && (
+                {hasInternalDoc && internalSignerStatus !== 'signed' && internalDoc?.status !== 'completed' && (
                   <Button
                     onClick={onSendTermSheet}
                     variant="outline"
                     size="sm"
                     className="h-8 rounded-full text-[14px] gap-1.5 px-3"
                     data-testid={`button-resend-${quote.id}`}
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    Resend
+                  </Button>
+                )}
+                {!hasInternalDoc && (envelopeStatus === 'sent' || envelopeStatus === 'viewed') && (
+                  <Button
+                    onClick={onSendTermSheet}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-full text-[14px] gap-1.5 px-3"
+                    data-testid={`button-resend-env-${quote.id}`}
                   >
                     <Send className="h-3.5 w-3.5" />
                     Resend
@@ -1210,7 +1281,45 @@ function QuoteCard({
         </div>
       </div>
 
-      <QuoteCardEnvelope envelope={latestEnvelope} isBorrower={isBorrower} onSendTermSheet={onSendTermSheet} />
+      {hasInternalDoc ? (
+        <div className="px-5 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <FileSignature className="h-4.5 w-4.5 text-muted-foreground" />
+              <span className="text-[15px] font-medium text-muted-foreground" data-testid={`text-internal-doc-label-${quote.id}`}>Term Sheet:</span>
+              <div className="flex items-center gap-2.5">
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[14px] font-medium ${internalDocStatus.color}`} data-testid={`badge-internal-status-${quote.id}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${internalDocStatus.dotColor}`} />
+                  {internalDocStatus.label}
+                </span>
+                {internalDoc.sentAt && internalSignerStatus !== 'signed' && internalDoc.status !== 'completed' && (
+                  <span className="text-[15px] text-muted-foreground" data-testid={`text-internal-sent-${quote.id}`}>
+                    Sent {formatShortDate(internalDoc.sentAt)}
+                  </span>
+                )}
+                {(internalSignerStatus === 'signed' || internalDoc.status === 'completed') && internalDoc.completedAt && (
+                  <span className="text-[15px] text-emerald-600 flex items-center gap-1" data-testid={`text-internal-signed-${quote.id}`}>
+                    <CheckCircle className="h-4 w-4" /> Signed {formatShortDate(internalDoc.completedAt)}
+                  </span>
+                )}
+                {internalDoc.hasProject && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[14px] font-medium bg-emerald-50 text-emerald-700" data-testid={`badge-deal-created-internal-${quote.id}`}>
+                    <CheckCircle className="h-3.5 w-3.5" />
+                    Deal Created
+                  </span>
+                )}
+              </div>
+            </div>
+            {internalDoc.signerEmail && (
+              <span className="text-[13px] text-muted-foreground" data-testid={`text-internal-signer-${quote.id}`}>
+                {internalDoc.signerName || internalDoc.signerEmail}
+              </span>
+            )}
+          </div>
+        </div>
+      ) : (
+        <QuoteCardEnvelope envelope={latestEnvelope} isBorrower={isBorrower} onSendTermSheet={onSendTermSheet} />
+      )}
     </div>
   );
 }

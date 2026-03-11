@@ -266,7 +266,7 @@ export default function SignPage() {
   return (
     <div className="min-h-screen bg-muted">
       <header className="bg-background border-b border-border sticky top-0 z-50 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between gap-4 flex-wrap">
+        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
               <FileText className="w-5 h-5 text-primary" />
@@ -297,8 +297,8 @@ export default function SignPage() {
         </div>
       </header>
 
-      <main className="flex-1 overflow-auto p-4">
-        <div className="max-w-4xl mx-auto">
+      <main className="flex-1 overflow-auto p-2 sm:p-4">
+        <div className="max-w-5xl mx-auto">
           <div className="bg-background rounded-lg shadow-lg overflow-hidden">
             <div ref={pdfContainerRef} className="relative bg-muted">
               {doc?.fileData && (

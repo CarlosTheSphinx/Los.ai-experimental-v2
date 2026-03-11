@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, FileText, Download, Send, CheckCircle2, Loader2, FileSignature, Pencil, X, Save, Mail } from "lucide-react";
+import { ArrowLeft, FileText, Download, Send, CheckCircle2, Loader2, FileSignature, Pencil, X, Save, Mail, Eye, EyeOff, ChevronDown, ChevronUp, User, MapPin, DollarSign, Building2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -60,6 +60,67 @@ function getEditFormData(quote: SavedQuote): EditFormData {
   };
 }
 
+interface InternalDocStatus {
+  quoteId: number;
+  documentId: number;
+  documentName: string;
+  status: string;
+  sentAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  signerStatus: string | null;
+  signerEmail: string | null;
+  signerName: string | null;
+  hasProject: boolean;
+}
+
+function TermSheetProgressBar({ step }: { step: number }) {
+  const stages = [
+    { label: 'Created', icon: FileText },
+    { label: 'Sent', icon: Send },
+    { label: 'Opened', icon: Eye },
+    { label: 'Signed', icon: CheckCircle2 },
+  ];
+
+  return (
+    <div className="flex items-center gap-0 w-full" data-testid="term-sheet-progress">
+      {stages.map((stage, i) => {
+        const isCompleted = i < step;
+        const isCurrent = i === step;
+        const Icon = stage.icon;
+        return (
+          <div key={stage.label} className="flex items-center flex-1">
+            <div className="flex flex-col items-center gap-1.5 relative z-10">
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                  isCompleted
+                    ? 'bg-emerald-500 text-white'
+                    : isCurrent
+                    ? 'bg-primary text-white ring-2 ring-primary/20'
+                    : 'bg-muted text-muted-foreground'
+                }`}
+                data-testid={`progress-step-${stage.label.toLowerCase()}`}
+              >
+                <Icon className="w-4 h-4" />
+              </div>
+              <span className={`text-[11px] font-medium ${
+                isCompleted ? 'text-emerald-600' : isCurrent ? 'text-primary' : 'text-muted-foreground'
+              }`}>
+                {stage.label}
+              </span>
+            </div>
+            {i < stages.length - 1 && (
+              <div className={`flex-1 h-0.5 mx-1 mt-[-18px] ${
+                isCompleted ? 'bg-emerald-500' : 'bg-muted'
+              }`} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function QuoteDocuments() {
   const [, params] = useRoute("/quotes/:id/documents");
   const [, setLocation] = useLocation();
@@ -82,6 +143,7 @@ export default function QuoteDocuments() {
   const [signatureSent, setSignatureSent] = useState(false);
   const [sendEmail, setSendEmail] = useState('');
   const [sendName, setSendName] = useState('');
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
 
   const { data: quoteData, isLoading: quoteLoading } = useQuery<{ success: boolean; quote: SavedQuote }>({
     queryKey: ['/api/quotes', quoteId],
@@ -91,6 +153,25 @@ export default function QuoteDocuments() {
   const { data: templates, isLoading: templatesLoading } = useQuery<any[]>({
     queryKey: ['/api/quote-pdf-templates'],
   });
+
+  const { data: internalDocData } = useQuery<{ documents: InternalDocStatus[] }>({
+    queryKey: ['/api/internal-documents/bulk', quoteId ? String(quoteId) : ''],
+    queryFn: async () => {
+      if (!quoteId) return { documents: [] };
+      const res = await fetch(`/api/internal-documents/bulk?quoteIds=${quoteId}`, { credentials: 'include' });
+      return res.json();
+    },
+    enabled: !!quoteId,
+    staleTime: 10000,
+  });
+
+  const internalDoc = internalDocData?.documents?.[0] || null;
+  const termSheetStep = internalDoc
+    ? (internalDoc.status === 'completed' || internalDoc.signerStatus === 'signed') ? 3
+      : internalDoc.signerStatus === 'viewed' ? 2
+      : (internalDoc.status === 'sent' || internalDoc.signerStatus === 'sent') ? 1
+      : 0
+    : 0;
 
   const quote = quoteData?.quote;
   const loanData = quote?.loanData as Record<string, any> | null;
@@ -107,6 +188,7 @@ export default function QuoteDocuments() {
   useEffect(() => {
     if (!quoteId || templatesLoading || quoteLoading || !quote) return;
     if (availableTemplates.length > 0 && selectedTemplateId === null) return;
+    if (!showPdfPreview) return;
 
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -151,7 +233,7 @@ export default function QuoteDocuments() {
     return () => {
       controller.abort();
     };
-  }, [quoteId, selectedTemplateId, templatesLoading, quoteLoading, quote, availableTemplates.length, toast, pdfVersion]);
+  }, [quoteId, selectedTemplateId, templatesLoading, quoteLoading, quote, availableTemplates.length, toast, pdfVersion, showPdfPreview]);
 
   useEffect(() => {
     return () => {
@@ -174,7 +256,7 @@ export default function QuoteDocuments() {
     });
     observer.observe(pdfContainerRef.current);
     return () => observer.disconnect();
-  }, []);
+  }, [showPdfPreview]);
 
   const onDocumentLoadSuccess = useCallback(({ numPages: n }: { numPages: number }) => {
     setNumPages(n);
@@ -265,6 +347,7 @@ export default function QuoteDocuments() {
       toast({ title: "Sent", description: data.message || "Term sheet sent for signature." });
       setShowSendDialog(false);
       setSignatureSent(true);
+      queryClient.invalidateQueries({ queryKey: ['/api/internal-documents/bulk'] });
     },
     onError: (error) => {
       toast({
@@ -302,10 +385,7 @@ export default function QuoteDocuments() {
       <div className="h-full p-6 space-y-4">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-20 w-full" />
-        <div className="flex gap-4 flex-1">
-          <Skeleton className="h-[600px] w-56" />
-          <Skeleton className="h-[600px] flex-1" />
-        </div>
+        <Skeleton className="h-[400px] w-full" />
       </div>
     );
   }
@@ -350,399 +430,444 @@ export default function QuoteDocuments() {
   const loanAmount = safeNumber(loanData?.loanAmount || loanData?.requestedLoanAmount || loanData?.loanamount);
   const borrowerName = [quote.customerFirstName, quote.customerLastName].filter(Boolean).join(' ') || 'N/A';
   const propertyAddress = quote.propertyAddress || 'N/A';
+  const propertyType = loanData?.propertyType || loanData?.property_type || 'N/A';
+  const interestRate = quote.interestRate || 'N/A';
+  const pointsCharged = quote.pointsCharged ?? 0;
+  const loanPurpose = loanData?.loanPurpose || loanData?.loan_purpose || loanData?.purpose || 'N/A';
 
   const selectedTemplate = availableTemplates.find((t: any) => t.id === selectedTemplateId);
   const selectedTemplateName = selectedTemplate?.name || 'Default';
+  const isLoi = selectedTemplate?.config?.templateType === 'loi';
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex-shrink-0 px-6 pt-5 pb-3 space-y-3">
+    <div className="h-full overflow-y-auto" data-testid="page-quote-documents">
+      <div className="max-w-4xl mx-auto px-6 py-6 space-y-5">
         <div className="flex items-center justify-between">
           <div>
+            <Button variant="ghost" size="sm" onClick={() => setLocation('/quotes')} className="mb-2 -ml-2 text-muted-foreground" data-testid="button-back-quotes">
+              <ArrowLeft className="mr-1.5 h-4 w-4" />
+              Back to Quotes
+            </Button>
             <h1 className="text-2xl font-bold font-display text-foreground" data-testid="text-page-title">
-              Document Preview
+              {quote.loanNumber || `Quote #${quote.id}`}
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Preview, download, or send your quote document.
+              Review, customize, and send your term sheet
             </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setLocation('/quotes')} data-testid="button-back-quotes">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Quotes
-            </Button>
           </div>
         </div>
 
-        <Card className="border-primary/10" data-testid="card-quote-summary">
-          <CardContent className="px-5 py-3">
-            <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-full bg-success/10 flex items-center justify-center flex-shrink-0">
-                <CheckCircle2 className="w-4 h-4 text-success" />
+        {internalDoc && (
+          <Card className="bg-card border rounded-[10px] shadow-sm" data-testid="card-term-sheet-progress">
+            <CardContent className="px-6 py-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-foreground">Term Sheet Status</h3>
+                {internalDoc.signerEmail && (
+                  <span className="text-xs text-muted-foreground">
+                    Sent to {internalDoc.signerName || internalDoc.signerEmail}
+                  </span>
+                )}
               </div>
-              <div className="flex items-center gap-6 flex-1 min-w-0 text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-foreground">{quote.loanNumber || `Quote #${quote.id}`}</span>
-                  <span className="text-lg font-bold text-primary">{quote.interestRate || 'N/A'}</span>
+              <TermSheetProgressBar step={termSheetStep} />
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="bg-card border rounded-[10px] shadow-sm" data-testid="card-borrower-info">
+            <CardContent className="px-5 py-4">
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
+                  <User className="w-3.5 h-3.5 text-primary" />
                 </div>
-                <div>
-                  <span className="text-muted-foreground">Loan: </span>
-                  <span className="font-medium">${loanAmount.toLocaleString()}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Borrower: </span>
-                  <span className="font-medium" data-testid="text-borrower-name">{borrowerName}</span>
-                </div>
-                <div className="hidden md:block truncate">
-                  <span className="text-muted-foreground">Property: </span>
-                  <span className="font-medium">{propertyAddress}</span>
-                </div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Borrower</h3>
               </div>
+              <p className="text-[15px] font-semibold text-foreground" data-testid="text-borrower-name">{borrowerName}</p>
+              {quote.customerCompanyName && (
+                <p className="text-[13px] text-muted-foreground mt-0.5">{quote.customerCompanyName}</p>
+              )}
+              {quote.customerEmail && (
+                <p className="text-[13px] text-muted-foreground mt-0.5">{quote.customerEmail}</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card border rounded-[10px] shadow-sm" data-testid="card-property-info">
+            <CardContent className="px-5 py-4">
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className="h-7 w-7 rounded-full bg-amber-500/10 flex items-center justify-center">
+                  <MapPin className="w-3.5 h-3.5 text-amber-600" />
+                </div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Property</h3>
+              </div>
+              <p className="text-[15px] font-semibold text-foreground truncate" data-testid="text-property-address">{propertyAddress}</p>
+              <p className="text-[13px] text-muted-foreground mt-0.5">{propertyType}</p>
+              <p className="text-[13px] text-muted-foreground mt-0.5">{loanPurpose}</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card border rounded-[10px] shadow-sm" data-testid="card-loan-info">
+            <CardContent className="px-5 py-4">
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className="h-7 w-7 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                  <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                </div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Loan Terms</h3>
+              </div>
+              <p className="text-[21px] font-bold text-foreground" data-testid="text-loan-amount">${loanAmount.toLocaleString()}</p>
+              <div className="flex items-center gap-3 mt-1">
+                <span className="text-[15px] font-semibold text-primary">{interestRate}</span>
+                <span className="text-[13px] text-muted-foreground">{pointsCharged} pts</span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="bg-card border rounded-[10px] shadow-sm" data-testid="card-document-actions">
+          <CardContent className="px-6 py-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center">
+                  <FileText className="w-3.5 h-3.5 text-primary" />
+                </div>
+                <h3 className="text-sm font-semibold text-foreground">Document Template</h3>
+              </div>
+              <Button variant="ghost" size="sm" onClick={handleOpenEdit} className="text-[13px] h-8" data-testid="button-edit-quote">
+                <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                Edit Quote
+              </Button>
             </div>
-          </CardContent>
-        </Card>
-      </div>
 
-      <div className="flex-1 flex gap-4 px-6 pb-5 min-h-0">
-        <div className="w-56 flex-shrink-0 flex flex-col gap-3 overflow-y-auto">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">
-            Templates
-          </h2>
-
-          {availableTemplates.length === 0 ? (
-            <Card
-              className="cursor-pointer border-primary bg-primary/5"
-              data-testid="card-template-default"
-            >
-              <CardContent className="p-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <FileText className="w-3.5 h-3.5 text-primary" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-medium text-sm text-foreground truncate">Default PDF</p>
-                    <p className="text-[11px] text-muted-foreground">Standard</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            availableTemplates.map((template: any) => {
-              const isLoi = template.config?.templateType === 'loi';
-              const isSelected = selectedTemplateId === template.id;
-              return (
-                <Card
-                  key={template.id}
-                  className={`cursor-pointer transition-colors ${
-                    isSelected
-                      ? 'border-primary bg-primary/5'
-                      : 'hover:border-primary/30'
-                  }`}
-                  onClick={() => setSelectedTemplateId(template.id)}
-                  data-testid={`card-template-${template.id}`}
-                >
-                  <CardContent className="p-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                        isLoi ? 'bg-amber-500/10' : 'bg-primary/10'
-                      }`}>
-                        {isLoi ? (
+            <div className="flex items-center gap-3 mb-5">
+              {availableTemplates.length > 0 ? (
+                <div className="flex gap-2 flex-wrap">
+                  {availableTemplates.map((template: any) => {
+                    const tIsLoi = template.config?.templateType === 'loi';
+                    const isSelected = selectedTemplateId === template.id;
+                    return (
+                      <button
+                        key={template.id}
+                        onClick={() => setSelectedTemplateId(template.id)}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors ${
+                          isSelected
+                            ? 'border-primary bg-primary/5 text-foreground font-medium'
+                            : 'border-border bg-card text-muted-foreground hover:border-primary/30'
+                        }`}
+                        data-testid={`button-template-${template.id}`}
+                      >
+                        {tIsLoi ? (
                           <FileSignature className="w-3.5 h-3.5 text-amber-600" />
                         ) : (
                           <FileText className="w-3.5 h-3.5 text-primary" />
                         )}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-medium text-sm text-foreground truncate">{template.name}</p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {isLoi ? 'Letter of Intent' : 'Summary'}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })
-          )}
-
-          <div className="mt-auto pt-3 space-y-2">
-            <Button
-              className="w-full"
-              variant="outline"
-              onClick={handleOpenEdit}
-              data-testid="button-edit-quote"
-            >
-              <Pencil className="mr-2 h-4 w-4" />
-              Edit Quote
-            </Button>
-            <Button
-              className="w-full"
-              variant="outline"
-              onClick={handleDownloadPdf}
-              disabled={downloadingTemplateId !== null}
-              data-testid="button-download-pdf"
-            >
-              {downloadingTemplateId !== null ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        {template.name}
+                      </button>
+                    );
+                  })}
+                </div>
               ) : (
-                <Download className="mr-2 h-4 w-4" />
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-primary bg-primary/5 text-sm font-medium">
+                  <FileText className="w-3.5 h-3.5 text-primary" />
+                  Default PDF
+                </div>
               )}
-              Download PDF
-            </Button>
-            <Button
-              className="w-full bg-gradient-to-r from-primary to-primary"
-              onClick={handleOpenSendDialog}
-              data-testid="button-send-signature"
-            >
-              <Send className="mr-2 h-4 w-4" />
-              Send for Signature
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setLocation('/quotes')}
-              className="w-full text-muted-foreground text-xs"
-              data-testid="button-skip-to-quotes"
-            >
-              Skip — Go to Quotes
-            </Button>
-          </div>
-        </div>
+            </div>
 
-        <div className="flex-1 min-w-0 rounded-lg border bg-muted/30 overflow-hidden flex flex-col" data-testid="pdf-preview-container">
-          <div className="flex items-center justify-between px-4 py-2 border-b bg-card/50">
-            <span className="text-sm font-medium text-foreground">{selectedTemplateName}</span>
-            {pdfLoading && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Generating...
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={handleDownloadPdf}
+                variant="outline"
+                disabled={downloadingTemplateId !== null}
+                className="gap-1.5"
+                data-testid="button-download-pdf"
+              >
+                {downloadingTemplateId !== null ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                Download PDF
+              </Button>
+              <Button
+                onClick={handleOpenSendDialog}
+                className="gap-1.5 shadow-md"
+                data-testid="button-send-signature"
+              >
+                <Send className="h-4 w-4" />
+                Send for Signature
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => setShowPdfPreview(!showPdfPreview)}
+                className="gap-1.5 ml-auto text-muted-foreground"
+                data-testid="button-toggle-preview"
+              >
+                {showPdfPreview ? (
+                  <>
+                    <EyeOff className="h-4 w-4" />
+                    Hide Preview
+                  </>
+                ) : (
+                  <>
+                    <Eye className="h-4 w-4" />
+                    Preview Document
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {showPdfPreview && (
+          <Card className="bg-card border rounded-[10px] shadow-sm overflow-hidden" data-testid="card-pdf-preview">
+            <div className="flex items-center justify-between px-5 py-3 border-b">
+              <div className="flex items-center gap-2">
+                {isLoi ? (
+                  <FileSignature className="w-4 h-4 text-amber-600" />
+                ) : (
+                  <FileText className="w-4 h-4 text-primary" />
+                )}
+                <span className="text-sm font-medium text-foreground">{selectedTemplateName}</span>
               </div>
-            )}
-          </div>
-          <div className="flex-1 min-h-0 overflow-y-auto" ref={pdfContainerRef} data-testid="preview-pdf">
-            {pdfLoading && !pdfBlobUrl ? (
-              <div className="h-full flex items-center justify-center">
-                <div className="text-center space-y-3">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
-                  <p className="text-sm text-muted-foreground">Generating document preview...</p>
+              <div className="flex items-center gap-2">
+                {pdfLoading && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Generating...
+                  </div>
+                )}
+                <Button variant="ghost" size="sm" onClick={() => setShowPdfPreview(false)} className="h-7 w-7 p-0" data-testid="button-close-preview">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="max-h-[600px] overflow-y-auto bg-muted/30" ref={pdfContainerRef} data-testid="preview-pdf">
+              {pdfLoading && !pdfBlobUrl ? (
+                <div className="h-96 flex items-center justify-center">
+                  <div className="text-center space-y-3">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+                    <p className="text-sm text-muted-foreground">Generating document preview...</p>
+                  </div>
                 </div>
-              </div>
-            ) : pdfBlobUrl ? (
-              <div className="flex flex-col items-center py-4 gap-4">
-                <PDFDocument
-                  file={pdfBlobUrl}
-                  onLoadSuccess={onDocumentLoadSuccess}
-                  loading={
-                    <div className="flex items-center justify-center py-12">
-                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                    </div>
-                  }
-                >
-                  {Array.from({ length: numPages }, (_, i) => (
-                    <div key={`page-${i + 1}`} className="relative mb-4 last:mb-0">
-                      <PDFPage
-                        pageNumber={i + 1}
-                        width={containerWidth > 48 ? containerWidth - 48 : containerWidth}
-                        renderTextLayer={true}
-                        renderAnnotationLayer={true}
-                        loading={
-                          <div className="flex items-center justify-center py-12">
-                            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                          </div>
-                        }
-                      />
-                      <div
-                        className="text-center text-xs text-muted-foreground mt-1"
-                        data-testid={`text-page-indicator-${i + 1}`}
-                      >
-                        Page {i + 1} of {numPages}
+              ) : pdfBlobUrl ? (
+                <div className="flex flex-col items-center py-4 gap-4">
+                  <PDFDocument
+                    file={pdfBlobUrl}
+                    onLoadSuccess={onDocumentLoadSuccess}
+                    loading={
+                      <div className="flex items-center justify-center py-12">
+                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
                       </div>
-                    </div>
-                  ))}
-                </PDFDocument>
-              </div>
-            ) : (
-              <div className="h-full flex items-center justify-center">
-                <div className="text-center space-y-2">
-                  <FileText className="h-10 w-10 text-muted-foreground/50 mx-auto" />
-                  <p className="text-sm text-muted-foreground">Select a template to preview</p>
+                    }
+                  >
+                    {Array.from({ length: numPages }, (_, i) => (
+                      <div key={`page-${i + 1}`} className="relative mb-4 last:mb-0">
+                        <PDFPage
+                          pageNumber={i + 1}
+                          width={containerWidth > 48 ? containerWidth - 48 : containerWidth}
+                          renderTextLayer={true}
+                          renderAnnotationLayer={true}
+                          loading={
+                            <div className="flex items-center justify-center py-12">
+                              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                            </div>
+                          }
+                        />
+                        <div
+                          className="text-center text-xs text-muted-foreground mt-1"
+                          data-testid={`text-page-indicator-${i + 1}`}
+                        >
+                          Page {i + 1} of {numPages}
+                        </div>
+                      </div>
+                    ))}
+                  </PDFDocument>
                 </div>
-              </div>
-            )}
-          </div>
-        </div>
+              ) : (
+                <div className="h-96 flex items-center justify-center">
+                  <div className="text-center space-y-2">
+                    <FileText className="h-10 w-10 text-muted-foreground/50 mx-auto" />
+                    <p className="text-sm text-muted-foreground">Select a template to preview</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
 
         {showEditPanel && editForm && (
-          <div className="w-80 flex-shrink-0 border rounded-lg bg-card overflow-hidden flex flex-col" data-testid="panel-edit-quote">
-            <div className="flex items-center justify-between px-4 py-3 border-b bg-card">
-              <h3 className="text-sm font-semibold text-foreground">Edit Quote</h3>
+          <Card className="bg-card border rounded-[10px] shadow-sm overflow-hidden" data-testid="panel-edit-quote">
+            <div className="flex items-center justify-between px-5 py-3 border-b">
+              <h3 className="text-sm font-semibold text-foreground">Edit Quote Details</h3>
               <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setShowEditPanel(false)} data-testid="button-close-edit">
                 <X className="h-4 w-4" />
               </Button>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-5">
-              <div className="space-y-3">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Borrower</h4>
-                <div className="space-y-2">
-                  <div>
-                    <Label className="text-xs">First Name</Label>
-                    <Input
-                      value={editForm.customerFirstName}
-                      onChange={(e) => handleEditField('customerFirstName', e.target.value)}
-                      className="h-8 text-sm"
-                      data-testid="input-edit-firstName"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Last Name</Label>
-                    <Input
-                      value={editForm.customerLastName}
-                      onChange={(e) => handleEditField('customerLastName', e.target.value)}
-                      className="h-8 text-sm"
-                      data-testid="input-edit-lastName"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Entity Name</Label>
-                    <Input
-                      value={editForm.customerCompanyName}
-                      onChange={(e) => handleEditField('customerCompanyName', e.target.value)}
-                      className="h-8 text-sm"
-                      data-testid="input-edit-entityName"
-                    />
+            <CardContent className="px-5 py-5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-3">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Borrower</h4>
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-xs">First Name</Label>
+                      <Input
+                        value={editForm.customerFirstName}
+                        onChange={(e) => handleEditField('customerFirstName', e.target.value)}
+                        className="h-8 text-sm"
+                        data-testid="input-edit-firstName"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Last Name</Label>
+                      <Input
+                        value={editForm.customerLastName}
+                        onChange={(e) => handleEditField('customerLastName', e.target.value)}
+                        className="h-8 text-sm"
+                        data-testid="input-edit-lastName"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Entity Name</Label>
+                      <Input
+                        value={editForm.customerCompanyName}
+                        onChange={(e) => handleEditField('customerCompanyName', e.target.value)}
+                        className="h-8 text-sm"
+                        data-testid="input-edit-entityName"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="space-y-3">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Property</h4>
-                <div className="space-y-2">
-                  <div>
-                    <Label className="text-xs">Address</Label>
-                    <Input
-                      value={editForm.propertyAddress}
-                      onChange={(e) => handleEditField('propertyAddress', e.target.value)}
-                      className="h-8 text-sm"
-                      data-testid="input-edit-address"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Property Type</Label>
-                    <Select value={editForm.propertyType} onValueChange={(v) => handleEditField('propertyType', v)}>
-                      <SelectTrigger className="h-8 text-sm" data-testid="select-edit-propertyType">
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Single Family">Single Family</SelectItem>
-                        <SelectItem value="2-4 Unit">2-4 Unit</SelectItem>
-                        <SelectItem value="Condo">Condo</SelectItem>
-                        <SelectItem value="Townhome">Townhome</SelectItem>
-                        <SelectItem value="Mixed Use">Mixed Use</SelectItem>
-                        <SelectItem value="5+ Unit">5+ Unit</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-xs">Property Value</Label>
-                    <Input
-                      value={editForm.propertyValue}
-                      onChange={(e) => handleEditField('propertyValue', e.target.value)}
-                      className="h-8 text-sm"
-                      data-testid="input-edit-propertyValue"
-                    />
+                <div className="space-y-3">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Property</h4>
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-xs">Address</Label>
+                      <Input
+                        value={editForm.propertyAddress}
+                        onChange={(e) => handleEditField('propertyAddress', e.target.value)}
+                        className="h-8 text-sm"
+                        data-testid="input-edit-address"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Property Type</Label>
+                      <Select value={editForm.propertyType} onValueChange={(v) => handleEditField('propertyType', v)}>
+                        <SelectTrigger className="h-8 text-sm" data-testid="select-edit-propertyType">
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Single Family">Single Family</SelectItem>
+                          <SelectItem value="2-4 Unit">2-4 Unit</SelectItem>
+                          <SelectItem value="Condo">Condo</SelectItem>
+                          <SelectItem value="Townhome">Townhome</SelectItem>
+                          <SelectItem value="Mixed Use">Mixed Use</SelectItem>
+                          <SelectItem value="5+ Unit">5+ Unit</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Property Value</Label>
+                      <Input
+                        value={editForm.propertyValue}
+                        onChange={(e) => handleEditField('propertyValue', e.target.value)}
+                        className="h-8 text-sm"
+                        data-testid="input-edit-propertyValue"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="space-y-3">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Loan</h4>
-                <div className="space-y-2">
-                  <div>
-                    <Label className="text-xs">Loan Amount</Label>
-                    <Input
-                      value={editForm.loanAmount}
-                      onChange={(e) => handleEditField('loanAmount', e.target.value)}
-                      className="h-8 text-sm"
-                      data-testid="input-edit-loanAmount"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Interest Rate</Label>
-                    <Input
-                      value={editForm.interestRate}
-                      onChange={(e) => handleEditField('interestRate', e.target.value)}
-                      className="h-8 text-sm"
-                      data-testid="input-edit-interestRate"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Points</Label>
-                    <Input
-                      value={editForm.pointsCharged}
-                      onChange={(e) => handleEditField('pointsCharged', e.target.value)}
-                      className="h-8 text-sm"
-                      data-testid="input-edit-points"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">FICO Score</Label>
-                    <Input
-                      value={editForm.ficoScore}
-                      onChange={(e) => handleEditField('ficoScore', e.target.value)}
-                      className="h-8 text-sm"
-                      data-testid="input-edit-fico"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">DSCR</Label>
-                    <Input
-                      value={editForm.dscr}
-                      onChange={(e) => handleEditField('dscr', e.target.value)}
-                      className="h-8 text-sm"
-                      data-testid="input-edit-dscr"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Prepayment Penalty</Label>
-                    <Input
-                      value={editForm.prepaymentPenalty}
-                      onChange={(e) => handleEditField('prepaymentPenalty', e.target.value)}
-                      className="h-8 text-sm"
-                      data-testid="input-edit-prepayment"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Loan Purpose</Label>
-                    <Select value={editForm.loanPurpose} onValueChange={(v) => handleEditField('loanPurpose', v)}>
-                      <SelectTrigger className="h-8 text-sm" data-testid="select-edit-loanPurpose">
-                        <SelectValue placeholder="Select purpose" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Purchase">Purchase</SelectItem>
-                        <SelectItem value="Refinance">Refinance</SelectItem>
-                        <SelectItem value="Cash Out">Cash Out</SelectItem>
-                      </SelectContent>
-                    </Select>
+                <div className="space-y-3">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Loan</h4>
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-xs">Loan Amount</Label>
+                      <Input
+                        value={editForm.loanAmount}
+                        onChange={(e) => handleEditField('loanAmount', e.target.value)}
+                        className="h-8 text-sm"
+                        data-testid="input-edit-loanAmount"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Interest Rate</Label>
+                      <Input
+                        value={editForm.interestRate}
+                        onChange={(e) => handleEditField('interestRate', e.target.value)}
+                        className="h-8 text-sm"
+                        data-testid="input-edit-interestRate"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Points</Label>
+                      <Input
+                        value={editForm.pointsCharged}
+                        onChange={(e) => handleEditField('pointsCharged', e.target.value)}
+                        className="h-8 text-sm"
+                        data-testid="input-edit-points"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">FICO Score</Label>
+                      <Input
+                        value={editForm.ficoScore}
+                        onChange={(e) => handleEditField('ficoScore', e.target.value)}
+                        className="h-8 text-sm"
+                        data-testid="input-edit-fico"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">DSCR</Label>
+                      <Input
+                        value={editForm.dscr}
+                        onChange={(e) => handleEditField('dscr', e.target.value)}
+                        className="h-8 text-sm"
+                        data-testid="input-edit-dscr"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Prepayment Penalty</Label>
+                      <Input
+                        value={editForm.prepaymentPenalty}
+                        onChange={(e) => handleEditField('prepaymentPenalty', e.target.value)}
+                        className="h-8 text-sm"
+                        data-testid="input-edit-prepayment"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Loan Purpose</Label>
+                      <Select value={editForm.loanPurpose} onValueChange={(v) => handleEditField('loanPurpose', v)}>
+                        <SelectTrigger className="h-8 text-sm" data-testid="select-edit-loanPurpose">
+                          <SelectValue placeholder="Select purpose" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Purchase">Purchase</SelectItem>
+                          <SelectItem value="Refinance">Refinance</SelectItem>
+                          <SelectItem value="Cash Out">Cash Out</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-            <div className="border-t px-4 py-3">
-              <Button
-                className="w-full"
-                onClick={() => editForm && updateQuoteMutation.mutate(editForm)}
-                disabled={updateQuoteMutation.isPending}
-                data-testid="button-save-edit"
-              >
-                {updateQuoteMutation.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="mr-2 h-4 w-4" />
-                )}
-                Save & Regenerate
-              </Button>
-            </div>
-          </div>
+              <div className="mt-5 flex justify-end">
+                <Button
+                  onClick={() => editForm && updateQuoteMutation.mutate(editForm)}
+                  disabled={updateQuoteMutation.isPending}
+                  className="gap-1.5"
+                  data-testid="button-save-edit"
+                >
+                  {updateQuoteMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  Save & Regenerate
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         )}
       </div>
 

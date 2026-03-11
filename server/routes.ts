@@ -2540,6 +2540,78 @@ export async function registerRoutes(
     }
   });
 
+  // Get internal document statuses for quotes (bulk)
+  app.get('/api/internal-documents/bulk', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const quoteIdsParam = req.query.quoteIds as string;
+      if (!quoteIdsParam) {
+        res.json({ documents: [] });
+        return;
+      }
+      const quoteIds = quoteIdsParam.split(',').map(Number).filter(n => !isNaN(n));
+      if (quoteIds.length === 0) {
+        res.json({ documents: [] });
+        return;
+      }
+
+      const results: Array<{
+        quoteId: number;
+        documentId: number;
+        documentName: string;
+        status: string;
+        sentAt: string | null;
+        completedAt: string | null;
+        createdAt: string;
+        signerStatus: string | null;
+        signerEmail: string | null;
+        signerName: string | null;
+        hasProject: boolean;
+      }> = [];
+
+      for (const qId of quoteIds) {
+        const docs = await storage.getDocumentsByQuoteId(qId, req.user!.id);
+        if (docs.length > 0) {
+          const latestDoc = docs[0];
+          const signers = await storage.getSignersByDocumentId(latestDoc.id);
+          const firstSigner = signers[0] || null;
+
+          let projectLinked = false;
+          try {
+            const existingProjects = await db.select({ id: projects.id })
+              .from(projects)
+              .where(
+                or(
+                  eq(projects.agreementId, latestDoc.id),
+                  eq(projects.quoteId, qId)
+                )
+              )
+              .limit(1);
+            projectLinked = existingProjects.length > 0;
+          } catch (_) {}
+
+          results.push({
+            quoteId: qId,
+            documentId: latestDoc.id,
+            documentName: latestDoc.name,
+            status: latestDoc.status,
+            sentAt: latestDoc.sentAt?.toISOString() || null,
+            completedAt: latestDoc.completedAt?.toISOString() || null,
+            createdAt: latestDoc.createdAt?.toISOString() || '',
+            signerStatus: firstSigner?.status || null,
+            signerEmail: firstSigner?.email || null,
+            signerName: firstSigner?.name || null,
+            hasProject: projectLinked,
+          });
+        }
+      }
+
+      res.json({ documents: results });
+    } catch (error) {
+      console.error('Error fetching internal document statuses:', error);
+      res.status(500).json({ error: 'Failed to fetch document statuses' });
+    }
+  });
+
   // Get signing page data by token
   app.get('/api/sign/:token', async (req, res) => {
     try {
@@ -2745,9 +2817,26 @@ export async function registerRoutes(
             targetCloseDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000), // 60 days
             borrowerPortalToken: borrowerToken,
             borrowerPortalEnabled: true,
-            sourceDocumentId: doc.id,
+            agreementId: doc.id,
+            quoteId: doc.quoteId || undefined,
             ...quoteFields,
           });
+
+          // Upload the signed document to the new project's documents section
+          try {
+            await storage.createDealDocument({
+              dealId: project.id,
+              documentName: doc.name,
+              documentCategory: 'closing_docs',
+              documentDescription: `Signed term sheet auto-uploaded from ${doc.name}`,
+              status: 'approved',
+              isRequired: true,
+              uploadedAt: new Date(),
+            });
+            console.log(`✓ Signed document attached to project ${project.id}`);
+          } catch (docErr) {
+            console.error('Error attaching signed document to project:', docErr);
+          }
           
           // Create stages/tasks/documents from program template (or legacy fallback)
           const { buildProjectPipelineFromProgram } = await import('./services/projectPipeline');
