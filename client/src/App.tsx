@@ -70,6 +70,7 @@ import OnboardingConfigPage from "@/pages/admin/onboarding-config";
 
 import BrokerContactsPage from "@/pages/broker-contacts";
 import BrokerOutreachPage from "@/pages/broker-outreach";
+import SettingsPage from "@/pages/settings";
 import QuoteDocuments from "@/pages/quote-documents";
 import BorrowerPreview from "@/pages/borrower-preview";
 
@@ -223,6 +224,7 @@ function MainRoutes() {
           <Route path="/inbox" component={() => <ProtectedRoute component={MessagesPage} />} />
           <Route path="/messages" component={() => <Redirect to="/inbox" />} />
           <Route path="/resources" component={() => <ProtectedRoute component={ResourcesPage} />} />
+          <Route path="/settings" component={() => <ProtectedRoute component={SettingsPage} />} />
           <Route path="/borrower-quote" component={() => <Redirect to="/quotes" />} />
           <Route path="/borrower-quotes" component={() => <Redirect to="/quotes" />} />
           <Route path="/commercial/dashboard" component={() => <ProtectedRoute component={CommercialDashboard} />} />

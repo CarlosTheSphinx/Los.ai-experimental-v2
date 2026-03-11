@@ -117,7 +117,7 @@ export default function ResourcesPage() {
   return (
     <div className="container max-w-4xl mx-auto py-6 px-4">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Resources</h1>
+        <h1 className="text-2xl font-display font-bold" data-testid="text-page-title">Resources</h1>
         <p className="text-muted-foreground">
           Access training materials, agreements, and helpful documents
         </p>

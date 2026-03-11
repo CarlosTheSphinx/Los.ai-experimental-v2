@@ -37,6 +37,7 @@ The application is built with a modern web stack: React 18 with TypeScript for t
 -   **Program Creation Wizard**: A multi-step wizard for defining loan programs, including credit policies, quote forms, stages, tasks, AI rules, and pricing configurations for external APIs.
 -   **Smart Form Tasks**: Reusable inquiry form templates linked to program tasks, allowing borrowers to submit data which auto-creates contacts and completes tasks.
 -   **Borrower Portal**: Redesigned portal for borrowers to view "My Loans" as a flat table and access a `deal-detail` view with full progress stages, overview, and `LoanChecklist`. Includes dedicated messaging and document management with classification.
+-   **Broker Portal**: Upgraded authenticated broker experience with Lendry.AI design system. Sidebar nav: New Quote, Quotes, My Loans, My Commissions, Contacts, Inbox, Resources, Settings. Dedicated broker Settings page at `/settings` with Profile, Security (password change), and Notifications tabs. Backend endpoints: `PATCH /api/auth/profile` for profile updates, `POST /api/auth/change-password` (with audit logging and token rotation).
 -   **Per-Person Invite Links**: System for generating and managing invite links for users, tracking their status, and configuring broker-specific settings.
 
 ## External Dependencies

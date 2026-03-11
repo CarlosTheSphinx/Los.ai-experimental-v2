@@ -754,6 +754,25 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
     }
   });
 
+  app.patch('/api/auth/profile', deps.authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const user = await storage.getUserById(req.user!.id);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
+      const { fullName, phone, companyName } = req.body;
+      const updates: Record<string, any> = {};
+      if (fullName !== undefined) updates.fullName = fullName;
+      if (phone !== undefined) updates.phone = phone;
+      if (companyName !== undefined) updates.companyName = companyName;
+
+      await storage.updateUser(user.id, updates);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Update profile error:', error);
+      res.status(500).json({ error: 'Failed to update profile' });
+    }
+  });
+
   app.post('/api/auth/complete-onboarding', deps.authenticateUser, async (req: AuthRequest, res: Response) => {
     try {
       if (!req.user) {

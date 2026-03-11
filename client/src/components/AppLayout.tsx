@@ -91,15 +91,14 @@ function NavIcon({ icon: IconComponent, isActive }: { icon: any; isActive: boole
 }
 
 const brokerNavItems: NavItem[] = [
+  { href: "/", label: "New Quote", icon: Sparkles, shortcut: undefined },
   { href: "/quotes", label: "Quotes", icon: FileText, shortcut: undefined },
   { href: "/deals", label: "My Loans", icon: FolderKanban, shortcut: undefined },
   { href: "/commissions", label: "My Commissions", icon: DollarSign, shortcut: undefined },
-  { href: "/commercial/dashboard", label: "Commercial", icon: Building2, shortcut: undefined },
   { href: "/broker/contacts", label: "Contacts", icon: Users, shortcut: undefined },
-  { href: "/broker/outreach", label: "Smart Prospect", icon: Target, shortcut: undefined },
   { href: "/inbox", label: "Inbox", icon: Inbox, shortcut: undefined },
   { href: "/resources", label: "Resources", icon: BookOpen, shortcut: undefined },
-  { href: "/admin/settings", label: "Settings", icon: Settings, requiredPermission: "settings.view", shortcut: undefined },
+  { href: "/settings", label: "Settings", icon: Settings, shortcut: undefined },
 ];
 
 const borrowerNavItems: NavItem[] = [

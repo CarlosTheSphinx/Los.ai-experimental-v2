@@ -103,7 +103,7 @@ export default function CommissionsPage() {
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
       <div>
-        <h1 className="text-2xl font-semibold" data-testid="text-page-title">My Commissions</h1>
+        <h1 className="text-2xl font-display font-bold" data-testid="text-page-title">My Commissions</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Commission summary across your active loan deals
         </p>
