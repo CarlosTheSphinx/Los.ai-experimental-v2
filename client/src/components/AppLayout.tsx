@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import {
   FileText,
   FolderKanban,
+  FolderOpen,
   LogOut,
   LayoutDashboard,
   Users,
@@ -105,6 +106,8 @@ const borrowerNavItems: NavItem[] = [
   { href: "/", label: "My Loans", icon: FolderKanban },
   { href: "/quotes", label: "Quotes", icon: FileText },
   { href: "/inbox", label: "Inbox", icon: Inbox },
+  { href: "/documents", label: "Documents", icon: FolderOpen },
+  { href: "/settings", label: "Settings", icon: Settings },
   { href: "/resources", label: "Resources", icon: BookOpen },
 ];
 

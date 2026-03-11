@@ -4687,6 +4687,139 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== AUTHENTICATED BORROWER PROFILE & DOCUMENTS ====================
+
+  app.get('/api/borrower/profile', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      if (user.userType !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
+
+      const email = user.email.toLowerCase();
+      let [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
+      if (!profile) {
+        const nameParts = (user.fullName || '').split(' ');
+        const [inserted] = await db.insert(borrowerProfiles).values({
+          email,
+          firstName: nameParts[0] || null,
+          lastName: nameParts.slice(1).join(' ') || null,
+          phone: (user as any).phone || null,
+        }).returning();
+        profile = inserted;
+      }
+
+      res.json(profile);
+    } catch (error) {
+      console.error('Get borrower profile error:', error);
+      res.status(500).json({ error: 'Failed to load borrower profile' });
+    }
+  });
+
+  app.put('/api/borrower/profile', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      if (user.userType !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
+
+      const email = user.email.toLowerCase();
+      const updates = { ...req.body };
+      delete updates.id;
+      delete updates.email;
+      delete updates.createdAt;
+      updates.updatedAt = new Date();
+
+      let [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
+      if (!profile) {
+        const [inserted] = await db.insert(borrowerProfiles).values({
+          email,
+          ...updates,
+        }).returning();
+        profile = inserted;
+      } else {
+        const [updated] = await db.update(borrowerProfiles)
+          .set(updates)
+          .where(eq(borrowerProfiles.email, email))
+          .returning();
+        profile = updated;
+      }
+
+      res.json(profile);
+    } catch (error) {
+      console.error('Update borrower profile error:', error);
+      res.status(500).json({ error: 'Failed to update borrower profile' });
+    }
+  });
+
+  app.get('/api/borrower/documents', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      if (user.userType !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
+
+      const email = user.email.toLowerCase();
+      const [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
+      if (!profile) return res.json([]);
+
+      const docs = await db.select().from(borrowerDocuments)
+        .where(and(eq(borrowerDocuments.borrowerProfileId, profile.id), eq(borrowerDocuments.isActive, true)))
+        .orderBy(borrowerDocuments.uploadedAt);
+
+      res.json(docs);
+    } catch (error) {
+      console.error('Get borrower documents error:', error);
+      res.status(500).json({ error: 'Failed to load documents' });
+    }
+  });
+
+  app.post('/api/borrower/documents', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      if (user.userType !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
+
+      const email = user.email.toLowerCase();
+      let [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
+      if (!profile) {
+        const [inserted] = await db.insert(borrowerProfiles).values({ email }).returning();
+        profile = inserted;
+      }
+
+      const { fileName, fileType, fileSize, storagePath, category, description, expirationDate } = req.body;
+      const [doc] = await db.insert(borrowerDocuments).values({
+        borrowerProfileId: profile.id,
+        fileName: fileName || 'Untitled',
+        fileType: fileType || null,
+        fileSize: fileSize || null,
+        storagePath: storagePath || null,
+        category: category || 'general',
+        description: description || null,
+        expirationDate: expirationDate || null,
+      }).returning();
+
+      res.json(doc);
+    } catch (error) {
+      console.error('Create borrower document error:', error);
+      res.status(500).json({ error: 'Failed to create document' });
+    }
+  });
+
+  app.delete('/api/borrower/documents/:docId', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      if (user.userType !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
+
+      const email = user.email.toLowerCase();
+      const [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
+      if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
+      const { docId } = req.params;
+      await db.update(borrowerDocuments)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(and(eq(borrowerDocuments.id, parseInt(docId)), eq(borrowerDocuments.borrowerProfileId, profile.id)));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Delete borrower document error:', error);
+      res.status(500).json({ error: 'Failed to delete document' });
+    }
+  });
+
   // Admin: Get borrower profile for a deal
   app.get('/api/admin/deals/:dealId/borrower-profile', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
