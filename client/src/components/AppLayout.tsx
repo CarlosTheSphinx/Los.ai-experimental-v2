@@ -142,11 +142,12 @@ const borrowerViewNavItems: NavItem[] = [
   { href: "/borrower-preview/checklist", label: "Loan Checklist", icon: ClipboardCheck },
 ];
 
-// Super admin items — only visible to super_admin role (Lendry platform team)
-const superAdminNavItems: NavItem[] = [
+// Lendry admin items — only visible to super_admin role (Lendry platform team)
+const lendryAdminNavItems: NavItem[] = [
   { href: "/admin/platform", label: "Platform Overview", icon: Globe },
   { href: "/admin/ai-agents", label: "AI Orchestration", icon: Sparkles },
   { href: "/admin/platform-integrations", label: "Platform Integrations", icon: Plug },
+  { href: "/admin/users", label: "Users & Permissions", icon: Users },
   { href: "/admin/onboarding-config", label: "Broker/Borrower Links", icon: GraduationCap },
 ];
 
@@ -218,9 +219,11 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
   const isAdmin = user?.role && ['admin', 'staff', 'super_admin', 'processor'].includes(user.role);
   const isBorrower = user?.userType === 'borrower';
 
-  const isPreviewingOtherRole = isSuperAdmin && viewAsMode !== "super_admin";
-  const effectiveViewAsBorrower = isSuperAdmin && viewAsMode === "borrower";
-  const effectiveViewAsLender = isSuperAdmin && viewAsMode === "lender";
+  const userIsSuperAdmin = isSuperAdmin || user?.role === 'super_admin';
+
+  const isPreviewingOtherRole = userIsSuperAdmin && viewAsMode !== "super_admin";
+  const effectiveViewAsBorrower = userIsSuperAdmin && viewAsMode === "borrower";
+  const effectiveViewAsLender = userIsSuperAdmin && viewAsMode === "lender";
 
   const navItems = (effectiveViewAsBorrower || isBorrower) ? borrowerNavItems : brokerNavItems;
 
@@ -228,8 +231,6 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
 
   const { isEnabled: isFlagEnabled } = useFeatureFlags();
   const useV2Nav = isFlagEnabled("phase1.sidebar");
-
-  const userIsSuperAdmin = isSuperAdmin || user?.role === 'super_admin';
 
   const filteredAdminItems = (useV2Nav ? adminNavItemsV2 : adminNavItems).filter(item => {
     if (item.superAdminOnly && !userIsSuperAdmin) return false;
@@ -463,15 +464,15 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
             </SidebarGroup>
           )}
 
-          {/* Super Admin section — only visible to Lendry platform team */}
-          {isSuperAdmin && !effectiveViewAsBorrower && (
+          {/* Lendry Admin section — only visible to super_admin / Lendry platform team */}
+          {userIsSuperAdmin && !effectiveViewAsBorrower && (
             <SidebarGroup className="mt-4 pt-4 border-t border-sidebar-border">
               <SidebarGroupLabel className="text-[12px] uppercase tracking-[0.15em] text-muted-foreground/60 px-0 pb-2">
-                Super Admin (Lendry Only)
+                Lendry Admin View
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {superAdminNavItems.map((item) => {
+                  {lendryAdminNavItems.map((item) => {
                     const isActive = location === item.href ||
                       (item.href !== "/admin" && location.startsWith(item.href));
                     const Icon = item.icon;
@@ -505,7 +506,7 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border p-2">
           <div className="flex flex-col gap-2">
-            {isSuperAdmin && (
+            {userIsSuperAdmin && (
               <div className="px-2 py-1 group-data-[collapsible=icon]:hidden">
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <Eye className="h-3 w-3 text-[hsl(212,67%,51%)]" />
