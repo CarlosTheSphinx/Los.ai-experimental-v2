@@ -5216,27 +5216,26 @@ export async function registerRoutes(
   // Admin - Create user manually
   app.post('/api/admin/users', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
-      const { email, password, fullName, companyName, phone, role, roles, title, userType } = req.body;
+      const { email, fullName, companyName, phone, role, roles, title, userType } = req.body;
       
-      if (!email || !password) {
-        return res.status(400).json({ error: 'Email and password are required' });
+      if (!email) {
+        return res.status(400).json({ error: 'Email is required' });
       }
       
       const existingUser = await storage.getUserByEmail(email);
       if (existingUser) {
         return res.status(400).json({ error: 'User with this email already exists' });
       }
-      
-      const bcrypt = await import('bcrypt');
-      const passwordHash = await bcrypt.hash(password, 10);
 
       const { getPrimaryRole } = await import('@shared/schema');
       const userRoles: string[] = roles?.length ? roles : (role ? [role] : ['user']);
       const primaryRole = getPrimaryRole(userRoles);
+
+      const inviteToken = generateRandomToken();
       
       const newUser = await storage.createUser({
         email,
-        passwordHash,
+        passwordHash: null,
         fullName: fullName || null,
         companyName: companyName || null,
         phone: phone || null,
@@ -5246,7 +5245,34 @@ export async function registerRoutes(
         userType: userType || 'broker',
         isActive: true,
         emailVerified: true,
+        inviteToken,
+        inviteStatus: 'sent',
+        inviteTokenSentAt: new Date(),
       });
+
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+      const inviteLink = `${baseUrl}/join/personal/${inviteToken}`;
+      let emailSent = false;
+      try {
+        const { getResendClient } = await import('./email');
+        const { client, fromEmail } = await getResendClient();
+        await client.emails.send({
+          from: fromEmail,
+          to: email,
+          subject: "You're invited to set up your account",
+          html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px;">
+              <p>Hi ${fullName || email},</p>
+              <p>An account has been created for you. Click the link below to set up your password and get started:</p>
+              <p><a href="${inviteLink}" style="color: #C9A84C; text-decoration: underline;">${inviteLink}</a></p>
+              <p>If you have questions, reply to this email.</p>
+            </div>
+          `,
+        });
+        emailSent = true;
+      } catch (emailErr) {
+        console.error('Failed to send invite email on user creation:', emailErr);
+      }
       
       res.json({ 
         user: {
@@ -5260,7 +5286,9 @@ export async function registerRoutes(
           createdAt: newUser.createdAt,
           isActive: newUser.isActive,
           emailVerified: newUser.emailVerified,
-        }
+        },
+        emailSent,
+        inviteLink,
       });
     } catch (error) {
       console.error('Admin create user error:', error);
@@ -5401,6 +5429,39 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Admin update broker settings error:', error);
       res.status(500).json({ error: 'Failed to update broker settings' });
+    }
+  });
+
+  app.post('/api/admin/users/:id/reset-password', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = parseInt(req.params.id);
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
+      const resetToken = generateRandomToken();
+      const resetExpires = new Date(Date.now() + 3600000);
+
+      await db.update(users).set({
+        passwordResetToken: resetToken,
+        passwordResetExpires: resetExpires,
+      }).where(eq(users.id, userId));
+
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+      const resetUrl = `${baseUrl}/reset-password/${resetToken}`;
+
+      await sendPasswordResetEmail(user.email, user.fullName || 'User', resetUrl);
+
+      await storage.createAdminActivity({
+        userId: req.user!.id,
+        actionType: 'password_reset_sent',
+        actionDescription: `Admin triggered password reset for ${user.email}`,
+        metadata: { targetUserId: userId }
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Admin reset password error:', error);
+      res.status(500).json({ error: 'Failed to send password reset email' });
     }
   });
 

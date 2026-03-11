@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Slider } from "@/components/ui/slider";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Search, MoreHorizontal, UserCog, Shield, User as UserIcon, Plus, Users, Briefcase, Pencil, Mail, CheckCircle, Clock, Link2, Send, Phone, Copy, ChevronDown, ChevronRight, ExternalLink, MessageSquare, Check, X } from "lucide-react";
+import { Search, MoreHorizontal, UserCog, Shield, User as UserIcon, Plus, Users, Briefcase, Pencil, Mail, CheckCircle, Clock, Link2, Send, Phone, Copy, ChevronDown, ChevronRight, ExternalLink, MessageSquare, Check, X, KeyRound } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 
@@ -174,6 +174,18 @@ function UserDetailPanel({ userId, onClose }: { userId: number; onClose: () => v
     },
     onError: () => {
       toast({ title: "Failed to send invite", variant: "destructive" });
+    },
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", `/api/admin/users/${userId}/reset-password`, {});
+    },
+    onSuccess: () => {
+      toast({ title: "Password reset email sent" });
+    },
+    onError: () => {
+      toast({ title: "Failed to send password reset email", variant: "destructive" });
     },
   });
 
@@ -499,6 +511,27 @@ function UserDetailPanel({ userId, onClose }: { userId: number; onClose: () => v
         )}
       </div>
 
+      <div className="border rounded-lg p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-semibold flex items-center gap-1.5">
+            <KeyRound className="h-4 w-4" /> Password
+          </h4>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Send a password reset email so they can set or change their password.
+        </p>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => resetPasswordMutation.mutate()}
+          disabled={resetPasswordMutation.isPending}
+          data-testid="button-reset-password"
+        >
+          <KeyRound className="h-3.5 w-3.5 mr-1.5" />
+          {resetPasswordMutation.isPending ? "Sending..." : "Send Password Reset"}
+        </Button>
+      </div>
+
       {user.userType === "broker" && (
         <Collapsible open={brokerPermsOpen} onOpenChange={setBrokerPermsOpen}>
           <CollapsibleTrigger asChild>
@@ -658,7 +691,6 @@ function UsersTab() {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [newUser, setNewUser] = useState({
     email: "",
-    password: "",
     fullName: "",
     companyName: "",
     phone: "",
@@ -678,8 +710,8 @@ function UsersTab() {
     onSuccess: () => {
       refetch();
       setIsAddDialogOpen(false);
-      setNewUser({ email: "", password: "", fullName: "", companyName: "", phone: "", role: "user", userType: "broker" });
-      toast({ title: "User created successfully" });
+      setNewUser({ email: "", fullName: "", companyName: "", phone: "", role: "user", userType: "broker" });
+      toast({ title: "User created and invite email sent" });
     },
     onError: (error: any) => {
       toast({
@@ -723,8 +755,8 @@ function UsersTab() {
   });
 
   const handleCreateUser = () => {
-    if (!newUser.email || !newUser.password) {
-      toast({ title: "Email and password are required", variant: "destructive" });
+    if (!newUser.email) {
+      toast({ title: "Email is required", variant: "destructive" });
       return;
     }
     createUserMutation.mutate(newUser);
@@ -745,7 +777,7 @@ function UsersTab() {
             <DialogHeader>
               <DialogTitle>Create New User</DialogTitle>
               <DialogDescription>
-                Add a new broker or borrower account.
+                Add a new broker or borrower. They'll receive an email to set up their password.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
@@ -772,17 +804,6 @@ function UsersTab() {
                   data-testid="input-new-user-email"
                 />
                 {getEmailError(newUser.email) && <p className="text-xs text-destructive mt-1">{getEmailError(newUser.email)}</p>}
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="user-password">Password *</Label>
-                <Input
-                  id="user-password"
-                  type="password"
-                  placeholder="Enter password"
-                  value={newUser.password}
-                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                  data-testid="input-new-user-password"
-                />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="user-fullName">Full Name</Label>
@@ -829,7 +850,7 @@ function UsersTab() {
                 disabled={createUserMutation.isPending}
                 data-testid="button-submit-add-user"
               >
-                {createUserMutation.isPending ? "Creating..." : "Create User"}
+                {createUserMutation.isPending ? "Creating & Sending Invite..." : "Create & Send Invite"}
               </Button>
             </DialogFooter>
           </DialogContent>
