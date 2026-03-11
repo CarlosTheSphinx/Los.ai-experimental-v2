@@ -5702,7 +5702,7 @@ export async function registerRoutes(
   app.patch('/api/admin/users/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const userId = parseInt(req.params.id);
-      const { role, roles: rolesInput, isActive, title, fullName, phone, companyName } = req.body;
+      const { role, roles: rolesInput, isActive, title, fullName, phone, companyName, email } = req.body;
       
       const { getPrimaryRole } = await import('@shared/schema');
       const updates: Record<string, any> = {};
@@ -5728,6 +5728,9 @@ export async function registerRoutes(
       }
       if (companyName !== undefined) {
         updates.companyName = companyName || null;
+      }
+      if (email !== undefined && typeof email === 'string' && email.includes('@')) {
+        updates.email = email.trim().toLowerCase();
       }
       
       const updated = await storage.updateUser(userId, updates);

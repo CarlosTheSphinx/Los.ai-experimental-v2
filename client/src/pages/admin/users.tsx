@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Slider } from "@/components/ui/slider";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Search, MoreHorizontal, UserCog, Shield, User as UserIcon, Plus, Users, Briefcase, Pencil, Mail, CheckCircle, Clock, Link2, Send, Phone, Copy, ChevronDown, ChevronRight, ExternalLink, MessageSquare } from "lucide-react";
+import { Search, MoreHorizontal, UserCog, Shield, User as UserIcon, Plus, Users, Briefcase, Pencil, Mail, CheckCircle, Clock, Link2, Send, Phone, Copy, ChevronDown, ChevronRight, ExternalLink, MessageSquare, Check, X } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 
@@ -131,6 +131,8 @@ function UserDetailPanel({ userId, onClose }: { userId: number; onClose: () => v
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
+  const [editingField, setEditingField] = useState<"email" | "phone" | null>(null);
+  const [editValue, setEditValue] = useState("");
 
   const { data, isLoading, refetch } = useQuery<{
     user: AdminUser;
@@ -174,6 +176,36 @@ function UserDetailPanel({ userId, onClose }: { userId: number; onClose: () => v
       toast({ title: "Failed to send invite", variant: "destructive" });
     },
   });
+
+  const updateFieldMutation = useMutation({
+    mutationFn: async (updates: Record<string, any>) => {
+      return await apiRequest("PATCH", `/api/admin/users/${userId}`, updates);
+    },
+    onSuccess: () => {
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setEditingField(null);
+      toast({ title: "Updated successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update", variant: "destructive" });
+    },
+  });
+
+  const startEditing = (field: "email" | "phone") => {
+    setEditingField(field);
+    setEditValue(field === "email" ? (user?.email || "") : (user?.phone || ""));
+  };
+
+  const saveEdit = () => {
+    if (!editingField) return;
+    const val = editValue.trim();
+    if (editingField === "email" && (!val || !val.includes("@"))) {
+      toast({ title: "Please enter a valid email", variant: "destructive" });
+      return;
+    }
+    updateFieldMutation.mutate({ [editingField]: val || null });
+  };
 
   const saveBrokerSettingsMutation = useMutation({
     mutationFn: async (settings: BrokerSettings) => {
@@ -280,7 +312,6 @@ function UserDetailPanel({ userId, onClose }: { userId: number; onClose: () => v
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-semibold truncate" data-testid="text-detail-name">{user.fullName || "No name"}</p>
-            <p className="text-sm text-muted-foreground truncate">{user.email}</p>
           </div>
           <Badge variant="secondary" className="capitalize shrink-0" data-testid="badge-detail-type">
             {user.userType || "broker"}
@@ -289,11 +320,64 @@ function UserDetailPanel({ userId, onClose }: { userId: number; onClose: () => v
         {user.companyName && (
           <p className="text-sm text-muted-foreground">{user.companyName}</p>
         )}
-        {user.phone && (
-          <p className="text-sm text-muted-foreground flex items-center gap-1.5">
-            <Phone className="h-3.5 w-3.5" /> {user.phone}
-          </p>
-        )}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            {editingField === "email" ? (
+              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                <Input
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  className="h-7 text-sm flex-1"
+                  autoFocus
+                  onKeyDown={(e) => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditingField(null); }}
+                  data-testid="input-edit-email"
+                />
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={saveEdit} disabled={updateFieldMutation.isPending} data-testid="button-save-email">
+                  <Check className="h-3.5 w-3.5 text-green-600" />
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setEditingField(null)} data-testid="button-cancel-edit">
+                  <X className="h-3.5 w-3.5 text-muted-foreground" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 flex-1 min-w-0 group">
+                <span className="text-sm text-muted-foreground truncate">{user.email}</span>
+                <Button variant="ghost" size="sm" className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => startEditing("email")} data-testid="button-edit-email">
+                  <Pencil className="h-3 w-3 text-muted-foreground" />
+                </Button>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            {editingField === "phone" ? (
+              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                <Input
+                  value={editValue}
+                  onChange={(e) => setEditValue(formatPhoneNumber(e.target.value))}
+                  className="h-7 text-sm flex-1"
+                  autoFocus
+                  onKeyDown={(e) => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditingField(null); }}
+                  data-testid="input-edit-phone"
+                />
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={saveEdit} disabled={updateFieldMutation.isPending} data-testid="button-save-phone">
+                  <Check className="h-3.5 w-3.5 text-green-600" />
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setEditingField(null)} data-testid="button-cancel-edit-phone">
+                  <X className="h-3.5 w-3.5 text-muted-foreground" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 flex-1 min-w-0 group">
+                <span className="text-sm text-muted-foreground truncate">{user.phone || "No phone"}</span>
+                <Button variant="ghost" size="sm" className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => startEditing("phone")} data-testid="button-edit-phone">
+                  <Pencil className="h-3 w-3 text-muted-foreground" />
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
         <div className="flex gap-2 text-xs text-muted-foreground">
           <span>Joined {safeFormat(user.createdAt, "MMM d, yyyy")}</span>
           {user.lastLoginAt && <span>· Last login {safeFormat(user.lastLoginAt, "MMM d, yyyy")}</span>}
@@ -569,6 +653,7 @@ function UserDetailPanel({ userId, onClose }: { userId: number; onClose: () => v
 
 function UsersTab() {
   const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | "broker" | "borrower">("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [newUser, setNewUser] = useState({
@@ -626,6 +711,10 @@ function UsersTab() {
   const externalUsers = allUsers.filter(u => u.role === "user" || u.userType === "borrower");
 
   const filteredUsers = externalUsers.filter(u => {
+    if (typeFilter !== "all") {
+      const ut = u.userType || "broker";
+      if (ut !== typeFilter) return false;
+    }
     if (search) {
       const s = search.toLowerCase();
       return (u.email?.toLowerCase().includes(s) || u.fullName?.toLowerCase().includes(s));
@@ -764,6 +853,16 @@ function UsersTab() {
                 data-testid="input-search-users"
               />
             </div>
+            <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as "all" | "broker" | "borrower")}>
+              <SelectTrigger className="w-[160px]" data-testid="select-type-filter">
+                <SelectValue placeholder="Filter by type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Users</SelectItem>
+                <SelectItem value="broker">Brokers</SelectItem>
+                <SelectItem value="borrower">Borrowers</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {isLoading ? (
