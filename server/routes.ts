@@ -5216,7 +5216,7 @@ export async function registerRoutes(
   // Admin - Create user manually
   app.post('/api/admin/users', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
-      const { email, fullName, companyName, phone, role, roles, title, userType } = req.body;
+      const { email, fullName, companyName, phone, role, roles, title, userType, skipInviteEmail } = req.body;
       
       if (!email) {
         return res.status(400).json({ error: 'Email is required' });
@@ -5253,25 +5253,28 @@ export async function registerRoutes(
       const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
       const inviteLink = `${baseUrl}/join/personal/${inviteToken}`;
       let emailSent = false;
-      try {
-        const { getResendClient } = await import('./email');
-        const { client, fromEmail } = await getResendClient();
-        await client.emails.send({
-          from: fromEmail,
-          to: email,
-          subject: "You're invited to set up your account",
-          html: `
-            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px;">
-              <p>Hi ${fullName || email},</p>
-              <p>An account has been created for you. Click the link below to set up your password and get started:</p>
-              <p><a href="${inviteLink}" style="color: #C9A84C; text-decoration: underline;">${inviteLink}</a></p>
-              <p>If you have questions, reply to this email.</p>
-            </div>
-          `,
-        });
-        emailSent = true;
-      } catch (emailErr) {
-        console.error('Failed to send invite email on user creation:', emailErr);
+
+      if (!skipInviteEmail) {
+        try {
+          const { getResendClient } = await import('./email');
+          const { client, fromEmail } = await getResendClient();
+          await client.emails.send({
+            from: fromEmail,
+            to: email,
+            subject: "You're invited to set up your account",
+            html: `
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px;">
+                <p>Hi ${fullName || email},</p>
+                <p>An account has been created for you. Click the link below to set up your password and get started:</p>
+                <p><a href="${inviteLink}" style="color: #C9A84C; text-decoration: underline;">${inviteLink}</a></p>
+                <p>If you have questions, reply to this email.</p>
+              </div>
+            `,
+          });
+          emailSent = true;
+        } catch (emailErr) {
+          console.error('Failed to send invite email on user creation:', emailErr);
+        }
       }
       
       res.json({ 

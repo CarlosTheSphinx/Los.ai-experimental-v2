@@ -17,6 +17,7 @@ import { Slider } from "@/components/ui/slider";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Search, MoreHorizontal, UserCog, Shield, User as UserIcon, Plus, Users, Briefcase, Pencil, Mail, CheckCircle, Clock, Link2, Send, Phone, Copy, ChevronDown, ChevronRight, ExternalLink, MessageSquare, Check, X, KeyRound, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { format } from "date-fns";
 
 function safeFormat(dateVal: any, fmt: string): string {
@@ -744,6 +745,10 @@ function UsersTab() {
   const [typeFilter, setTypeFilter] = useState<"all" | "broker" | "borrower">("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [showDraft, setShowDraft] = useState(false);
+  const [draftSubject, setDraftSubject] = useState("");
+  const [draftBody, setDraftBody] = useState("");
+  const [pendingInvite, setPendingInvite] = useState<{ subject: string; body: string } | null>(null);
   const [newUser, setNewUser] = useState({
     email: "",
     fullName: "",
@@ -758,17 +763,44 @@ function UsersTab() {
     queryKey: ["/api/admin/users"],
   });
 
+  const getDefaultDraft = (name: string, email: string) => ({
+    subject: "You're invited to set up your account",
+    body: `Hi ${name || email},\n\nAn account has been created for you. Click the link below to set up your password and get started:\n\n[invite link will be inserted automatically]\n\nIf you have questions, reply to this email.`,
+  });
+
   const createUserMutation = useMutation({
-    mutationFn: async (userData: typeof newUser) => {
-      return await apiRequest("POST", "/api/admin/users", userData);
+    mutationFn: async (userData: typeof newUser & { skipInviteEmail?: boolean }) => {
+      const res = await apiRequest("POST", "/api/admin/users", userData);
+      return res.json();
     },
-    onSuccess: () => {
-      refetch();
+    onSuccess: async (data: any) => {
+      const userId = data.user?.id;
+      const invite = pendingInvite;
+      if (userId && invite) {
+        const bodyWithLink = invite.body.includes("[invite link will be inserted automatically]")
+          ? invite.body.replace("[invite link will be inserted automatically]", data.inviteLink || "")
+          : invite.body + `\n\n${data.inviteLink || ""}`;
+        try {
+          await apiRequest("POST", `/api/admin/users/${userId}/send-invite`, {
+            method: "email",
+            subject: invite.subject.trim() || "You're invited to set up your account",
+            body: bodyWithLink,
+          });
+          toast({ title: "User created and invite sent" });
+        } catch {
+          toast({ title: "User created but invite failed to send", variant: "destructive" });
+        }
+      } else {
+        toast({ title: "User created and invite email sent" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       setIsAddDialogOpen(false);
+      setShowDraft(false);
+      setPendingInvite(null);
       setNewUser({ email: "", fullName: "", companyName: "", phone: "", role: "user", userType: "broker" });
-      toast({ title: "User created and invite email sent" });
     },
     onError: (error: any) => {
+      setPendingInvite(null);
       toast({
         title: "Failed to create user",
         description: error?.message || "Please check the form and try again",
@@ -822,12 +854,20 @@ function UsersTab() {
     return true;
   });
 
-  const handleCreateUser = () => {
+  const handleShowDraft = () => {
     if (!newUser.email) {
       toast({ title: "Email is required", variant: "destructive" });
       return;
     }
-    createUserMutation.mutate(newUser);
+    const defaults = getDefaultDraft(newUser.fullName, newUser.email);
+    setDraftSubject(defaults.subject);
+    setDraftBody(defaults.body);
+    setShowDraft(true);
+  };
+
+  const handleCreateAndSend = () => {
+    setPendingInvite({ subject: draftSubject, body: draftBody });
+    createUserMutation.mutate({ ...newUser, skipInviteEmail: true });
   };
 
   return (
@@ -840,91 +880,152 @@ function UsersTab() {
         </Button>
       </div>
 
-      <Sheet open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+      <Sheet open={isAddDialogOpen} onOpenChange={(open) => { setIsAddDialogOpen(open); if (!open) setShowDraft(false); }}>
         <SheetContent side="right" className="sm:max-w-md w-full overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Create New User</SheetTitle>
-            <SheetDescription>Add a new broker or borrower. They'll receive an email to set up their password.</SheetDescription>
-          </SheetHeader>
-          <div className="mt-4 space-y-6">
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
-                  {(newUser.fullName || newUser.email || "?").charAt(0).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
+          {!showDraft ? (
+            <>
+              <SheetHeader>
+                <SheetTitle>Create New User</SheetTitle>
+                <SheetDescription>Add a new broker or borrower. They'll receive an email to set up their password.</SheetDescription>
+              </SheetHeader>
+              <div className="mt-4 space-y-6">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
+                      {(newUser.fullName || newUser.email || "?").charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <Input
+                        value={newUser.fullName}
+                        onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
+                        placeholder="Full Name"
+                        className="h-8 text-sm font-semibold"
+                        data-testid="input-new-user-fullname"
+                      />
+                    </div>
+                    <Select value={newUser.userType} onValueChange={(v) => setNewUser({ ...newUser, userType: v })}>
+                      <SelectTrigger className="w-[120px] h-8" data-testid="select-new-user-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="broker">Broker</SelectItem>
+                        <SelectItem value="borrower">Borrower</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <Input
-                    value={newUser.fullName}
-                    onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
-                    placeholder="Full Name"
-                    className="h-8 text-sm font-semibold"
-                    data-testid="input-new-user-fullname"
+                    value={newUser.companyName}
+                    onChange={(e) => setNewUser({ ...newUser, companyName: e.target.value })}
+                    placeholder="Company Name"
+                    className="h-8 text-sm text-muted-foreground"
+                    data-testid="input-new-user-company"
                   />
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <Input
+                        type="email"
+                        value={newUser.email}
+                        onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                        placeholder="Email address *"
+                        className="h-8 text-sm flex-1"
+                        data-testid="input-new-user-email"
+                      />
+                    </div>
+                    {getEmailError(newUser.email) && <p className="text-xs text-destructive ml-6">{getEmailError(newUser.email)}</p>}
+                    <div className="flex items-center gap-2">
+                      <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <Input
+                        value={newUser.phone}
+                        onChange={(e) => setNewUser({ ...newUser, phone: formatPhoneNumber(e.target.value) })}
+                        placeholder="Phone number"
+                        className="h-8 text-sm flex-1"
+                        data-testid="input-new-user-phone"
+                      />
+                    </div>
+                    {getPhoneError(newUser.phone) && <p className="text-xs text-destructive ml-6">{getPhoneError(newUser.phone)}</p>}
+                  </div>
                 </div>
-                <Select value={newUser.userType} onValueChange={(v) => setNewUser({ ...newUser, userType: v })}>
-                  <SelectTrigger className="w-[120px] h-8" data-testid="select-new-user-type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="broker">Broker</SelectItem>
-                    <SelectItem value="borrower">Borrower</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <Input
-                value={newUser.companyName}
-                onChange={(e) => setNewUser({ ...newUser, companyName: e.target.value })}
-                placeholder="Company Name"
-                className="h-8 text-sm text-muted-foreground"
-                data-testid="input-new-user-company"
-              />
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <Input
-                    type="email"
-                    value={newUser.email}
-                    onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                    placeholder="Email address *"
-                    className="h-8 text-sm flex-1"
-                    data-testid="input-new-user-email"
-                  />
-                </div>
-                {getEmailError(newUser.email) && <p className="text-xs text-destructive ml-6">{getEmailError(newUser.email)}</p>}
-                <div className="flex items-center gap-2">
-                  <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <Input
-                    value={newUser.phone}
-                    onChange={(e) => setNewUser({ ...newUser, phone: formatPhoneNumber(e.target.value) })}
-                    placeholder="Phone number"
-                    className="h-8 text-sm flex-1"
-                    data-testid="input-new-user-phone"
-                  />
-                </div>
-                {getPhoneError(newUser.phone) && <p className="text-xs text-destructive ml-6">{getPhoneError(newUser.phone)}</p>}
-              </div>
-            </div>
 
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setIsAddDialogOpen(false)}
-                className="flex-1"
-                data-testid="button-cancel-add-user"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleCreateUser}
-                disabled={createUserMutation.isPending}
-                className="flex-1"
-                data-testid="button-submit-add-user"
-              >
-                <Send className="h-3.5 w-3.5 mr-1.5" />
-                {createUserMutation.isPending ? "Creating..." : "Create & Send Invite"}
-              </Button>
-            </div>
-          </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsAddDialogOpen(false)}
+                    className="flex-1"
+                    data-testid="button-cancel-add-user"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleShowDraft}
+                    className="flex-1"
+                    data-testid="button-preview-draft"
+                  >
+                    <Mail className="h-3.5 w-3.5 mr-1.5" />
+                    Preview Invite Email
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <SheetHeader>
+                <SheetTitle>Customize Invite Email</SheetTitle>
+                <SheetDescription>Edit the email that will be sent to {newUser.fullName || newUser.email}. The invite link is inserted automatically.</SheetDescription>
+              </SheetHeader>
+              <div className="mt-4 space-y-4">
+                <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Mail className="h-3 w-3" />
+                    <span>To: {newUser.email}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Subject</label>
+                  <Input
+                    value={draftSubject}
+                    onChange={(e) => setDraftSubject(e.target.value)}
+                    className="text-sm"
+                    data-testid="input-draft-subject"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Message</label>
+                  <Textarea
+                    value={draftBody}
+                    onChange={(e) => setDraftBody(e.target.value)}
+                    rows={10}
+                    className="text-sm resize-none"
+                    data-testid="input-draft-body"
+                  />
+                  <p className="text-[11px] text-muted-foreground">The invite link will replace "[invite link will be inserted automatically]" in your message.</p>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowDraft(false)}
+                    disabled={createUserMutation.isPending}
+                    className="flex-1"
+                    data-testid="button-back-to-form"
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    onClick={handleCreateAndSend}
+                    disabled={createUserMutation.isPending}
+                    className="flex-1"
+                    data-testid="button-submit-add-user"
+                  >
+                    <Send className="h-3.5 w-3.5 mr-1.5" />
+                    {createUserMutation.isPending ? "Sending..." : "Create & Send"}
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
         </SheetContent>
       </Sheet>
 
