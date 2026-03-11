@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, AlertCircle, CheckCircle, Lock, User, Building2, Phone } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 
 interface InviteInfo {
   email: string;
@@ -20,7 +21,14 @@ interface InviteInfo {
 export default function JoinPersonalPage() {
   const [, params] = useRoute("/join/personal/:token");
   const [, setLocation] = useLocation();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const token = params?.token;
+
+  useEffect(() => {
+    if (isAuthenticated && !authLoading) {
+      setLocation("/");
+    }
+  }, [isAuthenticated, authLoading, setLocation]);
   const [formData, setFormData] = useState({
     password: "",
     confirmPassword: "",

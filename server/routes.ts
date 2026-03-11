@@ -3512,11 +3512,30 @@ export async function registerRoutes(
       const userId = req.user!.id;
       const { status, archived } = req.query;
       
-      const projectsList = await storage.getProjects(
+      let projectsList = await storage.getProjects(
         userId,
         status as string | undefined,
         archived !== undefined ? archived === 'true' : undefined
       );
+
+      const currentUser = await storage.getUserById(userId);
+      if (currentUser && currentUser.email && currentUser.userType === 'borrower') {
+        const userEmail = currentUser.email.toLowerCase().trim();
+        let emailConditions: any[] = [
+          sql`LOWER(TRIM(${projects.borrowerEmail})) = ${userEmail}`
+        ];
+        if (status) emailConditions.push(eq(projects.status, status as string));
+        if (archived !== undefined) emailConditions.push(eq(projects.isArchived, archived === 'true'));
+        const emailMatched = await db.select().from(projects)
+          .where(and(...emailConditions))
+          .orderBy(desc(projects.lastUpdated));
+        const existingIds = new Set(projectsList.map(p => p.id));
+        for (const p of emailMatched) {
+          if (!existingIds.has(p.id)) {
+            projectsList.push(p);
+          }
+        }
+      }
 
       // Batch-fetch task stats for all projects to avoid N+1
       const projectIds = projectsList.map(p => p.id);
@@ -5515,11 +5534,6 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Account already set up. Please log in instead.' });
       }
 
-      const validStates = ['sent', 'opened', 'pending'];
-      if (!validStates.includes(user.inviteStatus || '')) {
-        return res.status(400).json({ error: 'This invite link has already been used' });
-      }
-
       if (!password || password.length < 8) {
         return res.status(400).json({ error: 'Password must be at least 8 characters' });
       }
@@ -5533,7 +5547,6 @@ export async function registerRoutes(
         phone: phone || user.phone,
         companyName: companyName || user.companyName,
         inviteStatus: 'joined',
-        inviteToken: null,
         emailVerified: true,
         onboardingCompleted: true,
       }).where(eq(users.id, user.id));
@@ -18696,17 +18709,36 @@ Return JSON only:
         return res.status(404).json({ error: 'Project not found' });
       }
 
-      const token = uuidv4();
-      const updated = await db.update(projects)
-        .set({ borrowerPortalToken: token, lastUpdated: new Date() })
-        .where(eq(projects.id, projectId))
-        .returning();
-
-      if (!updated[0]) {
-        return res.status(500).json({ error: 'Failed to generate link' });
+      const borrowerEmail = project.borrowerEmail;
+      if (!borrowerEmail) {
+        return res.status(400).json({ error: 'Deal has no borrower email set' });
       }
 
-      res.json({ token, url: `${req.protocol}://${req.get('host')}/portal/${token}` });
+      let user = await storage.getUserByEmail(borrowerEmail.toLowerCase().trim());
+      if (user && user.inviteToken) {
+        const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+        return res.json({ token: user.inviteToken, url: `${baseUrl}/join/personal/${user.inviteToken}` });
+      }
+
+      const inviteToken = generateRandomToken();
+      if (!user) {
+        user = await storage.createUser({
+          email: borrowerEmail.toLowerCase().trim(),
+          fullName: project.borrowerName || null,
+          phone: project.borrowerPhone || null,
+          role: 'user',
+          userType: 'borrower',
+          isActive: true,
+          emailVerified: true,
+          inviteToken,
+          inviteStatus: 'none',
+        } as any);
+      } else {
+        await db.update(users).set({ inviteToken, inviteStatus: user.inviteStatus || 'none' }).where(eq(users.id, user.id));
+      }
+
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+      res.json({ token: inviteToken, url: `${baseUrl}/join/personal/${inviteToken}` });
     } catch (error) {
       console.error('Generate borrower link error:', error);
       res.status(500).json({ error: 'Failed to generate borrower link' });
@@ -18725,17 +18757,23 @@ Return JSON only:
         return res.status(404).json({ error: 'Project not found' });
       }
 
-      const token = uuidv4();
-      const updated = await db.update(projects)
-        .set({ brokerPortalToken: token, lastUpdated: new Date() })
-        .where(eq(projects.id, projectId))
-        .returning();
+      const brokerId = project.userId;
+      let user = brokerId ? await storage.getUserById(brokerId) : null;
 
-      if (!updated[0]) {
-        return res.status(500).json({ error: 'Failed to generate link' });
+      if (user && user.inviteToken) {
+        const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+        return res.json({ token: user.inviteToken, url: `${baseUrl}/join/personal/${user.inviteToken}` });
       }
 
-      res.json({ token, url: `${req.protocol}://${req.get('host')}/broker-portal/${token}` });
+      if (!user) {
+        return res.status(400).json({ error: 'Deal has no broker assigned' });
+      }
+
+      const inviteToken = generateRandomToken();
+      await db.update(users).set({ inviteToken, inviteStatus: user.inviteStatus || 'none' }).where(eq(users.id, user.id));
+
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+      res.json({ token: inviteToken, url: `${baseUrl}/join/personal/${inviteToken}` });
     } catch (error) {
       console.error('Generate broker link error:', error);
       res.status(500).json({ error: 'Failed to generate broker link' });
@@ -19723,16 +19761,32 @@ Return JSON only:
         return res.status(404).json({ error: 'Deal not found' });
       }
 
-      const { v4: uuidv4Gen } = await import('uuid');
-      const token = uuidv4Gen();
-      const tokenField = portalType === 'borrower' ? 'borrowerPortalToken' : 'brokerPortalToken';
-      await db.update(projects)
-        .set({ [tokenField]: token, lastUpdated: new Date() })
-        .where(eq(projects.id, dealId));
+      let user = await storage.getUserByEmail(email.toLowerCase().trim());
+      let inviteToken: string;
 
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
-      const portalPath = portalType === 'borrower' ? 'portal' : 'broker-portal';
-      const portalUrl = `${baseUrl}/${portalPath}/${token}`;
+      if (user && user.inviteToken) {
+        inviteToken = user.inviteToken;
+      } else {
+        inviteToken = generateRandomToken();
+        if (!user) {
+          user = await storage.createUser({
+            email: email.toLowerCase().trim(),
+            fullName: portalType === 'borrower' ? (project.borrowerName || null) : (project.brokerName || null),
+            phone: portalType === 'borrower' ? (project.borrowerPhone || null) : null,
+            role: 'user',
+            userType: portalType,
+            isActive: true,
+            emailVerified: true,
+            inviteToken,
+            inviteStatus: 'none',
+          } as any);
+        } else {
+          await db.update(users).set({ inviteToken, inviteStatus: user.inviteStatus || 'none' }).where(eq(users.id, user.id));
+        }
+      }
+
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+      const portalUrl = `${baseUrl}/join/personal/${inviteToken}`;
       const portalLabel = portalType === 'borrower' ? 'Borrower Portal' : 'Broker Portal';
 
       const brandingSettings = await storage.getAllSettings();
@@ -19744,25 +19798,25 @@ Return JSON only:
         await client.emails.send({
           from: fromEmail || `${companyName} <info@lendry.ai>`,
           to: email,
-          subject: `[TEST] ${portalLabel} Preview - ${project.loanNumber || `DEAL-${dealId}`}`,
+          subject: `${portalLabel} Access - ${project.loanNumber || `DEAL-${dealId}`}`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-              <h2 style="color: #1e40af;">Test ${portalLabel} Link</h2>
-              <p>This is a test email from ${companyName} to preview the ${portalLabel.toLowerCase()} experience.</p>
+              <h2 style="color: #C9A84C;">Your ${portalLabel} Access</h2>
+              <p>You've been invited to access the ${portalLabel.toLowerCase()} from ${companyName}.</p>
               <p><strong>Deal:</strong> ${project.loanNumber || `DEAL-${dealId}`}</p>
               <p><strong>Property:</strong> ${project.propertyAddress || 'N/A'}</p>
               <div style="margin: 24px 0;">
-                <a href="${portalUrl}" style="background-color: #1e40af; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
-                  Open ${portalLabel}
+                <a href="${portalUrl}" style="background-color: #C9A84C; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                  Open Your Portal
                 </a>
               </div>
               <p style="color: #6b7280; font-size: 14px;">Or copy this link: <a href="${portalUrl}">${portalUrl}</a></p>
               <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
-              <p style="color: #9ca3af; font-size: 12px;">This is a test email. The link above provides access to the ${portalLabel.toLowerCase()} for this deal.</p>
+              <p style="color: #9ca3af; font-size: 12px;">This link provides access to your portal for this deal and all associated loans.</p>
             </div>
           `,
         });
-        res.json({ success: true, portalUrl, message: `Test ${portalLabel.toLowerCase()} link sent to ${email}` });
+        res.json({ success: true, portalUrl, message: `${portalLabel} link sent to ${email}` });
       } catch (emailError: any) {
         console.error('Failed to send test email:', emailError);
         res.json({ success: true, portalUrl, emailFailed: true, message: `Link generated but email failed to send. You can copy the link directly.` });

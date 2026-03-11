@@ -1,6 +1,6 @@
 import { Switch, Route, useRoute, useLocation, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
@@ -84,6 +84,54 @@ import ComingSoonPage from "@/pages/public/coming-soon";
 import { Loader2 } from "lucide-react";
 
 const SITE_MODE = import.meta.env.VITE_SITE_MODE || 'full';
+
+function LegacyPortalRedirect({ type }: { type: 'broker' | 'borrower' }) {
+  const [, params] = useRoute(type === 'broker' ? "/broker-portal/:token" : "/portal/:token");
+  const [, setLocation] = useLocation();
+  const token = params?.token;
+
+  const { data, isLoading, error } = useQuery<{ redirectTo: string }>({
+    queryKey: ['resolve-portal', type, token],
+    queryFn: async () => {
+      const res = await fetch(`/api/resolve-portal/${type}/${token}`);
+      if (!res.ok) throw new Error('Invalid link');
+      return res.json();
+    },
+    enabled: !!token,
+    retry: false,
+  });
+
+  if (data?.redirectTo) {
+    setLocation(data.redirectTo, { replace: true });
+    return null;
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0F1729]">
+        <div className="w-full max-w-md mx-4 bg-[#1a2332] border border-gray-700 rounded-lg p-8 text-center space-y-4">
+          <div className="h-12 w-12 mx-auto text-red-400 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+          <h2 className="text-lg font-semibold text-white">Link No Longer Active</h2>
+          <p className="text-sm text-gray-400">This portal link is no longer valid. Please contact your lender for an updated link.</p>
+          <button onClick={() => setLocation('/login')} className="px-4 py-2 bg-[#C9A84C] hover:bg-[#b8973b] text-white rounded-md text-sm font-medium" data-testid="button-go-login">
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#0F1729]">
+      <div className="text-center space-y-3">
+        <Loader2 className="h-8 w-8 animate-spin mx-auto text-[#C9A84C]" />
+        <p className="text-sm text-gray-400">Redirecting to your portal...</p>
+      </div>
+    </div>
+  );
+}
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -306,10 +354,10 @@ function LandingModeContent() {
     return <Switch><Route path="/sign/:token" component={SignPage} /></Switch>;
   }
   if (isPortalPage) {
-    return <Switch><Route path="/portal/:token" component={BorrowerPortal} /></Switch>;
+    return <LegacyPortalRedirect type="borrower" />;
   }
   if (isBrokerPortalPage) {
-    return <Switch><Route path="/broker-portal/:token" component={BrokerPortal} /></Switch>;
+    return <LegacyPortalRedirect type="broker" />;
   }
   if (isJoinBorrowerPage) {
     return <Switch><Route path="/join/borrower/:token" component={JoinBorrowerPage} /></Switch>;
@@ -414,19 +462,11 @@ function FullAppContent() {
   }
 
   if (isPortalPage) {
-    return (
-      <Switch>
-        <Route path="/portal/:token" component={BorrowerPortal} />
-      </Switch>
-    );
+    return <LegacyPortalRedirect type="borrower" />;
   }
 
   if (isBrokerPortalPage) {
-    return (
-      <Switch>
-        <Route path="/broker-portal/:token" component={BrokerPortal} />
-      </Switch>
-    );
+    return <LegacyPortalRedirect type="broker" />;
   }
 
   if (isJoinBorrowerPage) {

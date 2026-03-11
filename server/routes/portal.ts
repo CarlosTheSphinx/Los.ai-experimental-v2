@@ -1,11 +1,12 @@
 import type { Express, Request, Response } from 'express';
 import type { RouteDeps } from './types';
-import { eq, asc, and, ne, isNotNull, desc, gt, sql } from 'drizzle-orm';
+import { eq, asc, and, ne, isNotNull, desc, gt, sql, or } from 'drizzle-orm';
 import { dealDocuments, dealDocumentFiles, projectStages, loanPrograms, projectActivity, platformSettings, systemSettings, projects, messageThreads, messages, messageReads, users } from '@shared/schema';
 import multer from 'multer';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
+import { generateRandomToken } from '../auth';
 
 async function getOnboardingConfig(db: any, configKey: string) {
   try {
@@ -1176,6 +1177,86 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
     } catch (error) {
       console.error('Portal mark read error:', error);
       res.status(500).json({ error: 'Failed to mark read' });
+    }
+  });
+
+  app.get('/api/resolve-portal/broker/:token', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const project = await storage.getProjectByBrokerToken(token);
+      if (!project) {
+        return res.status(404).json({ error: 'Invalid portal link' });
+      }
+
+      if (!project.brokerPortalEnabled) {
+        return res.status(403).json({ error: 'Portal access is disabled for this deal' });
+      }
+
+      const brokerId = project.userId;
+      let user = brokerId ? await storage.getUserById(brokerId) : null;
+
+      if (!user) {
+        return res.status(404).json({ error: 'No user associated with this deal' });
+      }
+
+      if (!user.inviteToken) {
+        const inviteToken = generateRandomToken();
+        await db.update(users).set({ inviteToken, inviteStatus: user.inviteStatus || 'joined' }).where(eq(users.id, user.id));
+        return res.json({ redirectTo: `/join/personal/${inviteToken}` });
+      }
+
+      res.json({ redirectTo: `/join/personal/${user.inviteToken}` });
+    } catch (error) {
+      console.error('Resolve broker portal error:', error);
+      res.status(500).json({ error: 'Failed to resolve portal link' });
+    }
+  });
+
+  app.get('/api/resolve-portal/borrower/:token', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const project = await storage.getProjectByToken(token);
+      if (!project) {
+        return res.status(404).json({ error: 'Invalid portal link' });
+      }
+
+      if (!project.borrowerPortalEnabled) {
+        return res.status(403).json({ error: 'Portal access is disabled for this deal' });
+      }
+
+      const borrowerEmail = project.borrowerEmail;
+      if (!borrowerEmail) {
+        return res.status(404).json({ error: 'No borrower email on this deal' });
+      }
+
+      let user = await storage.getUserByEmail(borrowerEmail.toLowerCase().trim());
+
+      if (!user) {
+        const inviteToken = generateRandomToken();
+        user = await storage.createUser({
+          email: borrowerEmail.toLowerCase().trim(),
+          fullName: project.borrowerName || null,
+          phone: project.borrowerPhone || null,
+          role: 'user',
+          userType: 'borrower',
+          isActive: true,
+          emailVerified: true,
+          inviteToken,
+          inviteStatus: 'none',
+        } as any);
+        return res.json({ redirectTo: `/join/personal/${inviteToken}` });
+      }
+
+      if (!user.inviteToken) {
+        const inviteToken = generateRandomToken();
+        await db.update(users).set({ inviteToken, inviteStatus: user.inviteStatus || 'joined' }).where(eq(users.id, user.id));
+        return res.json({ redirectTo: `/join/personal/${inviteToken}` });
+      }
+
+      res.json({ redirectTo: `/join/personal/${user.inviteToken}` });
+    } catch (error) {
+      console.error('Resolve borrower portal error:', error);
+      res.status(500).json({ error: 'Failed to resolve portal link' });
     }
   });
 }
