@@ -6,7 +6,7 @@ import { db } from "./db";
 import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, documentReviewResults, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema, projectActivity, projectTasks, platformSettings, dealMemoryEntries, dealNotes, insertDealMemoryEntrySchema, insertDealNoteSchema, notifications, dealStatuses, insertDealStatusSchema, insertMessageTemplateSchema, dealThirdParties, systemSettings, betaSignups, insertBetaSignupSchema, inquiryFormTemplates, taskFormSubmissions, externalPricingFormSchema } from "@shared/schema";
 import { priceQuote, validateRuleset, SAMPLE_RTL_RULESET, SAMPLE_DSCR_RULESET, type PricingInputs, analyzeGuidelines, refineProposal } from "./pricing";
 import { getDocumentTemplatesForLoanType } from "./document-templates";
-import { eq, desc, asc, inArray, and, gt, gte, lte, sql, isNull, or } from "drizzle-orm";
+import { eq, desc, asc, inArray, and, gt, gte, lte, sql, isNull, isNotNull, or } from "drizzle-orm";
 import { format } from "date-fns";
 import { api } from "@shared/routes";
 import { ApifyClient } from 'apify-client';
@@ -6042,6 +6042,36 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Admin projects error:', error);
       res.status(500).json({ error: 'Failed to load projects' });
+    }
+  });
+
+  app.get('/api/admin/portal-preview-deals', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const tenantId = await getTenantId(req.user!);
+      const deals = await db.select({
+        id: projects.id,
+        dealName: projects.projectName,
+        propertyAddress: projects.propertyAddress,
+        loanAmount: projects.loanAmount,
+        status: projects.status,
+        loanNumber: projects.loanNumber,
+        borrowerPortalToken: projects.borrowerPortalToken,
+        borrowerName: projects.borrowerName,
+      })
+        .from(projects)
+        .where(
+          and(
+            eq(projects.tenantId, tenantId),
+            isNotNull(projects.borrowerPortalToken),
+          )
+        )
+        .orderBy(desc(projects.createdAt))
+        .limit(50);
+
+      res.json({ deals });
+    } catch (error) {
+      console.error('Portal preview deals error:', error);
+      res.status(500).json({ error: 'Failed to load deals for preview' });
     }
   });
 

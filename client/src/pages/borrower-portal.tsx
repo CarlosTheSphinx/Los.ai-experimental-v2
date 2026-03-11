@@ -168,9 +168,14 @@ interface RelatedDeal {
   isCurrent: boolean;
 }
 
-export default function BorrowerPortal() {
+interface BorrowerPortalProps {
+  token?: string;
+  isPreview?: boolean;
+}
+
+export default function BorrowerPortal({ token: propToken, isPreview }: BorrowerPortalProps = {}) {
   const [, params] = useRoute("/portal/:token");
-  const token = params?.token;
+  const token = propToken || params?.token;
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -260,7 +265,7 @@ export default function BorrowerPortal() {
     : [];
 
   const handleDealSwitch = (portalToken: string) => {
-    if (portalToken !== token) {
+    if (portalToken !== token && !isPreview) {
       setLocation(`/portal/${portalToken}`);
     }
   };
