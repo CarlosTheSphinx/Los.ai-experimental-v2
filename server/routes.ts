@@ -13017,6 +13017,7 @@ If the user provides specific criteria, extract as many rules as you can from th
           for (const p of associatedProjects) {
             if (p.tenantId != null) {
               collectedTenantIds.add(p.tenantId);
+              collectedCreatedByIds.add(p.tenantId);
             }
             if (p.userId != null) {
               collectedCreatedByIds.add(p.userId);

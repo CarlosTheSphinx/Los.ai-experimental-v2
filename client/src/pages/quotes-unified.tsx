@@ -467,13 +467,14 @@ export default function QuotesUnified() {
     queryKey: ['/api/quotes']
   });
 
-  const { data: programsData } = useQuery<{ programs: ProgramWithPricing[] }>({
+  const { data: programsData, isLoading: programsLoading } = useQuery<{ programs: ProgramWithPricing[] }>({
     queryKey: ["/api/programs-with-pricing"],
     staleTime: 30000,
     refetchOnWindowFocus: true,
   });
 
   const allActivePrograms = programsData?.programs || [];
+  const programsFetched = !programsLoading && !!programsData;
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -1131,7 +1132,11 @@ export default function QuotesUnified() {
                 <h3 className="text-[16px] font-semibold mb-1">Loan Program</h3>
                 <p className="text-[13px] text-muted-foreground mb-3">Select the loan program to price</p>
                 <div>
-                  {allActivePrograms.length > 0 ? (
+                  {programsLoading ? (
+                    <SelectTrigger className="w-full md:w-96" data-testid="select-loan-program-loading" disabled>
+                      <SelectValue placeholder="Loading programs..." />
+                    </SelectTrigger>
+                  ) : allActivePrograms.length > 0 ? (
                     <Select
                       value={selectedProgramId?.toString() || ""}
                       onValueChange={(v) => {
@@ -1250,7 +1255,7 @@ export default function QuotesUnified() {
                 );
               })()}
 
-              {!selectedProgramId && allActivePrograms.length === 0 && (
+              {!selectedProgramId && programsFetched && allActivePrograms.length === 0 && (
                 <div className="max-w-4xl mx-auto">
                   {loanProductType === "dscr" ? (
                     <LoanForm onSubmit={handleDSCRSubmit} isLoading={dscrPending} defaultData={dscrFormData} />
