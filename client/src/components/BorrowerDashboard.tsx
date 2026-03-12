@@ -30,6 +30,7 @@ interface ProjectItem {
   loanAmount: number | null;
   loanType: string | null;
   programName?: string | null;
+  loanNumber?: string | null;
   completedTasks: number;
   totalTasks: number;
   completedDocs: number;
@@ -132,6 +133,9 @@ export function BorrowerDashboard() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-3 mb-2">
                         <div className="min-w-0 flex-1">
+                          <span className="text-[12px] text-muted-foreground font-medium" data-testid={`text-loan-number-${project.id}`}>
+                            {project.loanNumber || `Loan #${project.id}`}
+                          </span>
                           <h3 className="text-[16px] font-semibold truncate group-hover:text-primary transition-colors" data-testid={`text-loan-address-${project.id}`}>
                             {project.propertyAddress?.replace(/,?\s*United States of America$/i, '') || project.projectName || `Loan #${project.id}`}
                           </h3>

@@ -4346,6 +4346,31 @@ export async function registerRoutes(
 
       maybeAutoTriggerPipeline(projectId, userId);
 
+      try {
+        const { isDriveIntegrationEnabled, syncDealDocumentToDrive } = await import('./services/googleDrive');
+        const driveEnabled = await isDriveIntegrationEnabled();
+        if (driveEnabled && updated && newFile) {
+          syncDealDocumentToDrive(updated.id, newFile.id).catch((err: any) => {
+            console.error(`Drive sync failed for borrower doc ${updated.id}:`, err.message);
+          });
+        }
+      } catch (driveErr: any) {
+        console.error('Drive sync check error:', driveErr.message);
+      }
+
+      try {
+        const { onDocumentUploaded } = await import('./services/documentReviewOrchestrator');
+        onDocumentUploaded({
+          documentId: docId,
+          projectId,
+          uploaderType: 'borrower',
+        }).catch(err => {
+          console.error(`Auto doc review trigger failed for doc ${docId}:`, err.message);
+        });
+      } catch (reviewErr: any) {
+        console.error('Doc review orchestrator error:', reviewErr.message);
+      }
+
       res.json({ document: updated, file: newFile });
     } catch (error: any) {
       console.error('Deal doc upload error:', error);
@@ -8814,10 +8839,24 @@ export async function registerRoutes(
     try {
       const dealId = parseInt(req.params.dealId);
       
-      const documents = await db.select()
+      const docs = await db.select()
         .from(dealDocuments)
         .where(eq(dealDocuments.dealId, dealId))
         .orderBy(dealDocuments.sortOrder);
+
+      const docIds = docs.map(d => d.id);
+      const allFiles = docIds.length > 0
+        ? await db.select()
+            .from(dealDocumentFiles)
+            .where(inArray(dealDocumentFiles.documentId, docIds))
+            .orderBy(dealDocumentFiles.sortOrder, dealDocumentFiles.createdAt)
+        : [];
+
+      const documents = docs.map(doc => ({
+        ...doc,
+        files: allFiles.filter(f => f.documentId === doc.id),
+        fileCount: allFiles.filter(f => f.documentId === doc.id).length,
+      }));
       
       res.json({ documents });
     } catch (error) {

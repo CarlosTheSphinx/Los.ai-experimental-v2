@@ -301,9 +301,9 @@ export default function BorrowerDealDetail() {
         </Link>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
-            <h1 className="text-xl font-bold truncate" data-testid="text-deal-title">
-              {deal.projectName || deal.propertyAddress || `Loan #${deal.id}`}
-            </h1>
+            <span className="text-[13px] text-muted-foreground font-medium" data-testid="text-loan-number">
+              {deal.loanNumber || `Loan #${deal.id}`}
+            </span>
             <Badge
               variant={deal.status === 'active' ? 'default' : 'secondary'}
               className={deal.status === 'active' ? 'bg-emerald-600' : ''}
@@ -312,6 +312,9 @@ export default function BorrowerDealDetail() {
               {deal.status === 'active' ? 'In Progress' : deal.status === 'completed' ? 'Completed' : deal.status}
             </Badge>
           </div>
+          <h1 className="text-xl font-bold truncate" data-testid="text-deal-title">
+            {deal.projectName || deal.propertyAddress || `Loan #${deal.id}`}
+          </h1>
           <p className="text-sm text-muted-foreground" data-testid="text-deal-subtitle">
             {[deal.programName, deal.loanType, deal.propertyAddress?.replace(/,?\s*United States of America$/i, '')].filter(Boolean).join(" · ")}
           </p>
