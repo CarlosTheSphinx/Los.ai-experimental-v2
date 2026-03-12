@@ -60,6 +60,8 @@ export default function NewDeal() {
 
   const { data: programsData, isLoading: programsLoading } = useQuery<{ programs: Array<{ id: number; name: string; loanType: string; isActive: boolean }> }>({
     queryKey: ['/api/programs-with-pricing'],
+    staleTime: 30000,
+    refetchOnWindowFocus: true,
   });
 
   const programs = programsData?.programs || [];

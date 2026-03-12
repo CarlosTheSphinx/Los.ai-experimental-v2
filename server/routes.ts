@@ -13053,6 +13053,7 @@ If the user provides specific criteria, extract as many rules as you can from th
 
       let tenantIds: number[] = [];
       let createdByIds: number[] = [];
+      const isBroker = user?.role === 'broker';
 
       if (!isSuperAdmin) {
         const resolvedTenantId = await getTenantId({ id: user!.id, role: user!.role, invitedBy: user!.invitedBy ?? undefined });
@@ -13078,6 +13079,31 @@ If the user provides specific criteria, extract as many rules as you can from th
             }
             if (p.userId != null) {
               collectedCreatedByIds.add(p.userId);
+            }
+          }
+
+          if (collectedTenantIds.size > 0) {
+            tenantIds = [...collectedTenantIds];
+          }
+          if (collectedCreatedByIds.size > 0) {
+            createdByIds = [...collectedCreatedByIds];
+          }
+        } else if (isBroker) {
+          const collectedTenantIds = new Set<number>();
+          const collectedCreatedByIds = new Set<number>();
+
+          if (resolvedTenantId != null && resolvedTenantId !== user!.id) {
+            collectedTenantIds.add(resolvedTenantId);
+            collectedCreatedByIds.add(resolvedTenantId);
+          }
+
+          const associatedProjects = await db.select({ tenantId: projects.tenantId, userId: projects.userId })
+            .from(projects)
+            .where(eq(projects.userId, user!.id));
+          for (const p of associatedProjects) {
+            if (p.tenantId != null) {
+              collectedTenantIds.add(p.tenantId);
+              collectedCreatedByIds.add(p.tenantId);
             }
           }
 
