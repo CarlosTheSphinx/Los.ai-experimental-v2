@@ -145,6 +145,7 @@ export default function MessagesPage() {
   const [isUploading, setIsUploading] = useState(false);
   
   const isAdmin = user?.role && ['admin', 'staff', 'super_admin'].includes(user.role);
+  const isBorrower = user?.role === 'borrower';
 
   const toggleStarred = (threadId: number, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -267,6 +268,12 @@ export default function MessagesPage() {
 
   const { data: quotesData } = useQuery<{ quotes: any[] }>({
     queryKey: ["/api/quotes"],
+    enabled: !isBorrower,
+  });
+
+  const { data: projectsData } = useQuery<{ projects: any[] }>({
+    queryKey: ["/api/projects"],
+    enabled: !!isBorrower,
   });
 
   const { data: emailThreadsData, isLoading: emailThreadsLoading } = useQuery<{ threads: any[]; total: number }>({
@@ -426,15 +433,15 @@ export default function MessagesPage() {
   });
 
   // Handle URL params for opening new thread with pre-selected deal
-  // Wait for quotes data to be loaded before opening dialog
+  // Wait for the appropriate deals data to be loaded before opening dialog
+  const dealsReady = isBorrower ? !!projectsData?.projects : !!quotesData?.quotes;
   useEffect(() => {
-    if (urlDealId && openNew && quotesData?.quotes) {
+    if (urlDealId && openNew && dealsReady) {
       setSelectedDealId(urlDealId);
       setIsNewThreadDialogOpen(true);
-      // Clear URL params after handling
       setLocation('/inbox', { replace: true });
     }
-  }, [urlDealId, openNew, setLocation, quotesData]);
+  }, [urlDealId, openNew, setLocation, dealsReady]);
 
   const threads = threadsData?.threads || [];
 
@@ -666,13 +673,28 @@ export default function MessagesPage() {
                     <SelectValue placeholder="Select a deal..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {quotesData?.quotes?.map((q) => (
-                      <SelectItem key={q.id} value={q.id.toString()}>
-                        {q.borrowerName || q.propertyAddress || `Quote #${q.id}`}
-                      </SelectItem>
-                    ))}
-                    {(!quotesData?.quotes || quotesData.quotes.length === 0) && (
-                      <div className="p-2 text-sm text-muted-foreground">No deals available</div>
+                    {isBorrower ? (
+                      <>
+                        {projectsData?.projects?.map((p) => (
+                          <SelectItem key={p.id} value={p.id.toString()} data-testid={`select-deal-option-${p.id}`}>
+                            {p.loanNumber ? `${p.loanNumber} — ` : ''}{p.propertyAddress || p.projectName || `Deal #${p.id}`}
+                          </SelectItem>
+                        ))}
+                        {(!projectsData?.projects || projectsData.projects.length === 0) && (
+                          <div className="p-2 text-sm text-muted-foreground">No deals available</div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {quotesData?.quotes?.map((q) => (
+                          <SelectItem key={q.id} value={q.id.toString()}>
+                            {q.borrowerName || q.propertyAddress || `Quote #${q.id}`}
+                          </SelectItem>
+                        ))}
+                        {(!quotesData?.quotes || quotesData.quotes.length === 0) && (
+                          <div className="p-2 text-sm text-muted-foreground">No deals available</div>
+                        )}
+                      </>
                     )}
                   </SelectContent>
                 </Select>
