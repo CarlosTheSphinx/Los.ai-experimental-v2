@@ -12995,15 +12995,18 @@ If the user provides specific criteria, extract as many rules as you can from th
       const isBorrower = user?.role === 'borrower';
 
       let tenantIds: number[] = [];
+      let createdByIds: number[] = [];
 
       if (!isSuperAdmin) {
         const resolvedTenantId = await getTenantId({ id: user!.id, role: user!.role, invitedBy: user!.invitedBy ?? undefined });
 
         if (isBorrower) {
-          const collectedIds = new Set<number>();
+          const collectedTenantIds = new Set<number>();
+          const collectedCreatedByIds = new Set<number>();
 
           if (resolvedTenantId != null && resolvedTenantId !== user!.id) {
-            collectedIds.add(resolvedTenantId);
+            collectedTenantIds.add(resolvedTenantId);
+            collectedCreatedByIds.add(resolvedTenantId);
           }
 
           const associatedProjects = await db.select({ tenantId: projects.tenantId, userId: projects.userId })
@@ -13013,25 +13016,39 @@ If the user provides specific criteria, extract as many rules as you can from th
             );
           for (const p of associatedProjects) {
             if (p.tenantId != null) {
-              collectedIds.add(p.tenantId);
-            } else if (p.userId != null) {
-              collectedIds.add(p.userId);
+              collectedTenantIds.add(p.tenantId);
+            }
+            if (p.userId != null) {
+              collectedCreatedByIds.add(p.userId);
             }
           }
 
-          if (collectedIds.size > 0) {
-            tenantIds = [...collectedIds];
+          if (collectedTenantIds.size > 0) {
+            tenantIds = [...collectedTenantIds];
+          }
+          if (collectedCreatedByIds.size > 0) {
+            createdByIds = [...collectedCreatedByIds];
           }
         } else if (resolvedTenantId != null) {
           tenantIds = [resolvedTenantId];
+          const createdBySet = new Set<number>([resolvedTenantId]);
+          createdBySet.add(user!.id);
+          createdByIds = [...createdBySet];
         }
       }
 
       let programFilter;
       if (isSuperAdmin) {
         programFilter = eq(loanPrograms.isActive, true);
-      } else if (tenantIds.length > 0) {
-        programFilter = and(eq(loanPrograms.isActive, true), inArray(loanPrograms.tenantId, tenantIds));
+      } else if (tenantIds.length > 0 || createdByIds.length > 0) {
+        const conditions = [];
+        if (tenantIds.length > 0) {
+          conditions.push(inArray(loanPrograms.tenantId, tenantIds));
+        }
+        if (createdByIds.length > 0) {
+          conditions.push(and(isNull(loanPrograms.tenantId), inArray(loanPrograms.createdBy, createdByIds)));
+        }
+        programFilter = and(eq(loanPrograms.isActive, true), or(...conditions));
       } else {
         programFilter = and(eq(loanPrograms.isActive, true), eq(loanPrograms.createdBy, req.user!.id));
       }
