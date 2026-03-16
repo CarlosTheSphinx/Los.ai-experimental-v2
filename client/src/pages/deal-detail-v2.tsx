@@ -92,6 +92,17 @@ function DealStrip({
     onError: () => toast({ title: "Failed to update", variant: "destructive" }),
   });
 
+  const moveStageMutation = useMutation({
+    mutationFn: async (targetStageKey: string) => {
+      return apiRequest("PATCH", `/api/admin/projects/${projectId}/move-stage`, { targetStageKey });
+    },
+    onSuccess: () => {
+      invalidateDeal();
+      toast({ title: "Stage updated" });
+    },
+    onError: () => toast({ title: "Failed to update stage", variant: "destructive" }),
+  });
+
   const convertProgramMutation = useMutation({
     mutationFn: async (programId: number | null) => {
       return apiRequest("POST", `/api/admin/projects/${projectId}/convert-program`, { programId });
@@ -185,7 +196,7 @@ function DealStrip({
 
   const confirmStageChange = () => {
     if (pendingStage) {
-      saveControlMutation.mutate({ currentStage: pendingStage });
+      moveStageMutation.mutate(pendingStage);
     }
     setShowStageConfirm(false);
     setPendingStage(undefined);
