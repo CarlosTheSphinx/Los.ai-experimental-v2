@@ -12522,7 +12522,7 @@ export async function registerRoutes(
 
   app.post('/api/admin/credit-policies/extract-rules', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
-      const { fileContent, fileName } = req.body;
+      const { fileContent, fileName, customPrompt } = req.body;
       if (!fileContent) {
         return res.status(400).json({ error: 'fileContent is required (base64 encoded)' });
       }
@@ -12571,7 +12571,9 @@ export async function registerRoutes(
         input: { fileName, textLength: truncatedText.length },
       });
 
-      const systemPrompt = await getActiveCreditExtractionPrompt();
+      const systemPrompt = (customPrompt && typeof customPrompt === 'string' && customPrompt.trim()) 
+        ? customPrompt 
+        : await getActiveCreditExtractionPrompt();
 
       OrchestrationTracer.emit({
         eventType: 'agent_processing',

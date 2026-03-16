@@ -52,6 +52,9 @@ import {
   Paperclip,
   Info,
   RefreshCw,
+  Upload,
+  FileText,
+  X,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -1357,6 +1360,9 @@ export default function AIAgentsPage() {
   const [cpDefaultPrompt, setCpDefaultPrompt] = useState("");
   const [cpSelectedSession, setCpSelectedSession] = useState("");
   const [cpShowPrompt, setCpShowPrompt] = useState(true);
+  const [cpUploadFile, setCpUploadFile] = useState<File | null>(null);
+  const [cpExtractionTab, setCpExtractionTab] = useState<"upload" | "cached">("upload");
+  const [cpLatestResult, setCpLatestResult] = useState<any>(null);
 
   const { data: cpPromptData, isLoading: cpPromptLoading } = useQuery({
     queryKey: ["/api/debug/credit-extraction-prompt"],
@@ -1414,8 +1420,43 @@ export default function AIAgentsPage() {
     },
   });
 
-  const { mutate: replayCreditPolicy, isPending: cpReplaying, data: cpReplayResult } = useMutation({
+  const { mutate: runDirectExtraction, isPending: cpDirectExtracting } = useMutation({
     mutationFn: async () => {
+      if (!cpUploadFile) throw new Error("No file selected");
+      setCpLatestResult(null);
+      const reader = new FileReader();
+      const fileContent = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const base64 = (reader.result as string).split(",")[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(cpUploadFile);
+      });
+      const res = await fetch("/api/admin/credit-policies/extract-rules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileContent, fileName: cpUploadFile.name, customPrompt: cpPrompt }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Extraction failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setCpLatestResult(data);
+      queryClient.invalidateQueries({ queryKey: ["/api/debug/credit-extraction-sessions"] });
+      toast({ title: "Extraction Complete", description: `${data.rules?.length || 0} rules extracted from ${cpUploadFile?.name}` });
+    },
+    onError: (err: any) => {
+      toast({ title: "Extraction Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const { mutate: replayCreditPolicy, isPending: cpReplaying } = useMutation({
+    mutationFn: async () => {
+      setCpLatestResult(null);
       const res = await fetch("/api/debug/replay-credit-extraction", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1428,6 +1469,7 @@ export default function AIAgentsPage() {
       return res.json();
     },
     onSuccess: (data) => {
+      setCpLatestResult(data);
       toast({
         title: "Extraction Complete",
         description: `Extracted ${data.rules?.length || 0} rules successfully`,
@@ -1740,61 +1782,141 @@ export default function AIAgentsPage() {
                   <div>
                     <CardTitle className="flex items-center gap-2">
                       <FileSearch className="w-5 h-5" />
-                      Re-run Extraction
+                      Run Extraction
                     </CardTitle>
-                    <CardDescription>Test the prompt against a previously cached document</CardDescription>
+                    <CardDescription>Upload a document or re-run against a cached one</CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                {cpSessions?.sessions?.length > 0 ? (
-                  <>
-                    <div className="space-y-2">
-                      <Label>Cached Document</Label>
-                      <Select value={cpSelectedSession} onValueChange={setCpSelectedSession}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a cached document..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {cpSessions.sessions.map((s: any) => (
-                            <SelectItem key={s.sessionId} value={s.sessionId}>
-                              {s.fileName || "Untitled"} ({Math.round(s.textLength / 1000)}K chars) — {new Date(s.cachedAt).toLocaleString()}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        Documents are cached for 30 minutes after upload. Upload a credit policy from the Program Wizard or Credit Policies page to populate this list.
-                      </p>
-                    </div>
+                <Tabs value={cpExtractionTab} onValueChange={(v) => setCpExtractionTab(v as any)}>
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="upload" className="flex items-center gap-1.5" data-testid="cp-upload-tab">
+                      <Upload className="w-3.5 h-3.5" />
+                      Upload Document
+                    </TabsTrigger>
+                    <TabsTrigger value="cached" className="flex items-center gap-1.5" data-testid="cp-cached-tab">
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Cached ({cpSessions?.sessions?.length || 0})
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="upload" className="space-y-4 mt-4">
+                    {cpUploadFile ? (
+                      <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30">
+                        <FileText className="w-8 h-8 text-blue-500 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{cpUploadFile.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {(cpUploadFile.size / 1024).toFixed(1)} KB
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="shrink-0 h-8 w-8"
+                          onClick={() => setCpUploadFile(null)}
+                          data-testid="cp-remove-file-btn"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <label
+                        className="flex flex-col items-center justify-center gap-2 p-8 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                        data-testid="cp-upload-dropzone"
+                      >
+                        <Upload className="w-8 h-8 text-muted-foreground" />
+                        <div className="text-center">
+                          <p className="text-sm font-medium">Upload a credit policy document</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            PDF, Excel (.xlsx/.xls), or plain text — up to 200K characters
+                          </p>
+                        </div>
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept=".pdf,.xlsx,.xls,.txt,.csv,.doc,.docx"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) setCpUploadFile(file);
+                            e.target.value = "";
+                          }}
+                          data-testid="cp-file-input"
+                        />
+                      </label>
+                    )}
                     <Button
-                      onClick={() => replayCreditPolicy()}
-                      disabled={cpReplaying || !cpPrompt.trim() || !cpSelectedSession}
+                      onClick={() => runDirectExtraction()}
+                      disabled={cpDirectExtracting || !cpUploadFile || !cpPrompt.trim()}
                       className="w-full"
-                      data-testid="credit-policy-rerun-btn"
+                      data-testid="cp-run-extraction-btn"
                     >
-                      {cpReplaying ? (
+                      {cpDirectExtracting ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Running extraction...
+                          Extracting rules... (this may take up to 3 minutes)
                         </>
                       ) : (
                         <>
                           <Play className="w-4 h-4 mr-2" />
-                          Re-run with Current Prompt
+                          Run Extraction
                         </>
                       )}
                     </Button>
-                  </>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <FileSearch className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                    <p className="font-medium">No cached documents</p>
-                    <p className="text-sm mt-1">
-                      Upload a credit policy document from the Program Wizard or Credit Policies page. Documents are cached for 30 minutes and will appear here for re-run testing.
-                    </p>
-                  </div>
-                )}
+                  </TabsContent>
+
+                  <TabsContent value="cached" className="space-y-4 mt-4">
+                    {cpSessions?.sessions?.length > 0 ? (
+                      <>
+                        <div className="space-y-2">
+                          <Label>Cached Document</Label>
+                          <Select value={cpSelectedSession} onValueChange={setCpSelectedSession}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a cached document..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {cpSessions.sessions.map((s: any) => (
+                                <SelectItem key={s.sessionId} value={s.sessionId}>
+                                  {s.fileName || "Untitled"} ({Math.round(s.textLength / 1000)}K chars) — {new Date(s.cachedAt).toLocaleString()}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            Documents are cached for 30 minutes after extraction. Previous uploads appear here automatically.
+                          </p>
+                        </div>
+                        <Button
+                          onClick={() => replayCreditPolicy()}
+                          disabled={cpReplaying || !cpPrompt.trim() || !cpSelectedSession}
+                          className="w-full"
+                          data-testid="credit-policy-rerun-btn"
+                        >
+                          {cpReplaying ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Re-running extraction...
+                            </>
+                          ) : (
+                            <>
+                              <Play className="w-4 h-4 mr-2" />
+                              Re-run with Current Prompt
+                            </>
+                          )}
+                        </Button>
+                      </>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <FileSearch className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                        <p className="font-medium">No cached documents</p>
+                        <p className="text-sm mt-1">
+                          Upload and run an extraction first. Documents are cached for 30 minutes for re-run testing.
+                        </p>
+                      </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
           </div>
@@ -1862,24 +1984,24 @@ export default function AIAgentsPage() {
             )}
           </Card>
 
-          {cpReplayResult?.rules && (
+          {cpLatestResult?.rules && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                  Extraction Results ({cpReplayResult.rules.length} rules)
+                  Extraction Results ({cpLatestResult.rules.length} rules)
                 </CardTitle>
                 <CardDescription>
-                  Rules extracted from the last re-run
+                  Rules extracted from the last extraction run
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <CreditPolicyRulesTable rules={cpReplayResult.rules} />
+                <CreditPolicyRulesTable rules={cpLatestResult.rules} />
               </CardContent>
             </Card>
           )}
 
-          {cpReplayResult?.error && (
+          {cpLatestResult?.error && (
             <Card className="border-red-200">
               <CardContent className="pt-6">
                 <div className="flex items-center gap-3">
