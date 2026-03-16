@@ -12457,12 +12457,12 @@ For each rule, provide:
           agentIndex: 0,
           timestamp: new Date().toISOString(),
           sessionId: pSessionId,
-          rules: [{ id: `rule_${idx}`, rule: r.ruleTitle || 'Untitled', category: r.category || 'General', confidence: r.confidence === 'high' ? 0.95 : r.confidence === 'medium' ? 0.75 : 0.5, reasoning: r.ruleDescription || '' }],
+          rules: [{ id: `rule_${idx}`, rule: r.ruleTitle || 'Untitled', category: r.category || 'General', confidence: r.confidence === 'high' ? 0.95 : r.confidence === 'medium' ? 0.75 : 0.5, reasoning: r.ruleDescription || '', documentType: r.documentType || '', sourceSection: r.sourceSection || '', ruleType: r.ruleType || '', clarificationNeeded: r.clarificationNeeded || false }],
           progress: { current: idx + 1, total: parsed.rules.length, percentage: ((idx + 1) / parsed.rules.length) * 100 },
         });
       });
 
-      OrchestrationTracer.emit({ eventType: 'agent_complete', agentName: 'creditPolicyExtractor', agentIndex: 0, timestamp: new Date().toISOString(), sessionId: pSessionId, output: { rulesExtracted: parsed.rules.length, programId }, duration: Date.now() - pStartTime });
+      OrchestrationTracer.emit({ eventType: 'agent_complete', agentName: 'creditPolicyExtractor', agentIndex: 0, timestamp: new Date().toISOString(), sessionId: pSessionId, output: { rulesExtracted: parsed.rules.length, programId, rules: parsed.rules }, duration: Date.now() - pStartTime });
       cacheReplayContext(pSessionId, truncatedText, fileName);
       OrchestrationTracer.endSession(pSessionId);
 
@@ -12866,6 +12866,10 @@ For each rule, provide:
             category: r.category || 'General',
             confidence: r.confidence === 'high' ? 0.95 : r.confidence === 'medium' ? 0.75 : 0.5,
             reasoning: r.ruleDescription || '',
+            documentType: r.documentType || '',
+            sourceSection: r.sourceSection || '',
+            ruleType: r.ruleType || '',
+            clarificationNeeded: r.clarificationNeeded || false,
           }],
           progress: { current: idx + 1, total: parsed.rules.length, percentage: ((idx + 1) / parsed.rules.length) * 100 },
         });
@@ -12877,7 +12881,7 @@ For each rule, provide:
         agentIndex: 0,
         timestamp: new Date().toISOString(),
         sessionId,
-        output: { rulesExtracted: parsed.rules.length, categories: Array.from(categories) },
+        output: { rulesExtracted: parsed.rules.length, categories: Array.from(categories), rules: parsed.rules },
         duration: Date.now() - startTime,
       });
       cacheReplayContext(sessionId, truncatedText, fileName);

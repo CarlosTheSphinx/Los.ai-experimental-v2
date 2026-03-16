@@ -42,6 +42,10 @@ export interface CreditRule {
   confidence: number;
   reasoning: string;
   sourceText?: string;
+  documentType?: string;
+  sourceSection?: string;
+  ruleType?: string;
+  clarificationNeeded?: boolean;
 }
 
 export interface OrchestrationSession {

@@ -87,9 +87,9 @@ export function RealTimeOutput({ events, selectedAgent }: RealTimeOutputProps) {
         <div className="border-t border-slate-700/50 p-2">
           <details className="group">
             <summary className="text-[11px] text-slate-400 cursor-pointer hover:text-slate-300 transition-colors">
-              View parsed output
+              View full parsed output {latestComplete.output.rulesExtracted != null && `(${latestComplete.output.rulesExtracted} rules)`}
             </summary>
-            <pre className="mt-1 text-[10px] text-slate-300 bg-slate-900/50 rounded p-2 max-h-[150px] overflow-auto whitespace-pre-wrap">
+            <pre className="mt-1 text-[10px] text-slate-300 bg-slate-900/50 rounded p-2 max-h-[400px] overflow-auto whitespace-pre-wrap">
               {JSON.stringify(latestComplete.output, null, 2)}
             </pre>
           </details>
