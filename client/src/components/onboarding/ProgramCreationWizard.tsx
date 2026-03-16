@@ -2691,7 +2691,7 @@ function QuoteFormBuilderStep({
 
 // ─── Step 4: Stages ─────────────────────────────────────────────
 
-const STAGE_COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#10B981', '#EF4444', '#06B6D4', '#EC4899', '#6366F1'];
+const STAGE_COLORS = ['#FFFFFF', '#F59E0B', '#F97316', '#EF4444', '#10B981', '#3B82F6', '#8B5CF6', '#000000', '#6B7280'];
 
 function StagesStep({
   stages,
@@ -2809,7 +2809,7 @@ function StagesStep({
                         <Popover>
                           <PopoverTrigger asChild>
                             <button
-                              className="w-4 h-4 rounded-full flex-shrink-0 border-2 border-white shadow-sm hover:scale-125 transition-transform cursor-pointer"
+                              className={cn("w-4 h-4 rounded-full flex-shrink-0 border-2 shadow-sm hover:scale-125 transition-transform cursor-pointer", color === '#FFFFFF' ? "border-gray-300" : "border-white")}
                               style={{ backgroundColor: color }}
                               title="Change stage color"
                               data-testid={`button-stage-color-${i}`}
@@ -2820,7 +2820,7 @@ function StagesStep({
                               {STAGE_COLORS.map((c) => (
                                 <button
                                   key={c}
-                                  className={cn("w-6 h-6 rounded-full border-2 hover:scale-110 transition-transform", color === c ? "border-foreground" : "border-transparent")}
+                                  className={cn("w-6 h-6 rounded-full border-2 hover:scale-110 transition-transform", color === c ? "border-foreground" : c === '#FFFFFF' ? "border-gray-300" : "border-transparent")}
                                   style={{ backgroundColor: c }}
                                   onClick={() => updateStage(i, 'color', c)}
                                   data-testid={`color-option-${c.replace('#', '')}`}
