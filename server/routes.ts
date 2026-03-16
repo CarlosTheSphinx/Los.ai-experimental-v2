@@ -12280,6 +12280,56 @@ export async function registerRoutes(
     return null;
   }
 
+  async function extractTextFromBuffer(buffer: Buffer, fileName: string): Promise<string> {
+    if (fileName?.toLowerCase().endsWith('.pdf')) {
+      const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+      const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+      const textParts: string[] = [];
+      for (let i = 1; i <= doc.numPages; i++) {
+        const page = await doc.getPage(i);
+        const content = await page.getTextContent();
+        const items = content.items as any[];
+        if (items.length === 0) continue;
+
+        const lines: string[] = [];
+        let currentLine = '';
+        let lastY: number | null = null;
+        let lastEndX: number | null = null;
+
+        for (const item of items) {
+          if (!item.str && item.str !== '') continue;
+          const y = item.transform ? item.transform[5] : null;
+          const x = item.transform ? item.transform[4] : null;
+
+          if (lastY !== null && y !== null && Math.abs(y - lastY) > 2) {
+            lines.push(currentLine.trimEnd());
+            currentLine = item.str;
+          } else if (lastEndX !== null && x !== null && (x - lastEndX) > 10) {
+            currentLine += '  ' + item.str;
+          } else {
+            currentLine += item.str;
+          }
+          lastY = y;
+          lastEndX = x !== null && item.width ? x + item.width : null;
+        }
+        if (currentLine) lines.push(currentLine.trimEnd());
+        textParts.push(`--- Page ${i} ---\n${lines.join('\n')}`);
+      }
+      return textParts.join('\n\n');
+    } else if (fileName?.toLowerCase().match(/\.xlsx?$/)) {
+      const XLSX = await import('xlsx');
+      const workbook = XLSX.read(buffer, { type: 'buffer' });
+      const sheets: string[] = [];
+      for (const sheetName of workbook.SheetNames) {
+        const sheet = workbook.Sheets[sheetName];
+        sheets.push(`--- Sheet: ${sheetName} ---\n${XLSX.utils.sheet_to_csv(sheet)}`);
+      }
+      return sheets.join('\n\n');
+    } else {
+      return buffer.toString('utf-8');
+    }
+  }
+
   app.post('/api/admin/programs/:programId/extract-rules', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const programId = parseInt(req.params.programId);
@@ -12289,31 +12339,7 @@ export async function registerRoutes(
       }
 
       const buffer = Buffer.from(fileContent, 'base64');
-      let textContent = '';
-
-      if (fileName?.toLowerCase().endsWith('.pdf')) {
-        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
-        const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
-        const textParts: string[] = [];
-        for (let i = 1; i <= doc.numPages; i++) {
-          const page = await doc.getPage(i);
-          const content = await page.getTextContent();
-          const pageText = content.items.map((item: any) => item.str).join(' ');
-          textParts.push(pageText);
-        }
-        textContent = textParts.join('\n\n');
-      } else if (fileName?.toLowerCase().match(/\.xlsx?$/)) {
-        const XLSX = await import('xlsx');
-        const workbook = XLSX.read(buffer, { type: 'buffer' });
-        const sheets: string[] = [];
-        for (const sheetName of workbook.SheetNames) {
-          const sheet = workbook.Sheets[sheetName];
-          sheets.push(`--- Sheet: ${sheetName} ---\n${XLSX.utils.sheet_to_csv(sheet)}`);
-        }
-        textContent = sheets.join('\n\n');
-      } else {
-        textContent = buffer.toString('utf-8');
-      }
+      const textContent = await extractTextFromBuffer(buffer, fileName);
 
       if (!textContent || textContent.trim().length < 20) {
         return res.status(400).json({ error: 'Could not extract meaningful text from this file.' });
@@ -12572,31 +12598,7 @@ export async function registerRoutes(
       }
 
       const buffer = Buffer.from(fileContent, 'base64');
-      let textContent = '';
-
-      if (fileName?.toLowerCase().endsWith('.pdf')) {
-        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
-        const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
-        const textParts: string[] = [];
-        for (let i = 1; i <= doc.numPages; i++) {
-          const page = await doc.getPage(i);
-          const content = await page.getTextContent();
-          const pageText = content.items.map((item: any) => item.str).join(' ');
-          textParts.push(pageText);
-        }
-        textContent = textParts.join('\n\n');
-      } else if (fileName?.toLowerCase().match(/\.xlsx?$/)) {
-        const XLSX = await import('xlsx');
-        const workbook = XLSX.read(buffer, { type: 'buffer' });
-        const sheets: string[] = [];
-        for (const sheetName of workbook.SheetNames) {
-          const sheet = workbook.Sheets[sheetName];
-          sheets.push(`--- Sheet: ${sheetName} ---\n${XLSX.utils.sheet_to_csv(sheet)}`);
-        }
-        textContent = sheets.join('\n\n');
-      } else {
-        textContent = buffer.toString('utf-8');
-      }
+      const textContent = await extractTextFromBuffer(buffer, fileName);
 
       if (!textContent || textContent.trim().length < 20) {
         return res.status(400).json({ error: 'Could not extract meaningful text from this file.' });
