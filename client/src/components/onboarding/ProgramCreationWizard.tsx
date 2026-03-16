@@ -1360,7 +1360,8 @@ function CreditPolicyStep({
     let wsCompleted = false;
     ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
+        const raw = JSON.parse(event.data);
+        const data = raw.type === 'orchestration_event' ? raw.data : raw;
         if (data.eventType === 'credit_extraction_progress' && data.metadata) {
           setChunkProgress({
             chunksCompleted: data.metadata.chunksCompleted,
@@ -1387,10 +1388,18 @@ function CreditPolicyStep({
             wsRulesReceived.forEach((r: any) => { groups[r.documentType || 'General'] = true; });
             setExpandedGroups(groups);
             toast({ title: `Extracted ${wsRulesReceived.length} rules from ${file.name}` });
-            extractingLockRef.current = false;
-            setIsExtracting(false);
-            setChunkProgress(null);
           }
+          extractingLockRef.current = false;
+          setIsExtracting(false);
+          setChunkProgress(null);
+          if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+        }
+        if (data.eventType === 'agent_error' && data.agentName === 'creditPolicyExtractor') {
+          wsCompleted = true;
+          extractingLockRef.current = false;
+          setIsExtracting(false);
+          setChunkProgress(null);
+          if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
         }
       } catch {}
     };

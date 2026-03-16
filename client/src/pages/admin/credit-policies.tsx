@@ -226,7 +226,8 @@ export default function AdminCreditPolicies() {
     let wsCompleted = false;
     ws.onmessage = (event) => {
       try {
-        const msg = JSON.parse(event.data);
+        const raw = JSON.parse(event.data);
+        const msg = raw.type === 'orchestration_event' ? raw.data : raw;
         if (msg.eventType === 'credit_extraction_progress' && msg.metadata) {
           const pct = Math.round((msg.metadata.chunksCompleted / msg.metadata.totalChunks) * 100);
           setExtractProgress(Math.min(pct, 95));
@@ -254,10 +255,19 @@ export default function AdminCreditPolicies() {
             stopProgressSimulation();
             setRules(wsRulesReceived.map(assignLocalId));
             toast({ title: `Extracted ${wsRulesReceived.length} rules from ${file.name}` });
-            extractingLockRef.current = false;
-            setIsExtracting(false);
-            setChunkProgress(null);
           }
+          extractingLockRef.current = false;
+          setIsExtracting(false);
+          setChunkProgress(null);
+          if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+        }
+        if (msg.eventType === 'agent_error' && msg.agentName === 'creditPolicyExtractor') {
+          wsCompleted = true;
+          stopProgressSimulation();
+          extractingLockRef.current = false;
+          setIsExtracting(false);
+          setChunkProgress(null);
+          if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
         }
       } catch {}
     };
