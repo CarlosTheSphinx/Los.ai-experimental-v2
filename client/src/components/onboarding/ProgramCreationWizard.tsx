@@ -1832,36 +1832,33 @@ function CreditPolicyStep({
           </div>
 
           {isExtracting && (
-            <div className="py-6 space-y-4">
-              <div className="flex items-center gap-3">
-                <Loader2 className="h-5 w-5 animate-spin text-primary flex-shrink-0" />
-                <div className="flex-1">
-                  <p className="text-[14px] font-medium">
-                    {chunkProgress
-                      ? `Processing chunk ${chunkProgress.chunksCompleted} of ${chunkProgress.totalChunks}`
-                      : 'Analyzing your credit policy document...'}
-                  </p>
-                  <p className="text-[13px] text-muted-foreground">
-                    {chunkProgress
-                      ? `${chunkProgress.rulesFoundSoFar} rules found so far`
-                      : 'The AI is reading and extracting individual lending rules'}
-                  </p>
-                </div>
+            <div className="py-4 space-y-3">
+              <div className="flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50">
+                <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                <span className="text-[14px] font-medium text-amber-800 dark:text-amber-200">
+                  {chunkProgress
+                    ? `Processing chunk ${chunkProgress.chunksCompleted} of ${chunkProgress.totalChunks} — ${chunkProgress.rulesFoundSoFar} rules found`
+                    : 'Parsing document...'}
+                </span>
               </div>
-              {chunkProgress && chunkProgress.totalChunks > 1 && (
-                <Progress
-                  value={(chunkProgress.chunksCompleted / chunkProgress.totalChunks) * 100}
-                  className="h-2"
-                  data-testid="progress-extraction"
-                />
-              )}
+              <Progress
+                value={chunkProgress ? (chunkProgress.chunksCompleted / chunkProgress.totalChunks) * 100 : 5}
+                className="h-2"
+                data-testid="progress-extraction"
+              />
+              <p className="text-xs text-muted-foreground text-center">
+                {chunkProgress
+                  ? `Chunk ${chunkProgress.chunksCompleted}/${chunkProgress.totalChunks} complete — ${chunkProgress.rulesFoundSoFar} rules extracted so far`
+                  : 'The AI is reading and extracting individual lending rules'}
+              </p>
               {liveRules.length > 0 && (
-                <div className="border rounded-[10px] max-h-48 overflow-y-auto">
-                  <div className="px-3 py-2 border-b bg-muted/30 flex items-center justify-between">
-                    <span className="text-[12px] font-medium text-muted-foreground uppercase tracking-wider">Live Extraction</span>
-                    <Badge variant="secondary" className="text-[11px]">{liveRules.length} rules</Badge>
+                <div className="border rounded-[10px] overflow-hidden">
+                  <div className="px-3 py-2 border-b bg-muted/30 flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 text-amber-500 animate-spin" />
+                    <span className="text-[13px] font-medium">Live Extraction — {liveRules.length} rules so far</span>
+                    <Badge variant="outline" className="ml-auto text-[11px]">Chunk {chunkProgress?.chunksCompleted || 0}/{chunkProgress?.totalChunks || '?'}</Badge>
                   </div>
-                  <div className="divide-y">
+                  <div className="divide-y max-h-48 overflow-y-auto">
                     {liveRules.slice(-10).map((rule: any, idx: number) => (
                       <div key={rule.id || idx} className="px-3 py-1.5 text-[12px]">
                         <span className="font-medium">{rule.rule || rule.ruleTitle}</span>

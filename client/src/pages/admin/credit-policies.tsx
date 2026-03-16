@@ -417,40 +417,40 @@ export default function AdminCreditPolicies() {
           {isExtracting ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-8 gap-4">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                <p className="text-sm font-medium" data-testid="text-extracting-rules">
-                  {chunkProgress
-                    ? `Processing chunk ${chunkProgress.chunksCompleted} of ${chunkProgress.totalChunks}`
-                    : 'AI is extracting rules from your document...'}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {chunkProgress
-                    ? `${chunkProgress.rulesFoundSoFar} rules found so far`
-                    : 'This may take 60–90 seconds for large documents'}
-                </p>
-                <div className="w-full max-w-xs space-y-1">
+                <div className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50">
+                  <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                  <span className="text-[14px] font-medium text-amber-800 dark:text-amber-200" data-testid="text-extracting-rules">
+                    {chunkProgress
+                      ? `Processing chunk ${chunkProgress.chunksCompleted} of ${chunkProgress.totalChunks} — ${chunkProgress.rulesFoundSoFar} rules found`
+                      : 'Parsing document...'}
+                  </span>
+                </div>
+                <div className="w-full space-y-1">
                   <Progress value={extractProgress} className="h-2" />
                   <p className="text-xs text-muted-foreground text-center" data-testid="text-extract-progress">
                     {chunkProgress
-                      ? `${Math.round((chunkProgress.chunksCompleted / chunkProgress.totalChunks) * 100)}%`
-                      : `${extractProgress}%`} complete
+                      ? `Chunk ${chunkProgress.chunksCompleted}/${chunkProgress.totalChunks} complete — ${chunkProgress.rulesFoundSoFar} rules extracted so far`
+                      : 'The AI is reading and extracting individual lending rules'}
                   </p>
                 </div>
                 {liveRules.length > 0 && (
-                  <div className="w-full border rounded-lg max-h-40 overflow-y-auto mt-2">
-                    <div className="px-3 py-1.5 border-b bg-muted/30 flex items-center justify-between">
-                      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Live Extraction</span>
-                      <span className="text-[11px] text-muted-foreground">{liveRules.length} rules</span>
+                  <div className="w-full border rounded-lg overflow-hidden mt-2">
+                    <div className="px-3 py-2 border-b bg-muted/30 flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 text-amber-500 animate-spin" />
+                      <span className="text-[13px] font-medium">Live Extraction — {liveRules.length} rules so far</span>
+                      <span className="ml-auto text-[11px] text-muted-foreground">
+                        Chunk {chunkProgress?.chunksCompleted || 0}/{chunkProgress?.totalChunks || '?'}
+                      </span>
                     </div>
-                    <div className="divide-y">
+                    <div className="divide-y max-h-40 overflow-y-auto">
                       {liveRules.slice(-8).map((rule: any, idx: number) => (
-                        <div key={rule.id || idx} className="px-3 py-1 text-[12px]">
+                        <div key={rule.id || idx} className="px-3 py-1.5 text-[12px]">
                           <span className="font-medium">{rule.rule || rule.ruleTitle}</span>
                           {rule.category && <span className="ml-2 text-muted-foreground">({rule.category})</span>}
                         </div>
                       ))}
                       {liveRules.length > 8 && (
-                        <div className="px-3 py-1 text-[11px] text-muted-foreground text-center">
+                        <div className="px-3 py-1.5 text-[11px] text-muted-foreground text-center">
                           + {liveRules.length - 8} more rules
                         </div>
                       )}
