@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useOrchestrationEvents } from '@/hooks/useOrchestrationEvents';
 import { AgentTracePanel } from './AgentTracePanel';
@@ -18,9 +18,16 @@ export function AIOrchestrationDebugger() {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('sessions');
   const [allEvents, setAllEvents] = useState<OrchestrationEvent[]>([]);
+  const [hasNewActivity, setHasNewActivity] = useState(false);
+  const isOpenRef = useRef(isOpen);
+  isOpenRef.current = isOpen;
 
   const handleEvent = useCallback((event: OrchestrationEvent) => {
     setAllEvents(prev => [...prev.slice(-500), event]);
+
+    if (!isOpenRef.current && (event.eventType === 'session_start' || event.eventType === 'agent_start')) {
+      setHasNewActivity(true);
+    }
 
     setSessions(prev => {
       const existing = prev.find(s => s.sessionId === event.sessionId);
@@ -68,14 +75,19 @@ export function AIOrchestrationDebugger() {
   if (!isOpen) {
     return (
       <button
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 left-6 z-[60] h-10 px-3 rounded-full bg-slate-800 text-slate-300 shadow-lg hover:shadow-xl hover:bg-slate-700 hover:text-white transition-all duration-200 flex items-center gap-2 border border-slate-600/50 text-[12px] font-medium"
+        onClick={() => { setIsOpen(true); setHasNewActivity(false); }}
+        className={`fixed bottom-6 left-6 z-[60] h-10 px-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2 border text-[12px] font-medium ${
+          hasNewActivity
+            ? 'bg-cyan-600 text-white border-cyan-400/50 animate-pulse'
+            : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border-slate-600/50'
+        }`}
         title="AI Orchestration Debugger"
         data-testid="debugger-toggle"
       >
         <Bug className="h-4 w-4" />
-        <span>AI Debugger</span>
+        <span>{hasNewActivity ? 'AI Active' : 'AI Debugger'}</span>
         {connected && <span className="h-1.5 w-1.5 rounded-full bg-green-400" />}
+        {hasNewActivity && <span className="h-2 w-2 rounded-full bg-yellow-400 animate-ping" />}
       </button>
     );
   }

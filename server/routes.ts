@@ -59,6 +59,7 @@ import { registerBrokerSdrRoutes } from './routes/broker-sdr';
 import { registerAiAssistantRoutes } from './routes/ai-assistant';
 import { registerAgentRoutes } from './routes/agents';
 import { registerDebuggerRoutes } from './routes/debugger';
+import { OrchestrationTracer } from './services/orchestrationTracing';
 import { registerEmailRoutes } from './routes/email';
 import { registerGoogleConnectRoutes } from './routes/googleConnect';
 import { registerMicrosoftConnectRoutes } from './routes/microsoftConnect';
@@ -12079,18 +12080,17 @@ export async function registerRoutes(
 
       const truncatedText = textContent.slice(0, 50000);
 
-      const OpenAI = (await import('openai')).default;
-      const openai = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      const pSessionId = OrchestrationTracer.startSession();
+      OrchestrationTracer.emit({
+        eventType: 'agent_start',
+        agentName: 'creditPolicyExtractor',
+        agentIndex: 0,
+        timestamp: new Date().toISOString(),
+        sessionId: pSessionId,
+        input: { fileName, textLength: truncatedText.length, programId },
       });
 
-      const aiPromise = openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: `You are an expert at analyzing loan credit policy documents and extracting specific, actionable review rules from them.
+      const pSystemPrompt = `You are an expert at analyzing loan credit policy documents and extracting specific, actionable review rules from them.
 
 Given a credit policy document, extract individual rules that can be used to evaluate loan documents. Each rule should be specific and testable.
 
@@ -12126,8 +12126,30 @@ Respond ONLY with valid JSON in this format:
       "confidence": "high"
     }
   ]
-}`
-          },
+}`;
+
+      OrchestrationTracer.emit({
+        eventType: 'agent_processing',
+        agentName: 'creditPolicyExtractor',
+        agentIndex: 0,
+        timestamp: new Date().toISOString(),
+        sessionId: pSessionId,
+        prompt: pSystemPrompt,
+        metadata: { model: 'gpt-4o-mini', temperature: 0 },
+      });
+
+      const pStartTime = Date.now();
+
+      const OpenAI = (await import('openai')).default;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const aiPromise = openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: pSystemPrompt },
           {
             role: 'user',
             content: `Extract all review rules from the following credit policy document:\n\n${truncatedText}`
@@ -12145,6 +12167,8 @@ Respond ONLY with valid JSON in this format:
 
       const content = response.choices[0]?.message?.content;
       if (!content) {
+        OrchestrationTracer.emit({ eventType: 'agent_error', agentName: 'creditPolicyExtractor', agentIndex: 0, timestamp: new Date().toISOString(), sessionId: pSessionId, error: 'AI returned empty response', duration: Date.now() - pStartTime });
+        OrchestrationTracer.endSession(pSessionId);
         return res.status(500).json({ error: 'AI returned empty response' });
       }
 
@@ -12152,12 +12176,31 @@ Respond ONLY with valid JSON in this format:
       try {
         parsed = JSON.parse(content);
       } catch {
+        OrchestrationTracer.emit({ eventType: 'agent_error', agentName: 'creditPolicyExtractor', agentIndex: 0, timestamp: new Date().toISOString(), sessionId: pSessionId, error: 'AI returned invalid JSON', duration: Date.now() - pStartTime });
+        OrchestrationTracer.endSession(pSessionId);
         return res.status(500).json({ error: 'AI returned invalid response format' });
       }
 
       if (!parsed.rules || !Array.isArray(parsed.rules)) {
+        OrchestrationTracer.emit({ eventType: 'agent_error', agentName: 'creditPolicyExtractor', agentIndex: 0, timestamp: new Date().toISOString(), sessionId: pSessionId, error: 'Missing rules array', duration: Date.now() - pStartTime });
+        OrchestrationTracer.endSession(pSessionId);
         return res.status(500).json({ error: 'AI did not return rules in expected format' });
       }
+
+      parsed.rules.forEach((r: any, idx: number) => {
+        OrchestrationTracer.emit({
+          eventType: 'credit_rule_extracted',
+          agentName: 'creditPolicyExtractor',
+          agentIndex: 0,
+          timestamp: new Date().toISOString(),
+          sessionId: pSessionId,
+          rules: [{ id: `rule_${idx}`, rule: r.ruleTitle || 'Untitled', category: r.category || 'General', confidence: r.confidence === 'high' ? 0.95 : r.confidence === 'medium' ? 0.75 : 0.5, reasoning: r.ruleDescription || '' }],
+          progress: { current: idx + 1, total: parsed.rules.length, percentage: ((idx + 1) / parsed.rules.length) * 100 },
+        });
+      });
+
+      OrchestrationTracer.emit({ eventType: 'agent_complete', agentName: 'creditPolicyExtractor', agentIndex: 0, timestamp: new Date().toISOString(), sessionId: pSessionId, output: { rulesExtracted: parsed.rules.length, programId }, duration: Date.now() - pStartTime });
+      OrchestrationTracer.endSession(pSessionId);
 
       res.json({ rules: parsed.rules, programId });
     } catch (error: any) {
@@ -12350,18 +12393,18 @@ Respond ONLY with valid JSON in this format:
 
       const truncatedText = textContent.slice(0, 50000);
 
-      const OpenAI = (await import('openai')).default;
-      const openai = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      const sessionId = OrchestrationTracer.startSession();
+
+      OrchestrationTracer.emit({
+        eventType: 'agent_start',
+        agentName: 'creditPolicyExtractor',
+        agentIndex: 0,
+        timestamp: new Date().toISOString(),
+        sessionId,
+        input: { fileName, textLength: truncatedText.length },
       });
 
-      const aiPromise = openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: `You are an expert at analyzing loan credit policy documents and extracting specific, actionable review rules from them.
+      const systemPrompt = `You are an expert at analyzing loan credit policy documents and extracting specific, actionable review rules from them.
 
 Given a credit policy document, extract individual rules that can be used to evaluate loan documents. Each rule should be specific and testable.
 
@@ -12397,8 +12440,30 @@ Respond ONLY with valid JSON in this format:
       "confidence": "high"
     }
   ]
-}`
-          },
+}`;
+
+      OrchestrationTracer.emit({
+        eventType: 'agent_processing',
+        agentName: 'creditPolicyExtractor',
+        agentIndex: 0,
+        timestamp: new Date().toISOString(),
+        sessionId,
+        prompt: systemPrompt,
+        metadata: { model: 'gpt-4o-mini', temperature: 0 },
+      });
+
+      const startTime = Date.now();
+
+      const OpenAI = (await import('openai')).default;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const aiPromise = openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
           {
             role: 'user',
             content: `Extract all review rules from the following credit policy document:\n\n${truncatedText}`
@@ -12416,6 +12481,16 @@ Respond ONLY with valid JSON in this format:
 
       const content = response.choices[0]?.message?.content;
       if (!content) {
+        OrchestrationTracer.emit({
+          eventType: 'agent_error',
+          agentName: 'creditPolicyExtractor',
+          agentIndex: 0,
+          timestamp: new Date().toISOString(),
+          sessionId,
+          error: 'AI returned empty response',
+          duration: Date.now() - startTime,
+        });
+        OrchestrationTracer.endSession(sessionId);
         return res.status(500).json({ error: 'AI returned empty response' });
       }
 
@@ -12423,12 +12498,64 @@ Respond ONLY with valid JSON in this format:
       try {
         parsed = JSON.parse(content);
       } catch {
+        OrchestrationTracer.emit({
+          eventType: 'agent_error',
+          agentName: 'creditPolicyExtractor',
+          agentIndex: 0,
+          timestamp: new Date().toISOString(),
+          sessionId,
+          error: 'AI returned invalid JSON',
+          rawResponse: content.slice(0, 2000),
+          duration: Date.now() - startTime,
+        });
+        OrchestrationTracer.endSession(sessionId);
         return res.status(500).json({ error: 'AI returned invalid response format' });
       }
 
       if (!parsed.rules || !Array.isArray(parsed.rules)) {
+        OrchestrationTracer.emit({
+          eventType: 'agent_error',
+          agentName: 'creditPolicyExtractor',
+          agentIndex: 0,
+          timestamp: new Date().toISOString(),
+          sessionId,
+          error: 'AI response missing rules array',
+          duration: Date.now() - startTime,
+        });
+        OrchestrationTracer.endSession(sessionId);
         return res.status(500).json({ error: 'AI did not return rules in expected format' });
       }
+
+      const categories = new Set<string>();
+      parsed.rules.forEach((r: any, idx: number) => {
+        categories.add(r.category || 'General');
+        OrchestrationTracer.emit({
+          eventType: 'credit_rule_extracted',
+          agentName: 'creditPolicyExtractor',
+          agentIndex: 0,
+          timestamp: new Date().toISOString(),
+          sessionId,
+          rules: [{
+            id: `rule_${idx}`,
+            rule: r.ruleTitle || 'Untitled rule',
+            category: r.category || 'General',
+            confidence: r.confidence === 'high' ? 0.95 : r.confidence === 'medium' ? 0.75 : 0.5,
+            reasoning: r.ruleDescription || '',
+          }],
+          progress: { current: idx + 1, total: parsed.rules.length, percentage: ((idx + 1) / parsed.rules.length) * 100 },
+        });
+      });
+
+      OrchestrationTracer.emit({
+        eventType: 'agent_complete',
+        agentName: 'creditPolicyExtractor',
+        agentIndex: 0,
+        timestamp: new Date().toISOString(),
+        sessionId,
+        output: { rulesExtracted: parsed.rules.length, categories: Array.from(categories) },
+        duration: Date.now() - startTime,
+      });
+      OrchestrationTracer.endSession(sessionId);
 
       res.json({ rules: parsed.rules });
     } catch (error: any) {
