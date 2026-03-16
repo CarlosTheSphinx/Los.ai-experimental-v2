@@ -301,7 +301,7 @@ export function DynamicQuoteForm({ fields, onSubmit, isLoading, defaultData, pro
   }, [visibleFields]);
 
   const groupOrder = useMemo(() => {
-    const known = ['loan_details', 'property_details', 'borrower_details', 'pricing_questions'];
+    const known = ['pricing_questions', 'loan_details', 'property_details', 'borrower_details'];
     const extra = Object.keys(groups).filter(g => !known.includes(g));
     return [...known, ...extra];
   }, [groups]);
