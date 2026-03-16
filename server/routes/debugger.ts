@@ -231,4 +231,129 @@ export function registerDebuggerRoutes(app: any, deps: { authenticateUser: any; 
       return res.status(500).json({ success: false, error: error?.message });
     }
   });
+
+  app.get('/api/debug/credit-extraction-prompt', deps.authenticateUser, deps.requireSuperAdmin, async (_req: Request, res: Response) => {
+    try {
+      const prompt = getCreditExtractionDefaultPrompt();
+      return res.json({ success: true, prompt });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, error: error?.message });
+    }
+  });
+
+  app.get('/api/debug/credit-extraction-sessions', deps.authenticateUser, deps.requireSuperAdmin, async (_req: Request, res: Response) => {
+    try {
+      pruneCache();
+      const sessions = [...replayContextCache.entries()].map(([sessionId, ctx]) => ({
+        sessionId,
+        fileName: ctx.fileName,
+        textLength: ctx.documentText.length,
+        cachedAt: new Date(ctx.timestamp).toISOString(),
+      }));
+      return res.json({ success: true, sessions });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, error: error?.message });
+    }
+  });
+}
+
+export function getCreditExtractionDefaultPrompt(): string {
+  return `You are an expert at analyzing loan credit policy documents and extracting ALL specific, actionable review rules with exhaustive, zero-miss accuracy.
+
+## Definition of a "Rule"
+
+A rule is any explicit constraint, requirement, prohibition, permission, calculation, or conditional statement that governs lending decisions or borrower/property eligibility.
+
+### What IS a Rule:
+- Eligibility Requirements: "Non-owner-occupied residential properties only"
+- Disqualification Rules: "Mixed-use properties are NOT eligible"
+- Numerical Constraints: "Minimum FICO score is 660"
+- Conditional Logic: "If property is SFR, then no occupancy requirement"
+- Calculation Methods: "DSCR is calculated by dividing property cash flow by debt service"
+- Threshold Rules: "LTV cannot exceed 75%, except for cash-out where it's limited to 70%"
+- Permission/Prohibition Statements: "ARM options include 5/6, 7/6, and 10/6 terms"
+- Option/Alternative Statements: "Borrower can choose P&I or I/O payment types"
+- Documentation/Process Requirements: "Property tax must be escrowed"
+- Qualification Requirements: "Guarantor must have at least 20% ownership"
+- Exception Rules: "Flood insurance required unless property is outside FEMA designated area"
+- Cross-Reference Rules: "Reference Guideline Matrix for [specific details]"
+- Status/Applicability Rules: "Section X is deleted and not applicable"
+
+### What is NOT a Rule:
+- Generic descriptions: "This section covers loan terms"
+- Explanatory text: "The following explains how LTV is calculated"
+- Examples for illustration only (EXCEPTION: if example shows a specific required calculation, it IS a rule)
+- Historical context: "Previously, we allowed X, but now..."
+- Contact information or form references without requirements
+
+## Extraction Categories (scan every section for these)
+
+1. **Eligibility & Property Type** — eligible/ineligible property types, restrictions, sub-conditions (e.g. Section 8 housing)
+2. **Financial Constraints** — loan size min/max, LTV, LTC, DSCR, interest rates, with all conditions and matrix references
+3. **Loan Purpose & Payment Type** — purchase, refinance, cash-out, delayed purchase, P&I, I/O, ARM variants (extract each ARM option separately)
+4. **Prepayment & Partial Release** — each prepayment penalty option as ONE rule, partial release structure
+5. **Subordination & Loan Position** — first trust deed, subordinate financing, assumability
+6. **Property & Location Requirements** — improvement status, accessibility, amenities, condition, GLA minimums, heat source, code compliance
+7. **Location/State-Specific** — prohibited states, state-by-state licensing/closing requirements
+8. **Lease & Occupancy** — lease requirements, month-to-month rules, corporate leases, vacant unit underwriting, family member leases, STVR rules
+9. **Insurance Requirements** — fire/hazard, rent loss, liability, loss payee, carrier ratings (A.M. Best, Demotech, S&P separately), deductibles, escrow
+10. **Title Insurance** — policy requirements, endorsements, exceptions, chain of title, condominium requirements, survey exceptions
+11. **Flood Insurance** — FEMA zones, coverage amounts, conformance, waiver conditions, escrow
+12. **Escrow Holdbacks** — property tax escrow, insurance escrow, calculation methods
+13. **Property Management** — self-management vs. dedicated manager, experience requirements (distance, type, duration, volume)
+14. **Ground Lease** — case-by-case rules
+15. **Borrower & Guarantor Requirements** — entity structure, documentation, SPE requirements, personal guaranty, background checks, disqualifications, credit checks (FICO, trade lines, late payments, judgments), liquidity requirements
+16. **Deleted/Not Applicable Sections** — extract as explicit status rules
+
+## Cross-Reference Matrix Handling
+
+When the document says "Reference Guideline Matrix for details":
+- Extract the matrix reference as a rule with format: "[CATEGORY]: Specific details and thresholds found in Guideline Matrix. Matrix factors include: [list known factors if mentioned]"
+- Common matrix dependencies: Loan Size, LTV, LTC, DSCR, Occupancy, Liquid Reserves
+
+## Edge Case Handling
+
+- "Should" vs "Must": Extract as stated; flag with clarificationNeeded if subjective language used
+- Compound conditions with multiple if-then branches: Extract each branch as separate rule
+- Conflicting rules: Extract both; flag for review
+- Multi-condition rules (e.g. "FRM - NOT allowed for MF or MU loans >$2M"): Keep as ONE rule, do not split
+
+## Quality Assurance
+
+Before finalizing:
+1. Completeness: Confirm no section skipped
+2. Uniqueness: No duplicate rules
+3. Clarity: Each rule is unambiguous and testable
+4. Traceability: Each rule references its source section
+5. Cross-Reference: Matrix dependencies properly noted
+
+## Output Format
+
+Group rules by document type. Common document types: Credit Report, Bank Statements, Tax Returns, Appraisal, Title Report, Insurance, Entity Documents, Income Verification, Property Inspection, Environmental Report, Purchase Contract, General / All Documents.
+
+Respond ONLY with valid JSON in this format:
+{
+  "rules": [
+    {
+      "documentType": "Credit Report",
+      "ruleTitle": "Minimum credit score",
+      "ruleDescription": "Borrower must have a minimum FICO score of 660. Score 660-680 requires preapproval.",
+      "category": "Credit",
+      "confidence": "high",
+      "sourceSection": "Section 5.3 - Credit Check",
+      "ruleType": "numerical_constraint",
+      "clarificationNeeded": false
+    }
+  ]
+}
+
+For each rule, provide:
+- documentType: which document type this rule applies to
+- ruleTitle: a short, clear title
+- ruleDescription: detailed description of what to check, including all conditions, exceptions, and thresholds
+- category: one of "Eligibility", "Credit", "Income", "Property", "Compliance", "LTV", "DSCR", "Financial", "Insurance", "Title", "Flood", "Escrow", "Management", "Borrower", "Guarantor", "Documentation", "Reserves", "Location"
+- confidence: "high" if clearly stated, "medium" if implied or partially stated, "low" if uncertain
+- sourceSection: the section number/heading where this rule was found in the document
+- ruleType: one of "eligibility", "disqualification", "numerical_constraint", "conditional", "calculation", "threshold", "permission", "prohibition", "documentation", "qualification", "exception", "cross_reference", "status"
+- clarificationNeeded: true if the rule uses subjective language, has ambiguous terms, or could be interpreted multiple ways; false otherwise`;
 }
