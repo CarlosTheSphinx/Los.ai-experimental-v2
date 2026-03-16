@@ -2,8 +2,8 @@ import { type Request, type Response } from 'express';
 import { executeAgent, type AgentType } from '../agents/agentRunner';
 import { OrchestrationTracer } from '../services/orchestrationTracing';
 import { db } from '../db';
-import { agentConfigurations } from '@shared/schema';
-import { eq } from 'drizzle-orm';
+import { agentConfigurations, systemSettings } from '@shared/schema';
+import { eq, and } from 'drizzle-orm';
 
 const AGENT_SEQUENCE: AgentType[] = ['document_intelligence', 'processor', 'communication'];
 
@@ -234,8 +234,55 @@ export function registerDebuggerRoutes(app: any, deps: { authenticateUser: any; 
 
   app.get('/api/debug/credit-extraction-prompt', deps.authenticateUser, deps.requireSuperAdmin, async (_req: Request, res: Response) => {
     try {
-      const prompt = getCreditExtractionDefaultPrompt();
-      return res.json({ success: true, prompt });
+      const defaultPrompt = getCreditExtractionDefaultPrompt();
+      const [saved] = await db
+        .select({ settingValue: systemSettings.settingValue })
+        .from(systemSettings)
+        .where(eq(systemSettings.settingKey, 'credit_policy_extraction_prompt'))
+        .limit(1);
+      return res.json({
+        success: true,
+        prompt: saved?.settingValue || defaultPrompt,
+        defaultPrompt,
+        isCustom: !!saved?.settingValue,
+      });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, error: error?.message });
+    }
+  });
+
+  app.put('/api/debug/credit-extraction-prompt', deps.authenticateUser, deps.requireSuperAdmin, async (req: Request, res: Response) => {
+    try {
+      const { prompt } = req.body;
+      if (!prompt || typeof prompt !== 'string') {
+        return res.status(400).json({ success: false, error: 'prompt is required' });
+      }
+      const userId = (req as any).user?.id;
+      const [existing] = await db
+        .select({ id: systemSettings.id })
+        .from(systemSettings)
+        .where(eq(systemSettings.settingKey, 'credit_policy_extraction_prompt'))
+        .limit(1);
+
+      if (existing) {
+        await db.update(systemSettings)
+          .set({
+            settingValue: prompt,
+            updatedBy: userId,
+            updatedAt: new Date(),
+          })
+          .where(eq(systemSettings.id, existing.id));
+      } else {
+        await db.insert(systemSettings).values({
+          settingKey: 'credit_policy_extraction_prompt',
+          settingValue: prompt,
+          settingDescription: 'Custom credit policy extraction system prompt',
+          updatedBy: userId,
+          updatedAt: new Date(),
+        });
+      }
+
+      return res.json({ success: true, message: 'Prompt saved' });
     } catch (error: any) {
       return res.status(500).json({ success: false, error: error?.message });
     }
@@ -255,6 +302,18 @@ export function registerDebuggerRoutes(app: any, deps: { authenticateUser: any; 
       return res.status(500).json({ success: false, error: error?.message });
     }
   });
+}
+
+export async function getActiveCreditExtractionPrompt(): Promise<string> {
+  try {
+    const [saved] = await db
+      .select({ settingValue: systemSettings.settingValue })
+      .from(systemSettings)
+      .where(eq(systemSettings.settingKey, 'credit_policy_extraction_prompt'))
+      .limit(1);
+    if (saved?.settingValue) return saved.settingValue;
+  } catch {}
+  return getCreditExtractionDefaultPrompt();
 }
 
 export function getCreditExtractionDefaultPrompt(): string {

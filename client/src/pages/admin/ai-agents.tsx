@@ -1371,7 +1371,7 @@ export default function AIAgentsPage() {
   useEffect(() => {
     if (cpPromptData?.prompt && !cpPrompt) {
       setCpPrompt(cpPromptData.prompt);
-      setCpDefaultPrompt(cpPromptData.prompt);
+      setCpDefaultPrompt(cpPromptData.defaultPrompt || cpPromptData.prompt);
     }
   }, [cpPromptData]);
 
@@ -1390,6 +1390,29 @@ export default function AIAgentsPage() {
       setCpSelectedSession(cpSessions.sessions[0].sessionId);
     }
   }, [cpSessions]);
+
+  const { mutate: saveCpPrompt, isPending: cpSaving } = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/debug/credit-extraction-prompt", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: cpPrompt }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to save prompt");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setCpDefaultPrompt(cpPrompt);
+      queryClient.invalidateQueries({ queryKey: ["/api/debug/credit-extraction-prompt"] });
+      toast({ title: "Saved", description: "Credit policy extraction prompt saved successfully" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
 
   const { mutate: replayCreditPolicy, isPending: cpReplaying, data: cpReplayResult } = useMutation({
     mutationFn: async () => {
@@ -1796,6 +1819,18 @@ export default function AIAgentsPage() {
                       Reset
                     </Button>
                   )}
+                  <Button
+                    size="sm"
+                    onClick={() => saveCpPrompt()}
+                    disabled={cpSaving || !cpPrompt.trim()}
+                    data-testid="credit-policy-save-prompt-btn"
+                  >
+                    {cpSaving ? (
+                      <><Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> Saving...</>
+                    ) : (
+                      <><Save className="w-3.5 h-3.5 mr-1" /> Save</>
+                    )}
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"

@@ -60,7 +60,7 @@ import { registerAiAssistantRoutes } from './routes/ai-assistant';
 import { registerAgentRoutes } from './routes/agents';
 import { registerDebuggerRoutes } from './routes/debugger';
 import { OrchestrationTracer } from './services/orchestrationTracing';
-import { cacheReplayContext, getCreditExtractionDefaultPrompt } from './routes/debugger';
+import { cacheReplayContext, getCreditExtractionDefaultPrompt, getActiveCreditExtractionPrompt } from './routes/debugger';
 import { registerEmailRoutes } from './routes/email';
 import { registerGoogleConnectRoutes } from './routes/googleConnect';
 import { registerMicrosoftConnectRoutes } from './routes/microsoftConnect';
@@ -12292,7 +12292,7 @@ export async function registerRoutes(
         input: { fileName, textLength: truncatedText.length, programId },
       });
 
-      const pSystemPrompt = getCreditExtractionDefaultPrompt();
+      const pSystemPrompt = await getActiveCreditExtractionPrompt();
 
       OrchestrationTracer.emit({
         eventType: 'agent_processing',
@@ -12571,7 +12571,7 @@ export async function registerRoutes(
         input: { fileName, textLength: truncatedText.length },
       });
 
-      const systemPrompt = getCreditExtractionDefaultPrompt();
+      const systemPrompt = await getActiveCreditExtractionPrompt();
 
       OrchestrationTracer.emit({
         eventType: 'agent_processing',
