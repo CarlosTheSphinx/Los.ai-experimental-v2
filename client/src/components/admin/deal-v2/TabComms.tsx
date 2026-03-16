@@ -10,20 +10,8 @@ import { EmptyState } from "@/components/ui/phase1/empty-state";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { formatDateTime } from "@/lib/utils";
 
-function formatDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function formatTime(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-}
-
-function formatDateTime(dateStr: string): string {
-  return `${formatDate(dateStr)} · ${formatTime(dateStr)}`;
-}
 
 function getDigestDotColor(type: string | undefined): string {
   switch (type) {

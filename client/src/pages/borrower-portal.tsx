@@ -38,6 +38,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { formatDateTime } from "@/lib/utils";
 import { getMessageFileMeta, getAttachmentDownloadUrl } from "@/lib/messagesApi";
 import { formatPhoneNumber } from "@/lib/validation";
 import { LoanChecklist } from "@/components/LoanChecklist";
@@ -599,12 +600,6 @@ export default function BorrowerPortal({ token: propToken, isPreview }: Borrower
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
-  const formatDateTime = (dateStr: string) => {
-    return new Date(dateStr).toLocaleString('en-US', { 
-      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' 
-    });
-  };
-
   return (
     <div className={`flex min-h-screen ${isPreview ? '' : 'bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950'}`} data-testid="borrower-portal">
       {!isPreview && (
@@ -947,7 +942,7 @@ export default function BorrowerPortal({ token: propToken, isPreview }: Borrower
                             </div>
                             {thread.lastMessageAt && (
                               <span className="text-[10px] text-muted-foreground shrink-0 mt-0.5">
-                                {formatDate(thread.lastMessageAt)}
+                                {formatDateTime(thread.lastMessageAt)}
                               </span>
                             )}
                           </div>

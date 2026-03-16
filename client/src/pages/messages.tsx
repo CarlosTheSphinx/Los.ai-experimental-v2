@@ -62,6 +62,7 @@ import {
   type Message
 } from "@/lib/messagesApi";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { formatDateTime } from "@/lib/utils";
 import { format } from "date-fns";
 
 function safeFormat(dateVal: any, fmt: string): string {
@@ -942,7 +943,7 @@ export default function MessagesPage() {
                             )}
                           </div>
                           <span className={`text-[11px] whitespace-nowrap ${thread.isUnread ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
-                            {safeFormat(thread.lastMessageAt, "MMM d, h:mm a")}
+                            {formatDateTime(thread.lastMessageAt)}
                           </span>
                         </div>
                       </div>
@@ -1043,7 +1044,7 @@ export default function MessagesPage() {
                             </div>
                           </div>
                           <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                            {safeFormat(digest.scheduledFor, 'h:mm a')}
+                            {formatDateTime(digest.scheduledFor)}
                           </span>
                         </div>
 
@@ -1164,7 +1165,7 @@ export default function MessagesPage() {
                               {t.propertyAddress?.split(',')[0] || t.subject || "General"}
                             </div>
                             <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0 mt-0.5">
-                              {safeFormat(t.lastMessageAt, "h:mm a")}
+                              {formatDateTime(t.lastMessageAt)}
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5 mt-0.5">
@@ -1275,7 +1276,7 @@ export default function MessagesPage() {
                           </div>
                         </div>
                         <span className="text-[10px] text-muted-foreground flex-shrink-0">
-                          {safeFormat(msg.internalDate, "MMM d, h:mm a")}
+                          {formatDateTime(msg.internalDate)}
                         </span>
                       </div>
                       {msg.bodyHtml ? (
@@ -1480,7 +1481,7 @@ export default function MessagesPage() {
                                   <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                                   <span className="text-[13px] font-semibold text-emerald-700 dark:text-emerald-400">AI Insight:</span>
                                   <span className="text-[11px] text-emerald-600/70 dark:text-emerald-400/60 ml-auto">
-                                    {safeFormat(msg.createdAt, "h:mm a")}
+                                    {formatDateTime(msg.createdAt)}
                                   </span>
                                 </div>
                                 <p className="text-[14px] text-emerald-900 dark:text-emerald-100 whitespace-pre-wrap">{msg.body}</p>
@@ -1528,7 +1529,7 @@ export default function MessagesPage() {
                                         )}
                                         <div className="text-[11px] text-muted-foreground">
                                           {fileAttachment.fileType || 'PDF'} {fileAttachment.fileSize ? `${fileAttachment.fileSize}` : ''}
-                                          {fileAttachment.uploadedAt ? ` · Uploaded ${safeFormat(fileAttachment.uploadedAt, "h:mm a")}` : ''}
+                                          {fileAttachment.uploadedAt ? ` · Uploaded ${formatDateTime(fileAttachment.uploadedAt)}` : ''}
                                         </div>
                                       </div>
                                       {downloadUrl && (
@@ -1551,7 +1552,7 @@ export default function MessagesPage() {
                                   })()}
                                 </div>
                                 <span className={`text-[11px] text-muted-foreground mt-1 ${isOwnMessage ? 'text-right' : ''}`}>
-                                  {safeFormat(msg.createdAt, "h:mm a")}
+                                  {formatDateTime(msg.createdAt)}
                                 </span>
                               </div>
                               {isOwnMessage && (
