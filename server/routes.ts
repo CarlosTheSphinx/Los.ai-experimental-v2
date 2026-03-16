@@ -12362,6 +12362,8 @@ export async function registerRoutes(
     return chunks;
   }
 
+  const activeExtractions = new Map<number, { sessionId: string; startedAt: number }>();
+
   async function extractRulesFromChunks(
     fullText: string,
     systemPrompt: string,
@@ -12371,34 +12373,60 @@ export async function registerRoutes(
     const CHUNK_THRESHOLD = 25000;
 
     if (fullText.length <= CHUNK_THRESHOLD) {
-      return extractRulesFromSingleChunk(fullText, systemPrompt, settings, sessionId, 1, 1);
+      const rules = await extractRulesFromSingleChunk(fullText, systemPrompt, settings, sessionId, 1, 1);
+      OrchestrationTracer.emit({
+        eventType: 'credit_extraction_progress',
+        agentName: 'creditPolicyExtractor',
+        agentIndex: 0,
+        timestamp: new Date().toISOString(),
+        sessionId,
+        metadata: { chunksCompleted: 1, totalChunks: 1, rulesFoundSoFar: rules.length },
+        rules: rules.map((r: any, idx: number) => ({
+          id: `rule_${idx}`, rule: r.ruleTitle, category: r.category,
+          confidence: r.confidence === 'high' || r.confidence === 'Critical' || r.confidence === '100%' ? 0.95 : r.confidence === 'medium' || r.confidence === 'High' ? 0.75 : 0.5,
+          reasoning: r.ruleDescription, sourceSection: r.sourceSection, ruleType: r.ruleType, clarificationNeeded: r.clarificationNeeded,
+        })),
+      });
+      return rules;
     }
 
     const chunks = splitTextIntoChunks(fullText, 25000);
     console.log(`[CreditPolicy] Document ${fullText.length} chars split into ${chunks.length} chunks: ${chunks.map(c => c.length).join(', ')} chars`);
 
     const allRules: any[] = [];
+    let chunksCompleted = 0;
     const CONCURRENCY = 3;
+
+    const emitProgress = () => {
+      const partialRules = allRules.map((r: any, idx: number) => ({
+        id: `rule_${idx}`, rule: r.ruleTitle, category: r.category,
+        confidence: r.confidence === 'high' || r.confidence === 'Critical' || r.confidence === '100%' ? 0.95 : r.confidence === 'medium' || r.confidence === 'High' ? 0.75 : 0.5,
+        reasoning: r.ruleDescription, sourceSection: r.sourceSection, ruleType: r.ruleType, clarificationNeeded: r.clarificationNeeded,
+      }));
+      OrchestrationTracer.emit({
+        eventType: 'credit_extraction_progress',
+        agentName: 'creditPolicyExtractor',
+        agentIndex: 0,
+        timestamp: new Date().toISOString(),
+        sessionId,
+        metadata: { chunksCompleted, totalChunks: chunks.length, rulesFoundSoFar: allRules.length },
+        rules: partialRules,
+      });
+    };
 
     for (let batchStart = 0; batchStart < chunks.length; batchStart += CONCURRENCY) {
       const batch = chunks.slice(batchStart, batchStart + CONCURRENCY);
       const batchPromises = batch.map((chunk, idx) => {
         const chunkIdx = batchStart + idx;
-        return extractRulesFromSingleChunk(chunk, systemPrompt, settings, sessionId, chunkIdx + 1, chunks.length);
+        return extractRulesFromSingleChunk(chunk, systemPrompt, settings, sessionId, chunkIdx + 1, chunks.length)
+          .then(rules => {
+            allRules.push(...rules);
+            chunksCompleted++;
+            emitProgress();
+            return rules;
+          });
       });
-      const batchResults = await Promise.all(batchPromises);
-      for (const rules of batchResults) {
-        allRules.push(...rules);
-      }
-
-      OrchestrationTracer.emit({
-        eventType: 'agent_processing',
-        agentName: 'creditPolicyExtractor',
-        agentIndex: 0,
-        timestamp: new Date().toISOString(),
-        sessionId,
-        metadata: { chunksCompleted: Math.min(batchStart + CONCURRENCY, chunks.length), totalChunks: chunks.length, rulesFoundSoFar: allRules.length },
-      });
+      await Promise.all(batchPromises);
     }
 
     const deduplicated = deduplicateRules(allRules);
@@ -12728,8 +12756,27 @@ export async function registerRoutes(
     }
   });
 
+  app.get('/api/admin/credit-policies/extraction-status', authenticateUser, requireAdmin, (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
+    const active = activeExtractions.get(userId);
+    if (active) {
+      return res.json({ extracting: true, sessionId: active.sessionId, startedAt: active.startedAt });
+    }
+    return res.json({ extracting: false });
+  });
+
   app.post('/api/admin/credit-policies/extract-rules', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
+      const userId = req.user!.id;
+      const existing = activeExtractions.get(userId);
+      if (existing) {
+        const elapsed = Date.now() - existing.startedAt;
+        if (elapsed < 10 * 60 * 1000) {
+          return res.status(409).json({ error: 'An extraction is already in progress. Please wait for it to complete.', sessionId: existing.sessionId });
+        }
+        activeExtractions.delete(userId);
+      }
+
       const { fileContent, fileName, customPrompt } = req.body;
       if (!fileContent) {
         return res.status(400).json({ error: 'fileContent is required (base64 encoded)' });
@@ -12746,6 +12793,7 @@ export async function registerRoutes(
       const truncatedText = textContent.slice(0, cpSettings2.documentLimit);
 
       const sessionId = OrchestrationTracer.startSession();
+      activeExtractions.set(userId, { sessionId, startedAt: Date.now() });
 
       OrchestrationTracer.emit({
         eventType: 'agent_start',
@@ -12790,6 +12838,7 @@ export async function registerRoutes(
           duration: Date.now() - startTime,
         });
         OrchestrationTracer.endSession(sessionId);
+        activeExtractions.delete(userId);
         return res.status(500).json({ error: 'AI could not extract any rules from the document' });
       }
 
@@ -12830,9 +12879,12 @@ export async function registerRoutes(
       });
       cacheReplayContext(sessionId, truncatedText, fileName);
       OrchestrationTracer.endSession(sessionId);
+      activeExtractions.delete(userId);
 
       res.json({ rules: normalizedRules });
     } catch (error: any) {
+      const userId = req.user?.id;
+      if (userId) activeExtractions.delete(userId);
       console.error('Extract rules error:', error);
       if (error.message?.includes('timed out')) {
         return res.status(504).json({ error: 'AI analysis timed out. Please try again with a smaller document.' });

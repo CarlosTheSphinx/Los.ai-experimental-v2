@@ -40,7 +40,7 @@ export function CreditExtractionPreview({ session }: CreditExtractionPreviewProp
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
 
   const extractionEvents = session.events.filter(
-    e => e.eventType === 'credit_rule_extracted' || e.eventType === 'credit_extraction_batch'
+    e => e.eventType === 'credit_rule_extracted' || e.eventType === 'credit_extraction_batch' || e.eventType === 'credit_extraction_progress'
   );
 
   const allRules: CreditRule[] = extractionEvents
@@ -50,6 +50,10 @@ export function CreditExtractionPreview({ session }: CreditExtractionPreviewProp
   const latestProgress = [...extractionEvents]
     .reverse()
     .find(e => e.progress)?.progress;
+
+  const latestChunkMeta = [...extractionEvents]
+    .reverse()
+    .find(e => e.metadata?.chunksCompleted != null)?.metadata;
 
   if (extractionEvents.length === 0) return null;
 
@@ -76,6 +80,11 @@ export function CreditExtractionPreview({ session }: CreditExtractionPreviewProp
             <span className="text-[10px] text-amber-400 flex items-center gap-0.5" title={`${clarificationCount} rules need clarification`}>
               <AlertTriangle className="h-3 w-3" />
               {clarificationCount}
+            </span>
+          )}
+          {latestChunkMeta && latestChunkMeta.chunksCompleted < latestChunkMeta.totalChunks && (
+            <span className="text-[10px] text-teal-400 font-mono">
+              Chunk {latestChunkMeta.chunksCompleted}/{latestChunkMeta.totalChunks}
             </span>
           )}
           {latestProgress && (

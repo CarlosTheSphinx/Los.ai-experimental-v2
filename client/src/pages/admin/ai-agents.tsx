@@ -1,5 +1,6 @@
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, useRef, useCallback, Fragment } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -1363,6 +1364,8 @@ export default function AIAgentsPage() {
   const [cpUploadFile, setCpUploadFile] = useState<File | null>(null);
   const [cpExtractionTab, setCpExtractionTab] = useState<"upload" | "cached">("upload");
   const [cpLatestResult, setCpLatestResult] = useState<any>(null);
+  const [cpChunkProgress, setCpChunkProgress] = useState<{ chunksCompleted: number; totalChunks: number; rulesFoundSoFar: number; partialRules: any[] } | null>(null);
+  const cpWsRef = useRef<WebSocket | null>(null);
   const [cpModel, setCpModel] = useState("gpt-4o");
   const [cpMaxTokens, setCpMaxTokens] = useState(16384);
   const [cpTemperature, setCpTemperature] = useState(0);
@@ -1463,6 +1466,30 @@ export default function AIAgentsPage() {
     }
   }, [cpSessions]);
 
+  useEffect(() => {
+    if (selectedOrchestration !== "credit_policy") return;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/orchestration`);
+    cpWsRef.current = ws;
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.type === 'orchestration_event') {
+          const data = message.data;
+          if (data.eventType === 'credit_extraction_progress' && data.metadata) {
+            setCpChunkProgress({
+              chunksCompleted: data.metadata.chunksCompleted,
+              totalChunks: data.metadata.totalChunks,
+              rulesFoundSoFar: data.metadata.rulesFoundSoFar,
+              partialRules: data.rules || [],
+            });
+          }
+        }
+      } catch {}
+    };
+    return () => { ws.close(); cpWsRef.current = null; };
+  }, [selectedOrchestration]);
+
   const { mutate: saveCpPrompt, isPending: cpSaving } = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/debug/credit-extraction-prompt", {
@@ -1490,6 +1517,7 @@ export default function AIAgentsPage() {
     mutationFn: async () => {
       if (!cpUploadFile) throw new Error("No file selected");
       setCpLatestResult(null);
+      setCpChunkProgress(null);
       const reader = new FileReader();
       const fileContent = await new Promise<string>((resolve, reject) => {
         reader.onload = () => {
@@ -1506,16 +1534,21 @@ export default function AIAgentsPage() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
+        if (res.status === 409) {
+          throw new Error(err.error || "An extraction is already running. Please wait.");
+        }
         throw new Error(err.error || "Extraction failed");
       }
       return res.json();
     },
     onSuccess: (data) => {
       setCpLatestResult(data);
+      setCpChunkProgress(null);
       queryClient.invalidateQueries({ queryKey: ["/api/debug/credit-extraction-sessions"] });
       toast({ title: "Extraction Complete", description: `${data.rules?.length || 0} rules extracted from ${cpUploadFile?.name}` });
     },
     onError: (err: any) => {
+      setCpChunkProgress(null);
       toast({ title: "Extraction Failed", description: err.message, variant: "destructive" });
     },
   });
@@ -2026,7 +2059,9 @@ export default function AIAgentsPage() {
                       {cpDirectExtracting ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Extracting rules... (this may take up to 3 minutes)
+                          {cpChunkProgress
+                            ? `Processing chunk ${cpChunkProgress.chunksCompleted} of ${cpChunkProgress.totalChunks} — ${cpChunkProgress.rulesFoundSoFar} rules found`
+                            : "Parsing document..."}
                         </>
                       ) : (
                         <>
@@ -2035,6 +2070,14 @@ export default function AIAgentsPage() {
                         </>
                       )}
                     </Button>
+                    {cpDirectExtracting && cpChunkProgress && (
+                      <div className="space-y-1">
+                        <Progress value={Math.round((cpChunkProgress.chunksCompleted / cpChunkProgress.totalChunks) * 100)} className="h-2" />
+                        <p className="text-xs text-muted-foreground text-center">
+                          Chunk {cpChunkProgress.chunksCompleted}/{cpChunkProgress.totalChunks} complete — {cpChunkProgress.rulesFoundSoFar} rules extracted so far
+                        </p>
+                      </div>
+                    )}
                   </TabsContent>
 
                   <TabsContent value="cached" className="space-y-4 mt-4">
@@ -2155,6 +2198,30 @@ export default function AIAgentsPage() {
             )}
           </Card>
 
+          {cpDirectExtracting && cpChunkProgress && cpChunkProgress.partialRules.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Loader2 className="w-5 h-5 text-amber-500 animate-spin" />
+                  Live Extraction — {cpChunkProgress.partialRules.length} rules so far
+                  <Badge variant="outline" className="ml-2 text-xs">
+                    Chunk {cpChunkProgress.chunksCompleted}/{cpChunkProgress.totalChunks}
+                  </Badge>
+                </CardTitle>
+                <CardDescription>
+                  Rules are appearing as each document chunk is processed
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <CreditPolicyRulesTable rules={cpChunkProgress.partialRules.map((r: any) => ({
+                  ruleTitle: r.rule, category: r.category, confidence: r.confidence > 0.8 ? 'high' : r.confidence > 0.6 ? 'medium' : 'low',
+                  ruleDescription: r.reasoning, sourceSection: r.sourceSection, ruleType: r.ruleType,
+                  clarificationNeeded: r.clarificationNeeded, documentType: '',
+                }))} />
+              </CardContent>
+            </Card>
+          )}
+
           {cpLatestResult?.rules && (
             <Card>
               <CardHeader>
@@ -2179,7 +2246,7 @@ export default function AIAgentsPage() {
                   <XCircle className="w-5 h-5 text-red-600" />
                   <div>
                     <p className="font-medium text-red-900">Extraction Failed</p>
-                    <p className="text-sm text-red-700 mt-1">{cpReplayResult.error}</p>
+                    <p className="text-sm text-red-700 mt-1">{cpLatestResult.error}</p>
                   </div>
                 </div>
               </CardContent>

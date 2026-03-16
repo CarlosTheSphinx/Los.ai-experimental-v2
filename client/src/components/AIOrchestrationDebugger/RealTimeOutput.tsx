@@ -16,6 +16,7 @@ function formatEventType(type: string): string {
     case 'session_start': return 'SESSION';
     case 'session_complete': return 'DONE';
     case 'credit_rule_extracted': return 'RULE';
+    case 'credit_extraction_progress': return 'PROGRESS';
     default: return type.toUpperCase();
   }
 }
@@ -26,6 +27,7 @@ function getEventColor(type: string): string {
     case 'agent_complete': return 'text-green-400';
     case 'agent_error': return 'text-red-400';
     case 'credit_rule_extracted': return 'text-amber-400';
+    case 'credit_extraction_progress': return 'text-teal-400';
     default: return 'text-slate-400';
   }
 }
@@ -74,9 +76,11 @@ export function RealTimeOutput({ events, selectedAgent }: RealTimeOutputProps) {
                 {event.agentName && <span className="text-slate-500">[{event.agentName}] </span>}
                 {event.error && <span className="text-red-300">{event.error}</span>}
                 {event.duration && <span className="text-slate-500">{event.duration}ms</span>}
-                {event.eventType === 'credit_rule_extracted' && event.rules && (
+                {(event.eventType === 'credit_rule_extracted' || event.eventType === 'credit_extraction_progress') && event.rules && (
                   <span className="text-amber-300">
-                    {event.rules.length === 1 ? event.rules[0].rule : `${event.rules.length} rules extracted`}
+                    {event.eventType === 'credit_extraction_progress'
+                      ? `Chunk ${event.metadata?.chunksCompleted}/${event.metadata?.totalChunks} — ${event.rules.length} rules so far`
+                      : `${event.rules.length} rules extracted (final)`}
                   </span>
                 )}
               </span>

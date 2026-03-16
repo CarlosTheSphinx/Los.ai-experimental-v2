@@ -325,7 +325,7 @@ export function AIOrchestrationDebugger() {
               </AnimatePresence>
 
               {activeSession.events.some(
-                e => e.eventType === 'credit_rule_extracted' || e.eventType === 'credit_extraction_batch'
+                e => e.eventType === 'credit_rule_extracted' || e.eventType === 'credit_extraction_batch' || e.eventType === 'credit_extraction_progress'
               ) && (
                 <CreditExtractionPreview session={activeSession} />
               )}
@@ -551,7 +551,8 @@ function CreditPolicyTab({
           </p>
           <div className="space-y-1">
             {liveSessions.map(s => {
-              const ruleCount = s.events.filter(e => e.eventType === 'credit_rule_extracted').reduce((sum, e) => sum + (e.rules?.length || 0), 0);
+              const ruleEvents = s.events.filter(e => e.eventType === 'credit_rule_extracted' || e.eventType === 'credit_extraction_progress');
+              const ruleCount = ruleEvents.length > 0 ? Math.max(...ruleEvents.map(e => e.rules?.length || 0)) : 0;
               const isRunning = s.status === 'running';
               return (
                 <button
