@@ -12300,12 +12300,15 @@ export async function registerRoutes(
           if (!item.str && item.str !== '') continue;
           const y = item.transform ? item.transform[5] : null;
           const x = item.transform ? item.transform[4] : null;
+          const fontSize = item.transform ? Math.abs(item.transform[3]) : 12;
 
-          if (lastY !== null && y !== null && Math.abs(y - lastY) > 2) {
+          const lineThreshold = Math.max(fontSize * 0.5, 3);
+
+          if (lastY !== null && y !== null && Math.abs(y - lastY) > lineThreshold) {
             lines.push(currentLine.trimEnd());
             currentLine = item.str;
-          } else if (lastEndX !== null && x !== null && (x - lastEndX) > 10) {
-            currentLine += '  ' + item.str;
+          } else if (lastEndX !== null && x !== null && (x - lastEndX) > 5) {
+            currentLine += ' ' + item.str;
           } else {
             currentLine += item.str;
           }
@@ -12313,7 +12316,10 @@ export async function registerRoutes(
           lastEndX = x !== null && item.width ? x + item.width : null;
         }
         if (currentLine) lines.push(currentLine.trimEnd());
-        textParts.push(`--- Page ${i} ---\n${lines.join('\n')}`);
+        const pageText = lines.filter(l => l.trim()).join('\n');
+        if (pageText.trim()) {
+          textParts.push(`--- Page ${i} ---\n${pageText}`);
+        }
       }
       return textParts.join('\n\n');
     } else if (fileName?.toLowerCase().match(/\.xlsx?$/)) {
@@ -12328,6 +12334,161 @@ export async function registerRoutes(
     } else {
       return buffer.toString('utf-8');
     }
+  }
+
+  function splitTextIntoChunks(text: string, maxChunkChars: number = 30000): string[] {
+    const pages = text.split(/(?=--- Page \d+ ---)/);
+    if (pages.length <= 1) {
+      if (text.length <= maxChunkChars) return [text];
+      const chunks: string[] = [];
+      for (let i = 0; i < text.length; i += maxChunkChars) {
+        chunks.push(text.slice(i, i + maxChunkChars));
+      }
+      return chunks;
+    }
+
+    const chunks: string[] = [];
+    let currentChunk = '';
+    for (const page of pages) {
+      if (!page.trim()) continue;
+      if (currentChunk.length + page.length > maxChunkChars && currentChunk.length > 0) {
+        chunks.push(currentChunk.trim());
+        currentChunk = page;
+      } else {
+        currentChunk += (currentChunk ? '\n\n' : '') + page;
+      }
+    }
+    if (currentChunk.trim()) chunks.push(currentChunk.trim());
+    return chunks;
+  }
+
+  async function extractRulesFromChunks(
+    fullText: string,
+    systemPrompt: string,
+    settings: { model: string; maxTokens: number; temperature: number; timeout: number },
+    sessionId: string
+  ): Promise<any[]> {
+    const CHUNK_THRESHOLD = 25000;
+
+    if (fullText.length <= CHUNK_THRESHOLD) {
+      return extractRulesFromSingleChunk(fullText, systemPrompt, settings, sessionId, 1, 1);
+    }
+
+    const chunks = splitTextIntoChunks(fullText, 25000);
+    console.log(`[CreditPolicy] Document ${fullText.length} chars split into ${chunks.length} chunks: ${chunks.map(c => c.length).join(', ')} chars`);
+
+    const allRules: any[] = [];
+    const CONCURRENCY = 3;
+
+    for (let batchStart = 0; batchStart < chunks.length; batchStart += CONCURRENCY) {
+      const batch = chunks.slice(batchStart, batchStart + CONCURRENCY);
+      const batchPromises = batch.map((chunk, idx) => {
+        const chunkIdx = batchStart + idx;
+        return extractRulesFromSingleChunk(chunk, systemPrompt, settings, sessionId, chunkIdx + 1, chunks.length);
+      });
+      const batchResults = await Promise.all(batchPromises);
+      for (const rules of batchResults) {
+        allRules.push(...rules);
+      }
+
+      OrchestrationTracer.emit({
+        eventType: 'agent_processing',
+        agentName: 'creditPolicyExtractor',
+        agentIndex: 0,
+        timestamp: new Date().toISOString(),
+        sessionId,
+        metadata: { chunksCompleted: Math.min(batchStart + CONCURRENCY, chunks.length), totalChunks: chunks.length, rulesFoundSoFar: allRules.length },
+      });
+    }
+
+    const deduplicated = deduplicateRules(allRules);
+    console.log(`[CreditPolicy] Total rules: ${allRules.length}, after dedup: ${deduplicated.length}`);
+    return deduplicated;
+  }
+
+  async function extractRulesFromSingleChunk(
+    chunkText: string,
+    systemPrompt: string,
+    settings: { model: string; maxTokens: number; temperature: number; timeout: number },
+    sessionId: string,
+    chunkNum: number,
+    totalChunks: number
+  ): Promise<any[]> {
+    try {
+      const OpenAI = (await import('openai')).default;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const chunkContext = totalChunks > 1 
+        ? `This is section ${chunkNum} of ${totalChunks} from a larger document. ` 
+        : '';
+
+      const aiPromise = openai.chat.completions.create({
+        model: settings.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          {
+            role: 'user',
+            content: `${chunkContext}Extract ALL rules from the following credit policy document section. Be exhaustive — extract every constraint, requirement, prohibition, permission, calculation, threshold, and conditional statement. Do not summarize or skip anything. Return your response as a JSON object with a "rules" array.\n\n${chunkText}`
+          }
+        ],
+        response_format: { type: 'json_object' },
+        max_completion_tokens: settings.maxTokens,
+        temperature: settings.temperature,
+      });
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Chunk ${chunkNum}/${totalChunks} timed out after ${settings.timeout}s`)), settings.timeout * 1000)
+      );
+
+      const response = await Promise.race([aiPromise, timeoutPromise]);
+
+      const finishReason = response.choices[0]?.finish_reason;
+      const usage = response.usage;
+      console.log(`[CreditPolicy] Chunk ${chunkNum}/${totalChunks}: finish_reason=${finishReason}, tokens=${JSON.stringify(usage)}`);
+
+      if (finishReason === 'length') {
+        console.warn(`[CreditPolicy] WARNING: Chunk ${chunkNum} hit token limit — some rules may be missing`);
+      }
+
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        console.warn(`[CreditPolicy] Chunk ${chunkNum}/${totalChunks}: empty response`);
+        return [];
+      }
+
+      const parsed = JSON.parse(content);
+      const rulesArray = findRulesArray(parsed);
+      if (!rulesArray) {
+        console.warn(`[CreditPolicy] Chunk ${chunkNum}/${totalChunks}: no rules array found in response`);
+        return [];
+      }
+
+      const normalized = rulesArray.map((r: any) => normalizeExtractedRule(r));
+      console.log(`[CreditPolicy] Chunk ${chunkNum}/${totalChunks}: extracted ${normalized.length} rules`);
+      return normalized;
+    } catch (error: any) {
+      console.error(`[CreditPolicy] Chunk ${chunkNum}/${totalChunks} failed:`, error?.message || error);
+      return [];
+    }
+  }
+
+  function deduplicateRules(rules: any[]): any[] {
+    const seen = new Map<string, any>();
+    for (const rule of rules) {
+      const key = `${(rule.ruleTitle || '').toLowerCase().trim()}|${(rule.category || '').toLowerCase().trim()}`;
+      if (!seen.has(key)) {
+        seen.set(key, rule);
+      } else {
+        const existing = seen.get(key);
+        if ((rule.ruleDescription || '').length > (existing.ruleDescription || '').length) {
+          seen.set(key, rule);
+        }
+      }
+    }
+    return Array.from(seen.values());
   }
 
   app.post('/api/admin/programs/:programId/extract-rules', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
@@ -12372,56 +12533,18 @@ export async function registerRoutes(
 
       const pStartTime = Date.now();
 
-      const OpenAI = (await import('openai')).default;
-      const openai = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-      });
-
-      const aiPromise = openai.chat.completions.create({
-        model: cpSettings.model,
-        messages: [
-          { role: 'system', content: pSystemPrompt },
-          {
-            role: 'user',
-            content: `Extract ALL review rules from the following credit policy document. Be exhaustive — scan every section, extract every constraint, requirement, prohibition, permission, calculation, and conditional statement. Do not skip any section. Return your response as a JSON object with a "rules" array.\n\n${truncatedText}`
-          }
-        ],
-        response_format: { type: 'json_object' },
-        max_completion_tokens: cpSettings.maxTokens,
-        temperature: cpSettings.temperature,
-      });
-
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`AI analysis timed out after ${cpSettings.timeout} seconds`)), cpSettings.timeout * 1000)
+      const normalizedRules = await extractRulesFromChunks(
+        truncatedText,
+        pSystemPrompt,
+        { model: cpSettings.model, maxTokens: cpSettings.maxTokens, temperature: cpSettings.temperature, timeout: cpSettings.timeout },
+        pSessionId
       );
 
-      const response = await Promise.race([aiPromise, timeoutPromise]);
-
-      const content = response.choices[0]?.message?.content;
-      if (!content) {
-        OrchestrationTracer.emit({ eventType: 'agent_error', agentName: 'creditPolicyExtractor', agentIndex: 0, timestamp: new Date().toISOString(), sessionId: pSessionId, error: 'AI returned empty response', duration: Date.now() - pStartTime });
+      if (normalizedRules.length === 0) {
+        OrchestrationTracer.emit({ eventType: 'agent_error', agentName: 'creditPolicyExtractor', agentIndex: 0, timestamp: new Date().toISOString(), sessionId: pSessionId, error: 'No rules extracted from any chunk', duration: Date.now() - pStartTime });
         OrchestrationTracer.endSession(pSessionId);
-        return res.status(500).json({ error: 'AI returned empty response' });
+        return res.status(500).json({ error: 'AI could not extract any rules from the document' });
       }
-
-      let parsed: { rules: any[] };
-      try {
-        parsed = JSON.parse(content);
-      } catch {
-        OrchestrationTracer.emit({ eventType: 'agent_error', agentName: 'creditPolicyExtractor', agentIndex: 0, timestamp: new Date().toISOString(), sessionId: pSessionId, error: 'AI returned invalid JSON', duration: Date.now() - pStartTime });
-        OrchestrationTracer.endSession(pSessionId);
-        return res.status(500).json({ error: 'AI returned invalid response format' });
-      }
-
-      const rulesArray = findRulesArray(parsed);
-      if (!rulesArray) {
-        OrchestrationTracer.emit({ eventType: 'agent_error', agentName: 'creditPolicyExtractor', agentIndex: 0, timestamp: new Date().toISOString(), sessionId: pSessionId, error: 'Missing rules array', duration: Date.now() - pStartTime });
-        OrchestrationTracer.endSession(pSessionId);
-        return res.status(500).json({ error: 'AI did not return rules in expected format' });
-      }
-
-      const normalizedRules = rulesArray.map(r => normalizeExtractedRule(r));
 
       normalizedRules.forEach((r: any, idx: number) => {
         OrchestrationTracer.emit({
@@ -12635,81 +12758,26 @@ export async function registerRoutes(
 
       const startTime = Date.now();
 
-      const OpenAI = (await import('openai')).default;
-      const openai = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-      });
-
-      const aiPromise = openai.chat.completions.create({
-        model: cpSettings2.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          {
-            role: 'user',
-            content: `Extract ALL review rules from the following credit policy document. Be exhaustive — scan every section, extract every constraint, requirement, prohibition, permission, calculation, and conditional statement. Do not skip any section. Return your response as a JSON object with a "rules" array.\n\n${truncatedText}`
-          }
-        ],
-        response_format: { type: 'json_object' },
-        max_completion_tokens: cpSettings2.maxTokens,
-        temperature: cpSettings2.temperature,
-      });
-
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`AI analysis timed out after ${cpSettings2.timeout} seconds`)), cpSettings2.timeout * 1000)
+      const normalizedRules = await extractRulesFromChunks(
+        truncatedText,
+        systemPrompt,
+        { model: cpSettings2.model, maxTokens: cpSettings2.maxTokens, temperature: cpSettings2.temperature, timeout: cpSettings2.timeout },
+        sessionId
       );
 
-      const response = await Promise.race([aiPromise, timeoutPromise]);
-
-      const content = response.choices[0]?.message?.content;
-      if (!content) {
+      if (normalizedRules.length === 0) {
         OrchestrationTracer.emit({
           eventType: 'agent_error',
           agentName: 'creditPolicyExtractor',
           agentIndex: 0,
           timestamp: new Date().toISOString(),
           sessionId,
-          error: 'AI returned empty response',
+          error: 'No rules extracted from any chunk',
           duration: Date.now() - startTime,
         });
         OrchestrationTracer.endSession(sessionId);
-        return res.status(500).json({ error: 'AI returned empty response' });
+        return res.status(500).json({ error: 'AI could not extract any rules from the document' });
       }
-
-      let parsed: { rules: any[] };
-      try {
-        parsed = JSON.parse(content);
-      } catch {
-        OrchestrationTracer.emit({
-          eventType: 'agent_error',
-          agentName: 'creditPolicyExtractor',
-          agentIndex: 0,
-          timestamp: new Date().toISOString(),
-          sessionId,
-          error: 'AI returned invalid JSON',
-          rawResponse: content.slice(0, 2000),
-          duration: Date.now() - startTime,
-        });
-        OrchestrationTracer.endSession(sessionId);
-        return res.status(500).json({ error: 'AI returned invalid response format' });
-      }
-
-      const rulesArray = findRulesArray(parsed);
-      if (!rulesArray) {
-        OrchestrationTracer.emit({
-          eventType: 'agent_error',
-          agentName: 'creditPolicyExtractor',
-          agentIndex: 0,
-          timestamp: new Date().toISOString(),
-          sessionId,
-          error: 'AI response missing rules array',
-          duration: Date.now() - startTime,
-        });
-        OrchestrationTracer.endSession(sessionId);
-        return res.status(500).json({ error: 'AI did not return rules in expected format' });
-      }
-
-      const normalizedRules = rulesArray.map(r => normalizeExtractedRule(r));
 
       const categories = new Set<string>();
       normalizedRules.forEach((r: any, idx: number) => {
