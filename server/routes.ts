@@ -6764,8 +6764,8 @@ export async function registerRoutes(
       await storage.createProjectActivity({
         projectId,
         activityType: 'stage_change',
-        description: `Project moved to stage: ${targetStage.stageName}`,
-        performedBy: req.user!.id,
+        activityDescription: `Project moved to stage: ${targetStage.stageName}`,
+        userId: req.user!.id,
       });
 
       const moverDisplayName = req.user!.fullName || req.user!.email || 'Admin';
