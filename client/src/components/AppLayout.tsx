@@ -84,9 +84,13 @@ interface NavItem {
 }
 
 function NavIcon({ icon: IconComponent, isActive }: { icon: any; isActive: boolean }) {
+  const { open } = useSidebar();
+  const collapsed = !open;
+  const size = collapsed ? 18 : 14;
+  const inactiveColor = collapsed ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.3)';
   return (
-    <span className="flex shrink-0 items-center justify-center" style={{ width: 14, height: 14 }}>
-      <IconComponent size={14} color={isActive ? '#C9A84C' : 'rgba(255,255,255,0.3)'} />
+    <span className="flex shrink-0 items-center justify-center" style={{ width: size, height: size }}>
+      <IconComponent size={size} color={isActive ? '#C9A84C' : inactiveColor} />
     </span>
   );
 }
@@ -360,12 +364,12 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
                           onClick={handleNavClick}
                         >
                           <NavIcon icon={Icon} isActive={isActive} />
-                          <span className="flex items-center gap-1 flex-1 text-[15px]">
+                          <span className="flex items-center gap-1 flex-1 text-[15px] group-data-[collapsible=icon]:hidden">
                             {item.label}
                             {'showBadge' in item && item.showBadge && <InboxBadge />}
                           </span>
                           {item.shortcut && (
-                            <span className="text-[12px] text-muted-foreground/50 group-hover:text-muted-foreground/70 transition-colors ml-2 hidden group-hover:inline">
+                            <span className="text-[12px] text-muted-foreground/50 group-hover:text-muted-foreground/70 transition-colors ml-2 hidden group-hover:inline group-data-[collapsible=icon]:!hidden">
                               {item.shortcut}
                             </span>
                           )}
@@ -404,12 +408,12 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
                             onClick={handleNavClick}
                           >
                             <NavIcon icon={Icon} isActive={isActive} />
-                            <span className="flex items-center gap-1 flex-1 text-[15px]">
+                            <span className="flex items-center gap-1 flex-1 text-[15px] group-data-[collapsible=icon]:hidden">
                               {item.label}
                               {'showBadge' in item && item.showBadge && <InboxBadge />}
                             </span>
                             {item.shortcut && (
-                              <span className="text-[12px] text-muted-foreground/50 group-hover:text-muted-foreground/70 transition-colors ml-2 hidden group-hover:inline">
+                              <span className="text-[12px] text-muted-foreground/50 group-hover:text-muted-foreground/70 transition-colors ml-2 hidden group-hover:inline group-data-[collapsible=icon]:!hidden">
                                 {item.shortcut}
                               </span>
                             )}
@@ -449,7 +453,7 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
                             onClick={handleNavClick}
                           >
                             <NavIcon icon={Icon} isActive={isActive} />
-                            <span className="flex items-center gap-1 flex-1 text-[15px]">
+                            <span className="flex items-center gap-1 flex-1 text-[15px] group-data-[collapsible=icon]:hidden">
                               {item.label}
                             </span>
                           </Link>
@@ -489,7 +493,7 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
                             onClick={handleNavClick}
                           >
                             <NavIcon icon={Icon} isActive={isActive} />
-                            <span className="flex items-center gap-1 flex-1 text-[15px]">
+                            <span className="flex items-center gap-1 flex-1 text-[15px] group-data-[collapsible=icon]:hidden">
                               {item.label}
                             </span>
                           </Link>
