@@ -298,7 +298,7 @@ export default function SignPage() {
       </header>
 
       <main className="flex-1 overflow-auto p-2 sm:p-4">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-[700px] mx-auto">
           <div className="bg-background rounded-lg shadow-lg overflow-hidden">
             <div ref={pdfContainerRef} className="relative bg-muted">
               {doc?.fileData && (

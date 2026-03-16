@@ -30,6 +30,7 @@ import {
   ArrowUpDown,
   List,
   LayoutGrid,
+  Mail,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ExpandableRow } from "@/components/ui/phase1/expandable-row";
@@ -47,6 +48,8 @@ import { usePricing } from "@/hooks/use-pricing";
 import { type LoanPricingFormData, type PricingResponse, type RTLPricingFormData, type RTLPricingResponse } from "@shared/schema";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 interface Envelope {
   id: number;
@@ -210,7 +213,7 @@ function getInternalDocStatusDisplay(doc: InternalDocStatus | null) {
   return { label: 'Draft', color: 'bg-gray-100 text-gray-600', dotColor: 'bg-gray-400', step: 0 };
 }
 
-function QuoteCardEnvelope({ envelope, isBorrower, onSendTermSheet }: { envelope: Envelope | null; isBorrower: boolean; onSendTermSheet?: () => void }) {
+function QuoteCardEnvelope({ envelope, isBorrower, onResendTermSheet }: { envelope: Envelope | null; isBorrower: boolean; onResendTermSheet?: () => void }) {
   const { toast } = useToast();
 
   const syncMutation = useMutation({
@@ -316,11 +319,11 @@ function QuoteCardEnvelope({ envelope, isBorrower, onSendTermSheet }: { envelope
               Sync
             </Button>
           )}
-          {!isBorrower && (s === 'sent' || s === 'viewed') && onSendTermSheet && (
+          {!isBorrower && (s === 'sent' || s === 'viewed') && onResendTermSheet && (
             <Button
               variant="outline"
               size="sm"
-              onClick={onSendTermSheet}
+              onClick={onResendTermSheet}
               className="h-8 text-[14px] gap-1.5 rounded-full"
               data-testid={`button-resend-bar-${latest.quoteId}`}
             >
@@ -447,6 +450,49 @@ export default function QuotesUnified() {
   } | null>(null);
   const [showScraperDebug, setShowScraperDebug] = useState(false);
   const [signingQuote, setSigningQuote] = useState<SavedQuote | null>(null);
+  const [showResendDialog, setShowResendDialog] = useState(false);
+  const [resendEmail, setResendEmail] = useState('');
+  const [resendName, setResendName] = useState('');
+  const [resendQuoteId, setResendQuoteId] = useState<number | null>(null);
+
+  const resendMutation = useMutation({
+    mutationFn: async ({ quoteId, email, name }: { quoteId: number; email: string; name: string }) => {
+      const response = await apiRequest('POST', `/api/quotes/${quoteId}/send-internal-signature`, {
+        recipientEmail: email,
+        recipientName: name,
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Sent", description: data.message || "Term sheet resent for signature." });
+      setShowResendDialog(false);
+      queryClient.invalidateQueries({ queryKey: ['/api/internal-documents/bulk'] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to resend term sheet",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleOpenResendDialog = (quote: SavedQuote) => {
+    setResendEmail(quote.customerEmail || '');
+    setResendName([quote.customerFirstName, quote.customerLastName].filter(Boolean).join(' '));
+    setResendQuoteId(quote.id);
+    setShowResendDialog(true);
+  };
+
+  const handleResendSignature = () => {
+    if (!resendEmail.trim()) {
+      toast({ title: "Error", description: "Please enter an email address", variant: "destructive" });
+      return;
+    }
+    if (resendQuoteId) {
+      resendMutation.mutate({ quoteId: resendQuoteId, email: resendEmail.trim(), name: resendName.trim() });
+    }
+  };
 
   const { mutate: getPricing, isPending: dscrPending } = usePricing();
 
@@ -1070,7 +1116,7 @@ export default function QuotesUnified() {
                                     </Button>
                                   )}
                                   {hasAnyTermSheet && !(internalSignerStatus === 'signed' || intDoc?.status === 'completed') && !(envelopeStatus === 'completed') && (
-                                    <Button variant="outline" size="sm" onClick={() => navigate(`/quotes/${quote.id}/documents`)} className="h-8 rounded-full text-[14px] gap-1.5 px-3" data-testid={`button-resend-${quote.id}`}>
+                                    <Button variant="outline" size="sm" onClick={() => handleOpenResendDialog(quote)} className="h-8 rounded-full text-[14px] gap-1.5 px-3" data-testid={`button-resend-${quote.id}`}>
                                       <Send className="h-3.5 w-3.5" /> Resend
                                     </Button>
                                   )}
@@ -1115,6 +1161,7 @@ export default function QuotesUnified() {
                   onEdit={() => handleEditQuote(quote)}
                   onDelete={() => deleteMutation.mutate(quote.id)}
                   onSendTermSheet={() => navigate(`/quotes/${quote.id}/documents`)}
+                  onResendTermSheet={() => handleOpenResendDialog(quote)}
                   onMessage={() => navigate(`/messages?dealId=${quote.id}&new=true`)}
                   deleteIsPending={deleteMutation.isPending}
                 />
@@ -1386,6 +1433,63 @@ export default function QuotesUnified() {
           quote={signingQuote}
         />
       )}
+
+      <Dialog open={showResendDialog} onOpenChange={setShowResendDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5 text-primary" />
+              Resend Term Sheet
+            </DialogTitle>
+            <DialogDescription>
+              Update the recipient details if needed, then resend the term sheet for signature.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label htmlFor="resend-name">Recipient Name</Label>
+              <Input
+                id="resend-name"
+                value={resendName}
+                onChange={(e) => setResendName(e.target.value)}
+                placeholder="Borrower name"
+                data-testid="input-resend-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="resend-email">Recipient Email</Label>
+              <Input
+                id="resend-email"
+                type="email"
+                value={resendEmail}
+                onChange={(e) => setResendEmail(e.target.value)}
+                placeholder="borrower@example.com"
+                data-testid="input-resend-email"
+              />
+            </div>
+            <div className="bg-muted/50 rounded-lg p-3 text-sm text-muted-foreground">
+              <p>The borrower will receive an email with a secure link to review and sign the document.</p>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setShowResendDialog(false)} data-testid="button-cancel-resend">
+                Cancel
+              </Button>
+              <Button
+                onClick={handleResendSignature}
+                disabled={resendMutation.isPending || !resendEmail.trim()}
+                data-testid="button-confirm-resend"
+              >
+                {resendMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="mr-2 h-4 w-4" />
+                )}
+                Resend Term Sheet
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1398,6 +1502,7 @@ function QuoteCard({
   onEdit,
   onDelete,
   onSendTermSheet,
+  onResendTermSheet,
   onMessage,
   deleteIsPending,
 }: {
@@ -1408,6 +1513,7 @@ function QuoteCard({
   onEdit: () => void;
   onDelete: () => void;
   onSendTermSheet: () => void;
+  onResendTermSheet: () => void;
   onMessage: () => void;
   deleteIsPending: boolean;
 }) {
@@ -1528,7 +1634,7 @@ function QuoteCard({
                 )}
                 {hasInternalDoc && internalSignerStatus !== 'signed' && internalDoc?.status !== 'completed' && (
                   <Button
-                    onClick={onSendTermSheet}
+                    onClick={onResendTermSheet}
                     variant="outline"
                     size="sm"
                     className="h-8 rounded-full text-[14px] gap-1.5 px-3"
@@ -1540,7 +1646,7 @@ function QuoteCard({
                 )}
                 {!hasInternalDoc && (envelopeStatus === 'sent' || envelopeStatus === 'viewed') && (
                   <Button
-                    onClick={onSendTermSheet}
+                    onClick={onResendTermSheet}
                     variant="outline"
                     size="sm"
                     className="h-8 rounded-full text-[14px] gap-1.5 px-3"
@@ -1695,7 +1801,7 @@ function QuoteCard({
           </div>
         </div>
       ) : (
-        <QuoteCardEnvelope envelope={latestEnvelope} isBorrower={isBorrower} onSendTermSheet={onSendTermSheet} />
+        <QuoteCardEnvelope envelope={latestEnvelope} isBorrower={isBorrower} onResendTermSheet={onResendTermSheet} />
       )}
     </div>
   );
