@@ -161,7 +161,7 @@ export function registerDebuggerRoutes(app: any, deps: { authenticateUser: any; 
       });
 
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('AI analysis timed out after 120 seconds')), 120000)
+        setTimeout(() => reject(new Error('AI analysis timed out after 180 seconds')), 180000)
       );
 
       const response = await Promise.race([aiPromise, timeoutPromise]);

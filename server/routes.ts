@@ -12280,7 +12280,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Could not extract meaningful text from this file.' });
       }
 
-      const truncatedText = textContent.slice(0, 50000);
+      const truncatedText = textContent.slice(0, 200000);
 
       const pSessionId = OrchestrationTracer.startSession();
       OrchestrationTracer.emit({
@@ -12423,7 +12423,7 @@ For each rule, provide:
       });
 
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('AI analysis timed out after 120 seconds')), 120000)
+        setTimeout(() => reject(new Error('AI analysis timed out after 180 seconds')), 180000)
       );
 
       const response = await Promise.race([aiPromise, timeoutPromise]);
@@ -12655,7 +12655,7 @@ For each rule, provide:
         return res.status(400).json({ error: 'Could not extract meaningful text from this file.' });
       }
 
-      const truncatedText = textContent.slice(0, 50000);
+      const truncatedText = textContent.slice(0, 200000);
 
       const sessionId = OrchestrationTracer.startSession();
 
@@ -12799,7 +12799,7 @@ For each rule, provide:
       });
 
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('AI analysis timed out after 120 seconds')), 120000)
+        setTimeout(() => reject(new Error('AI analysis timed out after 180 seconds')), 180000)
       );
 
       const response = await Promise.race([aiPromise, timeoutPromise]);
