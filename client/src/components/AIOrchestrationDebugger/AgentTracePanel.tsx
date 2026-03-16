@@ -6,6 +6,7 @@ const AGENT_COLORS: Record<string, string> = {
   processor: 'bg-blue-900/80',
   communication: 'bg-amber-900/80',
   creditExtractor: 'bg-emerald-900/80',
+  creditPolicyExtractor: 'bg-teal-900/80',
 };
 
 const AGENT_LABELS: Record<string, string> = {
@@ -13,6 +14,7 @@ const AGENT_LABELS: Record<string, string> = {
   processor: 'Processor',
   communication: 'Communication',
   creditExtractor: 'Credit Extractor',
+  creditPolicyExtractor: 'Credit Policy Extractor',
 };
 
 interface AgentTracePanelProps {

@@ -61,7 +61,7 @@ export function AIOrchestrationDebugger() {
     });
   }, []);
 
-  const { connected, replayAgent } = useOrchestrationEvents(handleEvent);
+  const { connected, replayAgent, replayCreditExtraction } = useOrchestrationEvents(handleEvent);
 
   const activeSession = sessions.find(s => s.sessionId === activeSessionId);
 
@@ -209,13 +209,16 @@ export function AIOrchestrationDebugger() {
                         e => e.agentName === selectedAgent && e.eventType === 'agent_start'
                       )?.input
                     }
+                    isCreditExtraction={selectedAgent === 'creditPolicyExtractor'}
                     onReplay={(customPrompt, mode) =>
-                      replayAgent(
-                        selectedAgent,
-                        activeSession.events.find(e => e.agentName === selectedAgent)?.input || {},
-                        customPrompt,
-                        mode
-                      )
+                      selectedAgent === 'creditPolicyExtractor'
+                        ? replayCreditExtraction(activeSession.sessionId, customPrompt)
+                        : replayAgent(
+                            selectedAgent,
+                            activeSession.events.find(e => e.agentName === selectedAgent)?.input || {},
+                            customPrompt,
+                            mode
+                          )
                     }
                   />
                 )}

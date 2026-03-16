@@ -62,5 +62,22 @@ export function useOrchestrationEvents(onEvent?: (event: OrchestrationEvent) => 
     []
   );
 
-  return { connected, replayAgent };
+  const replayCreditExtraction = useCallback(
+    async (originalSessionId: string, customPrompt: string) => {
+      const response = await fetch('/api/debug/replay-credit-extraction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ originalSessionId, customPrompt }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'Replay failed');
+      }
+      return await response.json();
+    },
+    []
+  );
+
+  return { connected, replayAgent, replayCreditExtraction };
 }

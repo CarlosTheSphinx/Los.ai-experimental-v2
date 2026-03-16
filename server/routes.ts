@@ -60,6 +60,7 @@ import { registerAiAssistantRoutes } from './routes/ai-assistant';
 import { registerAgentRoutes } from './routes/agents';
 import { registerDebuggerRoutes } from './routes/debugger';
 import { OrchestrationTracer } from './services/orchestrationTracing';
+import { cacheReplayContext } from './routes/debugger';
 import { registerEmailRoutes } from './routes/email';
 import { registerGoogleConnectRoutes } from './routes/googleConnect';
 import { registerMicrosoftConnectRoutes } from './routes/microsoftConnect';
@@ -12200,6 +12201,7 @@ Respond ONLY with valid JSON in this format:
       });
 
       OrchestrationTracer.emit({ eventType: 'agent_complete', agentName: 'creditPolicyExtractor', agentIndex: 0, timestamp: new Date().toISOString(), sessionId: pSessionId, output: { rulesExtracted: parsed.rules.length, programId }, duration: Date.now() - pStartTime });
+      cacheReplayContext(pSessionId, truncatedText, fileName);
       OrchestrationTracer.endSession(pSessionId);
 
       res.json({ rules: parsed.rules, programId });
@@ -12555,6 +12557,7 @@ Respond ONLY with valid JSON in this format:
         output: { rulesExtracted: parsed.rules.length, categories: Array.from(categories) },
         duration: Date.now() - startTime,
       });
+      cacheReplayContext(sessionId, truncatedText, fileName);
       OrchestrationTracer.endSession(sessionId);
 
       res.json({ rules: parsed.rules });
