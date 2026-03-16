@@ -3321,7 +3321,6 @@ function SortableTaskRow({
   globalIdx,
   stages,
   teamMembers,
-  formTemplates,
   updateTask,
   removeTask,
   getAssigneeLabel,
@@ -3331,14 +3330,12 @@ function SortableTaskRow({
   globalIdx: number;
   stages: StageEntry[];
   teamMembers: { id: number; fullName: string; role: string }[];
-  formTemplates: { id: number; name: string }[];
   updateTask: (i: number, field: keyof TaskEntry, value: any) => void;
   removeTask: (i: number) => void;
   getAssigneeLabel: (v: string) => string;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
-  const showFormDropdown = task.assignToRole === 'user' || task.assignToRole === 'all';
 
   return (
     <div
@@ -3393,24 +3390,6 @@ function SortableTaskRow({
           <SelectItem value="broker">Broker</SelectItem>
         </SelectContent>
       </Select>
-      {showFormDropdown && formTemplates.length > 0 ? (
-        <Select
-          value={task.formTemplateId ? task.formTemplateId.toString() : 'none'}
-          onValueChange={(v) => updateTask(globalIdx, 'formTemplateId', v === 'none' ? null : parseInt(v))}
-        >
-          <SelectTrigger className="w-[130px] h-7 text-[12px]" data-testid={`select-task-form-${globalIdx}`}>
-            <SelectValue placeholder="Form..." />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">No Form</SelectItem>
-            {formTemplates.map((ft) => (
-              <SelectItem key={ft.id} value={ft.id.toString()}>{ft.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      ) : (
-        <div className="w-[130px] flex-shrink-0" />
-      )}
       <Select
         value={task.stepIndex !== null ? task.stepIndex.toString() : 'none'}
         onValueChange={(v) => updateTask(globalIdx, 'stepIndex', v === 'none' ? null : parseInt(v))}
@@ -3549,7 +3528,6 @@ function TasksStep({
       globalIdx={globalIdx}
       stages={stages}
       teamMembers={teamMembers}
-      formTemplates={formTemplates}
       updateTask={updateTask}
       removeTask={removeTask}
       getAssigneeLabel={getAssigneeLabel}
@@ -3599,7 +3577,6 @@ function TasksStep({
         <div className="flex items-center justify-end gap-3 py-1.5 pr-[13px]">
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium w-[100px] text-center flex-shrink-0" data-testid="label-task-priority">Priority</span>
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium w-[140px] text-center flex-shrink-0" data-testid="label-assigned-to">Assigned To</span>
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium w-[130px] text-center flex-shrink-0" data-testid="label-task-form">Form</span>
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium w-[130px] text-center flex-shrink-0" data-testid="label-task-stage">Stage</span>
           <div className="w-[18px] flex-shrink-0" />
         </div>
