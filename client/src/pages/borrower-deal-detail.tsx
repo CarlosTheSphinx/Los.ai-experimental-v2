@@ -86,7 +86,7 @@ export default function BorrowerDealDetail() {
   const [uploadingDocId, setUploadingDocId] = useState<number | null>(null);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["overview", "checklist"]));
   const [expandedDocs, setExpandedDocs] = useState<Set<number>>(new Set());
-  const [previewDoc, setPreviewDoc] = useState<{ name: string; filePath: string; mimeType?: string } | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<{ name: string; filePath: string; mimeType?: string; docId: number } | null>(null);
 
   const { data: dealData, isLoading, error: dealError } = useQuery<{
     project: any;
@@ -541,7 +541,7 @@ export default function BorrowerDealDetail() {
                                     variant="outline"
                                     size="sm"
                                     className="h-7 text-xs gap-1.5"
-                                    onClick={() => setPreviewDoc({ name: doc.documentName || doc.fileName, filePath: doc.filePath, mimeType: doc.mimeType })}
+                                    onClick={() => setPreviewDoc({ name: doc.documentName || doc.fileName, filePath: doc.filePath, mimeType: doc.mimeType, docId: doc.id })}
                                     data-testid={`button-preview-${doc.id}`}
                                   >
                                     <Eye className="h-3 w-3" />
@@ -604,24 +604,38 @@ export default function BorrowerDealDetail() {
             <div className="flex-1 overflow-auto p-4 flex items-center justify-center min-h-[400px]">
               {previewDoc.mimeType?.startsWith('image/') ? (
                 <img
-                  src={`/api/storage/file?path=${encodeURIComponent(previewDoc.filePath)}`}
+                  src={`/api/projects/${dealId}/deal-documents/${previewDoc.docId}/download`}
                   alt={previewDoc.name}
                   className="max-w-full max-h-[75vh] object-contain rounded"
                   data-testid="preview-image"
                 />
               ) : previewDoc.mimeType === 'application/pdf' ? (
-                <iframe
-                  src={`/api/storage/file?path=${encodeURIComponent(previewDoc.filePath)}`}
-                  className="w-full h-[75vh] rounded border"
-                  title={previewDoc.name}
-                  data-testid="preview-pdf"
-                />
+                <div className="w-full h-[75vh] flex flex-col">
+                  <iframe
+                    src={`/api/projects/${dealId}/deal-documents/${previewDoc.docId}/download`}
+                    className="w-full flex-1 rounded border"
+                    title={previewDoc.name}
+                    data-testid="preview-pdf"
+                  />
+                  <div className="flex justify-center pt-3">
+                    <a
+                      href={`/api/projects/${dealId}/deal-documents/${previewDoc.docId}/download`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary"
+                      data-testid="link-open-pdf-tab"
+                    >
+                      <Eye className="h-3 w-3" />
+                      Open in new tab
+                    </a>
+                  </div>
+                </div>
               ) : (
                 <div className="text-center space-y-3 py-8">
                   <FileText className="h-12 w-12 mx-auto text-muted-foreground" />
                   <p className="text-sm text-muted-foreground">Preview not available for this file type.</p>
                   <a
-                    href={`/api/storage/file?path=${encodeURIComponent(previewDoc.filePath)}`}
+                    href={`/api/projects/${dealId}/deal-documents/${previewDoc.docId}/download?download=true`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"

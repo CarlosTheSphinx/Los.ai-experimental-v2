@@ -647,7 +647,15 @@ function DocumentPreviewModal({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const isImage = mimeType?.startsWith("image/");
+  const isPdf = mimeType === "application/pdf";
+
   useEffect(() => {
+    if (isPdf) {
+      setLoading(false);
+      return;
+    }
+
     let revoke: string | null = null;
     const controller = new AbortController();
 
@@ -670,7 +678,7 @@ function DocumentPreviewModal({
       controller.abort();
       if (revoke) URL.revokeObjectURL(revoke);
     };
-  }, [url]);
+  }, [url, isPdf]);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -679,10 +687,6 @@ function DocumentPreviewModal({
     document.addEventListener("keydown", handleEsc);
     return () => document.removeEventListener("keydown", handleEsc);
   }, [onClose]);
-
-  const isImage = mimeType?.startsWith("image/");
-  const isPdf = mimeType === "application/pdf";
-  const canPreview = isImage || isPdf;
 
   return (
     <div
@@ -714,7 +718,27 @@ function DocumentPreviewModal({
           </div>
         </div>
         <div className="flex-1 overflow-auto flex items-center justify-center p-4">
-          {loading ? (
+          {isPdf ? (
+            <div className="w-full h-full flex flex-col">
+              <iframe
+                src={url}
+                className="w-full flex-1 rounded border"
+                title={fileName}
+                data-testid="preview-pdf"
+              />
+              <div className="flex justify-center pt-3 shrink-0">
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary"
+                  data-testid="link-open-pdf-tab"
+                >
+                  Open in new tab
+                </a>
+              </div>
+            </div>
+          ) : loading ? (
             <div className="flex flex-col items-center gap-3" data-testid="preview-loading">
               <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
               <p className="text-[14px] text-muted-foreground">Loading preview...</p>
@@ -737,13 +761,6 @@ function DocumentPreviewModal({
               alt={fileName}
               className="max-w-full max-h-full object-contain"
               data-testid="preview-image"
-            />
-          ) : blobUrl && isPdf ? (
-            <embed
-              src={blobUrl}
-              type="application/pdf"
-              className="w-full h-full"
-              data-testid="preview-pdf"
             />
           ) : (
             <div className="text-center space-y-4" data-testid="preview-unsupported">

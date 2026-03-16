@@ -4468,6 +4468,49 @@ export async function registerRoutes(
     }
   });
 
+  app.get('/api/projects/:id/deal-documents/:docId/download', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const projectId = parseInt(req.params.id);
+      const docId = parseInt(req.params.docId);
+
+      const project = await getProjectWithBorrowerAccess(projectId, userId, req.user!.role);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+
+      const [doc] = await db.select()
+        .from(dealDocuments)
+        .where(and(eq(dealDocuments.id, docId), eq(dealDocuments.dealId, projectId)))
+        .limit(1);
+
+      if (!doc || !doc.filePath) {
+        return res.status(404).json({ error: 'Document file not found' });
+      }
+
+      const objectFile = await objectStorageService.getObjectEntityFile(doc.filePath);
+
+      res.set('X-Frame-Options', 'SAMEORIGIN');
+      res.removeHeader('Content-Security-Policy');
+
+      const safeDocName = doc.fileName ? doc.fileName.replace(/[^\x20-\x7E]/g, '_').replace(/\\/g, '_').replace(/"/g, "'") : null;
+      if (req.query.download === 'true' && safeDocName) {
+        res.set('Content-Disposition', `attachment; filename="${safeDocName}"`);
+      } else {
+        res.set('Content-Disposition', `inline${safeDocName ? `; filename="${safeDocName}"` : ''}`);
+      }
+
+      if (doc.mimeType) {
+        res.set('Content-Type', doc.mimeType);
+      }
+
+      await objectStorageService.downloadObject(objectFile, res);
+    } catch (error) {
+      console.error('Borrower document download error:', error);
+      res.status(500).json({ error: 'Failed to download document' });
+    }
+  });
+
   // Retry Drive folder sync for a project
   app.post('/api/projects/:id/drive/retry', authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
     try {
