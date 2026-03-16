@@ -1356,6 +1356,8 @@ function CreditPolicyStep({
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${protocol}//${window.location.host}/ws/orchestration`);
     wsRef.current = ws;
+    let wsRulesReceived: any[] | null = null;
+    let wsCompleted = false;
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
@@ -1367,6 +1369,22 @@ function CreditPolicyStep({
           });
           if (data.rules && Array.isArray(data.rules)) {
             setLiveRules(data.rules);
+          }
+        }
+        if (data.eventType === 'credit_rule_extracted' && data.rules) {
+          wsRulesReceived = data.rules;
+        }
+        if (data.eventType === 'agent_complete' && data.agentName === 'creditPolicyExtractor') {
+          wsCompleted = true;
+          if (wsRulesReceived && wsRulesReceived.length > 0) {
+            setExtractedRules(wsRulesReceived);
+            const groups: Record<string, boolean> = {};
+            wsRulesReceived.forEach((r: any) => { groups[r.documentType || 'General'] = true; });
+            setExpandedGroups(groups);
+            toast({ title: `Extracted ${wsRulesReceived.length} rules from ${file.name}` });
+            extractingLockRef.current = false;
+            setIsExtracting(false);
+            setChunkProgress(null);
           }
         }
       } catch {}
@@ -1401,6 +1419,17 @@ function CreditPolicyStep({
         toast({ title: `Extracted ${data.rules.length} rules from ${file.name}` });
       }
     } catch (error: any) {
+      if (error.message?.includes('already being extracted') || wsCompleted) {
+        return;
+      }
+      if (wsRulesReceived && wsRulesReceived.length > 0) {
+        setExtractedRules(wsRulesReceived);
+        const groups: Record<string, boolean> = {};
+        wsRulesReceived.forEach((r: any) => { groups[r.documentType || 'General'] = true; });
+        setExpandedGroups(groups);
+        toast({ title: `Extracted ${wsRulesReceived.length} rules from ${file.name}` });
+        return;
+      }
       let msg = 'Failed to extract rules';
       try {
         const jsonMatch = error.message?.match(/\{.*\}/s);

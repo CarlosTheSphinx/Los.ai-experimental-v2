@@ -222,6 +222,8 @@ export default function AdminCreditPolicies() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${protocol}//${window.location.host}/ws/orchestration`);
     wsRef.current = ws;
+    let wsRulesReceived: any[] | null = null;
+    let wsCompleted = false;
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
@@ -235,6 +237,20 @@ export default function AdminCreditPolicies() {
           });
           if (msg.rules && Array.isArray(msg.rules)) {
             setLiveRules(msg.rules);
+          }
+        }
+        if (msg.eventType === 'credit_rule_extracted' && msg.rules) {
+          wsRulesReceived = msg.rules;
+        }
+        if (msg.eventType === 'agent_complete' && msg.agentName === 'creditPolicyExtractor') {
+          wsCompleted = true;
+          if (wsRulesReceived && wsRulesReceived.length > 0) {
+            stopProgressSimulation();
+            setRules(wsRulesReceived.map(assignLocalId));
+            toast({ title: `Extracted ${wsRulesReceived.length} rules from ${file.name}` });
+            extractingLockRef.current = false;
+            setIsExtracting(false);
+            setChunkProgress(null);
           }
         }
       } catch {}
@@ -265,12 +281,17 @@ export default function AdminCreditPolicies() {
         toast({ title: `Extracted ${data.rules.length} rules from ${file.name}` });
       }
     } catch (error: any) {
-      stopProgressSimulation();
-      if (error.message?.includes('already being extracted')) {
-        toast({ title: "Extraction already in progress", description: "Please wait for the current extraction to finish." });
-      } else {
-        toast({ title: "Failed to extract rules", description: error.message, variant: "destructive" });
+      if (error.message?.includes('already being extracted') || wsCompleted) {
+        return;
       }
+      if (wsRulesReceived && wsRulesReceived.length > 0) {
+        stopProgressSimulation();
+        setRules(wsRulesReceived.map(assignLocalId));
+        toast({ title: `Extracted ${wsRulesReceived.length} rules from ${file.name}` });
+        return;
+      }
+      stopProgressSimulation();
+      toast({ title: "Failed to extract rules", description: error.message, variant: "destructive" });
     } finally {
       extractingLockRef.current = false;
       setIsExtracting(false);
