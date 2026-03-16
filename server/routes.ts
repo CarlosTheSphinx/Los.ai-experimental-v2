@@ -12362,8 +12362,6 @@ export async function registerRoutes(
     return chunks;
   }
 
-  const activeExtractions = new Map<number, { sessionId: string; startedAt: number }>();
-
   async function extractRulesFromChunks(
     fullText: string,
     systemPrompt: string,
@@ -12756,27 +12754,12 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/admin/credit-policies/extraction-status', authenticateUser, requireAdmin, (req: AuthRequest, res: Response) => {
-    const userId = req.user!.id;
-    const active = activeExtractions.get(userId);
-    if (active) {
-      return res.json({ extracting: true, sessionId: active.sessionId, startedAt: active.startedAt });
-    }
+  app.get('/api/admin/credit-policies/extraction-status', authenticateUser, requireAdmin, (_req: AuthRequest, res: Response) => {
     return res.json({ extracting: false });
   });
 
   app.post('/api/admin/credit-policies/extract-rules', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
-      const userId = req.user!.id;
-      const existing = activeExtractions.get(userId);
-      if (existing) {
-        const elapsed = Date.now() - existing.startedAt;
-        if (elapsed < 10 * 60 * 1000) {
-          return res.status(409).json({ error: 'An extraction is already in progress. Please wait for it to complete.', sessionId: existing.sessionId });
-        }
-        activeExtractions.delete(userId);
-      }
-
       const { fileContent, fileName, customPrompt } = req.body;
       if (!fileContent) {
         return res.status(400).json({ error: 'fileContent is required (base64 encoded)' });
@@ -12793,7 +12776,6 @@ export async function registerRoutes(
       const truncatedText = textContent.slice(0, cpSettings2.documentLimit);
 
       const sessionId = OrchestrationTracer.startSession();
-      activeExtractions.set(userId, { sessionId, startedAt: Date.now() });
 
       OrchestrationTracer.emit({
         eventType: 'agent_start',
@@ -12838,7 +12820,6 @@ export async function registerRoutes(
           duration: Date.now() - startTime,
         });
         OrchestrationTracer.endSession(sessionId);
-        activeExtractions.delete(userId);
         return res.status(500).json({ error: 'AI could not extract any rules from the document' });
       }
 
@@ -12879,12 +12860,9 @@ export async function registerRoutes(
       });
       cacheReplayContext(sessionId, truncatedText, fileName);
       OrchestrationTracer.endSession(sessionId);
-      activeExtractions.delete(userId);
 
       res.json({ rules: normalizedRules });
     } catch (error: any) {
-      const userId = req.user?.id;
-      if (userId) activeExtractions.delete(userId);
       console.error('Extract rules error:', error);
       if (error.message?.includes('timed out')) {
         return res.status(504).json({ error: 'AI analysis timed out. Please try again with a smaller document.' });

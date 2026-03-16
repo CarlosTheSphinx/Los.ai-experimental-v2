@@ -1835,6 +1835,12 @@ function CreditPolicyStep({
 
           {!isExtracting && !extractError && extractedRules.length > 0 && (
             <div className="space-y-3">
+              <div className="flex items-center gap-2 px-3 py-2 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800/50 rounded-lg">
+                <Check className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
+                <p className="text-[13px] text-green-700 dark:text-green-300 font-medium">
+                  Extraction complete — {extractedRules.length} rules found. You can review and edit them below.
+                </p>
+              </div>
               <div className="space-y-2">
                 <Label className="text-[14px] font-medium">Policy Name</Label>
                 <Input
