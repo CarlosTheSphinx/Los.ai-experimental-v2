@@ -12504,7 +12504,10 @@ export async function registerRoutes(
   function deduplicateRules(rules: any[]): any[] {
     const seen = new Map<string, any>();
     for (const rule of rules) {
-      const key = `${(rule.ruleTitle || '').toLowerCase().trim()}|${(rule.category || '').toLowerCase().trim()}`;
+      const titleNorm = (rule.ruleTitle || '').toLowerCase().trim();
+      const catNorm = (rule.category || '').toLowerCase().trim();
+      const descStart = (rule.ruleDescription || '').toLowerCase().trim().slice(0, 80);
+      const key = `${titleNorm}|${catNorm}|${descStart}`;
       if (!seen.has(key)) {
         seen.set(key, rule);
       } else {

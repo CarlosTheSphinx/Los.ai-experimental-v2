@@ -1149,6 +1149,9 @@ function CreditPolicyStep({
   const [extractError, setExtractError] = useState<string | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState('');
   const [extractedRules, setExtractedRules] = useState<{ documentType: string; ruleTitle: string; ruleDescription: string; category?: string }[]>([]);
+  const [chunkProgress, setChunkProgress] = useState<{ chunksCompleted: number; totalChunks: number; rulesFoundSoFar: number } | null>(null);
+  const [liveRules, setLiveRules] = useState<any[]>([]);
+  const wsRef = useRef<WebSocket | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newPolicyName, setNewPolicyName] = useState('');
   const [newPolicyDescription, setNewPolicyDescription] = useState('');
@@ -1338,12 +1341,33 @@ function CreditPolicyStep({
 
     setIsExtracting(true);
     setExtractError(null);
+    setChunkProgress(null);
+    setLiveRules([]);
     setUploadedFileName(file.name);
     setShowCreateForm(true);
     if (!newPolicyName) {
       const baseName = file.name.replace(/\.(pdf|docx?|txt)$/i, '').replace(/[_-]/g, ' ');
       setNewPolicyName(baseName);
     }
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/orchestration`);
+    wsRef.current = ws;
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.eventType === 'credit_extraction_progress' && data.metadata) {
+          setChunkProgress({
+            chunksCompleted: data.metadata.chunksCompleted,
+            totalChunks: data.metadata.totalChunks,
+            rulesFoundSoFar: data.metadata.rulesFoundSoFar,
+          });
+          if (data.rules && Array.isArray(data.rules)) {
+            setLiveRules(data.rules);
+          }
+        }
+      } catch {}
+    };
 
     try {
       const reader = new FileReader();
@@ -1383,6 +1407,11 @@ function CreditPolicyStep({
       toast({ title: 'Analysis failed', description: msg, variant: 'destructive' });
     } finally {
       setIsExtracting(false);
+      setChunkProgress(null);
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
     }
   }, [newPolicyName, toast]);
 
@@ -1798,12 +1827,50 @@ function CreditPolicyStep({
           </div>
 
           {isExtracting && (
-            <div className="flex items-center justify-center gap-3 py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-primary" />
-              <div>
-                <p className="text-[14px] font-medium">Analyzing your credit policy document...</p>
-                <p className="text-[13px] text-muted-foreground">The AI is reading and extracting individual lending rules</p>
+            <div className="py-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <Loader2 className="h-5 w-5 animate-spin text-primary flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-[14px] font-medium">
+                    {chunkProgress
+                      ? `Processing chunk ${chunkProgress.chunksCompleted} of ${chunkProgress.totalChunks}`
+                      : 'Analyzing your credit policy document...'}
+                  </p>
+                  <p className="text-[13px] text-muted-foreground">
+                    {chunkProgress
+                      ? `${chunkProgress.rulesFoundSoFar} rules found so far`
+                      : 'The AI is reading and extracting individual lending rules'}
+                  </p>
+                </div>
               </div>
+              {chunkProgress && chunkProgress.totalChunks > 1 && (
+                <Progress
+                  value={(chunkProgress.chunksCompleted / chunkProgress.totalChunks) * 100}
+                  className="h-2"
+                  data-testid="progress-extraction"
+                />
+              )}
+              {liveRules.length > 0 && (
+                <div className="border rounded-[10px] max-h-48 overflow-y-auto">
+                  <div className="px-3 py-2 border-b bg-muted/30 flex items-center justify-between">
+                    <span className="text-[12px] font-medium text-muted-foreground uppercase tracking-wider">Live Extraction</span>
+                    <Badge variant="secondary" className="text-[11px]">{liveRules.length} rules</Badge>
+                  </div>
+                  <div className="divide-y">
+                    {liveRules.slice(-10).map((rule: any, idx: number) => (
+                      <div key={rule.id || idx} className="px-3 py-1.5 text-[12px]">
+                        <span className="font-medium">{rule.rule || rule.ruleTitle}</span>
+                        {rule.category && <Badge variant="outline" className="ml-2 text-[10px] py-0">{rule.category}</Badge>}
+                      </div>
+                    ))}
+                    {liveRules.length > 10 && (
+                      <div className="px-3 py-1.5 text-[11px] text-muted-foreground text-center">
+                        + {liveRules.length - 10} more rules
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
