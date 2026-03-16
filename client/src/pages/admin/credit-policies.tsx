@@ -446,7 +446,7 @@ export default function AdminCreditPolicies() {
                       {liveRules.slice(-8).map((rule: any, idx: number) => (
                         <div key={rule.id || idx} className="px-3 py-1.5 text-[12px]">
                           <span className="font-medium">{rule.rule || rule.ruleTitle}</span>
-                          {rule.category && <span className="ml-2 text-muted-foreground">({rule.category})</span>}
+                          {rule.category && <Badge variant="outline" className="ml-2 text-[10px] py-0">{rule.category}</Badge>}
                         </div>
                       ))}
                       {liveRules.length > 8 && (
