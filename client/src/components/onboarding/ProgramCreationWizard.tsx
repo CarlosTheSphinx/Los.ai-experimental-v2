@@ -3537,10 +3537,7 @@ function TasksStep({
       </div>
 
       {tasks.length > 0 && (
-        <div className="flex items-center gap-3 py-1.5 px-3 ml-[40px]">
-          <div className="w-[22px] flex-shrink-0" />
-          <div className="w-[14px] flex-shrink-0" />
-          <div className="flex-1 min-w-0" />
+        <div className="flex items-center justify-end gap-3 py-1.5 pr-3">
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium w-[100px] text-center flex-shrink-0" data-testid="label-task-priority">Task Priority</span>
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium w-[140px] text-center flex-shrink-0" data-testid="label-assigned-to">Assigned To</span>
           <div className="w-[130px] flex-shrink-0" />
@@ -3570,7 +3567,7 @@ function TasksStep({
                 />
 
                 <div className="ml-4 mb-4">
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <span style={{ color }} className="text-[13px]">●</span>
                       <span className="text-[15px] font-bold text-foreground">
