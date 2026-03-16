@@ -35,6 +35,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useToast } from '@/hooks/use-toast';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Layers,
   Plus,
@@ -327,6 +328,7 @@ interface StageEntry {
   stepName: string;
   isRequired: boolean;
   description?: string;
+  color?: string;
 }
 
 interface DocEntry {
@@ -2730,7 +2732,7 @@ function StagesStep({
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-[26px] font-bold leading-tight">Workflow Stages</h2>
+        <h2 className="text-[26px] font-bold leading-tight">Process Stages</h2>
         <p className="text-[16px] text-muted-foreground mt-1">
           Define the stages each deal goes through from application to closing. Drag to reorder.
         </p>
@@ -2756,7 +2758,7 @@ function StagesStep({
 
         <div className="space-y-0">
           {stages.map((stage, i) => {
-            const color = STAGE_COLORS[i % STAGE_COLORS.length];
+            const color = stage.color || STAGE_COLORS[i % STAGE_COLORS.length];
 
             return (
               <div
@@ -2804,7 +2806,29 @@ function StagesStep({
 
                     <div className="flex-1 min-w-0 space-y-0.5">
                       <div className="flex items-center gap-1.5">
-                        <span style={{ color }} className="text-[14px] flex-shrink-0">●</span>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button
+                              className="w-4 h-4 rounded-full flex-shrink-0 border-2 border-white shadow-sm hover:scale-125 transition-transform cursor-pointer"
+                              style={{ backgroundColor: color }}
+                              title="Change stage color"
+                              data-testid={`button-stage-color-${i}`}
+                            />
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-2" align="start" side="bottom">
+                            <div className="grid grid-cols-4 gap-1.5">
+                              {STAGE_COLORS.map((c) => (
+                                <button
+                                  key={c}
+                                  className={cn("w-6 h-6 rounded-full border-2 hover:scale-110 transition-transform", color === c ? "border-foreground" : "border-transparent")}
+                                  style={{ backgroundColor: c }}
+                                  onClick={() => updateStage(i, 'color', c)}
+                                  data-testid={`color-option-${c.replace('#', '')}`}
+                                />
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
                         <span className="text-[13px] text-muted-foreground/60 flex-shrink-0 font-medium">{i + 1}.</span>
                         <input
                           ref={(el) => { nameRefs.current[i] = el; }}
@@ -2868,7 +2892,7 @@ function StagesStep({
         <div>
           <span className="text-[14px] font-semibold text-blue-700">Tip: </span>
           <span className="text-[14px] text-blue-800">
-            Stages define your deal workflow from application to closing. Documents and tasks in the next steps will be linked to these stages. Required stages must be completed before a deal can advance.
+            Stages define your deal process from application to closing. Documents and tasks in the next steps will be linked to these stages. Required stages must be completed before a deal can advance.
           </span>
         </div>
       </div>
@@ -4014,7 +4038,7 @@ function SummaryStep({
 
         <div className="border rounded-[10px] bg-slate-50/80 dark:bg-muted/30 overflow-hidden" data-testid="summary-card-workflow">
           <div className="flex items-center justify-between px-5 pt-5 pb-3">
-            <h4 className="text-[16px] font-bold">Workflow</h4>
+            <h4 className="text-[16px] font-bold">Process</h4>
             <button className="text-[13px] text-muted-foreground hover:text-primary" onClick={() => onEditStep('stages')} data-testid="button-edit-workflow">Edit</button>
           </div>
           <div className="divide-y text-[14px]">
