@@ -240,7 +240,13 @@ export default function AdminCreditPolicies() {
           }
         }
         if (msg.eventType === 'credit_rule_extracted' && msg.rules) {
-          wsRulesReceived = msg.rules;
+          wsRulesReceived = msg.rules.map((r: any) => ({
+            ...r,
+            ruleTitle: r.rule || r.ruleTitle || '',
+            ruleDescription: r.reasoning || r.ruleDescription || '',
+            documentType: r.documentType || 'General',
+            confidence: typeof r.confidence === 'number' ? (r.confidence >= 0.9 ? 'high' : r.confidence >= 0.7 ? 'medium' : 'low') : r.confidence || 'medium',
+          }));
         }
         if (msg.eventType === 'agent_complete' && msg.agentName === 'creditPolicyExtractor') {
           wsCompleted = true;
@@ -280,19 +286,25 @@ export default function AdminCreditPolicies() {
         setRules(data.rules.map(assignLocalId));
         toast({ title: `Extracted ${data.rules.length} rules from ${file.name}` });
       }
+      extractingLockRef.current = false;
+      setIsExtracting(false);
+      setChunkProgress(null);
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
     } catch (error: any) {
-      if (error.message?.includes('already being extracted') || wsCompleted) {
-        return;
-      }
+      if (wsCompleted) return;
+      if (error.message?.includes('already being extracted')) return;
       if (wsRulesReceived && wsRulesReceived.length > 0) {
         stopProgressSimulation();
         setRules(wsRulesReceived.map(assignLocalId));
         toast({ title: `Extracted ${wsRulesReceived.length} rules from ${file.name}` });
+        extractingLockRef.current = false;
+        setIsExtracting(false);
+        setChunkProgress(null);
+        if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
         return;
       }
       stopProgressSimulation();
       toast({ title: "Failed to extract rules", description: error.message, variant: "destructive" });
-    } finally {
       extractingLockRef.current = false;
       setIsExtracting(false);
       setChunkProgress(null);

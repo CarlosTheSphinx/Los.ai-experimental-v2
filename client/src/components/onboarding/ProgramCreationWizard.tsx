@@ -1372,7 +1372,12 @@ function CreditPolicyStep({
           }
         }
         if (data.eventType === 'credit_rule_extracted' && data.rules) {
-          wsRulesReceived = data.rules;
+          wsRulesReceived = data.rules.map((r: any) => ({
+            documentType: r.documentType || 'General',
+            ruleTitle: r.rule || r.ruleTitle || '',
+            ruleDescription: r.reasoning || r.ruleDescription || '',
+            category: r.category || null,
+          }));
         }
         if (data.eventType === 'agent_complete' && data.agentName === 'creditPolicyExtractor') {
           wsCompleted = true;
@@ -1418,16 +1423,24 @@ function CreditPolicyStep({
         setExpandedGroups(groups);
         toast({ title: `Extracted ${data.rules.length} rules from ${file.name}` });
       }
+      extractingLockRef.current = false;
+      setIsExtracting(false);
+      setChunkProgress(null);
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
     } catch (error: any) {
-      if (error.message?.includes('already being extracted') || wsCompleted) {
-        return;
-      }
+      if (wsCompleted) return;
+      if (error.message?.includes('already being extracted')) return;
       if (wsRulesReceived && wsRulesReceived.length > 0) {
         setExtractedRules(wsRulesReceived);
         const groups: Record<string, boolean> = {};
         wsRulesReceived.forEach((r: any) => { groups[r.documentType || 'General'] = true; });
         setExpandedGroups(groups);
         toast({ title: `Extracted ${wsRulesReceived.length} rules from ${file.name}` });
+        setExtractError(null);
+        extractingLockRef.current = false;
+        setIsExtracting(false);
+        setChunkProgress(null);
+        if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
         return;
       }
       let msg = 'Failed to extract rules';
@@ -1442,14 +1455,10 @@ function CreditPolicyStep({
       } catch { /* use default msg */ }
       setExtractError(msg);
       toast({ title: 'Analysis failed', description: msg, variant: 'destructive' });
-    } finally {
       extractingLockRef.current = false;
       setIsExtracting(false);
       setChunkProgress(null);
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
     }
   }, [newPolicyName, toast]);
 
