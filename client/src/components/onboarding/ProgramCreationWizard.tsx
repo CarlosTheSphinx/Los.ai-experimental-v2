@@ -3197,6 +3197,16 @@ function DocumentsStep({
         </Button>
       </div>
 
+      {documents.length > 0 && (
+        <div className="flex items-center justify-end gap-3 py-1.5 pr-[13px]">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium w-[140px] text-center flex-shrink-0" data-testid="label-doc-description">Description</span>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium w-[100px] text-center flex-shrink-0" data-testid="label-doc-required">Required</span>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium w-[120px] text-center flex-shrink-0" data-testid="label-doc-visibility">Visibility</span>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium w-[130px] text-center flex-shrink-0" data-testid="label-doc-stage">Stage</span>
+          <div className="w-[18px] flex-shrink-0" />
+        </div>
+      )}
+
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDocDragEnd}>
       <div className="relative pl-6">
         {stages.length > 1 && (
@@ -3403,7 +3413,7 @@ function SortableTaskRow({
           <SelectItem value="broker">Broker</SelectItem>
         </SelectContent>
       </Select>
-      {showFormDropdown && formTemplates.length > 0 && (
+      {showFormDropdown && formTemplates.length > 0 ? (
         <Select
           value={task.formTemplateId ? task.formTemplateId.toString() : 'none'}
           onValueChange={(v) => updateTask(globalIdx, 'formTemplateId', v === 'none' ? null : parseInt(v))}
@@ -3418,6 +3428,8 @@ function SortableTaskRow({
             ))}
           </SelectContent>
         </Select>
+      ) : (
+        <div className="w-[130px] flex-shrink-0" />
       )}
       <Select
         value={task.stepIndex !== null ? task.stepIndex.toString() : 'none'}
@@ -3605,10 +3617,10 @@ function TasksStep({
 
       {tasks.length > 0 && (
         <div className="flex items-center justify-end gap-3 py-1.5 pr-[13px]">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium w-[100px] text-center flex-shrink-0" data-testid="label-task-priority">Task Priority</span>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium w-[100px] text-center flex-shrink-0" data-testid="label-task-priority">Priority</span>
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium w-[140px] text-center flex-shrink-0" data-testid="label-assigned-to">Assigned To</span>
-          <div className="w-[130px] flex-shrink-0" />
-          <div className="w-[130px] flex-shrink-0" />
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium w-[130px] text-center flex-shrink-0" data-testid="label-task-form">Form</span>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium w-[130px] text-center flex-shrink-0" data-testid="label-task-stage">Stage</span>
           <div className="w-[18px] flex-shrink-0" />
         </div>
       )}
