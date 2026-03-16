@@ -30,7 +30,7 @@ The application is built with a modern web stack: React 18 with TypeScript for t
 -   **Multi-Property Support**: Handles multiple properties per loan.
 -   **Program-to-Deal Sync**: Non-destructive propagation of loan program template changes to existing deals.
 -   **Unified Checklist System**: Provides a single source of truth for checklists with role-based filtering.
--   **AI Integration**: Features an AI Draft Messages Panel, a Deal Memory System for persistent context, and an "Auto Process Pipeline" for AI-powered document and communication generation. AI Reviews tab for document review, draft messages, and risk flags.
+-   **AI Integration**: Features an AI Draft Messages Panel, a Deal Memory System for persistent context, and an "Auto Process Pipeline" for AI-powered document and communication generation. AI Reviews tab for document review, draft messages, and risk flags. Includes an **AI Orchestration Debugger** (super_admin only) with real-time agent tracing via WebSocket (`/ws/orchestration`, noServer mode to avoid Vite HMR conflicts), prompt replay (`POST /api/debug/replay-agent`), and credit extraction streaming. Tracing uses per-session IDs for concurrency safety. Debug endpoints protected by `requireSuperAdmin` middleware.
 -   **Gmail Integration**: Opt-in email integration for syncing threads, messages, and attachments with an in-app inbox.
 -   **Dynamic Deal Details**: Deal detail cards dynamically render based on `quoteFormFields` configuration with role-based access control.
 -   **Enhanced Document Management**: 5-step status lifecycle for documents, per-document AI review triggers, and "Push to Drive" functionality.

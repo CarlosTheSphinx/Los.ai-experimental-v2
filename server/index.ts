@@ -11,9 +11,12 @@ import { db } from "./db";
 import { seedSuperAdmins } from "./seedAdmins";
 import { seedInquiryFormTemplates, registerInquiryFormRoutes } from "./routes/inquiryForms";
 import { initializePIIContext, autoDecryptResponseMiddleware } from "./middleware/piiDecryption";
+import { setupOrchestrationWebSocket } from "./websocket/orchestrationEvents";
 const app = express();
 app.set('trust proxy', 1);
 const httpServer = createServer(app);
+
+setupOrchestrationWebSocket(httpServer);
 
 declare module "http" {
   interface IncomingMessage {

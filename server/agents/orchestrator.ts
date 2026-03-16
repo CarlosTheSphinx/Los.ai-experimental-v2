@@ -24,6 +24,7 @@ import {
 import { eq, and, desc, asc } from "drizzle-orm";
 import { executeAgent, type AgentType } from "./agentRunner";
 import { extractAllDealDocuments } from "./documentExtractor";
+import { OrchestrationTracer } from "../services/orchestrationTracing";
 
 const DEFAULT_SEQUENCE: AgentType[] = [
   "document_intelligence",
@@ -64,6 +65,11 @@ export async function startPipeline(
   const sequence = agentSequence || await getConfiguredPipelineSequence();
   console.log(`Starting pipeline for project ${projectId} — sequence: ${sequence.join(" → ")}`);
 
+  let tracingSessionId: string | undefined;
+  if (OrchestrationTracer.hasSubscribers()) {
+    tracingSessionId = OrchestrationTracer.startSession();
+  }
+
   const [pipelineRun] = await db
     .insert(agentPipelineRuns)
     .values({
@@ -87,10 +93,14 @@ export async function startPipeline(
   }
 
   try {
-    await executeNextAgent(pipelineRun.id, projectId, sequence, 0, triggeredBy);
+    await executeNextAgent(pipelineRun.id, projectId, sequence, 0, triggeredBy, tracingSessionId);
   } catch (error) {
     console.error(`Pipeline failed at agent index 0:`, error);
     await markPipelineFailed(pipelineRun.id, error instanceof Error ? error.message : String(error));
+  }
+
+  if (tracingSessionId) {
+    OrchestrationTracer.endSession(tracingSessionId);
   }
 
   const [updated] = await db
@@ -109,10 +119,10 @@ async function executeNextAgent(
   projectId: number,
   agentSequence: AgentType[],
   agentIndex: number,
-  triggeredBy: number | null
+  triggeredBy: number | null,
+  tracingSessionId?: string
 ): Promise<void> {
   if (agentIndex >= agentSequence.length) {
-    // Pipeline complete
     await markPipelineCompleted(pipelineRunId);
     await compileDealStory(projectId);
     return;
@@ -150,14 +160,26 @@ async function executeNextAgent(
   };
 
   try {
-    // Execute the agent
-    const result = await executeAgent({
-      agentType,
-      projectId,
-      triggeredBy: triggeredBy || undefined,
-      triggerType: "pipeline",
-      contextData: fullContext,
-    });
+    const agentExecFn = async () => {
+      return executeAgent({
+        agentType,
+        projectId,
+        triggeredBy: triggeredBy || undefined,
+        triggerType: "pipeline",
+        contextData: fullContext,
+      });
+    };
+
+    const result = OrchestrationTracer.hasSubscribers()
+      ? await OrchestrationTracer.traceAgent(
+          agentType,
+          agentIndex,
+          fullContext,
+          agentExecFn,
+          undefined,
+          tracingSessionId
+        )
+      : await agentExecFn();
 
     // Parse agent response and store structured output
     let outputSummary: any = {};
@@ -211,7 +233,7 @@ async function executeNextAgent(
     }
 
     // Continue to next agent
-    await executeNextAgent(pipelineRunId, projectId, agentSequence, agentIndex + 1, triggeredBy);
+    await executeNextAgent(pipelineRunId, projectId, agentSequence, agentIndex + 1, triggeredBy, tracingSessionId);
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
 

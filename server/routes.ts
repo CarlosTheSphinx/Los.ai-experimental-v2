@@ -58,6 +58,7 @@ import { registerProcessorRoutes } from './routes/processor';
 import { registerBrokerSdrRoutes } from './routes/broker-sdr';
 import { registerAiAssistantRoutes } from './routes/ai-assistant';
 import { registerAgentRoutes } from './routes/agents';
+import { registerDebuggerRoutes } from './routes/debugger';
 import { registerEmailRoutes } from './routes/email';
 import { registerGoogleConnectRoutes } from './routes/googleConnect';
 import { registerMicrosoftConnectRoutes } from './routes/microsoftConnect';
@@ -5119,6 +5120,9 @@ export async function registerRoutes(
 
   // ==================== AI AGENT SYSTEM ROUTES ====================
   registerAgentRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
+
+  // ==================== AI DEBUGGER ROUTES ====================
+  registerDebuggerRoutes(app, { authenticateUser, requireSuperAdmin });
 
   // ==================== EMAIL INTEGRATION ROUTES ====================
   registerEmailRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
