@@ -3817,15 +3817,37 @@ export async function registerRoutes(
       }).from(dealProcessors)
         .innerJoin(users, eq(dealProcessors.userId, users.id))
         .where(eq(dealProcessors.projectId, projectId));
-      
+
+      const formTemplateIds = [...new Set(tasks.filter(t => t.formTemplateId).map(t => t.formTemplateId!))];
+      let formTemplateMap = new Map<number, any>();
+      if (formTemplateIds.length > 0) {
+        const templates = await db.select().from(inquiryFormTemplates)
+          .where(inArray(inquiryFormTemplates.id, formTemplateIds));
+        formTemplateMap = new Map(templates.map(t => [t.id, t]));
+      }
+
+      const formTaskIds = tasks.filter(t => t.formTemplateId).map(t => t.id);
+      let formSubmissionMap = new Map<number, any>();
+      if (formTaskIds.length > 0) {
+        const submissions = await db.select().from(taskFormSubmissions)
+          .where(inArray(taskFormSubmissions.taskId, formTaskIds));
+        formSubmissionMap = new Map(submissions.map(s => [s.taskId, s]));
+      }
+
+      const enrichTask = (t: any) => ({
+        ...t,
+        formTemplate: t.formTemplateId ? formTemplateMap.get(t.formTemplateId) || null : null,
+        formSubmission: formSubmissionMap.get(t.id) || null,
+      });
+
       // Group tasks by stage
       const stagesWithTasks = stages.map(stage => ({
         ...stage,
-        tasks: tasks.filter(t => t.stageId === stage.id),
+        tasks: tasks.filter(t => t.stageId === stage.id).map(enrichTask),
       }));
 
       // Include tasks with no stage assignment (stageId = NULL)
-      const stagelessTasks = tasks.filter(t => t.stageId === null || t.stageId === undefined);
+      const stagelessTasks = tasks.filter(t => t.stageId === null || t.stageId === undefined).map(enrichTask);
       
       res.json({
         project: { ...project, programName },
@@ -3839,6 +3861,117 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Get project error:', error);
       res.status(500).json({ error: 'Failed to get project' });
+    }
+  });
+
+  app.post('/api/projects/:projectId/tasks/:taskId/submit-form', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const tId = parseInt(req.params.taskId);
+      const userId = req.user!.id;
+
+      const project = await getProjectWithBorrowerAccess(projectId, userId, req.user!.role);
+      if (!project) return res.status(404).json({ error: 'Deal not found' });
+
+      const [task] = await db.select().from(projectTasks)
+        .where(and(eq(projectTasks.id, tId), eq(projectTasks.projectId, projectId)));
+      if (!task) return res.status(404).json({ error: 'Task not found' });
+      if (!task.formTemplateId) return res.status(400).json({ error: 'This task has no form attached' });
+      if (task.status === 'completed') return res.status(400).json({ error: 'This task is already completed' });
+
+      const [template] = await db.select().from(inquiryFormTemplates)
+        .where(eq(inquiryFormTemplates.id, task.formTemplateId));
+      if (!template) return res.status(404).json({ error: 'Form template not found' });
+
+      const { formData } = req.body;
+      if (!formData || typeof formData !== 'object') {
+        return res.status(400).json({ error: 'formData is required' });
+      }
+
+      const templateFields = template.fields as Array<{ fieldKey: string; label: string; required: boolean }>;
+      for (const field of templateFields) {
+        if (field.required && !formData[field.fieldKey]?.trim()) {
+          return res.status(400).json({ error: `${field.label} is required` });
+        }
+      }
+
+      const existingSub = await db.select().from(taskFormSubmissions)
+        .where(eq(taskFormSubmissions.taskId, tId))
+        .limit(1);
+
+      const submitterEmail = req.user!.email || project.borrowerEmail;
+
+      if (existingSub.length > 0) {
+        await db.update(taskFormSubmissions)
+          .set({ formData, status: 'submitted', submittedAt: new Date(), submittedByEmail: submitterEmail })
+          .where(eq(taskFormSubmissions.id, existingSub[0].id));
+      } else {
+        await db.insert(taskFormSubmissions).values({
+          taskId: tId,
+          projectId: projectId,
+          formTemplateId: task.formTemplateId,
+          submittedByEmail: submitterEmail,
+          formData,
+          status: 'submitted',
+          submittedAt: new Date(),
+        });
+      }
+
+      if (template.targetType === 'third_party' && template.targetRole) {
+        const existingThirdParty = await db.select().from(dealThirdParties)
+          .where(and(
+            eq(dealThirdParties.projectId, projectId),
+            eq(dealThirdParties.role, template.targetRole)
+          ))
+          .limit(1);
+
+        const thirdPartyData = {
+          name: formData.name || formData.contactName || 'Unknown',
+          email: formData.email || null,
+          phone: formData.phone || null,
+          company: formData.company || null,
+          notes: Object.entries(formData)
+            .filter(([k]) => !['name', 'contactName', 'email', 'phone', 'company'].includes(k))
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(', ') || null,
+          role: template.targetRole,
+          projectId: projectId,
+        };
+
+        if (existingThirdParty.length > 0) {
+          await db.update(dealThirdParties)
+            .set({ ...thirdPartyData, updatedAt: new Date() })
+            .where(eq(dealThirdParties.id, existingThirdParty[0].id));
+        } else {
+          await db.insert(dealThirdParties).values(thirdPartyData);
+        }
+      }
+
+      await db.update(projectTasks)
+        .set({ status: 'completed', completedAt: new Date(), completedBy: 'borrower', borrowerActionRequired: false })
+        .where(eq(projectTasks.id, tId));
+
+      try {
+        const adminUsers = await db.select({ id: users.id }).from(users)
+          .where(inArray(users.role, ['admin', 'super_admin', 'staff']));
+        for (const admin of adminUsers) {
+          await createNotification({
+            userId: admin.id,
+            type: 'document_uploaded',
+            title: `Form Submitted: ${template.name}`,
+            message: `${project.borrowerName || 'Borrower'} submitted "${template.name}" for ${project.projectName || 'a deal'}.`,
+            dealId: projectId,
+            link: `/admin/deals/${projectId}`,
+          });
+        }
+      } catch (notifErr) {
+        console.error('Authenticated form submission notification error:', notifErr);
+      }
+
+      res.json({ success: true, message: 'Form submitted successfully' });
+    } catch (error) {
+      console.error('Authenticated form submission error:', error);
+      res.status(500).json({ error: 'Failed to submit form' });
     }
   });
 

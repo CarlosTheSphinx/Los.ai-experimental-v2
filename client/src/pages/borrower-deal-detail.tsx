@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, Link, useLocation } from "wouter";
 import { useState, type ChangeEvent } from "react";
 import {
@@ -9,11 +9,16 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StageProgressBar } from "@/components/ui/phase1/stage-progress-bar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { formatPhoneNumber } from "@/lib/validation";
 
 function fmt(amount: number | string | undefined | null): string {
   if (amount === null || amount === undefined || amount === "" || amount === "—") return "—";
@@ -78,6 +83,153 @@ const DEFAULT_STAGES = [
   { id: "appraisal", label: "Appraisal & Title" },
   { id: "closing", label: "Closing" },
 ];
+
+function formatDateTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function InlineFormTask({ task, dealId }: { task: any; dealId: string }) {
+  const { toast } = useToast();
+  const template = task.formTemplate;
+  const submission = task.formSubmission;
+  const [formOpen, setFormOpen] = useState(false);
+  const [formValues, setFormValues] = useState<Record<string, string>>(() => {
+    if (submission?.formData) return { ...submission.formData };
+    const init: Record<string, string> = {};
+    template?.fields?.forEach((f: any) => { init[f.fieldKey] = ""; });
+    return init;
+  });
+
+  const submitMutation = useMutation({
+    mutationFn: async (data: Record<string, string>) => {
+      const res = await apiRequest("POST", `/api/deals/${dealId}/tasks/${task.id}/submit-form`, { formData: data });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Form submitted", description: "Your information has been received." });
+      setFormOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/deals", dealId] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Submission failed", description: err.message || "Please try again.", variant: "destructive" });
+    },
+  });
+
+  if (!template) return null;
+
+  if (task.status === 'completed' && !submission) return null;
+
+  if (submission && submission.status === "submitted") {
+    return (
+      <div className="mt-2 ml-7 p-3 rounded-md border border-green-300/30 bg-green-50/50 dark:bg-green-950/20" data-testid={`form-submitted-${task.id}`}>
+        <div className="flex items-center gap-2 mb-2">
+          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <span className="text-sm font-medium text-green-600">Form Submitted</span>
+          {submission.submittedAt && (
+            <span className="text-xs text-muted-foreground">
+              {formatDateTime(submission.submittedAt)}
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+          {template.fields.map((field: any) => (
+            <div key={field.fieldKey} className="text-xs">
+              <span className="text-muted-foreground">{field.label}:</span>{" "}
+              <span className="font-medium">{submission.formData[field.fieldKey] || "—"}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 ml-7" data-testid={`form-section-${task.id}`}>
+      {!formOpen ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs gap-1.5"
+          onClick={() => setFormOpen(true)}
+          data-testid={`button-form-action-${task.id}`}
+        >
+          <ClipboardEdit className="h-3.5 w-3.5" />
+          Fill Out Form
+        </Button>
+      ) : (
+        <div className="p-4 rounded-md border border-primary/20 bg-card space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-semibold">{template.name}</h4>
+            <Button variant="ghost" size="sm" onClick={() => setFormOpen(false)} data-testid={`button-close-form-${task.id}`}>
+              Cancel
+            </Button>
+          </div>
+          {template.description && (
+            <p className="text-xs text-muted-foreground">{template.description}</p>
+          )}
+          <div className="space-y-3">
+            {template.fields.map((field: any) => (
+              <div key={field.fieldKey}>
+                <Label className="text-xs font-medium">
+                  {field.label}
+                  {field.required && <span className="text-destructive ml-0.5">*</span>}
+                </Label>
+                {field.fieldType === "textarea" ? (
+                  <Textarea
+                    placeholder={field.placeholder || ""}
+                    value={formValues[field.fieldKey] || ""}
+                    onChange={e => setFormValues(prev => ({ ...prev, [field.fieldKey]: e.target.value }))}
+                    className="mt-1"
+                    data-testid={`input-form-${field.fieldKey}-${task.id}`}
+                  />
+                ) : field.fieldType === "select" && field.options ? (
+                  <Select
+                    value={formValues[field.fieldKey] || ""}
+                    onValueChange={val => setFormValues(prev => ({ ...prev, [field.fieldKey]: val }))}
+                  >
+                    <SelectTrigger className="mt-1" data-testid={`select-form-${field.fieldKey}-${task.id}`}>
+                      <SelectValue placeholder={field.placeholder || "Select..."} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {field.options.map((opt: string) => (
+                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    type={field.fieldType === "email" ? "email" : field.fieldType === "phone" ? "tel" : "text"}
+                    placeholder={field.placeholder || ""}
+                    value={formValues[field.fieldKey] || ""}
+                    onChange={e => setFormValues(prev => ({ ...prev, [field.fieldKey]: field.fieldType === "phone" ? formatPhoneNumber(e.target.value) : e.target.value }))}
+                    className="mt-1"
+                    data-testid={`input-form-${field.fieldKey}-${task.id}`}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              onClick={() => submitMutation.mutate(formValues)}
+              disabled={submitMutation.isPending}
+              data-testid={`button-submit-form-${task.id}`}
+            >
+              {submitMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : null}
+              Submit
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function BorrowerDealDetail() {
   const [, params] = useRoute("/deals/:id");
@@ -449,23 +601,8 @@ export default function BorrowerDealDetail() {
                             {task.status === 'completed' ? 'Done' : task.priority || 'Pending'}
                           </Badge>
                         </div>
-                        {task.formTemplateId && task.status !== 'completed' && (
-                          <div className="ml-7">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs gap-1.5"
-                              onClick={() => {
-                                if (deal?.borrowerPortalToken) {
-                                  window.location.href = `/portal/${deal.borrowerPortalToken}`;
-                                }
-                              }}
-                              data-testid={`button-form-action-${task.id}`}
-                            >
-                              <ClipboardEdit className="h-3.5 w-3.5" />
-                              Fill Out Form
-                            </Button>
-                          </div>
+                        {task.formTemplateId && (
+                          <InlineFormTask task={task} dealId={dealId!} />
                         )}
                       </div>
                     ))}
