@@ -49,7 +49,7 @@ interface Fonts {
 
 const PAGE_W = 612;
 const PAGE_H = 792;
-const MARGIN = 54;
+const MARGIN = 72;
 const CONTENT_W = PAGE_W - MARGIN * 2;
 const BLACK = rgb(0, 0, 0);
 const DARK_GRAY = rgb(0.2, 0.2, 0.2);
