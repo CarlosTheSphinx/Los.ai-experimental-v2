@@ -302,19 +302,32 @@ export function registerDebuggerRoutes(app: any, deps: { authenticateUser: any; 
         return res.status(500).json({ success: false, error: 'AI could not extract any rules from the document' });
       }
 
-      normalizedRules.forEach((r: any, idx: number) => {
-        OrchestrationTracer.emit({
-          eventType: 'credit_rule_extracted',
-          agentName: 'creditPolicyExtractor',
-          agentIndex: 0,
-          timestamp: new Date().toISOString(),
-          sessionId: replaySessionId,
-          rules: [{ id: `rule_${idx}`, rule: r.ruleTitle, category: r.category, confidence: r.confidence === 'high' || r.confidence === 'Critical' || r.confidence === '100%' ? 0.95 : r.confidence === 'medium' || r.confidence === 'High' ? 0.75 : 0.5, reasoning: r.ruleDescription }],
-          progress: { current: idx + 1, total: normalizedRules.length, percentage: ((idx + 1) / normalizedRules.length) * 100 },
-        });
+      const replayCategories = new Set<string>();
+      const replayCreditRules = normalizedRules.map((r: any, idx: number) => {
+        replayCategories.add(r.category);
+        return {
+          id: `rule_${idx}`,
+          rule: r.ruleTitle,
+          category: r.category,
+          confidence: r.confidence === 'high' || r.confidence === 'Critical' || r.confidence === '100%' ? 0.95 : r.confidence === 'medium' || r.confidence === 'High' ? 0.75 : 0.5,
+          reasoning: r.ruleDescription,
+          sourceSection: r.sourceSection,
+          ruleType: r.ruleType,
+          clarificationNeeded: r.clarificationNeeded,
+        };
       });
 
-      OrchestrationTracer.emit({ eventType: 'agent_complete', agentName: 'creditPolicyExtractor', agentIndex: 0, timestamp: new Date().toISOString(), sessionId: replaySessionId, output: { rulesExtracted: normalizedRules.length, replay: true }, duration: Date.now() - startTime });
+      OrchestrationTracer.emit({
+        eventType: 'credit_rule_extracted',
+        agentName: 'creditPolicyExtractor',
+        agentIndex: 0,
+        timestamp: new Date().toISOString(),
+        sessionId: replaySessionId,
+        rules: replayCreditRules,
+        progress: { current: normalizedRules.length, total: normalizedRules.length, percentage: 100 },
+      });
+
+      OrchestrationTracer.emit({ eventType: 'agent_complete', agentName: 'creditPolicyExtractor', agentIndex: 0, timestamp: new Date().toISOString(), sessionId: replaySessionId, output: { rulesExtracted: normalizedRules.length, replay: true, categories: Array.from(replayCategories) }, duration: Date.now() - startTime });
       OrchestrationTracer.endSession(replaySessionId);
 
       cacheReplayContext(replaySessionId, cached.documentText, cached.fileName);

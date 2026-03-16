@@ -74,8 +74,10 @@ export function RealTimeOutput({ events, selectedAgent }: RealTimeOutputProps) {
                 {event.agentName && <span className="text-slate-500">[{event.agentName}] </span>}
                 {event.error && <span className="text-red-300">{event.error}</span>}
                 {event.duration && <span className="text-slate-500">{event.duration}ms</span>}
-                {event.eventType === 'credit_rule_extracted' && event.rules?.[0] && (
-                  <span className="text-amber-300">{event.rules[0].rule}</span>
+                {event.eventType === 'credit_rule_extracted' && event.rules && (
+                  <span className="text-amber-300">
+                    {event.rules.length === 1 ? event.rules[0].rule : `${event.rules.length} rules extracted`}
+                  </span>
                 )}
               </span>
             </motion.div>

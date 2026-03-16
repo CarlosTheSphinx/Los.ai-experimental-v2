@@ -12546,19 +12546,33 @@ export async function registerRoutes(
         return res.status(500).json({ error: 'AI could not extract any rules from the document' });
       }
 
-      normalizedRules.forEach((r: any, idx: number) => {
-        OrchestrationTracer.emit({
-          eventType: 'credit_rule_extracted',
-          agentName: 'creditPolicyExtractor',
-          agentIndex: 0,
-          timestamp: new Date().toISOString(),
-          sessionId: pSessionId,
-          rules: [{ id: `rule_${idx}`, rule: r.ruleTitle, category: r.category, confidence: r.confidence === 'high' || r.confidence === 'Critical' || r.confidence === '100%' ? 0.95 : r.confidence === 'medium' || r.confidence === 'High' ? 0.75 : 0.5, reasoning: r.ruleDescription, documentType: '', sourceSection: r.sourceSection, ruleType: r.ruleType, clarificationNeeded: r.clarificationNeeded }],
-          progress: { current: idx + 1, total: normalizedRules.length, percentage: ((idx + 1) / normalizedRules.length) * 100 },
-        });
+      const pCategories = new Set<string>();
+      const pAllCreditRules = normalizedRules.map((r: any, idx: number) => {
+        pCategories.add(r.category);
+        return {
+          id: `rule_${idx}`,
+          rule: r.ruleTitle,
+          category: r.category,
+          confidence: r.confidence === 'high' || r.confidence === 'Critical' || r.confidence === '100%' ? 0.95 : r.confidence === 'medium' || r.confidence === 'High' ? 0.75 : 0.5,
+          reasoning: r.ruleDescription,
+          documentType: '',
+          sourceSection: r.sourceSection,
+          ruleType: r.ruleType,
+          clarificationNeeded: r.clarificationNeeded,
+        };
       });
 
-      OrchestrationTracer.emit({ eventType: 'agent_complete', agentName: 'creditPolicyExtractor', agentIndex: 0, timestamp: new Date().toISOString(), sessionId: pSessionId, output: { rulesExtracted: normalizedRules.length, programId, rules: normalizedRules }, duration: Date.now() - pStartTime });
+      OrchestrationTracer.emit({
+        eventType: 'credit_rule_extracted',
+        agentName: 'creditPolicyExtractor',
+        agentIndex: 0,
+        timestamp: new Date().toISOString(),
+        sessionId: pSessionId,
+        rules: pAllCreditRules,
+        progress: { current: normalizedRules.length, total: normalizedRules.length, percentage: 100 },
+      });
+
+      OrchestrationTracer.emit({ eventType: 'agent_complete', agentName: 'creditPolicyExtractor', agentIndex: 0, timestamp: new Date().toISOString(), sessionId: pSessionId, output: { rulesExtracted: normalizedRules.length, programId, categories: Array.from(pCategories) }, duration: Date.now() - pStartTime });
       cacheReplayContext(pSessionId, truncatedText, fileName);
       OrchestrationTracer.endSession(pSessionId);
 
@@ -12780,27 +12794,29 @@ export async function registerRoutes(
       }
 
       const categories = new Set<string>();
-      normalizedRules.forEach((r: any, idx: number) => {
+      const allCreditRules = normalizedRules.map((r: any, idx: number) => {
         categories.add(r.category);
-        OrchestrationTracer.emit({
-          eventType: 'credit_rule_extracted',
-          agentName: 'creditPolicyExtractor',
-          agentIndex: 0,
-          timestamp: new Date().toISOString(),
-          sessionId,
-          rules: [{
-            id: `rule_${idx}`,
-            rule: r.ruleTitle,
-            category: r.category,
-            confidence: r.confidence === 'high' || r.confidence === 'Critical' || r.confidence === '100%' ? 0.95 : r.confidence === 'medium' || r.confidence === 'High' ? 0.75 : 0.5,
-            reasoning: r.ruleDescription,
-            documentType: '',
-            sourceSection: r.sourceSection,
-            ruleType: r.ruleType,
-            clarificationNeeded: r.clarificationNeeded,
-          }],
-          progress: { current: idx + 1, total: normalizedRules.length, percentage: ((idx + 1) / normalizedRules.length) * 100 },
-        });
+        return {
+          id: `rule_${idx}`,
+          rule: r.ruleTitle,
+          category: r.category,
+          confidence: r.confidence === 'high' || r.confidence === 'Critical' || r.confidence === '100%' ? 0.95 : r.confidence === 'medium' || r.confidence === 'High' ? 0.75 : 0.5,
+          reasoning: r.ruleDescription,
+          documentType: '',
+          sourceSection: r.sourceSection,
+          ruleType: r.ruleType,
+          clarificationNeeded: r.clarificationNeeded,
+        };
+      });
+
+      OrchestrationTracer.emit({
+        eventType: 'credit_rule_extracted',
+        agentName: 'creditPolicyExtractor',
+        agentIndex: 0,
+        timestamp: new Date().toISOString(),
+        sessionId,
+        rules: allCreditRules,
+        progress: { current: normalizedRules.length, total: normalizedRules.length, percentage: 100 },
       });
 
       OrchestrationTracer.emit({
@@ -12809,7 +12825,7 @@ export async function registerRoutes(
         agentIndex: 0,
         timestamp: new Date().toISOString(),
         sessionId,
-        output: { rulesExtracted: normalizedRules.length, categories: Array.from(categories), rules: normalizedRules },
+        output: { rulesExtracted: normalizedRules.length, categories: Array.from(categories) },
         duration: Date.now() - startTime,
       });
       cacheReplayContext(sessionId, truncatedText, fileName);

@@ -551,7 +551,7 @@ function CreditPolicyTab({
           </p>
           <div className="space-y-1">
             {liveSessions.map(s => {
-              const ruleCount = s.events.filter(e => e.eventType === 'credit_rule_extracted').length;
+              const ruleCount = s.events.filter(e => e.eventType === 'credit_rule_extracted').reduce((sum, e) => sum + (e.rules?.length || 0), 0);
               const isRunning = s.status === 'running';
               return (
                 <button
