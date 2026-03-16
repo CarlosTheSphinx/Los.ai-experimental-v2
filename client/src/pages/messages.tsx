@@ -265,12 +265,14 @@ export default function MessagesPage() {
   const { data: threadsData, isLoading: threadsLoading, refetch: refetchThreads } = useQuery({
     queryKey: ["/api/messages/threads"],
     queryFn: listThreads,
+    refetchInterval: 5000,
   });
 
   const { data: activeThreadData, isLoading: threadLoading, refetch: refetchThread } = useQuery({
     queryKey: ["/api/messages/threads", activeThreadId],
     queryFn: () => activeThreadId ? getThread(activeThreadId) : Promise.resolve(null),
     enabled: !!activeThreadId,
+    refetchInterval: activeThreadId ? 5000 : false,
   });
 
   const { data: usersData } = useQuery<{ users: any[] }>({

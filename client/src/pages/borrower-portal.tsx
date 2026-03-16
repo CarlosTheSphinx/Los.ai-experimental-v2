@@ -322,7 +322,7 @@ export default function BorrowerPortal({ token: propToken, isPreview }: Borrower
       return res.json();
     },
     enabled: !!token && !showOnboarding,
-    refetchInterval: 30000,
+    refetchInterval: 15000,
   });
   const unreadCount = unreadData?.unreadCount || 0;
 
@@ -334,6 +334,7 @@ export default function BorrowerPortal({ token: propToken, isPreview }: Borrower
       return res.json();
     },
     enabled: !!token && activeView === 'inbox',
+    refetchInterval: (token && activeView === 'inbox') ? 5000 : false,
   });
   const threads = threadsData?.threads || [];
 
@@ -345,6 +346,7 @@ export default function BorrowerPortal({ token: propToken, isPreview }: Borrower
       return res.json();
     },
     enabled: !!token && !!selectedThreadId && activeView === 'inbox',
+    refetchInterval: (token && selectedThreadId && activeView === 'inbox') ? 5000 : false,
   });
 
   const sendMessageMutation = useMutation({

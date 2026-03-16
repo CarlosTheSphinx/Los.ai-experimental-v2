@@ -108,6 +108,7 @@ export default function TabComms({
       return res.json();
     },
     enabled: !!dealId,
+    refetchInterval: dealId ? 5000 : false,
   });
 
   const currentThread = threadsData?.threads?.[0];
@@ -120,6 +121,7 @@ export default function TabComms({
       return res.json();
     },
     enabled: !!currentThread?.id,
+    refetchInterval: currentThread?.id ? 5000 : false,
   });
 
   const sendMessageMutation = useMutation({
