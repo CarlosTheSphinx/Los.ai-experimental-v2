@@ -285,8 +285,20 @@ export function registerDebuggerRoutes(app: any, deps: { authenticateUser: any; 
         .from(systemSettings)
         .where(eq(systemSettings.settingKey, 'credit_policy_extraction_settings'))
         .limit(1);
-      const settings = saved?.settingValue ? { ...defaults, ...JSON.parse(saved.settingValue) } : defaults;
-      return res.json({ success: true, settings, defaults });
+      let settings = defaults;
+      if (saved?.settingValue) {
+        const parsed = JSON.parse(saved.settingValue);
+        const model = (parsed.model && MODEL_REGISTRY[parsed.model]) ? parsed.model : defaults.model;
+        const modelMax = getModelMaxTokens(model);
+        settings = {
+          model,
+          maxTokens: Number.isFinite(parsed.maxTokens) ? Math.min(Math.max(parsed.maxTokens, 1024), modelMax) : modelMax,
+          temperature: Number.isFinite(parsed.temperature) ? Math.min(Math.max(parsed.temperature, 0), 2) : defaults.temperature,
+          timeout: Number.isFinite(parsed.timeout) ? Math.min(Math.max(parsed.timeout, 30), 600) : defaults.timeout,
+          documentLimit: Number.isFinite(parsed.documentLimit) ? Math.min(Math.max(parsed.documentLimit, 10000), 500000) : defaults.documentLimit,
+        };
+      }
+      return res.json({ success: true, settings, defaults, modelRegistry: MODEL_REGISTRY });
     } catch (error: any) {
       return res.status(500).json({ success: false, error: error?.message });
     }
@@ -299,9 +311,11 @@ export function registerDebuggerRoutes(app: any, deps: { authenticateUser: any; 
       const parsedMaxTokens = Number(maxTokens);
       const parsedTimeout = Number(timeout);
       const parsedDocLimit = Number(documentLimit);
+      const selectedModel = (model && MODEL_REGISTRY[model]) ? model : 'gpt-4o';
+      const modelMax = getModelMaxTokens(selectedModel);
       const settings = {
-        model: model || 'gpt-4o',
-        maxTokens: Math.min(Math.max(Number.isFinite(parsedMaxTokens) ? parsedMaxTokens : 16384, 1024), 65536),
+        model: selectedModel,
+        maxTokens: Math.min(Math.max(Number.isFinite(parsedMaxTokens) ? parsedMaxTokens : modelMax, 1024), modelMax) || modelMax,
         temperature: Math.min(Math.max(Number.isFinite(parsedTemp) ? parsedTemp : 0, 0), 2),
         timeout: Math.min(Math.max(Number.isFinite(parsedTimeout) ? parsedTimeout : 180, 30), 600),
         documentLimit: Math.min(Math.max(Number.isFinite(parsedDocLimit) ? parsedDocLimit : 200000, 10000), 500000),
@@ -403,6 +417,18 @@ export function registerDebuggerRoutes(app: any, deps: { authenticateUser: any; 
   });
 }
 
+export const MODEL_REGISTRY: Record<string, { maxCompletionTokens: number; description: string }> = {
+  'gpt-4o': { maxCompletionTokens: 16384, description: 'Best balance of speed, accuracy & cost' },
+  'gpt-4o-mini': { maxCompletionTokens: 16384, description: 'Fastest & cheapest — good for smaller docs' },
+  'gpt-4-turbo': { maxCompletionTokens: 4096, description: 'High accuracy, slower — best for complex policies' },
+  'gpt-4': { maxCompletionTokens: 8192, description: 'Original GPT-4 — reliable but slower' },
+  'gpt-3.5-turbo': { maxCompletionTokens: 4096, description: 'Legacy model — fast but less accurate' },
+};
+
+function getModelMaxTokens(model: string): number {
+  return MODEL_REGISTRY[model]?.maxCompletionTokens ?? 16384;
+}
+
 export async function getActiveCreditExtractionSettings(): Promise<{ model: string; maxTokens: number; temperature: number; timeout: number; documentLimit: number }> {
   const defaults = { model: 'gpt-4o', maxTokens: 16384, temperature: 0, timeout: 180, documentLimit: 200000 };
   try {
@@ -413,9 +439,11 @@ export async function getActiveCreditExtractionSettings(): Promise<{ model: stri
       .limit(1);
     if (saved?.settingValue) {
       const parsed = JSON.parse(saved.settingValue);
+      const model = typeof parsed.model === 'string' && parsed.model && MODEL_REGISTRY[parsed.model] ? parsed.model : defaults.model;
+      const modelMax = getModelMaxTokens(model);
       return {
-        model: typeof parsed.model === 'string' && parsed.model ? parsed.model : defaults.model,
-        maxTokens: Number.isFinite(parsed.maxTokens) ? Math.min(Math.max(parsed.maxTokens, 1024), 65536) : defaults.maxTokens,
+        model,
+        maxTokens: Number.isFinite(parsed.maxTokens) ? Math.min(Math.max(parsed.maxTokens, 1024), modelMax) : modelMax,
         temperature: Number.isFinite(parsed.temperature) ? Math.min(Math.max(parsed.temperature, 0), 2) : defaults.temperature,
         timeout: Number.isFinite(parsed.timeout) ? Math.min(Math.max(parsed.timeout, 30), 600) : defaults.timeout,
         documentLimit: Number.isFinite(parsed.documentLimit) ? Math.min(Math.max(parsed.documentLimit, 10000), 500000) : defaults.documentLimit,

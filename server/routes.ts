@@ -12445,7 +12445,8 @@ export async function registerRoutes(
       if (error.message?.includes('timed out')) {
         return res.status(504).json({ error: 'AI analysis timed out. Please try again with a smaller document.' });
       }
-      res.status(500).json({ error: 'Failed to extract rules from document' });
+      const apiMsg = error?.error?.message || error?.message || '';
+      res.status(500).json({ error: apiMsg || 'Failed to extract rules from document' });
     }
   });
 
@@ -12752,7 +12753,8 @@ export async function registerRoutes(
       if (error.message?.includes('timed out')) {
         return res.status(504).json({ error: 'AI analysis timed out. Please try again with a smaller document.' });
       }
-      res.status(500).json({ error: 'Failed to extract rules from document' });
+      const apiMsg = error?.error?.message || error?.message || '';
+      res.status(500).json({ error: apiMsg || 'Failed to extract rules from document' });
     }
   });
 

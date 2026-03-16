@@ -1391,6 +1391,25 @@ export default function AIAgentsPage() {
     }
   }, [cpSettingsData]);
 
+  const defaultModelRegistry: Record<string, { maxCompletionTokens: number; description: string }> = {
+    'gpt-4o': { maxCompletionTokens: 16384, description: 'Best balance of speed, accuracy & cost' },
+    'gpt-4o-mini': { maxCompletionTokens: 16384, description: 'Fastest & cheapest — good for smaller docs' },
+    'gpt-4-turbo': { maxCompletionTokens: 4096, description: 'High accuracy, slower — best for complex policies' },
+    'gpt-4': { maxCompletionTokens: 8192, description: 'Original GPT-4 — reliable but slower' },
+    'gpt-3.5-turbo': { maxCompletionTokens: 4096, description: 'Legacy model — fast but less accurate' },
+  };
+
+  const cpModelRegistry = (cpSettingsData?.modelRegistry as typeof defaultModelRegistry) || defaultModelRegistry;
+  const cpCurrentModelMax = cpModelRegistry[cpModel]?.maxCompletionTokens ?? 16384;
+
+  const handleModelChange = (newModel: string) => {
+    setCpModel(newModel);
+    const newMax = cpModelRegistry[newModel]?.maxCompletionTokens ?? 16384;
+    if (cpMaxTokens > newMax) {
+      setCpMaxTokens(newMax);
+    }
+  };
+
   const { mutate: saveCpSettings, isPending: cpSettingsSaving } = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/debug/credit-extraction-settings", {
@@ -1815,27 +1834,42 @@ export default function AIAgentsPage() {
                   <div className="space-y-3">
                     <div>
                       <label className="text-xs text-muted-foreground block mb-1">Model</label>
-                      <select
-                        className="w-full rounded-md border bg-background px-3 py-2 text-sm font-mono"
-                        value={cpModel}
-                        onChange={(e) => setCpModel(e.target.value)}
-                        data-testid="select-model"
-                      >
-                        <option value="gpt-4o">gpt-4o</option>
-                        <option value="gpt-4o-mini">gpt-4o-mini</option>
-                        <option value="gpt-4-turbo">gpt-4-turbo</option>
-                        <option value="gpt-4">gpt-4</option>
-                        <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
-                      </select>
+                      <div className="space-y-1.5" data-testid="select-model">
+                        {Object.entries(cpModelRegistry).map(([modelId, info]) => (
+                          <label
+                            key={modelId}
+                            className={`flex items-start gap-2 p-2 rounded-md border cursor-pointer transition-colors ${
+                              cpModel === modelId ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/30'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="cp-model"
+                              value={modelId}
+                              checked={cpModel === modelId}
+                              onChange={() => handleModelChange(modelId)}
+                              className="mt-0.5"
+                            />
+                            <div className="min-w-0">
+                              <p className="font-mono text-sm font-medium">{modelId}</p>
+                              <p className="text-[11px] text-muted-foreground">{info.description}</p>
+                              <p className="text-[10px] text-muted-foreground/70">Max output: {info.maxCompletionTokens.toLocaleString()} tokens</p>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
                     </div>
                     <div>
-                      <label className="text-xs text-muted-foreground block mb-1">Max Tokens (1,024 – 65,536)</label>
+                      <label className="text-xs text-muted-foreground block mb-1">Max Tokens (1,024 – {cpCurrentModelMax.toLocaleString()})</label>
                       <input
                         type="number"
                         className="w-full rounded-md border bg-background px-3 py-2 text-sm font-mono"
                         value={cpMaxTokens}
-                        onChange={(e) => setCpMaxTokens(parseInt(e.target.value) || 16384)}
-                        min={1024} max={65536}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value) || cpCurrentModelMax;
+                          setCpMaxTokens(Math.min(val, cpCurrentModelMax));
+                        }}
+                        min={1024} max={cpCurrentModelMax}
                         data-testid="input-max-tokens"
                       />
                     </div>
@@ -1875,9 +1909,10 @@ export default function AIAgentsPage() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-3">
-                    <div>
+                    <div className="col-span-2">
                       <p className="text-xs text-muted-foreground">Model</p>
                       <p className="font-mono text-sm font-medium" data-testid="text-model">{cpModel}</p>
+                      <p className="text-[11px] text-muted-foreground">{cpModelRegistry[cpModel]?.description}</p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Max Tokens</p>
