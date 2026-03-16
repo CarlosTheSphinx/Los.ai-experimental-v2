@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pipeline Page — Wireframe (Progressive Disclosure)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #F1F3F6;
+    --card: #FAFAFA;
+    --navy: #1A3A52;
+    --blue: #2E7FD6;
+    --blue-light: #EBF3FC;
+    --emerald: #10B981;
+    --emerald-light: #ECFDF5;
+    --amber: #F59E0B;
+    --amber-light: #FFFBEB;
+    --red: #EF4444;
+    --red-light: #FEF2F2;
+    --gray-50: #F8FAFC;
+    --gray-100: #F1F5F9;
+    --gray-200: #E2E8F0;
+    --gray-300: #CBD5E1;
+    --gray-400: #94A3B8;
+    --gray-500: #64748B;
+    --gray-600: #475569;
+    --gray-700: #334155;
+    --border: #E2E6EB;
+    --radius: 10px;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.08), 0 2px 4px -2px rgba(0,0,0,0.04);
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--navy);
+    min-height: 100vh;
+    display: flex;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ============ SIDEBAR ============ */
+  .sidebar {
+    width: 240px;
+    min-height: 100vh;
+    background: #0F2438;
+    color: #E2E8EF;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+  .sidebar-logo {
+    padding: 20px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .sidebar-logo .logo-icon {
+    width: 32px; height: 32px;
+    background: var(--blue);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 700; font-size: 14px;
+  }
+  .sidebar-logo span { font-weight: 600; font-size: 15px; }
+
+  .sidebar-nav { padding: 12px 8px; flex: 1; }
+  .nav-section { margin-bottom: 8px; }
+  .nav-section-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.35); padding: 8px 12px 4px; font-weight: 600;
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px; border-radius: 8px; font-size: 13.5px;
+    color: rgba(255,255,255,0.65); cursor: pointer; transition: all 0.15s;
+    font-weight: 500;
+  }
+  .nav-item:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.9); }
+  .nav-item.active { background: rgba(46,127,214,0.15); color: #4A9EFF; }
+  .nav-item .icon { width: 18px; text-align: center; opacity: 0.7; font-size: 15px; }
+  .nav-item.active .icon { opacity: 1; }
+  .nav-item .badge {
+    margin-left: auto; background: rgba(255,255,255,0.1);
+    padding: 1px 7px; border-radius: 10px; font-size: 11px;
+  }
+  .nav-item.active .badge { background: rgba(46,127,214,0.25); color: #4A9EFF; }
+  .nav-sub { padding-left: 16px; }
+  .nav-sub .nav-item { font-size: 13px; padding: 7px 12px; }
+
+  /* ============ MAIN ============ */
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  /* Top bar */
+  .topbar {
+    background: white; border-bottom: 1px solid var(--border);
+    padding: 12px 24px; display: flex; align-items: center; gap: 16px;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .breadcrumb { font-size: 13px; color: var(--gray-500); }
+  .breadcrumb a { color: var(--gray-500); text-decoration: none; }
+  .breadcrumb a:hover { color: var(--blue); }
+  .breadcrumb .sep { margin: 0 6px; }
+  .breadcrumb .current { color: var(--navy); font-weight: 500; }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+  .kbd-hint {
+    font-size: 11px; color: var(--gray-400); background: var(--gray-100);
+    padding: 3px 8px; border-radius: 4px; border: 1px solid var(--gray-200);
+  }
+
+  /* Content area */
+  .content { padding: 24px; flex: 1; overflow-y: auto; }
+
+  /* Page header */
+  .page-header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .page-title { font-size: 22px; font-weight: 700; color: var(--navy); }
+  .page-subtitle { font-size: 13.5px; color: var(--gray-500); margin-top: 2px; }
+  .btn-primary {
+    background: var(--blue); color: white; border: none;
+    padding: 9px 18px; border-radius: 8px; font-size: 13.5px;
+    font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;
+    transition: background 0.15s;
+  }
+  .btn-primary:hover { background: #2570C0; }
+
+  /* ============ SMART SUMMARY BAR (Progressive Disclosure Level 1) ============ */
+  .summary-bar {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+    margin-bottom: 20px;
+  }
+  .summary-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 16px;
+    display: flex; align-items: center; gap: 12px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .summary-card:hover { box-shadow: var(--shadow-md); border-color: var(--gray-300); }
+  .summary-card.active { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+  .summary-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  .summary-icon.blue { background: var(--blue-light); color: var(--blue); }
+  .summary-icon.emerald { background: var(--emerald-light); color: var(--emerald); }
+  .summary-icon.amber { background: var(--amber-light); color: var(--amber); }
+  .summary-icon.red { background: var(--red-light); color: var(--red); }
+  .summary-value { font-size: 20px; font-weight: 700; color: var(--navy); }
+  .summary-label { font-size: 12px; color: var(--gray-500); margin-top: 1px; }
+
+  /* ============ FILTER & CONTROLS BAR ============ */
+  .controls-bar {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .search-box {
+    position: relative; flex: 1; min-width: 200px; max-width: 320px;
+  }
+  .search-box input {
+    width: 100%; padding: 8px 12px 8px 34px; border: 1px solid var(--border);
+    border-radius: 8px; font-size: 13.5px; background: white;
+    color: var(--navy); outline: none; transition: border 0.15s;
+  }
+  .search-box input:focus { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(46,127,214,0.12); }
+  .search-box input::placeholder { color: var(--gray-400); }
+  .search-box .search-icon {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    color: var(--gray-400); font-size: 14px;
+  }
+
+  .filter-group { display: flex; gap: 6px; }
+  .filter-chip {
+    padding: 6px 14px; border-radius: 20px; font-size: 12.5px;
+    font-weight: 500; cursor: pointer; transition: all 0.15s;
+    border: 1px solid var(--border); background: white; color: var(--gray-600);
+  }
+  .filter-chip:hover { border-color: var(--gray-300); background: var(--gray-50); }
+  .filter-chip.active { background: var(--navy); color: white; border-color: var(--navy); }
+  .filter-chip .count {
+    margin-left: 4px; opacity: 0.6; font-size: 11px;
+  }
+
+  .controls-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .sort-btn, .view-btn {
+    padding: 7px 12px; border: 1px solid var(--border); background: white;
+    border-radius: 8px; font-size: 12.5px; color: var(--gray-600);
+    cursor: pointer; display: flex; align-items: center; gap: 5px;
+    transition: all 0.15s;
+  }
+  .sort-btn:hover, .view-btn:hover { border-color: var(--gray-300); }
+  .view-toggle { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .view-toggle button {
+    padding: 7px 12px; border: none; background: white;
+    cursor: pointer; font-size: 13px; color: var(--gray-500);
+    transition: all 0.15s;
+  }
+  .view-toggle button:not(:last-child) { border-right: 1px solid var(--border); }
+  .view-toggle button.active { background: var(--navy); color: white; }
+  .view-toggle button:hover:not(.active) { background: var(--gray-50); }
+
+  /* ============ ADVANCED FILTERS (Progressive Disclosure Level 2) ============ */
+  .advanced-filters {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 20px;
+    margin-bottom: 16px; display: none;
+  }
+  .advanced-filters.show { display: block; animation: slideDown 0.2s ease-out; }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .filters-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px;
+  }
+  .filters-header h3 { font-size: 13.5px; font-weight: 600; }
+  .filters-clear { font-size: 12px; color: var(--blue); cursor: pointer; border: none; background: none; }
+  .filters-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .filter-field label {
+    display: block; font-size: 11.5px; font-weight: 500;
+    color: var(--gray-500); margin-bottom: 4px; text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .filter-field select, .filter-field input {
+    width: 100%; padding: 7px 10px; border: 1px solid var(--border);
+    border-radius: 6px; font-size: 13px; color: var(--navy);
+    background: white; outline: none;
+  }
+  .filter-field select:focus, .filter-field input:focus {
+    border-color: var(--blue); box-shadow: 0 0 0 2px rgba(46,127,214,0.12);
+  }
+  .more-filters-btn {
+    font-size: 12.5px; color: var(--blue); cursor: pointer;
+    border: none; background: none; font-weight: 500;
+    display: flex; align-items: center; gap: 4px;
+    padding: 6px 0;
+  }
+  .more-filters-btn:hover { text-decoration: underline; }
+
+  /* ============ DEAL TABLE (List View) ============ */
+  .deals-table {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+  }
+  .deals-table table { width: 100%; border-collapse: collapse; }
+  .deals-table th {
+    text-align: left; padding: 10px 14px; font-size: 11.5px;
+    font-weight: 600; color: var(--gray-500); text-transform: uppercase;
+    letter-spacing: 0.04em; border-bottom: 2px solid var(--border);
+    background: var(--gray-50); white-space: nowrap;
+  }
+  .deals-table th.right { text-align: right; }
+  .deals-table td {
+    padding: 12px 14px; font-size: 13.5px; border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  .deals-table tr:last-child td { border-bottom: none; }
+  .deals-table tbody tr { cursor: pointer; transition: background 0.1s; }
+  .deals-table tbody tr:hover { background: var(--blue-light); }
+
+  .deal-id { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--blue); font-weight: 500; }
+  .borrower-cell { display: flex; align-items: center; gap: 8px; }
+  .avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--blue-light); color: var(--blue);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600;
+  }
+  .borrower-name { font-weight: 500; }
+  .borrower-email { font-size: 12px; color: var(--gray-400); }
+  .address-cell { max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--gray-600); font-size: 13px; }
+  .amount-cell { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* Status badges */
+  .stage-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 500;
+  }
+  .stage-badge .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .stage-badge.new { background: var(--blue-light); color: var(--blue); }
+  .stage-badge.new .dot { background: var(--blue); }
+  .stage-badge.processing { background: var(--amber-light); color: #B45309; }
+  .stage-badge.processing .dot { background: var(--amber); }
+  .stage-badge.approved { background: var(--emerald-light); color: #047857; }
+  .stage-badge.approved .dot { background: var(--emerald); }
+  .stage-badge.funded { background: #F0FDF4; color: #166534; }
+  .stage-badge.funded .dot { background: #16A34A; }
+  .stage-badge.review { background: #FFF7ED; color: #C2410C; }
+  .stage-badge.review .dot { background: #EA580C; }
+
+  .type-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 11.5px; font-weight: 500; background: var(--gray-100);
+    color: var(--gray-600);
+  }
+
+  /* Progress mini */
+  .progress-mini { display: flex; align-items: center; gap: 6px; }
+  .progress-bar-mini {
+    width: 60px; height: 4px; background: var(--gray-200);
+    border-radius: 2px; overflow: hidden;
+  }
+  .progress-bar-mini .fill {
+    height: 100%; border-radius: 2px; transition: width 0.3s;
+  }
+  .progress-pct { font-size: 12px; color: var(--gray-500); font-variant-numeric: tabular-nums; }
+
+  /* Days badge */
+  .days-badge { font-size: 12px; color: var(--gray-500); }
+  .days-badge.warning { color: var(--amber); font-weight: 500; }
+  .days-badge.danger { color: var(--red); font-weight: 500; }
+
+  /* ============ EXPANDED ROW (Progressive Disclosure Level 3) ============ */
+  .expanded-row { display: none; }
+  .expanded-row.show { display: table-row; }
+  .expanded-row td {
+    background: var(--gray-50); padding: 0 !important;
+    border-bottom: 2px solid var(--blue) !important;
+  }
+  .expanded-content {
+    padding: 16px 20px;
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;
+    animation: slideDown 0.2s ease-out;
+  }
+  .expanded-section h4 {
+    font-size: 11px; font-weight: 600; color: var(--gray-400);
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px;
+  }
+  .expanded-detail {
+    display: flex; justify-content: space-between; padding: 4px 0;
+    font-size: 13px;
+  }
+  .expanded-detail .label { color: var(--gray-500); }
+  .expanded-detail .value { font-weight: 500; }
+  .expanded-actions {
+    display: flex; gap: 8px; margin-top: 12px; grid-column: 1 / -1;
+    padding-top: 12px; border-top: 1px solid var(--border);
+  }
+  .btn-sm {
+    padding: 6px 14px; border-radius: 6px; font-size: 12.5px;
+    font-weight: 500; cursor: pointer; border: 1px solid var(--border);
+    background: white; color: var(--gray-600); transition: all 0.15s;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .btn-sm:hover { border-color: var(--gray-300); background: var(--gray-50); }
+  .btn-sm.primary { background: var(--blue); color: white; border-color: var(--blue); }
+  .btn-sm.primary:hover { background: #2570C0; }
+
+  /* ============ PAGINATION ============ */
+  .pagination {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 16px; padding: 0 4px;
+  }
+  .pagination-info { font-size: 13px; color: var(--gray-500); }
+  .pagination-controls { display: flex; gap: 4px; }
+  .page-btn {
+    width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--border);
+    background: white; font-size: 13px; cursor: pointer; color: var(--gray-600);
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .page-btn:hover { border-color: var(--gray-300); }
+  .page-btn.active { background: var(--blue); color: white; border-color: var(--blue); }
+
+  /* ============ EMPTY STATE ============ */
+  .empty-state {
+    text-align: center; padding: 60px 20px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .empty-state .icon { font-size: 48px; margin-bottom: 16px; opacity: 0.3; }
+  .empty-state h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .empty-state p { font-size: 13.5px; color: var(--gray-500); margin-bottom: 20px; max-width: 360px; margin-left: auto; margin-right: auto; }
+
+  /* ============ TOOLTIP ============ */
+  .tooltip {
+    position: relative; display: inline-flex; cursor: help;
+  }
+  .tooltip .tip-icon {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--gray-200); color: var(--gray-500);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 700; margin-left: 4px;
+  }
+  .tooltip .tip-content {
+    display: none; position: absolute; bottom: calc(100% + 6px); left: 50%;
+    transform: translateX(-50%); background: var(--navy); color: white;
+    padding: 8px 12px; border-radius: 6px; font-size: 12px; line-height: 1.4;
+    width: max-content; max-width: 240px; z-index: 100;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+  .tooltip:hover .tip-content { display: block; }
+  .tooltip .tip-content::after {
+    content: ''; position: absolute; top: 100%; left: 50%;
+    transform: translateX(-50%); border: 5px solid transparent;
+    border-top-color: var(--navy);
+  }
+
+  /* ============ ANNOTATION CALLOUTS ============ */
+  .annotation {
+    position: fixed; background: #1E1E2E; color: #F8F8F2;
+    padding: 10px 14px; border-radius: 8px; font-size: 12px;
+    line-height: 1.5; max-width: 260px; z-index: 200;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+    pointer-events: none;
+  }
+  .annotation::before {
+    content: '💡'; margin-right: 4px;
+  }
+  .annotation-tag {
+    display: inline-block; background: var(--blue); color: white;
+    padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  /* Design note banner */
+  .design-notes {
+    background: linear-gradient(135deg, #1E1E2E, #2D2D44);
+    color: #F8F8F2; padding: 16px 24px; font-size: 13px;
+    line-height: 1.6; border-bottom: 2px solid var(--blue);
+  }
+  .design-notes h2 { font-size: 15px; margin-bottom: 8px; color: #A78BFA; }
+  .design-notes ul { padding-left: 20px; }
+  .design-notes li { margin-bottom: 4px; }
+  .design-notes em { color: var(--amber); font-style: normal; font-weight: 500; }
+  .design-notes code { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+
+  /* Interactive state markers */
+  .pd-marker {
+    display: inline-flex; align-items: center; gap: 3px;
+    background: rgba(167,139,250,0.15); color: #A78BFA;
+    padding: 2px 6px; border-radius: 4px; font-size: 10px;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+    position: absolute; top: -8px; right: 8px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Design Notes Banner -->
+<div class="design-notes" style="position: fixed; top: 0; left: 0; right: 0; z-index: 1000;">
+  <h2>Pipeline Page — Wireframe Annotations</h2>
+  <ul>
+    <li><em>Progressive Disclosure:</em> Information revealed in 3 levels — summary cards → filters → row expansion</li>
+    <li><em>Cognitive Load:</em> Max 7 columns in table (was 9). Key info only. Details on click.</li>
+    <li><em>Smart Filters:</em> Click summary cards to filter. <code>All → High Priority → At Risk</code> are now data-driven counts.</li>
+    <li>Click any <em>table row</em> to see the expanded detail panel (Level 3 disclosure). Click <em>"More Filters"</em> to toggle advanced filters.</li>
+    <li>Sidebar collapsed from 18+ items to <em>7 categories</em> per the playbook's Miller's Law rule.</li>
+  </ul>
+</div>
+
+<div style="display: flex; margin-top: 100px;">
+
+<!-- ============ SIDEBAR (7 items max) ============ -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">L</div>
+    <span>Lendry.AI</span>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-section">
+      <div class="nav-item">
+        <span class="icon">🏠</span> Dashboard
+      </div>
+      <div class="nav-item active">
+        <span class="icon">📊</span> Pipeline
+        <span class="badge">24</span>
+      </div>
+      <div class="nav-item">
+        <span class="icon">👥</span> Contacts
+      </div>
+      <div class="nav-item">
+        <span class="icon">📋</span> Programs
+      </div>
+      <div class="nav-item">
+        <span class="icon">💬</span> Messages
+        <span class="badge">3</span>
+      </div>
+      <div class="nav-item">
+        <span class="icon">📈</span> Reports
+      </div>
+      <div class="nav-item">
+        <span class="icon">⚙️</span> Settings
+      </div>
+    </div>
+  </nav>
+</aside>
+
+<!-- ============ MAIN CONTENT ============ -->
+<div class="main">
+
+  <!-- Topbar with breadcrumbs -->
+  <div class="topbar">
+    <div class="breadcrumb">
+      <a href="#">Dashboard</a>
+      <span class="sep">›</span>
+      <span class="current">Pipeline</span>
+    </div>
+    <div class="topbar-right">
+      <span class="kbd-hint">⌘K to search</span>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- Page Header -->
+    <div class="page-header">
+      <div>
+        <div class="page-title">Loan Pipeline</div>
+        <div class="page-subtitle">24 active deals · $18.4M total volume</div>
+      </div>
+      <button class="btn-primary">
+        <span>+</span> New Deal
+      </button>
+    </div>
+
+    <!-- ====== LEVEL 1: Smart Summary Cards (clickable filters) ====== -->
+    <div style="position: relative;">
+      <div class="summary-bar">
+        <div class="summary-card active" onclick="filterByStatus('all')">
+          <div class="summary-icon blue">📊</div>
+          <div>
+            <div class="summary-value">24</div>
+            <div class="summary-label">All Deals</div>
+          </div>
+        </div>
+        <div class="summary-card" onclick="filterByStatus('new')">
+          <div class="summary-icon emerald">🆕</div>
+          <div>
+            <div class="summary-value">8</div>
+            <div class="summary-label">New / Intake</div>
+          </div>
+        </div>
+        <div class="summary-card" onclick="filterByStatus('processing')">
+          <div class="summary-icon amber">⏳</div>
+          <div>
+            <div class="summary-value">12</div>
+            <div class="summary-label">In Processing</div>
+          </div>
+        </div>
+        <div class="summary-card" onclick="filterByStatus('risk')">
+          <div class="summary-icon red">⚠️</div>
+          <div>
+            <div class="summary-value">4</div>
+            <div class="summary-label">
+              Needs Attention
+              <span class="tooltip">
+                <span class="tip-icon">?</span>
+                <span class="tip-content">Deals stalled >14 days or missing critical documents</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== Controls Bar ====== -->
+    <div class="controls-bar">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" placeholder="Search by borrower, address, or loan #..." />
+      </div>
+
+      <button class="more-filters-btn" onclick="toggleFilters()">
+        <span id="filter-icon">▸</span> More Filters
+      </button>
+
+      <div class="controls-right">
+        <button class="sort-btn">
+          ↕ Newest First
+        </button>
+        <div class="view-toggle">
+          <button class="active" title="List">☰</button>
+          <button title="Grid">▦</button>
+          <button title="Kanban">⫏</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== LEVEL 2: Advanced Filters (hidden by default) ====== -->
+    <div class="advanced-filters" id="advancedFilters">
+      <div class="filters-header">
+        <h3>Filter Deals</h3>
+        <button class="filters-clear">Clear all</button>
+      </div>
+      <div class="filters-grid">
+        <div class="filter-field">
+          <label>Loan Program</label>
+          <select>
+            <option>All Programs</option>
+            <option>DSCR 30-Year</option>
+            <option>RTL Fix & Flip</option>
+            <option>Bridge Loan</option>
+            <option>Ground Up</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>Loan Type</label>
+          <select>
+            <option>All Types</option>
+            <option>DSCR</option>
+            <option>RTL</option>
+            <option>Fix & Flip</option>
+            <option>Bridge</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>Assigned To</label>
+          <select>
+            <option>Anyone</option>
+            <option>Carlos V.</option>
+            <option>Maria S.</option>
+            <option>James T.</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>Amount Range</label>
+          <div style="display: flex; gap: 6px;">
+            <input type="text" placeholder="Min" style="width: 50%;" />
+            <input type="text" placeholder="Max" style="width: 50%;" />
+          </div>
+        </div>
+        <div class="filter-field">
+          <label>Close Date</label>
+          <select>
+            <option>Any time</option>
+            <option>Next 7 days</option>
+            <option>Next 30 days</option>
+            <option>Next 90 days</option>
+            <option>Overdue</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>Property State</label>
+          <select>
+            <option>All States</option>
+            <option>Florida</option>
+            <option>Texas</option>
+            <option>California</option>
+            <option>New York</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>Broker / Partner</label>
+          <select>
+            <option>All</option>
+            <option>Direct</option>
+            <option>ABC Mortgage</option>
+            <option>Premier Lending</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>Days in Stage</label>
+          <select>
+            <option>Any</option>
+            <option>> 7 days</option>
+            <option>> 14 days</option>
+            <option>> 30 days</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== DEAL TABLE (Reduced to 7 columns) ====== -->
+    <div class="deals-table">
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 90px;">Loan #</th>
+            <th>Borrower</th>
+            <th>Property</th>
+            <th>Program</th>
+            <th class="right">Amount</th>
+            <th>Status</th>
+            <th style="width: 80px;">Progress</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Row 1 -->
+          <tr onclick="toggleRow('row1')">
+            <td><span class="deal-id">LN-1024</span></td>
+            <td>
+              <div class="borrower-cell">
+                <div class="avatar">MR</div>
+                <div>
+                  <div class="borrower-name">Michael Rodriguez</div>
+                  <div class="borrower-email">michael.r@email.com</div>
+                </div>
+              </div>
+            </td>
+            <td class="address-cell">1234 Ocean Blvd, Miami Beach, FL 33139</td>
+            <td><span class="type-badge">DSCR 30-Year</span></td>
+            <td class="amount-cell">$1,250,000</td>
+            <td>
+              <span class="stage-badge approved">
+                <span class="dot"></span>
+                Approved
+              </span>
+            </td>
+            <td>
+              <div class="progress-mini">
+                <div class="progress-bar-mini">
+                  <div class="fill" style="width: 85%; background: var(--emerald);"></div>
+                </div>
+                <span class="progress-pct">85%</span>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Row 1 Expanded (LEVEL 3) -->
+          <tr class="expanded-row" id="row1">
+            <td colspan="7">
+              <div class="expanded-content">
+                <div class="expanded-section">
+                  <h4>Loan Details</h4>
+                  <div class="expanded-detail">
+                    <span class="label">LTV</span>
+                    <span class="value">72.5%</span>
+                  </div>
+                  <div class="expanded-detail">
+                    <span class="label">DSCR</span>
+                    <span class="value">1.35</span>
+                  </div>
+                  <div class="expanded-detail">
+                    <span class="label">Interest Rate</span>
+                    <span class="value">7.25%</span>
+                  </div>
+                  <div class="expanded-detail">
+                    <span class="label">Term</span>
+                    <span class="value">30 years</span>
+                  </div>
+                </div>
+                <div class="expanded-section">
+                  <h4>Property</h4>
+                  <div class="expanded-detail">
+                    <span class="label">Type</span>
+                    <span class="value">Single Family</span>
+                  </div>
+                  <div class="expanded-detail">
+                    <span class="label">Value</span>
+                    <span class="value">$1,725,000</span>
+                  </div>
+                  <div class="expanded-detail">
+                    <span class="label">State</span>
+                    <span class="value">Florida</span>
+                  </div>
+                  <div class="expanded-detail">
+                    <span class="label">Purpose</span>
+                    <span class="value">Purchase</span>
+                  </div>
+                </div>
+                <div class="expanded-section">
+                  <h4>Timeline</h4>
+                  <div class="expanded-detail">
+                    <span class="label">Created</span>
+                    <span class="value">Feb 3, 2026</span>
+                  </div>
+                  <div class="expanded-detail">
+                    <span class="label">Target Close</span>
+                    <span class="value">Mar 15, 2026</span>
+                  </div>
+                  <div class="expanded-detail">
+                    <span class="label">Days in Stage</span>
+                    <span class="value">4 days</span>
+                  </div>
+                  <div class="expanded-detail">
+                    <span class="label">Assigned To</span>
+                    <span class="value">Carlos V.</span>
+                  </div>
+                </div>
+                <div class="expanded-actions">
+                  <button class="btn-sm primary">Open Deal →</button>
+                  <button class="btn-sm">📁 Google Drive</button>
+                  <button class="btn-sm">📧 Email Borrower</button>
+                  <button class="btn-sm">📄 Documents (6/8)</button>
+                </div>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Row 2 -->
+          <tr onclick="toggleRow('row2')">
+            <td><span class="deal-id">LN-1023</span></td>
+            <td>
+              <div class="borrower-cell">
+                <div class="avatar" style="background: var(--amber-light); color: #B45309;">SK</div>
+                <div>
+                  <div class="borrower-name">Sarah Kim</div>
+                  <div class="borrower-email">s.kim@investors.co</div>
+                </div>
+              </div>
+            </td>
+            <td class="address-cell">567 Maple Ave, Austin, TX 78701</td>
+            <td><span class="type-badge">RTL Fix & Flip</span></td>
+            <td class="amount-cell">$425,000</td>
+            <td>
+              <span class="stage-badge processing">
+                <span class="dot"></span>
+                Underwriting
+              </span>
+            </td>
+            <td>
+              <div class="progress-mini">
+                <div class="progress-bar-mini">
+                  <div class="fill" style="width: 55%; background: var(--amber);"></div>
+                </div>
+                <span class="progress-pct">55%</span>
+              </div>
+            </td>
+          </tr>
+          <tr class="expanded-row" id="row2"><td colspan="7"><div class="expanded-content"><div class="expanded-section"><h4>Loan Details</h4><div class="expanded-detail"><span class="label">ARV</span><span class="value">$620,000</span></div><div class="expanded-detail"><span class="label">LTC</span><span class="value">68.5%</span></div><div class="expanded-detail"><span class="label">Rate</span><span class="value">10.5%</span></div><div class="expanded-detail"><span class="label">Term</span><span class="value">12 months</span></div></div><div class="expanded-section"><h4>Property</h4><div class="expanded-detail"><span class="label">Type</span><span class="value">Single Family</span></div><div class="expanded-detail"><span class="label">As-Is Value</span><span class="value">$380,000</span></div><div class="expanded-detail"><span class="label">Rehab Budget</span><span class="value">$85,000</span></div><div class="expanded-detail"><span class="label">Purpose</span><span class="value">Renovation</span></div></div><div class="expanded-section"><h4>Timeline</h4><div class="expanded-detail"><span class="label">Created</span><span class="value">Feb 8, 2026</span></div><div class="expanded-detail"><span class="label">Target Close</span><span class="value">Mar 1, 2026</span></div><div class="expanded-detail"><span class="label">Days in Stage</span><span class="value days-badge warning">18 days ⚠</span></div><div class="expanded-detail"><span class="label">Assigned To</span><span class="value">Maria S.</span></div></div><div class="expanded-actions"><button class="btn-sm primary">Open Deal →</button><button class="btn-sm">📁 Google Drive</button><button class="btn-sm">📧 Email Borrower</button><button class="btn-sm">📄 Documents (3/7)</button></div></div></td></tr>
+
+          <!-- Row 3 -->
+          <tr onclick="toggleRow('row3')">
+            <td><span class="deal-id">LN-1022</span></td>
+            <td>
+              <div class="borrower-cell">
+                <div class="avatar" style="background: var(--emerald-light); color: #047857;">JT</div>
+                <div>
+                  <div class="borrower-name">James Thompson</div>
+                  <div class="borrower-email">j.thompson@mail.com</div>
+                </div>
+              </div>
+            </td>
+            <td class="address-cell">890 Pine St, San Diego, CA 92101</td>
+            <td><span class="type-badge">DSCR 30-Year</span></td>
+            <td class="amount-cell">$875,000</td>
+            <td>
+              <span class="stage-badge new">
+                <span class="dot"></span>
+                New Lead
+              </span>
+            </td>
+            <td>
+              <div class="progress-mini">
+                <div class="progress-bar-mini">
+                  <div class="fill" style="width: 15%; background: var(--blue);"></div>
+                </div>
+                <span class="progress-pct">15%</span>
+              </div>
+            </td>
+          </tr>
+          <tr class="expanded-row" id="row3"><td colspan="7"><div class="expanded-content"><div class="expanded-section"><h4>Loan Details</h4><div class="expanded-detail"><span class="label">LTV</span><span class="value">75%</span></div><div class="expanded-detail"><span class="label">DSCR</span><span class="value">Pending</span></div><div class="expanded-detail"><span class="label">Rate</span><span class="value">TBD</span></div><div class="expanded-detail"><span class="label">Term</span><span class="value">30 years</span></div></div><div class="expanded-section"><h4>Property</h4><div class="expanded-detail"><span class="label">Type</span><span class="value">Condo</span></div><div class="expanded-detail"><span class="label">Value</span><span class="value">$1,165,000</span></div><div class="expanded-detail"><span class="label">State</span><span class="value">California</span></div><div class="expanded-detail"><span class="label">Purpose</span><span class="value">Refinance</span></div></div><div class="expanded-section"><h4>Timeline</h4><div class="expanded-detail"><span class="label">Created</span><span class="value">Feb 22, 2026</span></div><div class="expanded-detail"><span class="label">Target Close</span><span class="value">—</span></div><div class="expanded-detail"><span class="label">Days in Stage</span><span class="value">3 days</span></div><div class="expanded-detail"><span class="label">Assigned To</span><span class="value">Unassigned</span></div></div><div class="expanded-actions"><button class="btn-sm primary">Open Deal →</button><button class="btn-sm">📁 Google Drive</button><button class="btn-sm">📧 Email Borrower</button><button class="btn-sm">📄 Documents (0/6)</button></div></div></td></tr>
+
+          <!-- Row 4 -->
+          <tr onclick="toggleRow('row4')">
+            <td><span class="deal-id">LN-1021</span></td>
+            <td>
+              <div class="borrower-cell">
+                <div class="avatar" style="background: var(--red-light); color: var(--red);">AP</div>
+                <div>
+                  <div class="borrower-name">Ana Perez</div>
+                  <div class="borrower-email">ana.p@company.com</div>
+                </div>
+              </div>
+            </td>
+            <td class="address-cell">2100 NW 3rd St, Fort Lauderdale, FL 33311</td>
+            <td><span class="type-badge">Bridge Loan</span></td>
+            <td class="amount-cell">$2,100,000</td>
+            <td>
+              <span class="stage-badge review">
+                <span class="dot"></span>
+                Doc Review
+              </span>
+            </td>
+            <td>
+              <div class="progress-mini">
+                <div class="progress-bar-mini">
+                  <div class="fill" style="width: 65%; background: #EA580C;"></div>
+                </div>
+                <span class="progress-pct">65%</span>
+              </div>
+            </td>
+          </tr>
+          <tr class="expanded-row" id="row4"><td colspan="7"><div class="expanded-content"><div class="expanded-section"><h4>Loan Details</h4><div class="expanded-detail"><span class="label">LTV</span><span class="value">70%</span></div><div class="expanded-detail"><span class="label">Rate</span><span class="value">9.75%</span></div><div class="expanded-detail"><span class="label">Term</span><span class="value">18 months</span></div><div class="expanded-detail"><span class="label">Points</span><span class="value">2.0</span></div></div><div class="expanded-section"><h4>Property</h4><div class="expanded-detail"><span class="label">Type</span><span class="value">Multi-Family</span></div><div class="expanded-detail"><span class="label">Value</span><span class="value">$3,000,000</span></div><div class="expanded-detail"><span class="label">Units</span><span class="value">8</span></div><div class="expanded-detail"><span class="label">Purpose</span><span class="value">Purchase</span></div></div><div class="expanded-section"><h4>Timeline</h4><div class="expanded-detail"><span class="label">Created</span><span class="value">Jan 28, 2026</span></div><div class="expanded-detail"><span class="label">Target Close</span><span class="value">Feb 28, 2026</span></div><div class="expanded-detail"><span class="label">Days in Stage</span><span class="value days-badge danger">22 days 🔴</span></div><div class="expanded-detail"><span class="label">Assigned To</span><span class="value">Carlos V.</span></div></div><div class="expanded-actions"><button class="btn-sm primary">Open Deal →</button><button class="btn-sm">📁 Google Drive</button><button class="btn-sm">📧 Email Borrower</button><button class="btn-sm">📄 Documents (5/9)</button></div></div></td></tr>
+
+          <!-- Row 5 -->
+          <tr onclick="toggleRow('row5')">
+            <td><span class="deal-id">LN-1020</span></td>
+            <td>
+              <div class="borrower-cell">
+                <div class="avatar">DW</div>
+                <div>
+                  <div class="borrower-name">David Wu</div>
+                  <div class="borrower-email">d.wu@realestate.net</div>
+                </div>
+              </div>
+            </td>
+            <td class="address-cell">4500 Collins Ave, Miami, FL 33140</td>
+            <td><span class="type-badge">DSCR 30-Year</span></td>
+            <td class="amount-cell">$550,000</td>
+            <td>
+              <span class="stage-badge funded">
+                <span class="dot"></span>
+                Funded
+              </span>
+            </td>
+            <td>
+              <div class="progress-mini">
+                <div class="progress-bar-mini">
+                  <div class="fill" style="width: 100%; background: #16A34A;"></div>
+                </div>
+                <span class="progress-pct">100%</span>
+              </div>
+            </td>
+          </tr>
+          <tr class="expanded-row" id="row5"><td colspan="7"><div class="expanded-content"><div class="expanded-section"><h4>Loan Details</h4><div class="expanded-detail"><span class="label">LTV</span><span class="value">70%</span></div><div class="expanded-detail"><span class="label">DSCR</span><span class="value">1.42</span></div><div class="expanded-detail"><span class="label">Rate</span><span class="value">7.0%</span></div><div class="expanded-detail"><span class="label">Term</span><span class="value">30 years</span></div></div><div class="expanded-section"><h4>Property</h4><div class="expanded-detail"><span class="label">Type</span><span class="value">Condo</span></div><div class="expanded-detail"><span class="label">Value</span><span class="value">$785,000</span></div><div class="expanded-detail"><span class="label">State</span><span class="value">Florida</span></div><div class="expanded-detail"><span class="label">Purpose</span><span class="value">Cash-Out Refi</span></div></div><div class="expanded-section"><h4>Timeline</h4><div class="expanded-detail"><span class="label">Created</span><span class="value">Jan 10, 2026</span></div><div class="expanded-detail"><span class="label">Funded Date</span><span class="value">Feb 20, 2026</span></div><div class="expanded-detail"><span class="label">Revenue</span><span class="value" style="color: var(--emerald); font-weight: 700;">$14,850</span></div><div class="expanded-detail"><span class="label">Assigned To</span><span class="value">James T.</span></div></div><div class="expanded-actions"><button class="btn-sm primary">Open Deal →</button><button class="btn-sm">📁 Google Drive</button><button class="btn-sm">📧 Email Borrower</button><button class="btn-sm">📄 Documents (9/9) ✓</button></div></div></td></tr>
+
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination">
+      <div class="pagination-info">Showing 1–5 of 24 deals</div>
+      <div class="pagination-controls">
+        <button class="page-btn">‹</button>
+        <button class="page-btn active">1</button>
+        <button class="page-btn">2</button>
+        <button class="page-btn">3</button>
+        <button class="page-btn">4</button>
+        <button class="page-btn">5</button>
+        <button class="page-btn">›</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</div>
+
+<script>
+function toggleRow(id) {
+  const row = document.getElementById(id);
+  if (row) {
+    row.classList.toggle('show');
+  }
+}
+
+function toggleFilters() {
+  const panel = document.getElementById('advancedFilters');
+  const icon = document.getElementById('filter-icon');
+  panel.classList.toggle('show');
+  icon.textContent = panel.classList.contains('show') ? '▾' : '▸';
+}
+
+function filterByStatus(status) {
+  document.querySelectorAll('.summary-card').forEach(card => card.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+}
+</script>
+
+</body>
+</html>

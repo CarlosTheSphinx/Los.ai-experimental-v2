@@ -47,4 +47,16 @@ expertMode = true
 [userenv]
 
 [userenv.shared]
-APP_URL = "https://code-paste.replit.app"
+VITE_SITE_MODE = "landing"
+SITE_MODE = "landing"
+VITE_BASE_URL = "https://lendry.ai"
+
+[userenv.production]
+BASE_URL = "https://lendry.ai"
+
+[userenv.development]
+BASE_URL = "https://lendry.ai"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 60000

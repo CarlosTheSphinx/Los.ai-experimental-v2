@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deal Detail — Wireframe (Tab-Based Progressive Disclosure)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #F1F3F6; --card: #FAFAFA; --navy: #1A3A52; --blue: #2E7FD6;
+    --blue-light: #EBF3FC; --emerald: #10B981; --emerald-light: #ECFDF5;
+    --amber: #F59E0B; --amber-light: #FFFBEB; --red: #EF4444; --red-light: #FEF2F2;
+    --gray-50: #F8FAFC; --gray-100: #F1F5F9; --gray-200: #E2E8F0; --gray-300: #CBD5E1;
+    --gray-400: #94A3B8; --gray-500: #64748B; --gray-600: #475569; --gray-700: #334155;
+    --border: #E2E6EB; --radius: 10px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.08), 0 2px 4px -2px rgba(0,0,0,0.04);
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  body { font-family: var(--font); background: var(--bg); color: var(--navy); min-height: 100vh; display: flex; -webkit-font-smoothing: antialiased; }
+
+  /* ===== SIDEBAR ===== */
+  .sidebar { width: 240px; min-height: 100vh; background: #0F2438; color: #E2E8EF; display: flex; flex-direction: column; flex-shrink: 0; }
+  .sidebar-logo { padding: 20px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 10px; }
+  .sidebar-logo .logo-icon { width: 32px; height: 32px; background: var(--blue); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 14px; }
+  .sidebar-logo span { font-weight: 600; font-size: 15px; }
+  .sidebar-nav { padding: 12px 8px; flex: 1; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; font-size: 13.5px; color: rgba(255,255,255,0.65); cursor: pointer; transition: all 0.15s; font-weight: 500; }
+  .nav-item:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.9); }
+  .nav-item.active { background: rgba(46,127,214,0.15); color: #4A9EFF; }
+  .nav-item .icon { width: 18px; text-align: center; opacity: 0.7; font-size: 15px; }
+  .nav-item.active .icon { opacity: 1; }
+  .nav-item .badge { margin-left: auto; background: rgba(255,255,255,0.1); padding: 1px 7px; border-radius: 10px; font-size: 11px; }
+
+  /* ===== MAIN ===== */
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .topbar { background: white; border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 10; }
+  .breadcrumb { font-size: 13px; color: var(--gray-500); }
+  .breadcrumb a { color: var(--gray-500); text-decoration: none; }
+  .breadcrumb a:hover { color: var(--blue); }
+  .breadcrumb .sep { margin: 0 6px; }
+  .breadcrumb .current { color: var(--navy); font-weight: 500; }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+  .kbd-hint { font-size: 11px; color: var(--gray-400); background: var(--gray-100); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--gray-200); }
+
+  .content { padding: 24px; flex: 1; overflow-y: auto; }
+
+  /* ===== DEAL HEADER ===== */
+  .deal-header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
+  .back-btn { width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--border); background: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; color: var(--gray-500); transition: all 0.15s; flex-shrink: 0; margin-top: 2px; }
+  .back-btn:hover { border-color: var(--gray-300); color: var(--navy); }
+  .deal-header-info { flex: 1; }
+  .deal-header-top { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .deal-id { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--gray-400); font-weight: 500; }
+  .deal-title { font-size: 22px; font-weight: 700; }
+  .deal-subtitle { font-size: 13.5px; color: var(--gray-500); margin-top: 2px; }
+  .deal-header-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  .btn { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: white; color: var(--gray-600); transition: all 0.15s; display: flex; align-items: center; gap: 6px; }
+  .btn:hover { border-color: var(--gray-300); background: var(--gray-50); }
+  .btn-primary { background: var(--blue); color: white; border-color: var(--blue); }
+  .btn-primary:hover { background: #2570C0; }
+  .btn-success { background: var(--emerald); color: white; border-color: var(--emerald); }
+  .btn-success:hover { background: #0EA472; }
+
+  /* ===== STAGE PROGRESS BAR ===== */
+  .stage-bar { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 20px; display: flex; align-items: center; gap: 0; }
+  .stage-step { display: flex; align-items: center; flex: 1; position: relative; }
+  .stage-step:last-child { flex: 0; }
+  .stage-circle { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; z-index: 1; transition: all 0.2s; }
+  .stage-circle.done { background: var(--emerald); color: white; }
+  .stage-circle.active { background: var(--blue); color: white; box-shadow: 0 0 0 4px rgba(46,127,214,0.2); }
+  .stage-circle.pending { background: var(--gray-200); color: var(--gray-400); }
+  .stage-line { height: 3px; flex: 1; margin: 0 -1px; }
+  .stage-line.done { background: var(--emerald); }
+  .stage-line.active { background: linear-gradient(to right, var(--emerald), var(--gray-200)); }
+  .stage-line.pending { background: var(--gray-200); }
+  .stage-label { position: absolute; top: 38px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--gray-500); white-space: nowrap; font-weight: 500; }
+  .stage-label.active { color: var(--blue); font-weight: 600; }
+  .stage-count { position: absolute; top: 54px; left: 50%; transform: translateX(-50%); font-size: 10px; color: var(--gray-400); white-space: nowrap; }
+
+  /* ===== KPI CARDS ===== */
+  .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px; }
+  .kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+  .kpi-label { font-size: 11px; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 500; margin-bottom: 4px; display: flex; align-items: center; gap: 4px; }
+  .kpi-value { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .kpi-sub { font-size: 12px; color: var(--gray-400); margin-top: 2px; }
+  .tooltip { position: relative; cursor: help; }
+  .tip-icon { width: 13px; height: 13px; border-radius: 50%; background: var(--gray-200); color: var(--gray-500); display: inline-flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 700; }
+  .tip-content { display: none; position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: var(--navy); color: white; padding: 8px 12px; border-radius: 6px; font-size: 12px; line-height: 1.4; width: max-content; max-width: 220px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-weight: 400; text-transform: none; letter-spacing: 0; }
+  .tooltip:hover .tip-content { display: block; }
+  .tip-content::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 5px solid transparent; border-top-color: var(--navy); }
+
+  /* ===== TAB NAVIGATION ===== */
+  .tab-bar { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 20px; background: var(--card); border-radius: var(--radius) var(--radius) 0 0; border: 1px solid var(--border); border-bottom: 2px solid var(--border); padding: 0 8px; }
+  .tab-item { padding: 12px 18px; font-size: 13.5px; font-weight: 500; color: var(--gray-500); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .tab-item:hover { color: var(--navy); }
+  .tab-item.active { color: var(--blue); border-bottom-color: var(--blue); font-weight: 600; }
+  .tab-badge { background: var(--gray-100); color: var(--gray-500); padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+  .tab-item.active .tab-badge { background: var(--blue-light); color: var(--blue); }
+  .tab-badge.warn { background: var(--amber-light); color: #B45309; }
+  .tab-badge.success { background: var(--emerald-light); color: #047857; }
+
+  /* ===== TAB CONTENT ===== */
+  .tab-content { display: none; animation: fadeIn 0.25s ease-out; }
+  .tab-content.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ===== CARD COMPONENT ===== */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 16px; }
+  .card-header { padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+  .card-title { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .card-body { padding: 18px; }
+  .card-body-compact { padding: 0; }
+
+  /* ===== 2-COL DETAIL GRID ===== */
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; }
+  .detail-item { }
+  .detail-label { font-size: 11.5px; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 500; margin-bottom: 2px; display: flex; align-items: center; gap: 4px; }
+  .detail-value { font-size: 14px; font-weight: 500; }
+  .detail-value.money { font-variant-numeric: tabular-nums; }
+
+  /* ===== DOCUMENT TABLE ===== */
+  .doc-table { width: 100%; border-collapse: collapse; }
+  .doc-table th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 2px solid var(--border); background: var(--gray-50); }
+  .doc-table td { padding: 10px 14px; font-size: 13.5px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .doc-table tbody tr:last-child td { border-bottom: none; }
+  .doc-table tbody tr:hover { background: var(--blue-light); }
+  .doc-name { font-weight: 500; display: flex; align-items: center; gap: 8px; }
+  .doc-icon { width: 28px; height: 28px; border-radius: 6px; background: var(--gray-100); display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
+
+  /* ===== STATUS BADGES ===== */
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 12px; font-size: 11.5px; font-weight: 500; }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .badge-blue { background: var(--blue-light); color: var(--blue); }
+  .badge-blue .dot { background: var(--blue); }
+  .badge-green { background: var(--emerald-light); color: #047857; }
+  .badge-green .dot { background: var(--emerald); }
+  .badge-amber { background: var(--amber-light); color: #B45309; }
+  .badge-amber .dot { background: var(--amber); }
+  .badge-red { background: var(--red-light); color: var(--red); }
+  .badge-red .dot { background: var(--red); }
+  .badge-gray { background: var(--gray-100); color: var(--gray-500); }
+  .badge-gray .dot { background: var(--gray-400); }
+  .required-tag { font-size: 10px; color: var(--red); font-weight: 600; text-transform: uppercase; }
+
+  /* ===== TASK LIST ===== */
+  .task-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .task-item:last-child { border-bottom: none; }
+  .task-check { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--gray-300); cursor: pointer; flex-shrink: 0; margin-top: 1px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+  .task-check:hover { border-color: var(--blue); }
+  .task-check.done { background: var(--emerald); border-color: var(--emerald); color: white; font-size: 11px; }
+  .task-name { font-size: 13.5px; font-weight: 500; flex: 1; }
+  .task-name.done { color: var(--gray-400); text-decoration: line-through; }
+  .task-meta { font-size: 12px; color: var(--gray-400); margin-top: 2px; }
+  .task-priority { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; }
+  .task-priority.high { background: var(--red-light); color: var(--red); }
+  .task-priority.medium { background: var(--amber-light); color: #B45309; }
+  .task-priority.low { background: var(--blue-light); color: var(--blue); }
+
+  /* ===== PEOPLE LIST ===== */
+  .person-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .person-row:last-child { border-bottom: none; }
+  .avatar { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+  .person-info { flex: 1; }
+  .person-name { font-size: 13.5px; font-weight: 500; }
+  .person-role { font-size: 12px; color: var(--gray-400); }
+  .person-email { font-size: 12px; color: var(--gray-400); }
+
+  /* ===== COLLAPSIBLE STAGE SECTION ===== */
+  .stage-section { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; background: var(--card); overflow: hidden; }
+  .stage-header { padding: 14px 18px; display: flex; align-items: center; gap: 12px; cursor: pointer; transition: background 0.15s; }
+  .stage-header:hover { background: var(--gray-50); }
+  .stage-num { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+  .stage-num.done { background: var(--emerald); color: white; }
+  .stage-num.active { background: var(--blue); color: white; }
+  .stage-num.pending { background: var(--gray-200); color: var(--gray-500); }
+  .stage-name { font-size: 14px; font-weight: 600; flex: 1; }
+  .stage-progress { font-size: 12px; color: var(--gray-400); }
+  .stage-chevron { font-size: 14px; color: var(--gray-400); transition: transform 0.2s; }
+  .stage-chevron.open { transform: rotate(180deg); }
+  .stage-body { padding: 0 18px 18px; display: none; border-top: 1px solid var(--border); }
+  .stage-body.show { display: block; animation: fadeIn 0.2s ease-out; }
+
+  /* ===== REVIEW MODE CONTROL ===== */
+  .review-mode { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 18px; margin-bottom: 16px; display: flex; align-items: center; gap: 16px; }
+  .review-label { font-size: 12px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+  .review-toggle { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .review-toggle button { padding: 6px 14px; border: none; background: white; cursor: pointer; font-size: 12.5px; font-weight: 500; color: var(--gray-500); transition: all 0.15s; }
+  .review-toggle button:not(:last-child) { border-right: 1px solid var(--border); }
+  .review-toggle button.active { background: var(--blue); color: white; }
+  .review-desc { font-size: 12px; color: var(--gray-400); flex: 1; }
+
+  /* ===== TIMELINE ===== */
+  .timeline-item { display: flex; gap: 12px; padding: 10px 0; }
+  .timeline-dot-wrap { display: flex; flex-direction: column; align-items: center; width: 24px; flex-shrink: 0; }
+  .timeline-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--blue); flex-shrink: 0; }
+  .timeline-line { width: 2px; flex: 1; background: var(--gray-200); margin-top: 4px; }
+  .timeline-content { flex: 1; padding-bottom: 8px; }
+  .timeline-text { font-size: 13.5px; }
+  .timeline-time { font-size: 12px; color: var(--gray-400); margin-top: 2px; }
+
+  /* ===== ACTION BAR ===== */
+  .action-bar { display: flex; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; flex-wrap: wrap; }
+
+  /* ===== DESIGN NOTES BANNER ===== */
+  .design-notes { background: linear-gradient(135deg, #1E1E2E, #2D2D44); color: #F8F8F2; padding: 16px 24px; font-size: 13px; line-height: 1.6; border-bottom: 2px solid var(--blue); }
+  .design-notes h2 { font-size: 15px; margin-bottom: 8px; color: #A78BFA; }
+  .design-notes ul { padding-left: 20px; }
+  .design-notes li { margin-bottom: 4px; }
+  .design-notes em { color: var(--amber); font-style: normal; font-weight: 500; }
+  .design-notes code { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+
+  /* ===== EMPTY STATE ===== */
+  .empty-state { text-align: center; padding: 40px 20px; }
+  .empty-state .icon { font-size: 40px; margin-bottom: 12px; opacity: 0.3; }
+  .empty-state h3 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .empty-state p { font-size: 13px; color: var(--gray-500); margin-bottom: 16px; }
+
+  /* ===== PORTAL LINK ===== */
+  .portal-link { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--gray-50); border: 1px solid var(--border); border-radius: 8px; font-size: 12px; margin-top: 6px; }
+  .portal-link code { flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--gray-500); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .portal-link .copy-btn { font-size: 11px; color: var(--blue); cursor: pointer; font-weight: 500; border: none; background: none; white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<!-- Design Notes -->
+<div class="design-notes" style="position: fixed; top: 0; left: 0; right: 0; z-index: 1000;">
+  <h2>Deal Detail Page — Wireframe Annotations</h2>
+  <ul>
+    <li><em>From 30 Cards on 1 scroll → 6 Tabs</em> with focused content per tab. Cognitive load cut by ~80%.</li>
+    <li><em>Progressive Disclosure:</em> Stage bar (Level 1) → Tab content (Level 2) → Collapsible stage sections with docs (Level 3)</li>
+    <li><em>Financial tooltips</em> on LTV, DSCR, YSP, NOI — hover the <code>?</code> icons to see definitions.</li>
+    <li><em>Review Mode</em> consolidated into a compact control bar instead of a full card with 3 mode panels.</li>
+    <li><em>Documents tab</em> organized by pipeline stage with collapsible sections. Click stage headers to expand.</li>
+    <li>Click the <em>tabs</em> to switch views. Click <em>stage sections</em> in Documents to expand/collapse.</li>
+  </ul>
+</div>
+
+<div style="display: flex; margin-top: 95px;">
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">L</div>
+    <span>Lendry.AI</span>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-item"><span class="icon">🏠</span> Dashboard</div>
+    <div class="nav-item active"><span class="icon">📊</span> Pipeline <span class="badge">24</span></div>
+    <div class="nav-item"><span class="icon">👥</span> Contacts</div>
+    <div class="nav-item"><span class="icon">📋</span> Programs</div>
+    <div class="nav-item"><span class="icon">💬</span> Messages <span class="badge">3</span></div>
+    <div class="nav-item"><span class="icon">📈</span> Reports</div>
+    <div class="nav-item"><span class="icon">⚙️</span> Settings</div>
+  </nav>
+</aside>
+
+<div class="main">
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="breadcrumb">
+      <a href="#">Dashboard</a><span class="sep">›</span>
+      <a href="#">Pipeline</a><span class="sep">›</span>
+      <span class="current">LN-1024 · Michael Rodriguez</span>
+    </div>
+    <div class="topbar-right"><span class="kbd-hint">⌘K to search</span></div>
+  </div>
+
+  <div class="content">
+
+    <!-- ====== DEAL HEADER ====== -->
+    <div class="deal-header">
+      <button class="back-btn" title="Back to Pipeline">←</button>
+      <div class="deal-header-info">
+        <div class="deal-header-top">
+          <span class="deal-id">LN-1024</span>
+          <span class="badge badge-green"><span class="dot"></span> Active</span>
+          <span class="badge badge-blue"><span class="dot"></span> DSCR 30-Year</span>
+        </div>
+        <div class="deal-title">1234 Ocean Blvd, Miami Beach, FL 33139</div>
+        <div class="deal-subtitle">Michael Rodriguez · michael.r@email.com · (305) 555-1234</div>
+      </div>
+      <div class="deal-header-actions">
+        <button class="btn">📁 Drive</button>
+        <button class="btn btn-success">⚡ Auto Process</button>
+        <button class="btn" style="font-size: 16px; padding: 8px 10px;">⋯</button>
+      </div>
+    </div>
+
+    <!-- ====== STAGE PROGRESS BAR (Level 1) ====== -->
+    <div class="stage-bar" style="padding-bottom: 40px;">
+      <div class="stage-step">
+        <div class="stage-circle done">✓</div>
+        <div class="stage-line done"></div>
+        <span class="stage-label">Intake</span>
+        <span class="stage-count">3/3</span>
+      </div>
+      <div class="stage-step">
+        <div class="stage-circle done">✓</div>
+        <div class="stage-line done"></div>
+        <span class="stage-label">Processing</span>
+        <span class="stage-count">5/5</span>
+      </div>
+      <div class="stage-step">
+        <div class="stage-circle active">3</div>
+        <div class="stage-line active"></div>
+        <span class="stage-label active">Underwriting</span>
+        <span class="stage-count">4/7</span>
+      </div>
+      <div class="stage-step">
+        <div class="stage-circle pending">4</div>
+        <div class="stage-line pending"></div>
+        <span class="stage-label">Approval</span>
+        <span class="stage-count">0/4</span>
+      </div>
+      <div class="stage-step">
+        <div class="stage-circle pending">5</div>
+        <div class="stage-line pending"></div>
+        <span class="stage-label">Closing</span>
+        <span class="stage-count">0/6</span>
+      </div>
+      <div class="stage-step">
+        <div class="stage-circle pending">6</div>
+        <span class="stage-label">Funded</span>
+        <span class="stage-count">0/2</span>
+      </div>
+    </div>
+
+    <!-- ====== KPI CARDS ====== -->
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-label">Loan Amount</div>
+        <div class="kpi-value">$1,250,000</div>
+        <div class="kpi-sub">Purchase</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">
+          LTV
+          <span class="tooltip"><span class="tip-icon">?</span>
+            <span class="tip-content">Loan-to-Value: The ratio of the loan amount to the appraised property value. Lower LTV = less risk for the lender.</span>
+          </span>
+        </div>
+        <div class="kpi-value">72.5%</div>
+        <div class="kpi-sub">of $1,725,000</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">
+          DSCR
+          <span class="tooltip"><span class="tip-icon">?</span>
+            <span class="tip-content">Debt Service Coverage Ratio: Property's net income divided by total debt payments. Above 1.0 means income covers the debt.</span>
+          </span>
+        </div>
+        <div class="kpi-value">1.35</div>
+        <div class="kpi-sub">Above threshold (1.20)</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Interest Rate</div>
+        <div class="kpi-value">7.25%</div>
+        <div class="kpi-sub">30-year fixed</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Progress</div>
+        <div class="kpi-value" style="color: var(--blue);">68%</div>
+        <div class="kpi-sub">12 of 27 items</div>
+      </div>
+    </div>
+
+    <!-- ====== TAB NAVIGATION ====== -->
+    <div class="tab-bar">
+      <div class="tab-item active" onclick="switchTab('overview')">📋 Overview</div>
+      <div class="tab-item" onclick="switchTab('documents')">📄 Documents <span class="tab-badge warn">3 pending</span></div>
+      <div class="tab-item" onclick="switchTab('tasks')">✅ Tasks <span class="tab-badge">5</span></div>
+      <div class="tab-item" onclick="switchTab('people')">👥 People</div>
+      <div class="tab-item" onclick="switchTab('comms')">💬 Communications</div>
+      <div class="tab-item" onclick="switchTab('ai')">🤖 AI Insights</div>
+    </div>
+
+    <!-- ==================== TAB: OVERVIEW ==================== -->
+    <div class="tab-content active" id="tab-overview">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+        <!-- Loan Details Card -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">📊 Loan Details</span>
+            <button class="btn" style="padding: 5px 10px; font-size: 12px;">✏️ Edit</button>
+          </div>
+          <div class="card-body">
+            <div class="detail-grid">
+              <div class="detail-item"><div class="detail-label">Loan Amount</div><div class="detail-value money">$1,250,000</div></div>
+              <div class="detail-item"><div class="detail-label">Property Value</div><div class="detail-value money">$1,725,000</div></div>
+              <div class="detail-item"><div class="detail-label">LTV <span class="tooltip"><span class="tip-icon">?</span><span class="tip-content">Loan-to-Value ratio</span></span></div><div class="detail-value">72.5%</div></div>
+              <div class="detail-item"><div class="detail-label">DSCR <span class="tooltip"><span class="tip-icon">?</span><span class="tip-content">Debt Service Coverage Ratio</span></span></div><div class="detail-value">1.35</div></div>
+              <div class="detail-item"><div class="detail-label">Interest Rate</div><div class="detail-value">7.25%</div></div>
+              <div class="detail-item"><div class="detail-label">Loan Term</div><div class="detail-value">30 years</div></div>
+              <div class="detail-item"><div class="detail-label">Origination Points</div><div class="detail-value">1.5</div></div>
+              <div class="detail-item"><div class="detail-label">YSP <span class="tooltip"><span class="tip-icon">?</span><span class="tip-content">Yield Spread Premium: Additional compensation paid to the broker from the lender</span></span></div><div class="detail-value">0.25%</div></div>
+              <div class="detail-item"><div class="detail-label">Target Close</div><div class="detail-value">Mar 15, 2026</div></div>
+              <div class="detail-item"><div class="detail-label">Days in Stage</div><div class="detail-value">4 days</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Property Details Card -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">🏠 Property Details</span>
+            <button class="btn" style="padding: 5px 10px; font-size: 12px;">+ Add Property</button>
+          </div>
+          <div class="card-body">
+            <div class="detail-grid">
+              <div class="detail-item"><div class="detail-label">Address</div><div class="detail-value">1234 Ocean Blvd</div></div>
+              <div class="detail-item"><div class="detail-label">City / State</div><div class="detail-value">Miami Beach, FL 33139</div></div>
+              <div class="detail-item"><div class="detail-label">Property Type</div><div class="detail-value">Single Family Residence</div></div>
+              <div class="detail-item"><div class="detail-label">Units</div><div class="detail-value">1</div></div>
+              <div class="detail-item"><div class="detail-label">Monthly Rent</div><div class="detail-value money">$8,500</div></div>
+              <div class="detail-item"><div class="detail-label">Annual Taxes</div><div class="detail-value money">$18,400</div></div>
+              <div class="detail-item"><div class="detail-label">Annual Insurance</div><div class="detail-value money">$4,200</div></div>
+              <div class="detail-item"><div class="detail-label">NOI <span class="tooltip"><span class="tip-icon">?</span><span class="tip-content">Net Operating Income: Annual rental income minus operating expenses (taxes, insurance, maintenance)</span></span></div><div class="detail-value money">$79,400</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Borrower Details Card -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">👤 Borrower Details</span>
+            <button class="btn" style="padding: 5px 10px; font-size: 12px;">✏️ Edit</button>
+          </div>
+          <div class="card-body">
+            <div class="detail-grid">
+              <div class="detail-item"><div class="detail-label">Full Name</div><div class="detail-value">Michael Rodriguez</div></div>
+              <div class="detail-item"><div class="detail-label">Email</div><div class="detail-value">michael.r@email.com</div></div>
+              <div class="detail-item"><div class="detail-label">Phone</div><div class="detail-value">(305) 555-1234</div></div>
+              <div class="detail-item"><div class="detail-label">Employer</div><div class="detail-value">Rodriguez Holdings LLC</div></div>
+              <div class="detail-item"><div class="detail-label">Title</div><div class="detail-value">Managing Partner</div></div>
+              <div class="detail-item"><div class="detail-label">Annual Income</div><div class="detail-value money">$285,000</div></div>
+              <div class="detail-item"><div class="detail-label">Entity Name</div><div class="detail-value">MR Capital Partners LLC</div></div>
+              <div class="detail-item"><div class="detail-label">Entity Type</div><div class="detail-value">LLC</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Deal Status Card -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">⚙️ Deal Controls</span></div>
+          <div class="card-body">
+            <div class="detail-grid">
+              <div class="detail-item">
+                <div class="detail-label">Deal Status</div>
+                <div><select style="padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; width: 100%;">
+                  <option selected>Active</option><option>On Hold</option><option>Closed</option><option>Archived</option>
+                </select></div>
+              </div>
+              <div class="detail-item">
+                <div class="detail-label">Current Stage</div>
+                <div><select style="padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; width: 100%;">
+                  <option>Intake</option><option>Processing</option><option selected>Underwriting</option><option>Approval</option><option>Closing</option><option>Funded</option>
+                </select></div>
+              </div>
+              <div class="detail-item">
+                <div class="detail-label">Loan Program</div>
+                <div><select style="padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; width: 100%;">
+                  <option selected>DSCR 30-Year Fixed</option><option>RTL Fix & Flip</option><option>Bridge Loan</option>
+                </select></div>
+              </div>
+              <div class="detail-item">
+                <div class="detail-label">Created</div>
+                <div class="detail-value">Feb 3, 2026</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== TAB: DOCUMENTS ==================== -->
+    <div class="tab-content" id="tab-documents">
+      <!-- Review Mode Control -->
+      <div class="review-mode">
+        <span class="review-label">Review Mode</span>
+        <div class="review-toggle">
+          <button class="active">⚡ Automatic</button>
+          <button>🕐 Timed</button>
+          <button>✋ Manual</button>
+        </div>
+        <span class="review-desc">Documents are reviewed automatically on upload</span>
+        <button class="btn btn-success" style="padding: 6px 14px; font-size: 12.5px; margin-left: auto;">Approve All (3)</button>
+      </div>
+
+      <!-- Stage 1: Intake (completed) -->
+      <div class="stage-section">
+        <div class="stage-header" onclick="toggleStage('s1')">
+          <div class="stage-num done">✓</div>
+          <div class="stage-name">Stage 1: Intake</div>
+          <div class="stage-progress">3/3 complete</div>
+          <span class="stage-chevron" id="chevron-s1">▾</span>
+        </div>
+        <div class="stage-body" id="stage-s1">
+          <table class="doc-table" style="margin-top: 12px;">
+            <thead><tr><th>Document</th><th>Status</th><th>Files</th><th style="width: 100px;">Actions</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><div class="doc-name"><span class="doc-icon">📄</span> Loan Application <span class="required-tag">REQ</span></div></td>
+                <td><span class="badge badge-green"><span class="dot"></span> Approved</span></td>
+                <td style="font-size: 12px; color: var(--gray-500);">1 file</td>
+                <td><button class="btn" style="padding: 4px 8px; font-size: 11px;">👁 View</button></td>
+              </tr>
+              <tr>
+                <td><div class="doc-name"><span class="doc-icon">📄</span> Photo ID <span class="required-tag">REQ</span></div></td>
+                <td><span class="badge badge-green"><span class="dot"></span> Approved</span></td>
+                <td style="font-size: 12px; color: var(--gray-500);">1 file</td>
+                <td><button class="btn" style="padding: 4px 8px; font-size: 11px;">👁 View</button></td>
+              </tr>
+              <tr>
+                <td><div class="doc-name"><span class="doc-icon">📄</span> Entity Documents</div></td>
+                <td><span class="badge badge-green"><span class="dot"></span> Approved</span></td>
+                <td style="font-size: 12px; color: var(--gray-500);">2 files</td>
+                <td><button class="btn" style="padding: 4px 8px; font-size: 11px;">👁 View</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Stage 2: Processing (completed) -->
+      <div class="stage-section">
+        <div class="stage-header" onclick="toggleStage('s2')">
+          <div class="stage-num done">✓</div>
+          <div class="stage-name">Stage 2: Processing</div>
+          <div class="stage-progress">5/5 complete</div>
+          <span class="stage-chevron" id="chevron-s2">▸</span>
+        </div>
+        <div class="stage-body" id="stage-s2"></div>
+      </div>
+
+      <!-- Stage 3: Underwriting (active) -->
+      <div class="stage-section" style="border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue);">
+        <div class="stage-header" onclick="toggleStage('s3')">
+          <div class="stage-num active">3</div>
+          <div class="stage-name">Stage 3: Underwriting <span class="badge badge-amber" style="margin-left: 6px;"><span class="dot"></span> Active</span></div>
+          <div class="stage-progress" style="color: var(--amber);">4/7 complete</div>
+          <span class="stage-chevron open" id="chevron-s3">▾</span>
+        </div>
+        <div class="stage-body show" id="stage-s3">
+          <table class="doc-table" style="margin-top: 12px;">
+            <thead><tr><th>Document</th><th>Status</th><th>Files</th><th style="width: 180px;">Actions</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><div class="doc-name"><span class="doc-icon">📄</span> Appraisal Report <span class="required-tag">REQ</span></div></td>
+                <td><span class="badge badge-green"><span class="dot"></span> Approved</span></td>
+                <td style="font-size: 12px; color: var(--gray-500);">1 file</td>
+                <td><button class="btn" style="padding: 4px 8px; font-size: 11px;">👁 View</button></td>
+              </tr>
+              <tr>
+                <td><div class="doc-name"><span class="doc-icon">📄</span> Title Report <span class="required-tag">REQ</span></div></td>
+                <td><span class="badge badge-green"><span class="dot"></span> Approved</span></td>
+                <td style="font-size: 12px; color: var(--gray-500);">1 file</td>
+                <td><button class="btn" style="padding: 4px 8px; font-size: 11px;">👁 View</button></td>
+              </tr>
+              <tr>
+                <td><div class="doc-name"><span class="doc-icon">📄</span> Insurance Binder <span class="required-tag">REQ</span></div></td>
+                <td><span class="badge badge-green"><span class="dot"></span> Approved</span></td>
+                <td style="font-size: 12px; color: var(--gray-500);">1 file</td>
+                <td><button class="btn" style="padding: 4px 8px; font-size: 11px;">👁 View</button></td>
+              </tr>
+              <tr>
+                <td><div class="doc-name"><span class="doc-icon">📄</span> Bank Statements (3 mo) <span class="required-tag">REQ</span></div></td>
+                <td><span class="badge badge-green"><span class="dot"></span> Approved</span></td>
+                <td style="font-size: 12px; color: var(--gray-500);">3 files</td>
+                <td><button class="btn" style="padding: 4px 8px; font-size: 11px;">👁 View</button></td>
+              </tr>
+              <tr style="background: var(--amber-light);">
+                <td><div class="doc-name"><span class="doc-icon" style="background: var(--amber-light);">📄</span> Rent Roll <span class="required-tag">REQ</span></div></td>
+                <td><span class="badge badge-amber"><span class="dot"></span> AI Reviewed</span></td>
+                <td style="font-size: 12px; color: var(--gray-500);">1 file</td>
+                <td>
+                  <button class="btn" style="padding: 4px 8px; font-size: 11px;">👁</button>
+                  <button class="btn" style="padding: 4px 8px; font-size: 11px; background: var(--emerald); color: white; border-color: var(--emerald);">✓ Approve</button>
+                  <button class="btn" style="padding: 4px 8px; font-size: 11px;">✗</button>
+                </td>
+              </tr>
+              <tr style="background: var(--amber-light);">
+                <td><div class="doc-name"><span class="doc-icon" style="background: var(--amber-light);">📄</span> Tax Returns (2 yr)</div></td>
+                <td><span class="badge badge-amber"><span class="dot"></span> AI Reviewed</span></td>
+                <td style="font-size: 12px; color: var(--gray-500);">2 files</td>
+                <td>
+                  <button class="btn" style="padding: 4px 8px; font-size: 11px;">👁</button>
+                  <button class="btn" style="padding: 4px 8px; font-size: 11px; background: var(--emerald); color: white; border-color: var(--emerald);">✓ Approve</button>
+                  <button class="btn" style="padding: 4px 8px; font-size: 11px;">✗</button>
+                </td>
+              </tr>
+              <tr>
+                <td><div class="doc-name"><span class="doc-icon">📄</span> Environmental Report</div></td>
+                <td><span class="badge badge-gray"><span class="dot"></span> Pending</span></td>
+                <td style="font-size: 12px; color: var(--gray-400);">No files</td>
+                <td>
+                  <button class="btn" style="padding: 4px 8px; font-size: 11px;">⬆ Upload</button>
+                  <button class="btn" style="padding: 4px 8px; font-size: 11px;">N/A</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="margin-top: 10px;">
+            <button class="btn" style="font-size: 12px; padding: 6px 12px;">+ Add Document</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stage 4: Approval (pending) -->
+      <div class="stage-section">
+        <div class="stage-header" onclick="toggleStage('s4')">
+          <div class="stage-num pending">4</div>
+          <div class="stage-name">Stage 4: Approval</div>
+          <div class="stage-progress">0/4 complete</div>
+          <span class="stage-chevron" id="chevron-s4">▸</span>
+        </div>
+        <div class="stage-body" id="stage-s4"></div>
+      </div>
+
+      <!-- Stage 5: Closing (pending) -->
+      <div class="stage-section">
+        <div class="stage-header" onclick="toggleStage('s5')">
+          <div class="stage-num pending">5</div>
+          <div class="stage-name">Stage 5: Closing</div>
+          <div class="stage-progress">0/6 complete</div>
+          <span class="stage-chevron" id="chevron-s5">▸</span>
+        </div>
+        <div class="stage-body" id="stage-s5"></div>
+      </div>
+    </div>
+
+    <!-- ==================== TAB: TASKS ==================== -->
+    <div class="tab-content" id="tab-tasks">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Tasks <span class="tab-badge">2 remaining</span></span>
+          <button class="btn" style="padding: 5px 12px; font-size: 12px;">+ Add Task</button>
+        </div>
+        <div class="card-body">
+          <div class="task-item">
+            <div class="task-check done">✓</div>
+            <div style="flex: 1;">
+              <div class="task-name done">Order appraisal report</div>
+              <div class="task-meta">Completed Feb 10 · Carlos V.</div>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="task-check done">✓</div>
+            <div style="flex: 1;">
+              <div class="task-name done">Request title search</div>
+              <div class="task-meta">Completed Feb 12 · Carlos V.</div>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="task-check done">✓</div>
+            <div style="flex: 1;">
+              <div class="task-name done">Verify borrower identity</div>
+              <div class="task-meta">Completed Feb 14 · Maria S.</div>
+            </div>
+          </div>
+          <div class="task-item">
+            <div class="task-check"></div>
+            <div style="flex: 1;">
+              <div class="task-name">Review underwriting package</div>
+              <div class="task-meta">Due Feb 28 · Carlos V.</div>
+            </div>
+            <span class="task-priority high">High</span>
+          </div>
+          <div class="task-item">
+            <div class="task-check"></div>
+            <div style="flex: 1;">
+              <div class="task-name">Schedule closing with title company</div>
+              <div class="task-meta">Due Mar 10 · Unassigned</div>
+            </div>
+            <span class="task-priority medium">Medium</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== TAB: PEOPLE ==================== -->
+    <div class="tab-content" id="tab-people">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+        <!-- Borrower -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">👤 Borrower</span>
+            <button class="btn" style="padding: 5px 10px; font-size: 12px;">✏️ Edit</button>
+          </div>
+          <div class="card-body">
+            <div class="person-row" style="border-bottom: none; padding-top: 0;">
+              <div class="avatar" style="background: var(--blue-light); color: var(--blue); width: 42px; height: 42px; font-size: 14px;">MR</div>
+              <div class="person-info">
+                <div class="person-name">Michael Rodriguez</div>
+                <div class="person-email">michael.r@email.com · (305) 555-1234</div>
+              </div>
+            </div>
+            <div style="margin-top: 8px;">
+              <div class="detail-label" style="margin-bottom: 4px;">Borrower Portal</div>
+              <div class="portal-link">
+                <span class="badge badge-green" style="font-size: 10px; padding: 2px 6px;"><span class="dot"></span> Active</span>
+                <code>https://losai-exp.../portal/bwr_abc123...</code>
+                <button class="copy-btn">📋 Copy</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Processor + Broker -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">🏢 Team</span>
+            <button class="btn" style="padding: 5px 10px; font-size: 12px;">+ Add</button>
+          </div>
+          <div class="card-body">
+            <div class="person-row">
+              <div class="avatar" style="background: var(--emerald-light); color: #047857;">CV</div>
+              <div class="person-info">
+                <div class="person-name">Carlos Velez</div>
+                <div class="person-role">Loan Processor (Owner)</div>
+              </div>
+            </div>
+            <div class="person-row">
+              <div class="avatar" style="background: var(--amber-light); color: #B45309;">MS</div>
+              <div class="person-info">
+                <div class="person-name">Maria Santos</div>
+                <div class="person-role">Assistant Processor</div>
+              </div>
+            </div>
+            <div class="person-row" style="border-bottom: none;">
+              <div class="avatar" style="background: var(--gray-100); color: var(--gray-500);">—</div>
+              <div class="person-info">
+                <div class="person-name" style="color: var(--gray-400);">No broker assigned</div>
+                <div class="person-role"><button class="copy-btn" style="font-size: 12px;">+ Assign Broker</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Third Parties -->
+        <div class="card" style="grid-column: 1 / -1;">
+          <div class="card-header">
+            <span class="card-title">🤝 Third Parties</span>
+            <button class="btn" style="padding: 5px 10px; font-size: 12px;">+ Add Contact</button>
+          </div>
+          <div class="card-body">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 24px;">
+              <div class="person-row">
+                <div class="avatar" style="background: var(--blue-light); color: var(--blue);">TC</div>
+                <div class="person-info">
+                  <div class="person-name">Tom Chen</div>
+                  <div class="person-role">Title Contact · ABC Title Co.</div>
+                  <div class="person-email">tom@abctitle.com</div>
+                </div>
+              </div>
+              <div class="person-row">
+                <div class="avatar" style="background: var(--emerald-light); color: #047857;">JD</div>
+                <div class="person-info">
+                  <div class="person-name">Jane Doe</div>
+                  <div class="person-role">Appraiser · ValuPro Appraisals</div>
+                  <div class="person-email">jane@valupro.com</div>
+                </div>
+              </div>
+              <div class="person-row">
+                <div class="avatar" style="background: var(--amber-light); color: #B45309;">RA</div>
+                <div class="person-info">
+                  <div class="person-name">Robert Adams</div>
+                  <div class="person-role">Insurance Agent · Allstate</div>
+                  <div class="person-email">r.adams@allstate.com</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== TAB: COMMUNICATIONS ==================== -->
+    <div class="tab-content" id="tab-comms">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">📧 Email Digests</span>
+            <button class="btn" style="padding: 5px 10px; font-size: 12px;">⚙️ Configure</button>
+          </div>
+          <div class="card-body">
+            <div class="timeline-item">
+              <div class="timeline-dot-wrap"><div class="timeline-dot" style="background: var(--emerald);"></div><div class="timeline-line"></div></div>
+              <div class="timeline-content">
+                <div class="timeline-text"><strong>Borrower Portal Update</strong> sent to Michael Rodriguez</div>
+                <div class="timeline-time">Feb 24, 2026 · 9:15 AM — Documents requested: Rent Roll, Tax Returns</div>
+              </div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-dot-wrap"><div class="timeline-dot"></div><div class="timeline-line"></div></div>
+              <div class="timeline-content">
+                <div class="timeline-text"><strong>Weekly Digest</strong> sent to borrower</div>
+                <div class="timeline-time">Feb 17, 2026 · 8:00 AM — Stage update: Processing → Underwriting</div>
+              </div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-dot-wrap"><div class="timeline-dot"></div></div>
+              <div class="timeline-content">
+                <div class="timeline-text"><strong>Welcome Email</strong> sent to Michael Rodriguez</div>
+                <div class="timeline-time">Feb 3, 2026 · 10:30 AM — Portal access granted</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">📝 Notes & Activity</span>
+            <button class="btn" style="padding: 5px 10px; font-size: 12px;">+ Add Note</button>
+          </div>
+          <div class="card-body">
+            <div class="timeline-item">
+              <div class="timeline-dot-wrap"><div class="timeline-dot" style="background: var(--amber);"></div><div class="timeline-line"></div></div>
+              <div class="timeline-content">
+                <div class="timeline-text"><strong>Carlos V.</strong> moved deal from Processing to Underwriting</div>
+                <div class="timeline-time">Feb 15, 2026 · 2:30 PM</div>
+              </div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-dot-wrap"><div class="timeline-dot"></div><div class="timeline-line"></div></div>
+              <div class="timeline-content">
+                <div class="timeline-text"><strong>AI Agent</strong> reviewed and approved Appraisal Report</div>
+                <div class="timeline-time">Feb 14, 2026 · 11:20 AM</div>
+              </div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-dot-wrap"><div class="timeline-dot"></div><div class="timeline-line"></div></div>
+              <div class="timeline-content">
+                <div class="timeline-text"><strong>Maria S.</strong> added note: "Borrower confirmed closing date works"</div>
+                <div class="timeline-time">Feb 12, 2026 · 4:15 PM</div>
+              </div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-dot-wrap"><div class="timeline-dot"></div></div>
+              <div class="timeline-content">
+                <div class="timeline-text"><strong>System</strong> created deal from manual entry</div>
+                <div class="timeline-time">Feb 3, 2026 · 10:00 AM</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== TAB: AI INSIGHTS ==================== -->
+    <div class="tab-content" id="tab-ai">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">🤖 AI Document Analysis</span>
+          <button class="btn btn-success" style="padding: 6px 14px; font-size: 12.5px;">⚡ Run Analysis</button>
+        </div>
+        <div class="card-body">
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+            <div style="background: var(--emerald-light); border-radius: 8px; padding: 14px;">
+              <div style="font-size: 11px; color: #047857; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Documents Analyzed</div>
+              <div style="font-size: 24px; font-weight: 700; color: #047857;">8</div>
+              <div style="font-size: 12px; color: #047857; opacity: 0.7;">of 12 uploaded</div>
+            </div>
+            <div style="background: var(--amber-light); border-radius: 8px; padding: 14px;">
+              <div style="font-size: 11px; color: #B45309; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Findings</div>
+              <div style="font-size: 24px; font-weight: 700; color: #B45309;">3</div>
+              <div style="font-size: 12px; color: #B45309; opacity: 0.7;">items need attention</div>
+            </div>
+            <div style="background: var(--blue-light); border-radius: 8px; padding: 14px;">
+              <div style="font-size: 11px; color: var(--blue); text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Risk Score</div>
+              <div style="font-size: 24px; font-weight: 700; color: var(--blue);">Low</div>
+              <div style="font-size: 12px; color: var(--blue); opacity: 0.7;">Based on doc completeness</div>
+            </div>
+          </div>
+
+          <h4 style="font-size: 13px; font-weight: 600; margin-bottom: 12px;">Key Findings</h4>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; align-items: flex-start; gap: 10px; padding: 10px; border-radius: 8px; background: var(--amber-light);">
+              <span style="font-size: 16px;">⚠️</span>
+              <div>
+                <div style="font-size: 13px; font-weight: 500;">Rent roll shows vacancy in Unit B</div>
+                <div style="font-size: 12px; color: #B45309; margin-top: 2px;">Monthly rent listed as $0 for Unit B. This may affect DSCR calculation. Confirm with borrower.</div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: flex-start; gap: 10px; padding: 10px; border-radius: 8px; background: var(--blue-light);">
+              <span style="font-size: 16px;">ℹ️</span>
+              <div>
+                <div style="font-size: 13px; font-weight: 500;">Tax returns show consistent income growth</div>
+                <div style="font-size: 12px; color: var(--blue); margin-top: 2px;">AGI increased 12% year-over-year. Positive indicator for borrower qualification.</div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: flex-start; gap: 10px; padding: 10px; border-radius: 8px; background: var(--emerald-light);">
+              <span style="font-size: 16px;">✅</span>
+              <div>
+                <div style="font-size: 13px; font-weight: 500;">Title report is clean</div>
+                <div style="font-size: 12px; color: #047857; margin-top: 2px;">No liens, encumbrances, or title defects found. Property is marketable.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+</div>
+
+<script>
+function switchTab(tabId) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + tabId).classList.add('active');
+  event.currentTarget.classList.add('active');
+}
+
+function toggleStage(id) {
+  const body = document.getElementById('stage-' + id);
+  const chevron = document.getElementById('chevron-' + id);
+  body.classList.toggle('show');
+  if (body.classList.contains('show')) {
+    chevron.textContent = '▾';
+    chevron.classList.add('open');
+  } else {
+    chevron.textContent = '▸';
+    chevron.classList.remove('open');
+  }
+}
+</script>
+</body>
+</html>

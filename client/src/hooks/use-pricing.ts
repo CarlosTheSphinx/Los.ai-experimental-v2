@@ -5,15 +5,18 @@ import { useToast } from "@/hooks/use-toast";
 export function usePricing() {
   const { toast } = useToast();
 
-  return useMutation<PricingResponse, Error, LoanPricingFormData>({
-    mutationFn: async (data: LoanPricingFormData) => {
-      // Ensure numeric fields are correctly typed if they come in as strings from forms
-      const payload = {
-        ...data,
-        loanAmount: Number(data.loanAmount),
-        propertyValue: Number(data.propertyValue),
-        // other fields are strings or handled by zod coercion in backend
-      };
+  return useMutation<PricingResponse, Error, Record<string, any>>({
+    mutationFn: async (data: Record<string, any>) => {
+      const payload: Record<string, any> = { ...data };
+      for (const key of Object.keys(payload)) {
+        const val = payload[key];
+        if (typeof val === 'string' && val !== '' && !isNaN(Number(val.replace(/,/g, '')))) {
+          const num = Number(val.replace(/,/g, ''));
+          if (key === 'loanAmount' || key === 'propertyValue' || /amount|value|price|budget|rent|tax|insurance/i.test(key)) {
+            payload[key] = num;
+          }
+        }
+      }
 
       const res = await fetch(api.pricing.submit.path, {
         method: api.pricing.submit.method,
@@ -29,11 +32,18 @@ export function usePricing() {
 
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.message || errorData.error || "Failed to fetch pricing");
+        const err = new Error(errorData.message || errorData.error || "Failed to fetch pricing") as any;
+        err.scraperPayload = errorData.scraperPayload;
+        err.debug = errorData.debug;
+        throw err;
       }
 
       const result = await res.json();
-      return api.pricing.submit.responses[200].parse(result);
+      try {
+        return api.pricing.submit.responses[200].parse(result);
+      } catch {
+        return result;
+      }
     },
     onError: (error) => {
       toast({

@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import { SiGoogle } from 'react-icons/si';
 
 const loginSchema = z.object({
@@ -22,6 +22,8 @@ const loginSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>;
 
+let _persistedLoginError: string | null = null;
+
 export default function LoginPage() {
   const [, setLocation] = useLocation();
   const searchString = useSearch();
@@ -29,6 +31,12 @@ export default function LoginPage() {
   const { branding } = useBranding();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(_persistedLoginError);
+
+  const clearError = () => {
+    _persistedLoginError = null;
+    setLoginError(null);
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(searchString);
@@ -57,15 +65,14 @@ export default function LoginPage() {
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
+    clearError();
     try {
       await login(data.email, data.password);
       setLocation('/');
     } catch (error: any) {
-      toast({
-        title: 'Login failed',
-        description: error?.message || 'Invalid email or password',
-        variant: 'destructive',
-      });
+      const msg = error?.message || 'Invalid email or password';
+      _persistedLoginError = msg;
+      setLoginError(msg);
     } finally {
       setIsLoading(false);
     }
@@ -77,13 +84,13 @@ export default function LoginPage() {
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-b from-[#0F2438] via-[#1A3A52] to-[#0F1729] text-background flex-col justify-between items-center p-12">
         {/* Centered Logo & Tagline */}
         <div className="flex flex-col items-center justify-center flex-1">
-          <div className="flex items-center gap-0 mb-6">
-            <span className="text-3xl font-bold text-white">Lendry.</span>
-            <span className="text-3xl font-bold text-blue-400">AI</span>
+          <div className="flex items-baseline gap-1 mb-4">
+            <span className="text-6xl font-display font-bold text-white tracking-[0.3em]">LENDRY</span>
+            <span className="text-3xl font-display font-bold text-amber-400 tracking-[0.15em]">AI</span>
           </div>
-          <h1 className="text-4xl font-bold tracking-tight text-center">
+          <p className="text-xl font-medium tracking-tight text-center text-white/70">
             Lending, Automated.
-          </h1>
+          </p>
         </div>
 
         {/* Copyright Footer */}
@@ -102,9 +109,9 @@ export default function LoginPage() {
         >
           {/* Mobile logo */}
           <div className="lg:hidden text-center mb-4">
-            <div className="flex items-center justify-center gap-0">
-              <span className="text-2xl font-bold text-foreground">Lendry.</span>
-              <span className="text-2xl font-bold text-primary">AI</span>
+            <div className="flex items-baseline gap-0.5">
+              <span className="text-2xl font-display font-bold text-foreground tracking-[0.3em]">LENDRY</span>
+              <span className="text-base font-display font-bold text-primary tracking-[0.15em]">AI</span>
             </div>
           </div>
 
@@ -128,6 +135,7 @@ export default function LoginPage() {
                         className="h-12 focus:ring-2 focus:ring-primary/20 transition-all duration-200"
                         data-testid="input-email"
                         {...field}
+                        onChange={(e) => { clearError(); field.onChange(e); }}
                       />
                     </FormControl>
                     <FormMessage />
@@ -152,12 +160,19 @@ export default function LoginPage() {
                         className="h-12 focus:ring-2 focus:ring-primary/20 transition-all duration-200"
                         data-testid="input-password"
                         {...field}
+                        onChange={(e) => { clearError(); field.onChange(e); }}
                       />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+              {loginError && (
+                <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-[14px]" data-testid="text-login-error">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{loginError}</span>
+                </div>
+              )}
               <Button
                 type="submit"
                 className="w-full h-11 text-base"

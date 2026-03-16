@@ -2,20 +2,21 @@
 import { db } from "./db";
 import {
   pricingRequests, savedQuotes, documents, signers, documentFields, documentAuditLog, users,
-  projects, projectStages, projectTasks, projectActivity, projectDocuments, projectWebhooks,
+  projects, projectStages, projectTasks, projectActivity, projectDocuments,
   dealDocuments, dealDocumentFiles,
   systemSettings, adminTasks, adminActivity, dealStages, teamPermissions,
   commercialSubmissions, commercialSubmissionDocuments,
   documentReviewResults,
   programReviewRules,
   creditPolicies,
+  loanPrograms,
   type InsertPricingRequest, type PricingRequest, type InsertSavedQuote, type SavedQuote,
   type Document, type InsertDocument, type Signer, type InsertSigner,
   type DocumentField, type InsertDocumentField, type DocumentAuditLog, type InsertDocumentAuditLog,
   type User, type InsertUser,
   type Project, type InsertProject, type ProjectStage, type InsertProjectStage,
   type ProjectTask, type InsertProjectTask, type ProjectActivity, type InsertProjectActivity,
-  type ProjectDocument, type InsertProjectDocument, type ProjectWebhook, type InsertProjectWebhook,
+  type ProjectDocument, type InsertProjectDocument,
   type DealDocument, type InsertDealDocument, type DealDocumentFile,
   type SystemSetting, type InsertSystemSetting, type AdminTask, type InsertAdminTask,
   type AdminActivity, type InsertAdminActivity,
@@ -39,6 +40,8 @@ import {
   type SubmissionNotification, type InsertSubmissionNotification,
   messageTemplates,
   type MessageTemplate, type InsertMessageTemplate,
+  quotePdfTemplates,
+  type QuotePdfTemplate, type InsertQuotePdfTemplate,
 } from "@shared/schema";
 import { desc, eq, and, gt, like, sql, asc, or, isNull, count, inArray } from "drizzle-orm";
 
@@ -54,6 +57,7 @@ export interface IStorage {
   saveQuote(quote: InsertSavedQuote, userId: number): Promise<SavedQuote>;
   getQuotes(userId: number): Promise<SavedQuote[]>;
   getQuoteById(id: number, userId: number): Promise<SavedQuote | undefined>;
+  updateQuote(id: number, userId: number, updates: Partial<SavedQuote>): Promise<SavedQuote | undefined>;
   deleteQuote(id: number, userId: number): Promise<void>;
   
   // Document methods
@@ -170,6 +174,14 @@ export interface IStorage {
   createMessageTemplate(data: InsertMessageTemplate): Promise<MessageTemplate>;
   updateMessageTemplate(id: number, userId: number, data: Partial<InsertMessageTemplate>): Promise<MessageTemplate | undefined>;
   deleteMessageTemplate(id: number, userId: number): Promise<boolean>;
+
+  // Quote PDF Templates
+  getQuotePdfTemplates(tenantId?: string): Promise<QuotePdfTemplate[]>;
+  getQuotePdfTemplateById(id: number): Promise<QuotePdfTemplate | undefined>;
+  getDefaultQuotePdfTemplate(tenantId?: string): Promise<QuotePdfTemplate | undefined>;
+  createQuotePdfTemplate(data: InsertQuotePdfTemplate): Promise<QuotePdfTemplate>;
+  updateQuotePdfTemplate(id: number, data: Partial<InsertQuotePdfTemplate>): Promise<QuotePdfTemplate | undefined>;
+  deleteQuotePdfTemplate(id: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -209,8 +221,27 @@ export class DatabaseStorage implements IStorage {
     return log;
   }
 
+  async generateQuoteLoanNumber(): Promise<string> {
+    const START_NUMBER = 1124;
+    const result = await db.select({ loanNumber: savedQuotes.loanNumber })
+      .from(savedQuotes)
+      .where(sql`${savedQuotes.loanNumber} IS NOT NULL AND ${savedQuotes.loanNumber} LIKE 'SPX-%'`)
+      .orderBy(desc(savedQuotes.id))
+      .limit(100);
+
+    let maxNum = START_NUMBER - 1;
+    for (const row of result) {
+      if (row.loanNumber) {
+        const num = parseInt(row.loanNumber.replace('SPX-', ''), 10);
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      }
+    }
+    return `SPX-${maxNum + 1}`;
+  }
+
   async saveQuote(quote: InsertSavedQuote, userId: number): Promise<SavedQuote> {
-    const [saved] = await db.insert(savedQuotes).values({ ...quote, userId }).returning();
+    const loanNumber = await this.generateQuoteLoanNumber();
+    const [saved] = await db.insert(savedQuotes).values({ ...quote, userId, loanNumber }).returning();
     return saved;
   }
 
@@ -223,6 +254,14 @@ export class DatabaseStorage implements IStorage {
       and(eq(savedQuotes.id, id), eq(savedQuotes.userId, userId))
     );
     return quote;
+  }
+
+  async updateQuote(id: number, userId: number, updates: Partial<SavedQuote>): Promise<SavedQuote | undefined> {
+    const [updated] = await db.update(savedQuotes)
+      .set(updates)
+      .where(and(eq(savedQuotes.id, id), eq(savedQuotes.userId, userId)))
+      .returning();
+    return updated;
   }
 
   async deleteQuote(id: number, userId: number): Promise<void> {
@@ -386,6 +425,12 @@ export class DatabaseStorage implements IStorage {
   async createProject(project: InsertProject): Promise<Project> {
     if (!project.loanNumber) {
       project.loanNumber = await this.generateLoanNumber(project.propertyAddress || '');
+    }
+    if (!project.tenantId && project.programId) {
+      const [program] = await db.select({ createdBy: loanPrograms.createdBy }).from(loanPrograms).where(eq(loanPrograms.id, project.programId)).limit(1);
+      if (program?.createdBy) {
+        project.tenantId = program.createdBy;
+      }
     }
     const [created] = await db.insert(projects).values(project).returning();
     return created;
@@ -678,51 +723,57 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  // Project webhooks methods
-  async createProjectWebhook(webhook: InsertProjectWebhook): Promise<ProjectWebhook> {
-    const [created] = await db.insert(projectWebhooks).values(webhook).returning();
-    return created;
-  }
-
-  async updateProjectWebhook(id: number, updates: Partial<ProjectWebhook>): Promise<ProjectWebhook | undefined> {
-    const [updated] = await db.update(projectWebhooks).set(updates).where(eq(projectWebhooks.id, id)).returning();
-    return updated;
-  }
-
-  async getWebhooksByProjectId(projectId: number): Promise<ProjectWebhook[]> {
-    return await db.select().from(projectWebhooks)
-      .where(eq(projectWebhooks.projectId, projectId))
-      .orderBy(desc(projectWebhooks.triggeredAt));
-  }
-
   // Admin methods - System Settings
-  async getAllSettings(): Promise<SystemSetting[]> {
+  async getAllSettings(tenantId?: number | null): Promise<SystemSetting[]> {
+    if (tenantId != null) {
+      return await db.select().from(systemSettings)
+        .where(or(eq(systemSettings.tenantId, tenantId), sql`${systemSettings.tenantId} IS NULL`))
+        .orderBy(asc(systemSettings.settingKey));
+    }
     return await db.select().from(systemSettings).orderBy(asc(systemSettings.settingKey));
   }
 
-  async getSettingByKey(key: string): Promise<SystemSetting | undefined> {
-    const [setting] = await db.select().from(systemSettings).where(eq(systemSettings.settingKey, key));
+  async getSettingByKey(key: string, tenantId?: number | null): Promise<SystemSetting | undefined> {
+    if (tenantId != null) {
+      const [tenantSetting] = await db.select().from(systemSettings)
+        .where(and(eq(systemSettings.settingKey, key), eq(systemSettings.tenantId, tenantId)));
+      if (tenantSetting) return tenantSetting;
+    }
+    const [setting] = await db.select().from(systemSettings)
+      .where(and(eq(systemSettings.settingKey, key), sql`${systemSettings.tenantId} IS NULL`));
     return setting;
   }
 
-  async upsertSetting(key: string, value: string, description: string | null, updatedBy: number): Promise<SystemSetting> {
-    const existing = await this.getSettingByKey(key);
+  async upsertSetting(key: string, value: string, description: string | null, updatedBy: number, tenantId?: number | null): Promise<SystemSetting> {
+    const conditions = [eq(systemSettings.settingKey, key)];
+    if (tenantId != null) {
+      conditions.push(eq(systemSettings.tenantId, tenantId));
+    } else {
+      conditions.push(sql`${systemSettings.tenantId} IS NULL`);
+    }
+    const [existing] = await db.select().from(systemSettings).where(and(...conditions));
     if (existing) {
       const [updated] = await db.update(systemSettings)
         .set({ settingValue: value, settingDescription: description, updatedBy, updatedAt: new Date() })
-        .where(eq(systemSettings.settingKey, key))
+        .where(eq(systemSettings.id, existing.id))
         .returning();
       return updated;
     } else {
       const [created] = await db.insert(systemSettings)
-        .values({ settingKey: key, settingValue: value, settingDescription: description, updatedBy })
+        .values({ settingKey: key, settingValue: value, settingDescription: description, updatedBy, tenantId: tenantId ?? null })
         .returning();
       return created;
     }
   }
 
-  async deleteSetting(key: string): Promise<void> {
-    await db.delete(systemSettings).where(eq(systemSettings.settingKey, key));
+  async deleteSetting(key: string, tenantId?: number | null): Promise<void> {
+    const conditions = [eq(systemSettings.settingKey, key)];
+    if (tenantId != null) {
+      conditions.push(eq(systemSettings.tenantId, tenantId));
+    } else {
+      conditions.push(sql`${systemSettings.tenantId} IS NULL`);
+    }
+    await db.delete(systemSettings).where(and(...conditions));
   }
 
   // Admin methods - Get all users (admin view)
@@ -745,7 +796,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Admin methods - Get all projects (across all users)
-  async getAllProjects(filters?: { status?: string; stage?: string; userId?: number }): Promise<Project[]> {
+  async getAllProjects(filters?: { status?: string; stage?: string; userId?: number; tenantId?: number | null }): Promise<Project[]> {
     const conditions = [];
     
     if (filters?.status) {
@@ -756,6 +807,9 @@ export class DatabaseStorage implements IStorage {
     }
     if (filters?.userId) {
       conditions.push(eq(projects.userId, filters.userId));
+    }
+    if (filters?.tenantId !== undefined && filters?.tenantId !== null) {
+      conditions.push(eq(projects.tenantId, filters.tenantId));
     }
     
     if (conditions.length > 0) {
@@ -843,7 +897,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Dashboard stats
-  async getAdminDashboardStats(): Promise<{
+  async getAdminDashboardStats(tenantId?: number | null): Promise<{
     totalActiveUsers: number;
     regularUsers: number;
     activeProjects: number;
@@ -853,6 +907,8 @@ export class DatabaseStorage implements IStorage {
     activePipelineValue: number;
     fundedVolume: number;
   }> {
+    const tenantFilter = tenantId != null ? eq(projects.tenantId, tenantId) : undefined;
+
     const [userStats] = await db.select({ 
       totalActive: count() 
     }).from(users).where(eq(users.isActive, true));
@@ -861,34 +917,44 @@ export class DatabaseStorage implements IStorage {
       count: count() 
     }).from(users).where(eq(users.role, 'user'));
     
+    const activeConditions = [eq(projects.status, 'active')];
+    if (tenantFilter) activeConditions.push(tenantFilter);
     const [activeProjectStats] = await db.select({ 
       count: count() 
-    }).from(projects).where(eq(projects.status, 'active'));
+    }).from(projects).where(and(...activeConditions));
     
+    const completedConditions = [eq(projects.status, 'completed')];
+    if (tenantFilter) completedConditions.push(tenantFilter);
     const [completedProjectStats] = await db.select({ 
       count: count() 
-    }).from(projects).where(eq(projects.status, 'completed'));
+    }).from(projects).where(and(...completedConditions));
     
     const [completedAgreementStats] = await db.select({ 
       count: count() 
     }).from(documents).where(eq(documents.status, 'completed'));
     
+    const taskConditions = [
+      sql`${projectTasks.status} != 'completed'`,
+      sql`${projectTasks.status} != 'not_applicable'`
+    ];
+    if (tenantId != null) {
+      taskConditions.push(sql`${projectTasks.projectId} IN (SELECT id FROM projects WHERE tenant_id = ${tenantId})`);
+    }
     const [pendingTaskStats] = await db.select({ 
       count: count() 
-    }).from(projectTasks).where(
-      and(
-        sql`${projectTasks.status} != 'completed'`,
-        sql`${projectTasks.status} != 'not_applicable'`
-      )
-    );
+    }).from(projectTasks).where(and(...taskConditions));
     
+    const pipelineConditions = [eq(projects.status, 'active')];
+    if (tenantFilter) pipelineConditions.push(tenantFilter);
     const activePipelineResult = await db.select({ 
       total: sql<number>`COALESCE(SUM(${projects.loanAmount}), 0)` 
-    }).from(projects).where(eq(projects.status, 'active'));
+    }).from(projects).where(and(...pipelineConditions));
     
+    const fundedConditions = [eq(projects.status, 'funded')];
+    if (tenantFilter) fundedConditions.push(tenantFilter);
     const fundedResult = await db.select({ 
       total: sql<number>`COALESCE(SUM(${projects.loanAmount}), 0)` 
-    }).from(projects).where(eq(projects.status, 'funded'));
+    }).from(projects).where(and(...fundedConditions));
     
     return {
       totalActiveUsers: userStats?.totalActive ?? 0,
@@ -1450,6 +1516,60 @@ export class DatabaseStorage implements IStorage {
     const result = await db.delete(messageTemplates)
       .where(and(eq(messageTemplates.id, id), eq(messageTemplates.createdBy, userId)))
       .returning();
+    return result.length > 0;
+  }
+
+  async getQuotePdfTemplates(tenantId?: string): Promise<QuotePdfTemplate[]> {
+    if (tenantId) {
+      return await db.select().from(quotePdfTemplates)
+        .where(or(eq(quotePdfTemplates.tenantId, tenantId), isNull(quotePdfTemplates.tenantId)))
+        .orderBy(desc(quotePdfTemplates.createdAt));
+    }
+    return await db.select().from(quotePdfTemplates).orderBy(desc(quotePdfTemplates.createdAt));
+  }
+
+  async getQuotePdfTemplateById(id: number): Promise<QuotePdfTemplate | undefined> {
+    const [template] = await db.select().from(quotePdfTemplates).where(eq(quotePdfTemplates.id, id));
+    return template;
+  }
+
+  async getDefaultQuotePdfTemplate(tenantId?: string): Promise<QuotePdfTemplate | undefined> {
+    const conditions = [eq(quotePdfTemplates.isDefault, true)];
+    if (tenantId) {
+      conditions.push(eq(quotePdfTemplates.tenantId, tenantId));
+    }
+    const [template] = await db.select().from(quotePdfTemplates).where(and(...conditions));
+    return template;
+  }
+
+  async createQuotePdfTemplate(data: InsertQuotePdfTemplate): Promise<QuotePdfTemplate> {
+    if (data.isDefault) {
+      await db.update(quotePdfTemplates)
+        .set({ isDefault: false })
+        .where(data.tenantId ? eq(quotePdfTemplates.tenantId, data.tenantId) : sql`true`);
+    }
+    const [created] = await db.insert(quotePdfTemplates).values(data).returning();
+    return created;
+  }
+
+  async updateQuotePdfTemplate(id: number, data: Partial<InsertQuotePdfTemplate>): Promise<QuotePdfTemplate | undefined> {
+    if (data.isDefault) {
+      const existing = await this.getQuotePdfTemplateById(id);
+      if (existing) {
+        await db.update(quotePdfTemplates)
+          .set({ isDefault: false })
+          .where(existing.tenantId ? eq(quotePdfTemplates.tenantId, existing.tenantId) : sql`true`);
+      }
+    }
+    const [updated] = await db.update(quotePdfTemplates)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(quotePdfTemplates.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteQuotePdfTemplate(id: number): Promise<boolean> {
+    const result = await db.delete(quotePdfTemplates).where(eq(quotePdfTemplates.id, id)).returning();
     return result.length > 0;
   }
 }

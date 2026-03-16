@@ -16,6 +16,7 @@ const ENV_VARS: EnvVarConfig[] = [
   { name: 'PANDADOC_WEBHOOK_SECRET', required: false, description: 'PandaDoc webhook signature verification' },
   { name: 'CRON_SECRET_KEY', required: false, description: 'API key for cron digest endpoint' },
   { name: 'TOKEN_ENCRYPTION_KEY', required: false, description: 'AES-256-GCM key for OAuth token encryption (64 hex chars)' },
+  { name: 'PII_ENCRYPTION_KEY', required: false, description: 'AES-256-GCM key for PII field encryption (64 hex chars)' },
   { name: 'AI_INTEGRATIONS_OPENAI_API_KEY', required: false, description: 'OpenAI API key for document review' },
   { name: 'RESEND_API_KEY', required: false, description: 'Resend email service API key' },
   { name: 'TWILIO_ACCOUNT_SID', required: false, description: 'Twilio SMS account SID' },
@@ -38,7 +39,7 @@ export function validateConfig(): void {
       missing.push(`${envVar.name} — ${envVar.description}`);
     } else if (!envVar.required && !process.env[envVar.name]) {
       // Only warn for key integrations, not all optional vars
-      if (['TOKEN_ENCRYPTION_KEY', 'AI_INTEGRATIONS_OPENAI_API_KEY'].includes(envVar.name)) {
+      if (['TOKEN_ENCRYPTION_KEY', 'PII_ENCRYPTION_KEY', 'AI_INTEGRATIONS_OPENAI_API_KEY'].includes(envVar.name)) {
         warnings.push(`${envVar.name} — ${envVar.description}`);
       }
     }

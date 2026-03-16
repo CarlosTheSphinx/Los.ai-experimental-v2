@@ -3,7 +3,7 @@ import type { AuthRequest } from '../auth';
 import type { RouteDeps } from './types';
 import { OAuth2Client } from 'google-auth-library';
 import { eq } from 'drizzle-orm';
-import { users } from '@shared/schema';
+import { users, auditLogs, loginAttempts } from '@shared/schema';
 import {
   hashPassword,
   comparePassword,
@@ -11,9 +11,78 @@ import {
   generateRandomToken,
   setAuthCookie,
   clearAuthCookie,
-  encryptToken
+  encryptToken,
+  verifyToken
 } from '../auth';
 import { sendPasswordResetEmail } from '../email';
+import {
+  isAccountLocked,
+  calculateLockoutUntil,
+  PASSWORD_POLICY,
+  validatePassword,
+  calculatePasswordExpiry,
+  isPasswordExpired,
+} from '../lib/auth';
+
+function getClientIp(req: Request): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string') return forwarded.split(',')[0].trim();
+  return req.ip || req.socket.remoteAddress || 'unknown';
+}
+
+async function logAudit(
+  db: any,
+  params: {
+    userId?: number | null;
+    userEmail?: string | null;
+    userRole?: string | null;
+    action: string;
+    resourceType?: string;
+    resourceId?: string;
+    ipAddress?: string;
+    userAgent?: string;
+    statusCode?: number;
+    success: boolean;
+    errorMessage?: string;
+  }
+) {
+  try {
+    await db.insert(auditLogs).values({
+      userId: params.userId ?? null,
+      userEmail: params.userEmail ?? null,
+      userRole: params.userRole ?? null,
+      action: params.action,
+      resourceType: params.resourceType ?? null,
+      resourceId: params.resourceId ?? null,
+      ipAddress: params.ipAddress ?? null,
+      userAgent: params.userAgent ?? null,
+      statusCode: params.statusCode ?? null,
+      success: params.success,
+      errorMessage: params.errorMessage ?? null,
+    });
+  } catch (err) {
+    console.error('Audit log write failed:', err);
+  }
+}
+
+async function recordLoginAttempt(
+  db: any,
+  email: string,
+  ip: string,
+  success: boolean,
+  userAgent?: string,
+) {
+  try {
+    await db.insert(loginAttempts).values({
+      email,
+      ipAddress: ip,
+      success,
+      userAgent: userAgent ?? null,
+    });
+  } catch (err) {
+    console.error('Login attempt log failed:', err);
+  }
+}
 
 export function registerAuthRoutes(app: Express, deps: RouteDeps) {
   const { storage, db } = deps;
@@ -122,7 +191,7 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
   // Register
   app.post('/api/auth/register', async (req: Request, res: Response) => {
     try {
-      const { email, password, fullName, firstName, lastName, companyName, phone, userType } = req.body;
+      const { email, password, fullName, firstName, lastName, companyName, phone, userType: requestedRole } = req.body;
 
       // Support both fullName and firstName/lastName
       const resolvedFullName = fullName || (firstName && lastName ? `${firstName} ${lastName}` : null);
@@ -131,23 +200,15 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         return res.status(400).json({ error: 'Email, password, and name are required' });
       }
 
-      if (password.length < 8) {
-        return res.status(400).json({ error: 'Password must be at least 8 characters' });
-      }
-
-      // Password strength requirements
-      const hasUppercase = /[A-Z]/.test(password);
-      const hasLowercase = /[a-z]/.test(password);
-      const hasNumber = /[0-9]/.test(password);
-      const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
-      if (!hasUppercase || !hasLowercase || !hasNumber || !hasSpecial) {
+      const passwordValidation = validatePassword(password);
+      if (!passwordValidation.isValid) {
         return res.status(400).json({
-          error: 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'
+          error: passwordValidation.errors.join('. ')
         });
       }
 
-      // Validate userType - default to broker if not provided
-      const validUserType = (userType === 'broker' || userType === 'borrower' || userType === 'lender') ? userType : 'broker';
+      const validRoles = ['broker', 'borrower', 'lender'];
+      const userRole = validRoles.includes(requestedRole) ? requestedRole : 'broker';
 
       const existingUser = await storage.getUserByEmail(email.toLowerCase());
       if (existingUser) {
@@ -156,11 +217,7 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
 
       const passwordHash = await hashPassword(password);
 
-      // Borrowers don't need onboarding, brokers and lenders do
-      const onboardingCompleted = validUserType === 'borrower';
-
-      // Lenders get admin role by default
-      const userRole = validUserType === 'lender' ? 'admin' : 'user';
+      const onboardingCompleted = userRole === 'borrower';
 
       const user = await storage.createUser({
         email: email.toLowerCase(),
@@ -173,14 +230,27 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         isActive: true,
         passwordResetToken: null,
         passwordResetExpires: null,
-        userType: validUserType,
-        onboardingCompleted
+        userType: userRole,
+        onboardingCompleted,
+        passwordExpiresAt: calculatePasswordExpiry(),
       });
 
-      const token = generateToken(user.id, user.email);
+      await logAudit(db, {
+        userId: user.id,
+        userEmail: user.email,
+        userRole: userRole,
+        action: 'user.registered',
+        resourceType: 'user',
+        resourceId: String(user.id),
+        ipAddress: getClientIp(req),
+        userAgent: req.headers['user-agent'] || '',
+        statusCode: 201,
+        success: true,
+      });
+
+      const token = generateToken(user.id, user.email, user.tokenVersion ?? 0);
       setAuthCookie(res, token);
 
-      // Parse firstName and lastName from fullName for response
       const respNameParts = user.fullName?.split(' ') || [];
       const respFirstName = respNameParts[0] || '';
       const respLastName = respNameParts.slice(1).join(' ') || '';
@@ -194,7 +264,7 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
           lastName: respLastName,
           fullName: user.fullName,
           companyName: user.companyName,
-          userType: user.userType,
+          userType: user.role,
           onboardingCompleted: user.onboardingCompleted
         },
         token
@@ -209,19 +279,78 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
   app.post('/api/auth/login', async (req: Request, res: Response) => {
     try {
       const { email, password } = req.body;
+      const clientIp = getClientIp(req);
+      const ua = req.headers['user-agent'] || '';
 
       if (!email || !password) {
         return res.status(400).json({ error: 'Email and password are required' });
       }
 
-      const user = await storage.getUserByEmail(email.toLowerCase());
+      const normalizedEmail = email.toLowerCase();
+      const user = await storage.getUserByEmail(normalizedEmail);
 
       if (!user) {
+        await recordLoginAttempt(db, normalizedEmail, clientIp, false, ua);
+        await logAudit(db, {
+          userEmail: normalizedEmail,
+          action: 'user.login_failed',
+          resourceType: 'user',
+          ipAddress: clientIp,
+          userAgent: ua,
+          statusCode: 401,
+          success: false,
+          errorMessage: 'User not found',
+        });
         return res.status(401).json({ error: 'Invalid email or password' });
       }
 
       if (!user.isActive) {
+        await recordLoginAttempt(db, normalizedEmail, clientIp, false, ua);
+        await logAudit(db, {
+          userId: user.id,
+          userEmail: user.email,
+          userRole: user.role,
+          action: 'user.login_failed',
+          resourceType: 'user',
+          resourceId: String(user.id),
+          ipAddress: clientIp,
+          userAgent: ua,
+          statusCode: 403,
+          success: false,
+          errorMessage: 'Account deactivated',
+        });
         return res.status(403).json({ error: 'Account has been deactivated' });
+      }
+
+      const failedAttempts = user.failedLoginAttempts ?? 0;
+      const lockedUntil = user.accountLockedUntil ?? null;
+      const locked = isAccountLocked(failedAttempts, lockedUntil);
+
+      if (!locked && failedAttempts >= PASSWORD_POLICY.maxFailedAttempts && lockedUntil && lockedUntil <= new Date()) {
+        await storage.updateUser(user.id, {
+          failedLoginAttempts: 0,
+          accountLockedUntil: null,
+        });
+      }
+
+      if (locked) {
+        await recordLoginAttempt(db, normalizedEmail, clientIp, false, ua);
+        await logAudit(db, {
+          userId: user.id,
+          userEmail: user.email,
+          userRole: user.role,
+          action: 'user.login_blocked',
+          resourceType: 'user',
+          resourceId: String(user.id),
+          ipAddress: clientIp,
+          userAgent: ua,
+          statusCode: 423,
+          success: false,
+          errorMessage: 'Account locked due to too many failed attempts',
+        });
+        return res.status(423).json({
+          error: 'Account temporarily locked due to too many failed login attempts. Please try again in 30 minutes.',
+        });
       }
 
       if (!user.passwordHash) {
@@ -231,21 +360,77 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
       const isValid = await comparePassword(password, user.passwordHash);
 
       if (!isValid) {
+        const newFailedCount = (user.failedLoginAttempts ?? 0) + 1;
+        const updates: Record<string, any> = { failedLoginAttempts: newFailedCount };
+        if (newFailedCount >= PASSWORD_POLICY.maxFailedAttempts) {
+          updates.accountLockedUntil = calculateLockoutUntil();
+        }
+        await storage.updateUser(user.id, updates);
+        await recordLoginAttempt(db, normalizedEmail, clientIp, false, ua);
+        await logAudit(db, {
+          userId: user.id,
+          userEmail: user.email,
+          userRole: user.role,
+          action: 'user.login_failed',
+          resourceType: 'user',
+          resourceId: String(user.id),
+          ipAddress: clientIp,
+          userAgent: ua,
+          statusCode: 401,
+          success: false,
+          errorMessage: `Invalid password (attempt ${newFailedCount}/${PASSWORD_POLICY.maxFailedAttempts})`,
+        });
+
+        if (newFailedCount >= PASSWORD_POLICY.maxFailedAttempts) {
+          await logAudit(db, {
+            userId: user.id,
+            userEmail: user.email,
+            userRole: user.role,
+            action: 'user.locked',
+            resourceType: 'user',
+            resourceId: String(user.id),
+            ipAddress: clientIp,
+            userAgent: ua,
+            statusCode: 423,
+            success: true,
+            errorMessage: `Account locked after ${PASSWORD_POLICY.maxFailedAttempts} failed attempts`,
+          });
+        }
+
         return res.status(401).json({ error: 'Invalid email or password' });
       }
 
-      await storage.updateUser(user.id, { lastLoginAt: new Date() });
+      await storage.updateUser(user.id, {
+        lastLoginAt: new Date(),
+        failedLoginAttempts: 0,
+        accountLockedUntil: null,
+      });
+      await recordLoginAttempt(db, normalizedEmail, clientIp, true, ua);
+      await logAudit(db, {
+        userId: user.id,
+        userEmail: user.email,
+        userRole: user.role,
+        action: 'user.login',
+        resourceType: 'user',
+        resourceId: String(user.id),
+        ipAddress: clientIp,
+        userAgent: ua,
+        statusCode: 200,
+        success: true,
+      });
 
-      const token = generateToken(user.id, user.email);
+      const passwordExpired = isPasswordExpired(user.passwordExpiresAt ?? null);
+
+      const token = generateToken(user.id, user.email, user.tokenVersion ?? 0);
       setAuthCookie(res, token);
 
-      // Parse firstName and lastName from fullName
       const nameParts = user.fullName?.split(' ') || [];
       const firstName = nameParts[0] || '';
       const lastName = nameParts.slice(1).join(' ') || '';
 
       res.json({
         success: true,
+        passwordExpired,
         user: {
           id: user.id,
           email: user.email,
@@ -262,8 +447,102 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
     }
   });
 
+  // Change password (authenticated)
+  app.post('/api/auth/change-password', deps.authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      const clientIp = getClientIp(req);
+      const ua = req.headers['user-agent'] || '';
+
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ error: 'Current password and new password are required' });
+      }
+
+      const user = await storage.getUserById(req.user!.id);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      if (!user.passwordHash) {
+        return res.status(400).json({ error: 'This account uses Google login and has no password to change.' });
+      }
+
+      const isCurrentValid = await comparePassword(currentPassword, user.passwordHash);
+      if (!isCurrentValid) {
+        await logAudit(db, {
+          userId: user.id,
+          userEmail: user.email,
+          userRole: user.role,
+          action: 'user.password_change_failed',
+          resourceType: 'user',
+          resourceId: String(user.id),
+          ipAddress: clientIp,
+          userAgent: ua,
+          statusCode: 401,
+          success: false,
+          errorMessage: 'Current password incorrect',
+        });
+        return res.status(401).json({ error: 'Current password is incorrect' });
+      }
+
+      const pwValidation = validatePassword(newPassword);
+      if (!pwValidation.isValid) {
+        return res.status(400).json({ error: pwValidation.errors.join('. ') });
+      }
+
+      const newHash = await hashPassword(newPassword);
+      const newTokenVersion = (user.tokenVersion ?? 0) + 1;
+      await storage.updateUser(user.id, {
+        passwordHash: newHash,
+        failedLoginAttempts: 0,
+        accountLockedUntil: null,
+        passwordExpiresAt: calculatePasswordExpiry(),
+        tokenVersion: newTokenVersion,
+      });
+
+      await logAudit(db, {
+        userId: user.id,
+        userEmail: user.email,
+        userRole: user.role,
+        action: 'user.password_changed',
+        resourceType: 'user',
+        resourceId: String(user.id),
+        ipAddress: clientIp,
+        userAgent: ua,
+        statusCode: 200,
+        success: true,
+        newValues: { tokenVersion: newTokenVersion },
+      });
+
+      const freshToken = generateToken(user.id, user.email, newTokenVersion);
+      setAuthCookie(res, freshToken);
+
+      res.json({ success: true, message: 'Password changed successfully' });
+    } catch (error) {
+      console.error('Change password error:', error);
+      res.status(500).json({ error: 'Failed to change password' });
+    }
+  });
+
   // Logout
-  app.post('/api/auth/logout', (_req: Request, res: Response) => {
+  app.post('/api/auth/logout', (req: Request, res: Response) => {
+    const token = req.cookies?.auth_token;
+    if (token) {
+      const decoded = verifyToken(token);
+      if (decoded) {
+        logAudit(db, {
+          userId: decoded.userId,
+          userEmail: decoded.email,
+          action: 'user.logout',
+          resourceType: 'user',
+          resourceId: String(decoded.userId),
+          ipAddress: getClientIp(req),
+          userAgent: req.headers['user-agent'] || '',
+          statusCode: 200,
+          success: true,
+        });
+      }
+    }
     clearAuthCookie(res);
     res.json({ success: true, message: 'Logged out successfully' });
   });
@@ -391,11 +670,10 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         }
         await storage.updateUser(user.id, { lastLoginAt: new Date(), emailVerified: true });
       } else {
-        const assignedUserType = requestedUserType && ['broker', 'borrower', 'lender'].includes(requestedUserType)
+        const assignedRole = requestedUserType && ['broker', 'borrower', 'lender'].includes(requestedUserType)
           ? requestedUserType
           : null;
-        const assignedRole = assignedUserType === 'lender' ? 'admin' : 'user';
-        const onboardingCompleted = assignedUserType === 'borrower';
+        const onboardingCompleted = assignedRole === 'borrower';
 
         user = await storage.createUser({
           email,
@@ -405,27 +683,27 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
           avatarUrl,
           emailVerified: true,
           isActive: true,
-          userType: assignedUserType,
+          userType: assignedRole,
           onboardingCompleted,
           companyName: null,
           phone: null,
           passwordResetToken: null,
           passwordResetExpires: null,
-          role: assignedRole,
+          role: assignedRole || 'broker',
         });
       }
 
-      const token = generateToken(user.id, user.email);
+      const token = generateToken(user.id, user.email, user.tokenVersion ?? 0);
       setAuthCookie(res, token);
 
       const returnTo = oauthState.returnTo || null;
       if (returnTo && returnTo.startsWith('/')) {
         res.redirect(returnTo);
-      } else if (!user.userType) {
+      } else if (!user.role || user.role === 'user') {
         res.redirect('/select-role');
-      } else if (user.userType === 'lender' || ['admin', 'staff', 'super_admin'].includes(user.role || '')) {
+      } else if (['lender', 'super_admin', 'admin', 'staff', 'processor'].includes(user.role)) {
         res.redirect('/admin/onboarding');
-      } else if (user.userType === 'broker' && !user.onboardingCompleted) {
+      } else if (user.role === 'broker' && !user.onboardingCompleted) {
         res.redirect('/onboarding');
       } else {
         res.redirect('/');
@@ -460,7 +738,7 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
           companyName: user.companyName,
           phone: user.phone,
           role: user.role,
-          userType: user.userType,
+          userType: user.role,
           onboardingCompleted: user.onboardingCompleted,
           createdAt: user.createdAt
         }
@@ -468,6 +746,25 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
     } catch (error) {
       console.error('Get user error:', error);
       res.status(500).json({ error: 'Failed to get user' });
+    }
+  });
+
+  app.patch('/api/auth/profile', deps.authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const user = await storage.getUserById(req.user!.id);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
+      const { fullName, phone, companyName } = req.body;
+      const updates: Record<string, any> = {};
+      if (fullName !== undefined) updates.fullName = fullName;
+      if (phone !== undefined) updates.phone = phone;
+      if (companyName !== undefined) updates.companyName = companyName;
+
+      await storage.updateUser(user.id, updates);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Update profile error:', error);
+      res.status(500).json({ error: 'Failed to update profile' });
     }
   });
 
@@ -494,18 +791,18 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
       if (!req.user) {
         return res.status(401).json({ error: 'Authentication required' });
       }
-      const { userType } = req.body;
-      if (userType !== 'broker' && userType !== 'borrower') {
-        return res.status(400).json({ error: 'Invalid user type. Must be broker or borrower.' });
+      const { userType: selectedRole } = req.body;
+      if (!['broker', 'borrower', 'lender'].includes(selectedRole)) {
+        return res.status(400).json({ error: 'Invalid role. Must be broker, borrower, or lender.' });
       }
       const user = await storage.getUserById(req.user.id);
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
-      if (user.userType) {
-        return res.status(400).json({ error: 'User type already set' });
+      if (user.role && user.role !== 'user') {
+        return res.status(400).json({ error: 'Role already set' });
       }
-      await storage.updateUser(user.id, { userType });
+      await storage.updateUser(user.id, { role: selectedRole, userType: selectedRole });
       const updatedUser = await storage.getUserById(user.id);
       res.json({ success: true, user: updatedUser });
     } catch (error) {
@@ -554,18 +851,10 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         return res.status(400).json({ error: 'Token and password are required' });
       }
 
-      if (password.length < 8) {
-        return res.status(400).json({ error: 'Password must be at least 8 characters' });
-      }
-
-      // Password strength requirements (same as registration)
-      const hasUpper = /[A-Z]/.test(password);
-      const hasLower = /[a-z]/.test(password);
-      const hasNum = /[0-9]/.test(password);
-      const hasSpec = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
-      if (!hasUpper || !hasLower || !hasNum || !hasSpec) {
+      const pwValidation = validatePassword(password);
+      if (!pwValidation.isValid) {
         return res.status(400).json({
-          error: 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'
+          error: pwValidation.errors.join('. ')
         });
       }
 
@@ -580,7 +869,22 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
       await storage.updateUser(user.id, {
         passwordHash,
         passwordResetToken: null,
-        passwordResetExpires: null
+        passwordResetExpires: null,
+        failedLoginAttempts: 0,
+        accountLockedUntil: null,
+        passwordExpiresAt: calculatePasswordExpiry(),
+      });
+
+      await logAudit(db, {
+        userId: user.id,
+        userEmail: user.email,
+        action: 'user.password_changed',
+        resourceType: 'user',
+        resourceId: String(user.id),
+        ipAddress: getClientIp(req),
+        userAgent: req.headers['user-agent'] || '',
+        statusCode: 200,
+        success: true,
       });
 
       res.json({ success: true, message: 'Password reset successful' });

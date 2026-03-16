@@ -67,6 +67,8 @@ import EmailIntegrationConfig from "@/components/admin/config/EmailIntegrationCo
 import AICustomizationConfig from "@/components/admin/config/AICustomizationConfig";
 import MagicLinksConfig from "@/components/admin/config/MagicLinksConfig";
 import DocumentReviewConfig from "@/components/admin/config/DocumentReviewConfig";
+import InquiryFormTemplatesConfig from "@/components/admin/config/InquiryFormTemplatesConfig";
+import QuotePdfTemplateConfig from "@/components/admin/config/QuotePdfTemplateConfig";
 
 interface DealStage {
   id: number;
@@ -120,6 +122,8 @@ const CONFIG_TABS = [
   { id: "ai-customization", label: "AI Customization", icon: Bot },
   { id: "doc-review", label: "Doc Review & Comms", icon: FileSearch },
   { id: "magic-links", label: "Magic Links", icon: Link2 },
+  { id: "inquiry-forms", label: "Inquiry Forms", icon: FileText },
+  { id: "quote-pdfs", label: "Quote PDFs", icon: FileText },
   { id: "custom-fields", label: "Custom Fields", icon: LayoutList },
   { id: "billing", label: "Billing & Plans", icon: CreditCard },
 ] as const;
@@ -223,7 +227,7 @@ const settingLabels: Record<string, { label: string; description: string; type: 
   },
   google_drive_parent_folder_id: {
     label: "Google Drive Parent Folder ID",
-    description: "The ID of the parent Google Drive folder where all deal folders will be created. Find this in your Google Drive folder's URL after /folders/",
+    description: "The ID of the parent Google Drive folder where all deal folders will be created. In your Google Drive folder URL (e.g. drive.google.com/drive/folders/ABC123?resourcekey=...), the ID is everything after /folders/ and before the \"?\" — copy only that part.",
     type: "text",
     category: "google_drive",
   },
@@ -572,7 +576,7 @@ export default function AdminSettings() {
           <Label htmlFor={key} className="font-medium">
             {config.label}
           </Label>
-          {setting?.updatedAt && (
+          {setting?.updatedAt && !isNaN(new Date(setting.updatedAt).getTime()) && (
             <span className="text-xs text-muted-foreground">
               Updated {format(new Date(setting.updatedAt), "MMM d, yyyy")}
             </span>
@@ -1210,6 +1214,10 @@ export default function AdminSettings() {
           {activeTab === "doc-review" && <DocumentReviewConfig />}
 
           {activeTab === "magic-links" && <MagicLinksConfig />}
+
+          {activeTab === "inquiry-forms" && <InquiryFormTemplatesConfig />}
+
+          {activeTab === "quote-pdfs" && <QuotePdfTemplateConfig />}
 
           {activeTab === "custom-fields" && <CustomFieldsConfig />}
 

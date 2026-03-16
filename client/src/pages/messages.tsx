@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, useSearch } from "wouter";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +26,7 @@ import {
   Link2,
   Paperclip,
   Inbox,
+  Users,
   Save,
   Trash2,
   Tags,
@@ -41,7 +43,10 @@ import {
   Play,
   Pencil,
   Eye,
+  Download,
   MapPin,
+  Sparkles,
+  File,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useBranding } from "@/hooks/use-branding";
@@ -51,11 +56,21 @@ import {
   sendMessage,
   markRead,
   createThread,
+  getMessageFileMeta,
+  getAttachmentDownloadUrl,
   type MessageThread,
   type Message
 } from "@/lib/messagesApi";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { formatDateTime } from "@/lib/utils";
 import { format } from "date-fns";
+
+function safeFormat(dateVal: any, fmt: string): string {
+  if (!dateVal) return '';
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) return '';
+  return format(d, fmt);
+}
 import {
   Dialog,
   DialogContent,
@@ -81,11 +96,13 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 
 import { MERGE_TAGS, type MessageTemplate } from "@shared/schema";
+import TeamChat, { TeamChatDetail } from "@/components/TeamChat";
 
 const QUICK_REPLIES = [
-  "Thanks, received!",
-  "I'll look into this",
-  "Can you send more details?"
+  { text: "Got it, thanks!", icon: CheckCircle2 },
+  { text: "Request insurance binder", icon: FileText },
+  { text: "Send Magic Link", icon: Sparkles },
+  { text: "Can you send more details?", icon: MessageCircle },
 ];
 
 export default function MessagesPage() {
@@ -108,7 +125,10 @@ export default function MessagesPage() {
   const [initialMessage, setInitialMessage] = useState("");
   const [starredThreadIds, setStarredThreadIds] = useState<Set<number>>(new Set());
   const [isTemplatePopoverOpen, setIsTemplatePopoverOpen] = useState(false);
-  const [inboxTab, setInboxTab] = useState<'messages' | 'email' | 'digests'>(urlTab === 'email' ? 'email' : 'messages');
+  const [inboxTab, setInboxTab] = useState<'messages' | 'email' | 'digests' | 'team'>(urlTab === 'email' ? 'email' : urlTab === 'team' ? 'team' : 'messages');
+  const [activeTeamChatId, setActiveTeamChatId] = useState<number | null>(null);
+  const [statFilter, setStatFilter] = useState<'all' | 'unread' | 'needs_reply'>('all');
+  const [channelFilter, setChannelFilter] = useState<'all' | 'in-app' | 'email' | 'team'>('all');
   const [activeEmailThreadId, setActiveEmailThreadId] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
@@ -125,8 +145,20 @@ export default function MessagesPage() {
   const [digestDate, setDigestDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
   const [editingDraft, setEditingDraft] = useState<any>(null);
   const messageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [stagedAttachment, setStagedAttachment] = useState<{
+    fileName: string;
+    fileType: string;
+    fileSize: string;
+    objectPath: string;
+    uploadedAt: string;
+  } | null>(null);
+  const activeThreadIdRef = useRef(activeThreadId);
+  activeThreadIdRef.current = activeThreadId;
   
   const isAdmin = user?.role && ['admin', 'staff', 'super_admin'].includes(user.role);
+  const isBorrower = user?.role === 'borrower';
 
   const toggleStarred = (threadId: number, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -148,6 +180,28 @@ export default function MessagesPage() {
       .toUpperCase()
       .slice(0, 2);
   };
+
+  const AVATAR_COLORS = [
+    "bg-blue-500", "bg-emerald-500", "bg-amber-500", "bg-violet-500",
+    "bg-rose-500", "bg-cyan-500", "bg-orange-500", "bg-teal-500",
+  ];
+
+  const getAvatarColor = (id: number) => AVATAR_COLORS[id % AVATAR_COLORS.length];
+
+  const STAGE_COLORS: Record<string, string> = {
+    "lead": "bg-slate-400",
+    "application": "bg-blue-400",
+    "processing": "bg-amber-400",
+    "underwriting": "bg-purple-400",
+    "conditional_approval": "bg-cyan-400",
+    "clear_to_close": "bg-emerald-400",
+    "closing": "bg-green-500",
+    "funded": "bg-green-600",
+    "dead": "bg-red-400",
+  };
+
+  const formatStageName = (stage: string) =>
+    stage.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 
   const insertTemplate = (templateContent: string) => {
     setDraft(templateContent);
@@ -212,12 +266,14 @@ export default function MessagesPage() {
   const { data: threadsData, isLoading: threadsLoading, refetch: refetchThreads } = useQuery({
     queryKey: ["/api/messages/threads"],
     queryFn: listThreads,
+    refetchInterval: 5000,
   });
 
   const { data: activeThreadData, isLoading: threadLoading, refetch: refetchThread } = useQuery({
     queryKey: ["/api/messages/threads", activeThreadId],
     queryFn: () => activeThreadId ? getThread(activeThreadId) : Promise.resolve(null),
     enabled: !!activeThreadId,
+    refetchInterval: activeThreadId ? 5000 : false,
   });
 
   const { data: usersData } = useQuery<{ users: any[] }>({
@@ -227,6 +283,12 @@ export default function MessagesPage() {
 
   const { data: quotesData } = useQuery<{ quotes: any[] }>({
     queryKey: ["/api/quotes"],
+    enabled: !isBorrower,
+  });
+
+  const { data: projectsData } = useQuery<{ projects: any[] }>({
+    queryKey: ["/api/projects"],
+    enabled: !!isBorrower,
   });
 
   const { data: emailThreadsData, isLoading: emailThreadsLoading } = useQuery<{ threads: any[]; total: number }>({
@@ -265,6 +327,12 @@ export default function MessagesPage() {
   const { data: dealsListData } = useQuery<{ quotes: any[] }>({
     queryKey: ["/api/quotes"],
     enabled: !!isAdmin && inboxTab === 'email',
+  });
+
+  const { data: teamChatUnreadData } = useQuery<{ unreadCount: number }>({
+    queryKey: ["/api/team-chats/unread-count"],
+    enabled: !!isAdmin,
+    refetchInterval: 15000,
   });
 
   const linkDealMutation = useMutation({
@@ -380,27 +448,42 @@ export default function MessagesPage() {
   });
 
   // Handle URL params for opening new thread with pre-selected deal
-  // Wait for quotes data to be loaded before opening dialog
+  // Wait for the appropriate deals data to be loaded before opening dialog
+  const dealsReady = isBorrower ? !!projectsData?.projects : !!quotesData?.quotes;
   useEffect(() => {
-    if (urlDealId && openNew && quotesData?.quotes) {
+    if (urlDealId && openNew && dealsReady) {
       setSelectedDealId(urlDealId);
       setIsNewThreadDialogOpen(true);
-      // Clear URL params after handling
       setLocation('/inbox', { replace: true });
     }
-  }, [urlDealId, openNew, setLocation, quotesData]);
+  }, [urlDealId, openNew, setLocation, dealsReady]);
 
   const threads = threadsData?.threads || [];
-  const filteredThreads = inboxSearchQuery.trim()
-    ? threads.filter((t: any) => {
-        const q = inboxSearchQuery.toLowerCase();
-        return (t.subject?.toLowerCase().includes(q)) ||
-          (t.userName?.toLowerCase().includes(q)) ||
-          (t.dealName?.toLowerCase().includes(q)) ||
-          (t.propertyAddress?.toLowerCase().includes(q)) ||
-          (t.lastMessagePreview?.toLowerCase().includes(q));
-      })
-    : threads;
+
+  const unreadThreadCount = threads.filter((t: any) => t.unreadCount > 0).length;
+  const unreadEmailCount = emailThreads.filter((t: any) => t.isUnread).length;
+  const teamUnreadCount = teamChatUnreadData?.unreadCount || 0;
+  const needsReplyCount = threads.filter((t: any) => {
+    if (!t.lastMessageSenderId) return false;
+    return t.lastMessageSenderId !== user?.id && t.unreadCount > 0;
+  }).length;
+
+  const filteredThreads = threads.filter((t: any) => {
+    if (inboxSearchQuery.trim()) {
+      const q = inboxSearchQuery.toLowerCase();
+      const matchesSearch = (t.subject?.toLowerCase().includes(q)) ||
+        (t.userName?.toLowerCase().includes(q)) ||
+        (t.dealName?.toLowerCase().includes(q)) ||
+        (t.propertyAddress?.toLowerCase().includes(q)) ||
+        (t.lastMessagePreview?.toLowerCase().includes(q));
+      if (!matchesSearch) return false;
+    }
+    if (statFilter === 'unread' && t.unreadCount <= 0) return false;
+    if (statFilter === 'needs_reply') {
+      if (!t.lastMessageSenderId || t.lastMessageSenderId === user?.id || t.unreadCount <= 0) return false;
+    }
+    return true;
+  });
 
   const filteredEmailThreads = emailThreads.filter((t: any) => {
     if (emailSearchQuery.trim()) {
@@ -419,7 +502,14 @@ export default function MessagesPage() {
   });
 
   const activeThread = activeThreadData?.thread;
-  const messages = activeThreadData?.messages || [];
+  const activeMessages = activeThreadData?.messages || [];
+
+  const activeThreadMeta = activeThread ? threads.find((t: any) => t.id === activeThread.id) : null;
+  const headerAddress = activeThreadMeta?.propertyAddress?.split(',')[0] || (activeThread as any)?.userName || "Conversation";
+  const headerStage = activeThreadMeta?.currentStage;
+  const headerIdentifier = activeThreadMeta?.dealIdentifier;
+  const headerUserType = activeThreadMeta?.userType;
+  const headerUserName = (activeThread as any)?.userName || activeThreadMeta?.userName;
 
   useEffect(() => {
     if (threads.length && !activeThreadId) {
@@ -431,19 +521,31 @@ export default function MessagesPage() {
     if (activeThreadId) {
       markRead(activeThreadId).catch(() => {});
     }
-  }, [activeThreadId, messages.length]);
+  }, [activeThreadId, activeMessages.length]);
+
+  useEffect(() => {
+    setStagedAttachment(null);
+  }, [activeThreadId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [activeMessages]);
 
   const sendMutation = useMutation({
     mutationFn: async () => {
-      if (!activeThreadId || !draft.trim()) return;
-      return sendMessage(activeThreadId, draft.trim(), "message");
+      if (!activeThreadId) return;
+      if (!draft.trim() && !stagedAttachment) return;
+      const messageBody = stagedAttachment
+        ? (draft.trim() || `📎 ${stagedAttachment.fileName}`)
+        : draft.trim();
+      const meta = stagedAttachment
+        ? { ...stagedAttachment, status: "received" }
+        : undefined;
+      return sendMessage(activeThreadId, messageBody, "message", meta);
     },
     onSuccess: () => {
       setDraft("");
+      setStagedAttachment(null);
       refetchThread();
       refetchThreads();
     },
@@ -476,7 +578,7 @@ export default function MessagesPage() {
   });
 
   const handleSend = () => {
-    if (draft.trim() && activeThreadId) {
+    if ((draft.trim() || stagedAttachment) && activeThreadId && !isUploading) {
       sendMutation.mutate();
     }
   };
@@ -488,23 +590,80 @@ export default function MessagesPage() {
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeThreadId) return;
+
+    const originatingThreadId = activeThreadId;
+    setIsUploading(true);
+    try {
+      const urlRes = await apiRequest("POST", "/api/uploads/request-url", {
+        name: file.name,
+        size: file.size,
+        contentType: file.type,
+      });
+      const urlData = await urlRes.json();
+
+      let objectPath = urlData.objectPath;
+
+      if (urlData.useDirectUpload) {
+        const formData = new FormData();
+        formData.append("file", file);
+        const uploadRes = await fetch(urlData.uploadURL, {
+          method: "POST",
+          body: formData,
+        });
+        const uploadData = await uploadRes.json();
+        objectPath = uploadData.objectPath || objectPath;
+      } else {
+        await fetch(urlData.uploadURL, {
+          method: "PUT",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+      }
+
+      const fileSizeStr = file.size < 1024 * 1024
+        ? `${Math.round(file.size / 1024)} KB`
+        : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+
+      if (originatingThreadId !== activeThreadIdRef.current) {
+        toast({ title: "Thread changed — uploaded file was discarded" });
+        return;
+      }
+
+      setStagedAttachment({
+        fileName: file.name,
+        fileType: file.type.includes("pdf") ? "PDF" : file.type.split("/")[1]?.toUpperCase() || "File",
+        fileSize: fileSizeStr,
+        objectPath,
+        uploadedAt: new Date().toISOString(),
+      });
+
+      toast({ title: "File ready to send" });
+    } catch (err) {
+      console.error("File upload error:", err);
+      toast({ title: "Failed to upload file", variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   return (
-    <div className="p-6 h-full" data-testid="messages-page">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Inbox className="h-8 w-8 text-primary" />
-          <div>
-            <h1 className="text-2xl font-bold">Inbox</h1>
-            <p className="text-sm text-muted-foreground">
-              {isAdmin ? "Communicate with borrowers and partners" : `Messages from ${branding.companyName}`}
-            </p>
-          </div>
+    <div className="p-4 md:p-6 h-full" data-testid="messages-page">
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h1 className="text-[30px] font-display font-bold" data-testid="text-inbox-title">Inbox</h1>
+          <p className="text-[16px] text-muted-foreground mt-0.5">
+            {isAdmin ? "Communicate with borrowers and partners" : `Messages from ${branding.companyName}`}
+          </p>
         </div>
         
         <Dialog open={isNewThreadDialogOpen} onOpenChange={setIsNewThreadDialogOpen}>
           <DialogTrigger asChild>
-            <Button data-testid="button-new-thread">
-              <Plus className="h-4 w-4 mr-2" />
+            <Button className="rounded-full h-10 px-5 text-[15px] gap-2 shadow-md" data-testid="button-new-thread">
+              <Plus className="h-4 w-4" />
               {isAdmin ? "New Conversation" : "Message Lender"}
             </Button>
           </DialogTrigger>
@@ -544,13 +703,28 @@ export default function MessagesPage() {
                     <SelectValue placeholder="Select a deal..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {quotesData?.quotes?.map((q) => (
-                      <SelectItem key={q.id} value={q.id.toString()}>
-                        {q.borrowerName || q.propertyAddress || `Quote #${q.id}`}
-                      </SelectItem>
-                    ))}
-                    {(!quotesData?.quotes || quotesData.quotes.length === 0) && (
-                      <div className="p-2 text-sm text-muted-foreground">No deals available</div>
+                    {isBorrower ? (
+                      <>
+                        {projectsData?.projects?.map((p) => (
+                          <SelectItem key={p.id} value={p.id.toString()} data-testid={`select-deal-option-${p.id}`}>
+                            {p.loanNumber ? `${p.loanNumber} — ` : ''}{p.propertyAddress || p.projectName || `Deal #${p.id}`}
+                          </SelectItem>
+                        ))}
+                        {(!projectsData?.projects || projectsData.projects.length === 0) && (
+                          <div className="p-2 text-sm text-muted-foreground">No deals available</div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {quotesData?.quotes?.map((q) => (
+                          <SelectItem key={q.id} value={q.id.toString()}>
+                            {q.borrowerName || q.propertyAddress || `Quote #${q.id}`}
+                          </SelectItem>
+                        ))}
+                        {(!quotesData?.quotes || quotesData.quotes.length === 0) && (
+                          <div className="p-2 text-sm text-muted-foreground">No deals available</div>
+                        )}
+                      </>
                     )}
                   </SelectContent>
                 </Select>
@@ -595,54 +769,77 @@ export default function MessagesPage() {
         </Dialog>
       </div>
 
-      <div className="flex h-[calc(100vh-200px)] gap-4">
-        <Card className="w-[504px] shrink-0 flex flex-col overflow-hidden">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <MessageCircle className="h-5 w-5" />
-              Inbox
-            </CardTitle>
+      <div className="flex h-[calc(100vh-180px)] gap-4">
+        <Card className="w-[504px] shrink-0 flex flex-col overflow-hidden rounded-[10px] shadow-sm">
+          <div className="px-4 pt-4 pb-3 space-y-3">
+            <div className="grid grid-cols-3 gap-2" data-testid="inbox-stat-counters">
+              {([
+                { key: 'all' as const, label: 'All', count: threads.length },
+                { key: 'unread' as const, label: 'Unread', count: unreadThreadCount },
+                { key: 'needs_reply' as const, label: 'Needs Reply', count: needsReplyCount },
+              ]).map((stat) => (
+                <button
+                  key={stat.key}
+                  onClick={() => setStatFilter(stat.key)}
+                  className={`flex flex-col items-center py-2.5 rounded-lg transition-colors cursor-pointer ${
+                    statFilter === stat.key
+                      ? "bg-primary/10 border border-primary/30"
+                      : "bg-muted/50 hover:bg-muted border border-transparent"
+                  }`}
+                  data-testid={`stat-${stat.key}`}
+                >
+                  <span className={`text-[20px] font-bold leading-tight ${statFilter === stat.key ? 'text-primary' : ''}`}>{stat.count}</span>
+                  <span className="text-[13px] text-muted-foreground mt-0.5">{stat.label}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search conversations..."
+                value={inboxSearchQuery}
+                onChange={(e) => setInboxSearchQuery(e.target.value)}
+                className="h-8 pl-8 text-xs"
+                data-testid="input-inbox-search"
+              />
+            </div>
+
             {isAdmin && (
-              <div className="flex items-center gap-1 mt-2 p-1 rounded-md bg-muted">
-                <Button
-                  variant={inboxTab === 'messages' ? 'default' : 'ghost'}
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={() => { setInboxTab('messages'); setActiveEmailThreadId(null); }}
-                  data-testid="tab-messages"
-                >
-                  <MessageSquare className="h-3 w-3 mr-1" />
-                  In-App
-                  {threads.filter((t: any) => t.isUnread).length > 0 && (
-                    <Badge variant={inboxTab === 'messages' ? 'secondary' : 'outline'} className="ml-1 h-4 min-w-[16px] px-1 text-[10px] leading-none">{threads.filter((t: any) => t.isUnread).length}</Badge>
-                  )}
-                </Button>
-                <Button
-                  variant={inboxTab === 'email' ? 'default' : 'ghost'}
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={() => { setInboxTab('email'); }}
-                  data-testid="tab-email"
-                >
-                  <Mail className="h-3 w-3 mr-1" />
-                  Email
-                  {emailThreads.filter((t: any) => t.unreadCount > 0).length > 0 && (
-                    <Badge variant={inboxTab === 'email' ? 'secondary' : 'outline'} className="ml-1 h-4 min-w-[16px] px-1 text-[10px] leading-none">{emailThreads.filter((t: any) => t.unreadCount > 0).length}</Badge>
-                  )}
-                </Button>
-                <Button
-                  variant={inboxTab === 'digests' ? 'default' : 'ghost'}
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={() => { setInboxTab('digests'); }}
-                  data-testid="tab-digests"
-                >
-                  <Bell className="h-3 w-3 mr-1" />
-                  Updates
-                </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                {([
+                  { key: 'all' as const, label: 'All', icon: null, badge: 0 },
+                  { key: 'in-app' as const, label: 'In-App', icon: MessageSquare, badge: unreadThreadCount },
+                  { key: 'email' as const, label: 'Email', icon: Mail, badge: unreadEmailCount },
+                  { key: 'team' as const, label: 'Team', icon: Users, badge: teamUnreadCount },
+                ] as const).map((ch) => (
+                  <div key={ch.key} className="relative">
+                    <Button
+                      variant={channelFilter === ch.key ? 'default' : 'outline'}
+                      size="sm"
+                      className={`rounded-full text-[13px] h-7 px-3 gap-1.5 ${channelFilter === ch.key ? '' : 'text-muted-foreground'}`}
+                      onClick={() => {
+                        setChannelFilter(ch.key);
+                        if (ch.key === 'email') { setInboxTab('email'); }
+                        else if (ch.key === 'team') { setInboxTab('team'); setActiveTeamChatId(null); }
+                        else if (ch.key === 'in-app') { setInboxTab('messages'); setActiveEmailThreadId(null); }
+                        else { setInboxTab('messages'); }
+                      }}
+                      data-testid={`filter-${ch.key}`}
+                    >
+                      {ch.icon && <ch.icon className="h-3 w-3" />}
+                      {ch.label}
+                    </Button>
+                    {ch.badge > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-emerald-500 text-white text-[9px] font-bold leading-none shadow-sm" data-testid={`badge-${ch.key}`}>
+                        {ch.badge}
+                      </span>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
-          </CardHeader>
+          </div>
           <Separator />
           <ScrollArea className="flex-1">
             {inboxTab === 'email' && isAdmin ? (
@@ -746,7 +943,7 @@ export default function MessagesPage() {
                             )}
                           </div>
                           <span className={`text-[11px] whitespace-nowrap ${thread.isUnread ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
-                            {thread.lastMessageAt ? format(new Date(thread.lastMessageAt), "MMM d, h:mm a") : ""}
+                            {formatDateTime(thread.lastMessageAt)}
                           </span>
                         </div>
                       </div>
@@ -766,6 +963,8 @@ export default function MessagesPage() {
                 </div>
               )}
             </>
+            ) : inboxTab === 'team' && isAdmin ? (
+              <TeamChat activeChatId={activeTeamChatId} onSelectChat={setActiveTeamChatId} />
             ) : inboxTab === 'digests' && isAdmin ? (
               <div className="p-3 space-y-3">
                 <div className="flex items-center justify-between gap-2">
@@ -784,7 +983,7 @@ export default function MessagesPage() {
                   </Button>
                   <div className="flex items-center gap-1.5 text-sm font-medium">
                     <CalendarDays className="h-4 w-4 text-muted-foreground" />
-                    {format(new Date(digestDate + 'T12:00:00'), 'MMM d, yyyy')}
+                    {safeFormat(digestDate + 'T12:00:00', 'MMM d, yyyy')}
                   </div>
                   <Button
                     variant="ghost"
@@ -845,7 +1044,7 @@ export default function MessagesPage() {
                             </div>
                           </div>
                           <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                            {digest.scheduledFor ? format(new Date(digest.scheduledFor), 'h:mm a') : ''}
+                            {formatDateTime(digest.scheduledFor)}
                           </span>
                         </div>
 
@@ -931,120 +1130,82 @@ export default function MessagesPage() {
               </div>
             ) : threadsLoading ? (
               <div className="p-4 text-center text-muted-foreground">Loading...</div>
+            ) : filteredThreads.length === 0 ? (
+              <div className="p-4 text-center text-muted-foreground">
+                <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>{inboxSearchQuery ? 'No matching conversations' : 'No conversations yet'}</p>
+                {isAdmin && !inboxSearchQuery && <p className="text-xs mt-1">Start a new conversation above</p>}
+              </div>
             ) : (
-              <>
-                <div className="px-3 py-2 border-b">
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                    <Input
-                      placeholder="Search conversations..."
-                      value={inboxSearchQuery}
-                      onChange={(e) => setInboxSearchQuery(e.target.value)}
-                      className="h-8 pl-8 text-xs"
-                      data-testid="input-inbox-search"
-                    />
-                  </div>
-                </div>
-                {filteredThreads.length === 0 ? (
-                  <div className="p-4 text-center text-muted-foreground">
-                    <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                    <p>{inboxSearchQuery ? 'No matching conversations' : 'No conversations yet'}</p>
-                    {isAdmin && !inboxSearchQuery && <p className="text-xs mt-1">Start a new conversation above</p>}
-                  </div>
-                ) : (
               <div className="p-2">
                 {filteredThreads.map((thread: any) => {
                   const t = thread;
+                  const isActive = thread.id === activeThreadId;
+                  const isRead = t.unreadCount === 0;
                   return (
-                    <div
+                    <button
                       key={thread.id}
-                      className={`group w-full text-left p-3 rounded-lg mb-1 transition-colors ${
-                        thread.id === activeThreadId
-                          ? "bg-primary/10 border border-primary/20"
-                          : "hover:bg-muted"
+                      onClick={() => { setActiveThreadId(thread.id); setInboxTab('messages'); }}
+                      className={`group w-full text-left p-3 rounded-xl mb-1.5 transition-colors cursor-pointer border ${
+                        isActive
+                          ? "bg-primary/5 border-l-[3px] border-l-primary border-primary/20"
+                          : isRead
+                            ? "bg-blue-50/60 dark:bg-blue-950/20 border-border/40 hover:bg-blue-100/60 dark:hover:bg-blue-950/30 border-l-[3px] border-l-transparent"
+                            : "bg-background border-border/40 hover:bg-muted border-l-[3px] border-l-transparent"
                       }`}
                       data-testid={`thread-item-${thread.id}`}
                     >
-                      <button
-                        onClick={() => setActiveThreadId(thread.id)}
-                        className="w-full text-left"
-                      >
-                        <div className="flex items-start justify-between gap-2 mb-1">
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <div className="flex items-center justify-center h-8 w-8 rounded-full bg-muted text-xs font-semibold shrink-0">
-                              {getInitials(t.propertyAddress || t.userName)}
+                      <div className="flex items-start gap-3">
+                        <div className={`flex items-center justify-center h-10 w-10 rounded-full text-white text-[14px] font-bold shrink-0 ${getAvatarColor(thread.id)}`}>
+                          {getInitials(t.propertyAddress || t.userName)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className={`text-[15px] truncate ${t.unreadCount > 0 ? 'font-bold' : 'font-semibold'}`}>
+                              {t.propertyAddress?.split(',')[0] || t.subject || "General"}
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <div className={`text-sm truncate ${t.unreadCount > 0 ? 'font-bold' : 'font-semibold'}`}>
-                                {t.propertyAddress || t.subject || "General"}
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                {t.dealIdentifier && (
-                                  <Badge variant="outline" className="text-[10px] h-4 px-1.5">
-                                    {t.dealIdentifier}
-                                  </Badge>
-                                )}
-                                <span className="text-xs text-muted-foreground truncate">
-                                  {t.userName || "User"}
-                                </span>
-                                {t.userType && (
-                                  <Badge variant="secondary" className="text-[10px] h-4 px-1.5 shrink-0">
-                                    {t.userType === 'borrower' ? 'Borrower' : 'Broker'}
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
+                            <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0 mt-0.5">
+                              {formatDateTime(t.lastMessageAt)}
+                            </span>
                           </div>
-                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {t.dealIdentifier && (
+                              <span className="text-[12px] font-medium text-muted-foreground">{t.dealIdentifier}</span>
+                            )}
+                            {t.userType && (
+                              <Badge variant="secondary" className={`text-[10px] h-[18px] px-1.5 shrink-0 border-0 ${t.userType === 'borrower' ? 'bg-blue-500 hover:bg-blue-500 text-white' : 'bg-emerald-500 hover:bg-emerald-500 text-white'}`}>
+                                {t.userType === 'borrower' ? 'Borrower' : 'Broker'}
+                              </Badge>
+                            )}
+                            <span className="text-[12px] text-muted-foreground truncate">
+                              {t.userName || "User"}
+                            </span>
                             {t.unreadCount > 0 && (
-                              <span className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
+                              <span className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none ml-auto shrink-0">
                                 {t.unreadCount}
                               </span>
                             )}
-                            <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                              {format(new Date(thread.lastMessageAt), "MMM d")}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />
+                            <span className="text-[12px] text-muted-foreground line-clamp-1">
+                              {t.lastMessagePreview || "No messages yet"}
                             </span>
                           </div>
                         </div>
-                        <div className="text-xs text-muted-foreground line-clamp-1 ml-10">
-                          {t.lastMessagePreview || "No messages yet"}
-                        </div>
-                      </button>
-
-                      <div className="flex items-center gap-1 mt-1.5 ml-10 invisible group-hover:visible">
-                        <button
-                          onClick={(e) => toggleStarred(thread.id, e)}
-                          className="p-1 rounded transition-colors"
-                        >
-                          <Star
-                            className={`h-3.5 w-3.5 ${
-                              starredThreadIds.has(thread.id)
-                                ? "fill-yellow-500 text-yellow-500"
-                                : "text-muted-foreground"
-                            }`}
-                          />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                          }}
-                          className="p-1 rounded transition-colors"
-                        >
-                          <Archive className="h-3.5 w-3.5 text-muted-foreground" />
-                        </button>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
-                )}
-              </>
             )}
           </ScrollArea>
         </Card>
 
-        <Card className="flex-1 flex flex-col">
-          {inboxTab === 'email' && activeEmailThreadId && emailThreadDetail ? (
+        <Card className="flex-1 flex flex-col rounded-[10px] shadow-sm">
+          {inboxTab === 'team' ? (
+            <TeamChatDetail activeChatId={activeTeamChatId} />
+          ) : inboxTab === 'email' && activeEmailThreadId && emailThreadDetail ? (
             <>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -1115,7 +1276,7 @@ export default function MessagesPage() {
                           </div>
                         </div>
                         <span className="text-[10px] text-muted-foreground flex-shrink-0">
-                          {msg.internalDate ? format(new Date(msg.internalDate), "MMM d, h:mm a") : ""}
+                          {formatDateTime(msg.internalDate)}
                         </span>
                       </div>
                       {msg.bodyHtml ? (
@@ -1130,9 +1291,24 @@ export default function MessagesPage() {
                         <div className="mt-2 pt-2 border-t flex items-center gap-2 flex-wrap">
                           <Paperclip className="h-3 w-3 text-muted-foreground" />
                           {(msg.attachments as any[]).map((att: any, idx: number) => (
-                            <Badge key={idx} variant="outline" className="text-[10px]">
-                              {att.filename} ({Math.round(att.size / 1024)}KB)
-                            </Badge>
+                            att.url || att.objectPath ? (
+                              <a
+                                key={idx}
+                                href={att.url || (att.objectPath ? getAttachmentDownloadUrl(att.objectPath) : '#')}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                data-testid={`link-email-attachment-${msg.id}-${idx}`}
+                              >
+                                <Badge variant="outline" className="text-[10px] cursor-pointer hover:bg-muted gap-1">
+                                  <Download className="h-2.5 w-2.5" />
+                                  {att.filename} {att.size ? `(${Math.round(att.size / 1024)}KB)` : ''}
+                                </Badge>
+                              </a>
+                            ) : (
+                              <Badge key={idx} variant="outline" className="text-[10px]">
+                                {att.filename} {att.size ? `(${Math.round(att.size / 1024)}KB)` : ''}
+                              </Badge>
+                            )
                           ))}
                         </div>
                       )}
@@ -1212,21 +1388,28 @@ export default function MessagesPage() {
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="flex items-center justify-center h-10 w-10 rounded-full bg-muted text-sm font-semibold shrink-0">
-                      {getInitials((activeThread as any).userName)}
+                    <div className={`flex items-center justify-center h-10 w-10 rounded-full text-white text-sm font-semibold shrink-0 ${getAvatarColor(activeThread.id)}`}>
+                      {getInitials(headerAddress)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <CardTitle className="text-lg truncate">
-                        {(activeThread as any).userName || "User"}
+                      <CardTitle className="text-[18px] truncate" data-testid="text-conversation-title">
+                        {headerAddress}
                       </CardTitle>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-xs text-muted-foreground">
-                          {activeThread.subject || "Conversation"}
-                        </p>
-                        {activeThread.dealId && (
-                          <Badge variant="outline" className="text-[10px] h-4 px-1.5">
-                            DEAL-{activeThread.dealId}
+                      <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                        {headerIdentifier && (
+                          <span className="text-[12px] font-medium text-muted-foreground">{headerIdentifier}</span>
+                        )}
+                        {headerUserType && (
+                          <Badge variant="secondary" className={`text-[10px] h-4 px-1.5 shrink-0 ${headerUserType === 'borrower' ? 'bg-blue-500 hover:bg-blue-500 text-white' : 'bg-emerald-500 hover:bg-emerald-500 text-white'}`}>
+                            {headerUserType === 'borrower' ? 'Borrower' : 'Broker'}
                           </Badge>
+                        )}
+                        <span className="text-[12px] text-muted-foreground">{headerUserName}</span>
+                        {headerStage && (
+                          <span className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                            <span className={`w-2 h-2 rounded-full ${STAGE_COLORS[headerStage] || 'bg-slate-400'}`} />
+                            {formatStageName(headerStage)}
+                          </span>
                         )}
                       </div>
                     </div>
@@ -1234,19 +1417,21 @@ export default function MessagesPage() {
                   <div className="flex items-center gap-1 shrink-0">
                     {isAdmin && activeThread.dealId && (
                       <Button
-                        variant="ghost"
-                        size="icon"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-[13px] gap-1.5"
                         onClick={() => setLocation(`/admin/deals/${activeThread.dealId}`)}
                         title="Go to deal"
                         data-testid="button-go-to-deal"
                       >
-                        <Briefcase className="h-4 w-4" />
+                        <Briefcase className="h-3.5 w-3.5" />
+                        Deal
                       </Button>
                     )}
-                    <Button variant="ghost" size="icon">
+                    <Button variant="ghost" size="icon" data-testid="button-call">
                       <Phone className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon">
+                    <Button variant="ghost" size="icon" data-testid="button-more">
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>
                   </div>
@@ -1256,39 +1441,130 @@ export default function MessagesPage() {
               <ScrollArea className="flex-1 p-4">
                 {threadLoading ? (
                   <div className="text-center text-muted-foreground">Loading messages...</div>
-                ) : messages.length === 0 ? (
+                ) : activeMessages.length === 0 ? (
                   <div className="text-center text-muted-foreground py-8">
                     <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-50" />
                     <p>No messages yet</p>
                     <p className="text-xs mt-1">Send the first message below</p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {messages.filter((msg) => msg.type !== "notification").map((msg) => {
+                  <div className="space-y-3">
+                    {activeMessages.map((msg, idx) => {
                       const isOwnMessage = msg.senderId === user?.id;
-                      
+                      const isSystemNotification = msg.type === 'notification';
+                      const isAiInsight = msg.senderRole === 'system' && msg.type === 'message';
+                      const fileAttachment = getMessageFileMeta(msg.meta);
+
+                      const prevMsg = idx > 0 ? activeMessages[idx - 1] : null;
+                      const showDateHeader = !prevMsg || safeFormat(msg.createdAt, 'yyyy-MM-dd') !== safeFormat(prevMsg.createdAt, 'yyyy-MM-dd');
+
                       return (
-                        <div
-                          key={msg.id}
-                          className={`flex ${isOwnMessage ? "justify-end" : "justify-start"}`}
-                          data-testid={`message-${msg.id}`}
-                        >
-                          <div
-                            className={`max-w-[70%] rounded-lg p-3 ${
-                              isOwnMessage
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-xs opacity-70">
-                                {msg.senderName || (msg.senderRole === 'system' ? 'System' : msg.senderRole)}
-                                {" · "}
-                                {format(new Date(msg.createdAt), "MMM d, h:mm a")}
+                        <div key={msg.id}>
+                          {showDateHeader && (
+                            <div className="flex items-center justify-center py-3" data-testid={`date-header-${msg.id}`}>
+                              <span className="text-[13px] text-muted-foreground font-medium">
+                                {safeFormat(msg.createdAt, "MMMM d, yyyy")}
                               </span>
                             </div>
-                            <p className="text-sm whitespace-pre-wrap">{msg.body}</p>
-                          </div>
+                          )}
+
+                          {isSystemNotification ? (
+                            <div className="flex items-center justify-center py-1.5" data-testid={`notification-${msg.id}`}>
+                              <span className="text-[13px] text-muted-foreground bg-muted/50 px-3 py-1 rounded-full">
+                                {msg.body}
+                              </span>
+                            </div>
+                          ) : isAiInsight ? (
+                            <div className="flex justify-start" data-testid={`ai-insight-${msg.id}`}>
+                              <div className="max-w-[80%] rounded-lg p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50">
+                                <div className="flex items-center gap-1.5 mb-1.5">
+                                  <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                  <span className="text-[13px] font-semibold text-emerald-700 dark:text-emerald-400">AI Insight:</span>
+                                  <span className="text-[11px] text-emerald-600/70 dark:text-emerald-400/60 ml-auto">
+                                    {formatDateTime(msg.createdAt)}
+                                  </span>
+                                </div>
+                                <p className="text-[14px] text-emerald-900 dark:text-emerald-100 whitespace-pre-wrap">{msg.body}</p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div
+                              className={`flex ${isOwnMessage ? "justify-end" : "justify-start"} gap-2`}
+                              data-testid={`message-${msg.id}`}
+                            >
+                              {!isOwnMessage && (
+                                <div className={`flex items-center justify-center h-8 w-8 rounded-full text-white text-[12px] font-semibold shrink-0 mt-1 ${getAvatarColor(msg.senderId || 0)}`}>
+                                  {getInitials(msg.senderName)}
+                                </div>
+                              )}
+                              <div className="flex flex-col max-w-[70%]">
+                                <div
+                                  className={`rounded-lg p-3 ${
+                                    isOwnMessage
+                                      ? "bg-primary text-primary-foreground"
+                                      : "bg-muted"
+                                  }`}
+                                >
+                                  <p className="text-sm whitespace-pre-wrap">{msg.body}</p>
+                                  {fileAttachment && (() => {
+                                    const downloadUrl = fileAttachment.objectPath ? getAttachmentDownloadUrl(fileAttachment.objectPath) : null;
+                                    return (
+                                    <div className="mt-2 flex items-center gap-2 p-2 rounded-md border bg-background/50">
+                                      <div className="flex items-center justify-center h-9 w-9 rounded bg-red-100 dark:bg-red-900/30 shrink-0">
+                                        <File className="h-4 w-4 text-red-600 dark:text-red-400" />
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        {downloadUrl ? (
+                                          <a
+                                            href={downloadUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-[13px] font-medium truncate block hover:underline cursor-pointer"
+                                            data-testid={`link-view-attachment-${msg.id}`}
+                                          >
+                                            {fileAttachment.fileName}
+                                          </a>
+                                        ) : (
+                                          <div className="text-[13px] font-medium truncate">{fileAttachment.fileName}</div>
+                                        )}
+                                        <div className="text-[11px] text-muted-foreground">
+                                          {fileAttachment.fileType || 'PDF'} {fileAttachment.fileSize ? `${fileAttachment.fileSize}` : ''}
+                                          {fileAttachment.uploadedAt ? ` · Uploaded ${formatDateTime(fileAttachment.uploadedAt)}` : ''}
+                                        </div>
+                                      </div>
+                                      {downloadUrl && (
+                                        <a
+                                          href={downloadUrl}
+                                          download={fileAttachment.fileName}
+                                          className="shrink-0"
+                                          data-testid={`button-download-attachment-${msg.id}`}
+                                        >
+                                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                                            <Download className="h-4 w-4" />
+                                          </Button>
+                                        </a>
+                                      )}
+                                      {fileAttachment.status === 'received' && (
+                                        <Badge className="bg-emerald-500 hover:bg-emerald-500 text-white text-[10px] h-5 shrink-0">Received</Badge>
+                                      )}
+                                    </div>
+                                    );
+                                  })()}
+                                </div>
+                                <span className={`text-[11px] text-muted-foreground mt-1 ${isOwnMessage ? 'text-right' : ''}`}>
+                                  {formatDateTime(msg.createdAt)}
+                                </span>
+                              </div>
+                              {isOwnMessage && (
+                                <div className="flex flex-col items-center shrink-0 mt-1">
+                                  <div className={`flex items-center justify-center h-8 w-8 rounded-full text-white text-[12px] font-semibold ${getAvatarColor(user?.id || 0)}`}>
+                                    {getInitials(user?.fullName || user?.email)}
+                                  </div>
+                                  <span className="text-[11px] font-medium text-muted-foreground mt-0.5">Me</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -1298,73 +1574,94 @@ export default function MessagesPage() {
               </ScrollArea>
               <Separator />
 
-              {messages.length > 0 && (
-                <>
-                  <div className="px-4 pt-3 pb-0">
-                    <div className="flex gap-2 flex-wrap">
-                      {QUICK_REPLIES.map((reply) => (
-                        <Button
-                          key={reply}
-                          variant="outline"
-                          size="sm"
-                          className="text-xs h-8"
-                          onClick={() => setDraft(reply)}
-                        >
-                          {reply}
-                        </Button>
-                      ))}
-                    </div>
+              {activeMessages.length > 0 && (
+                <div className="px-4 pt-3 pb-2">
+                  <div className="flex gap-2 flex-wrap">
+                    {QUICK_REPLIES.map((reply) => (
+                      <Button
+                        key={reply.text}
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full text-[13px] h-8 px-3 gap-1.5 text-muted-foreground hover:text-foreground"
+                        onClick={() => setDraft(reply.text)}
+                        data-testid={`quick-reply-${reply.text}`}
+                      >
+                        <reply.icon className="h-3.5 w-3.5" />
+                        {reply.text}
+                      </Button>
+                    ))}
                   </div>
-                  <Separator className="mt-3" />
-                </>
+                </div>
               )}
 
-              <div className="p-4 space-y-3">
-                <div className="flex gap-2">
+              <div className="px-4 pb-4 pt-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.csv,.txt,.zip"
+                  data-testid="input-file-upload"
+                />
+                {(stagedAttachment || isUploading) && (
+                  <div className="mb-2 flex items-center gap-2 rounded-lg border bg-muted/50 px-3 py-2" data-testid="staged-attachment-chip">
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Uploading file...</span>
+                      </>
+                    ) : stagedAttachment && (
+                      <>
+                        <File className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium truncate block" data-testid="text-staged-filename">{stagedAttachment.fileName}</span>
+                          <span className="text-xs text-muted-foreground" data-testid="text-staged-fileinfo">{stagedAttachment.fileType} · {stagedAttachment.fileSize}</span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 shrink-0"
+                          onClick={() => setStagedAttachment(null)}
+                          data-testid="button-remove-attachment"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                )}
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-[42px] w-[42px] shrink-0 text-muted-foreground hover:text-foreground"
+                    title="Attach file"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={!activeThreadId || isUploading}
+                    data-testid="button-attach-file"
+                  >
+                    {isUploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Paperclip className="h-5 w-5" />}
+                  </Button>
+
                   <Popover open={isTemplatePopoverOpen} onOpenChange={setIsTemplatePopoverOpen}>
                     <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9"
-                        title="Message templates"
-                        data-testid="button-templates"
-                      >
-                        <FileText className="h-4 w-4" />
+                      <Button variant="ghost" size="icon" className="h-[42px] w-[42px] shrink-0 text-muted-foreground hover:text-foreground" title="Message templates" data-testid="button-templates">
+                        <FileText className="h-5 w-5" />
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent align="start" className="w-64 p-2">
                       <div className="space-y-1">
-                        <p className="text-xs font-semibold px-2 py-1.5 text-muted-foreground">
-                          Saved Templates
-                        </p>
+                        <p className="text-xs font-semibold px-2 py-1.5 text-muted-foreground">Saved Templates</p>
                         {savedTemplates.length === 0 ? (
-                          <p className="text-xs text-muted-foreground px-2 py-2">
-                            No templates yet. Type a message and save it as a template.
-                          </p>
+                          <p className="text-xs text-muted-foreground px-2 py-2">No templates yet. Type a message and save it as a template.</p>
                         ) : (
                           savedTemplates.map((template) => (
-                            <div
-                              key={template.id}
-                              className="flex items-center gap-1 group"
-                              data-testid={`template-item-${template.id}`}
-                            >
-                              <button
-                                onClick={() => insertTemplate(template.content)}
-                                className="flex-1 text-left px-2 py-2 rounded hover:bg-muted transition-colors text-sm"
-                              >
+                            <div key={template.id} className="flex items-center gap-1 group" data-testid={`template-item-${template.id}`}>
+                              <button onClick={() => insertTemplate(template.content)} className="flex-1 text-left px-2 py-2 rounded hover:bg-muted transition-colors text-sm">
                                 <div className="font-medium">{template.name}</div>
-                                <div className="text-xs text-muted-foreground line-clamp-1">
-                                  {template.content.split("\n")[0]}
-                                </div>
+                                <div className="text-xs text-muted-foreground line-clamp-1">{template.content.split("\n")[0]}</div>
                               </button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                                onClick={() => deleteTemplateMutation.mutate(template.id)}
-                                data-testid={`button-delete-template-${template.id}`}
-                              >
+                              <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => deleteTemplateMutation.mutate(template.id)} data-testid={`button-delete-template-${template.id}`}>
                                 <Trash2 className="h-3 w-3 text-destructive" />
                               </Button>
                             </div>
@@ -1376,28 +1673,15 @@ export default function MessagesPage() {
 
                   <Popover open={isMergeTagPopoverOpen} onOpenChange={setIsMergeTagPopoverOpen}>
                     <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9"
-                        title="Insert merge tag"
-                        data-testid="button-merge-tags"
-                      >
-                        <Tags className="h-4 w-4" />
+                      <Button variant="ghost" size="icon" className="h-[42px] w-[42px] shrink-0 text-muted-foreground hover:text-foreground" title="Insert merge tag" data-testid="button-merge-tags">
+                        <Tags className="h-5 w-5" />
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent align="start" className="w-60 p-2">
                       <div className="space-y-1">
-                        <p className="text-xs font-semibold px-2 py-1.5 text-muted-foreground">
-                          Merge Tags
-                        </p>
+                        <p className="text-xs font-semibold px-2 py-1.5 text-muted-foreground">Merge Tags</p>
                         {MERGE_TAGS.map((mt) => (
-                          <button
-                            key={mt.tag}
-                            onClick={() => insertMergeTag(mt.tag)}
-                            className="w-full text-left px-2 py-1.5 rounded hover:bg-muted transition-colors text-sm"
-                            data-testid={`merge-tag-${mt.tag}`}
-                          >
+                          <button key={mt.tag} onClick={() => insertMergeTag(mt.tag)} className="w-full text-left px-2 py-1.5 rounded hover:bg-muted transition-colors text-sm" data-testid={`merge-tag-${mt.tag}`}>
                             <div className="font-medium text-xs">{mt.label}</div>
                             <div className="text-xs text-muted-foreground font-mono">{mt.tag}</div>
                           </button>
@@ -1409,53 +1693,36 @@ export default function MessagesPage() {
                   {draft.trim() && (
                     <Popover open={isSaveTemplateOpen} onOpenChange={setIsSaveTemplateOpen}>
                       <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-9 w-9"
-                          title="Save as template"
-                          data-testid="button-save-template"
-                        >
-                          <Save className="h-4 w-4" />
+                        <Button variant="ghost" size="icon" className="h-[42px] w-[42px] shrink-0 text-muted-foreground hover:text-foreground" title="Save as template" data-testid="button-save-template">
+                          <Save className="h-5 w-5" />
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent align="start" className="w-64 p-3">
                         <div className="space-y-2">
                           <p className="text-sm font-semibold">Save as Template</p>
-                          <Input
-                            placeholder="Template name..."
-                            value={saveTemplateName}
-                            onChange={(e) => setSaveTemplateName(e.target.value)}
-                            data-testid="input-template-name"
-                          />
-                          <Button
-                            size="sm"
-                            className="w-full"
-                            disabled={!saveTemplateName.trim() || createTemplateMutation.isPending}
-                            onClick={() => createTemplateMutation.mutate({ name: saveTemplateName.trim(), content: draft })}
-                            data-testid="button-confirm-save-template"
-                          >
+                          <Input placeholder="Template name..." value={saveTemplateName} onChange={(e) => setSaveTemplateName(e.target.value)} data-testid="input-template-name" />
+                          <Button size="sm" className="w-full" disabled={!saveTemplateName.trim() || createTemplateMutation.isPending} onClick={() => createTemplateMutation.mutate({ name: saveTemplateName.trim(), content: draft })} data-testid="button-confirm-save-template">
                             {createTemplateMutation.isPending ? "Saving..." : "Save Template"}
                           </Button>
                         </div>
                       </PopoverContent>
                     </Popover>
                   )}
-                </div>
 
-                <div className="flex gap-2">
                   <Input
                     ref={messageInputRef}
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
                     onKeyDown={handleKeyDown}
                     placeholder="Type a message..."
-                    className="flex-1"
+                    className="flex-1 text-[15px] placeholder:text-muted-foreground/50 rounded-lg"
                     data-testid="input-message"
                   />
                   <Button
                     onClick={handleSend}
-                    disabled={!draft.trim() || sendMutation.isPending}
+                    disabled={(!draft.trim() && !stagedAttachment) || sendMutation.isPending || isUploading}
+                    size="icon"
+                    className="h-9 w-9 rounded-full shrink-0"
                     data-testid="button-send-message"
                   >
                     <Send className="h-4 w-4" />

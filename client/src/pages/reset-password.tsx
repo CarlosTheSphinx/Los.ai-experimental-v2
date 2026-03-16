@@ -12,7 +12,7 @@ import { apiRequest } from '@/lib/queryClient';
 import { Loader2, CheckCircle } from 'lucide-react';
 
 const resetPasswordSchema = z.object({
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: z.string().min(12, 'Password must be at least 12 characters'),
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
@@ -24,7 +24,8 @@ type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>;
 export default function ResetPasswordPage() {
   const [, setLocation] = useLocation();
   const [, params] = useRoute('/reset-password/:token');
-  const token = params?.token;
+  const queryToken = new URLSearchParams(window.location.search).get('token');
+  const token = params?.token || queryToken;
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [resetComplete, setResetComplete] = useState(false);

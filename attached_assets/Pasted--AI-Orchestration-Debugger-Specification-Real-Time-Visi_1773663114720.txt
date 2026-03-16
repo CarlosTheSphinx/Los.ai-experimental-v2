@@ -1,0 +1,1069 @@
+# AI Orchestration Debugger Specification
+## Real-Time Visibility into AI Agent Processing & Prompt Optimization
+
+**Project**: Lendry Lending Application
+**Purpose**: Enable real-time visibility into AI orchestration layer for prompt optimization and debugging
+**Target Audience**: Developers during build phase, Admins in production (with feature flag)
+**Tech Stack**: React 18 + TypeScript, OpenAI API, Service class orchestrator pattern, WebSocket streaming
+
+---
+
+## 1. System Architecture Overview
+
+### 1.1 High-Level Flow
+
+```
+User Action (Upload Credit Policy / Run AI Orchestration)
+    ↓
+Orchestrator Service (orchestrator.ts) - Instrumented with events
+    ↓
+Tracing/Instrumentation Layer - Captures agent state, inputs, outputs
+    ↓
+WebSocket Server - Streams real-time events to frontend
+    ↓
+React Sidebar Component (AIOrchestrationDebugger) - Receives and displays data
+    ↓
+Developer sees: [Agent Name] → [Input] → [Processing] → [Output]
+Optional: Adjust prompt → Replay isolated agent or cascade
+```
+
+### 1.2 Key Components
+
+**Backend:**
+- `orchestrator.ts` (existing service) - Add instrumentation hooks
+- `services/orchestrationTracing.ts` (new) - Capture agent execution events
+- `websocket/orchestrationEvents.ts` (new) - Stream events to connected clients
+- `middleware/debuggerAuth.ts` (new) - Protect debugger endpoints
+
+**Frontend:**
+- `components/AIOrchestrationDebugger/` (new)
+  - `DebuggerSidebar.tsx` - Main container
+  - `AgentTracePanel.tsx` - Shows agent execution flow
+  - `RealTimeOutput.tsx` - Streams agent processing
+  - `PromptEditor.tsx` - Edit and replay prompts
+  - `CreditExtractionPreview.tsx` - Credit policy extraction preview
+- `hooks/useOrchestrationEvents.ts` (new) - WebSocket consumer hook
+- `types/orchestration.ts` (new) - TypeScript interfaces
+
+---
+
+## 2. Backend Implementation
+
+### 2.1 Instrumentation Layer (`services/orchestrationTracing.ts`)
+
+**Purpose**: Intercept agent calls and capture execution data without modifying orchestrator logic.
+
+**Key Events to Capture:**
+```typescript
+interface OrchestrationEvent {
+  timestamp: ISO8601;
+  sessionId: string;           // Unique session for this orchestration run
+  eventType: 'agent_start' | 'agent_processing' | 'agent_complete' | 'agent_error';
+  agentName: string;           // "creditExtractor" | "dealAnalyzer" | etc.
+  agentIndex: number;          // Position in chain (1, 2, 3, 4)
+  input: Record<string, any>;  // What the agent received
+  output?: Record<string, any>; // What the agent produced
+  rawResponse?: string;        // Raw AI response before parsing
+  parsedOutput?: any;          // Parsed/extracted output
+  prompt?: string;             // The system prompt used
+  tokens?: { input: number; output: number };
+  duration?: number;           // ms to complete
+  error?: string;              // If failed
+  metadata?: {
+    model: string;            // "gpt-4", "gpt-4-turbo", etc.
+    temperature?: number;
+    tokens_used?: number;
+  };
+}
+```
+
+**Implementation Pattern:**
+
+```typescript
+// services/orchestrationTracing.ts
+export class OrchestrationTracer {
+  private static subscribers: Set<(event: OrchestrationEvent) => void> = new Set();
+  private static currentSessionId: string;
+
+  static startSession(): string {
+    this.currentSessionId = generateUUID();
+    return this.currentSessionId;
+  }
+
+  static subscribe(callback: (event: OrchestrationEvent) => void): () => void {
+    this.subscribers.add(callback);
+    return () => this.subscribers.delete(callback);
+  }
+
+  static async traceAgent<T>(
+    agentName: string,
+    agentIndex: number,
+    input: Record<string, any>,
+    agentFn: () => Promise<T>,
+    prompt?: string
+  ): Promise<T> {
+    const startTime = Date.now();
+
+    // Agent start event
+    this.emit({
+      eventType: 'agent_start',
+      agentName,
+      agentIndex,
+      input,
+      prompt,
+      timestamp: new Date().toISOString(),
+      sessionId: this.currentSessionId,
+    });
+
+    try {
+      const result = await agentFn();
+
+      // Agent complete event
+      this.emit({
+        eventType: 'agent_complete',
+        agentName,
+        agentIndex,
+        input,
+        output: result,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+        sessionId: this.currentSessionId,
+      });
+
+      return result;
+    } catch (error) {
+      // Agent error event
+      this.emit({
+        eventType: 'agent_error',
+        agentName,
+        agentIndex,
+        error: error.message,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+        sessionId: this.currentSessionId,
+      });
+      throw error;
+    }
+  }
+
+  private static emit(event: OrchestrationEvent) {
+    this.subscribers.forEach(cb => cb(event));
+  }
+}
+```
+
+**Integration into Orchestrator:**
+
+Modify `orchestrator.ts` to wrap each agent call:
+
+```typescript
+// In orchestrator.ts (Orchestrator service class)
+async executeOrchestration(input: Record<string, any>) {
+  const sessionId = OrchestrationTracer.startSession();
+
+  // Agent 1: Credit Extraction
+  const creditRules = await OrchestrationTracer.traceAgent(
+    'creditExtractor',
+    1,
+    input,
+    () => this.creditExtractionAgent(input),
+    CREDIT_EXTRACTION_PROMPT // Pass current prompt
+  );
+
+  // Agent 2: Deal Analysis
+  const dealAnalysis = await OrchestrationTracer.traceAgent(
+    'dealAnalyzer',
+    2,
+    { creditRules, ...input },
+    () => this.dealAnalysisAgent(creditRules),
+    DEAL_ANALYSIS_PROMPT
+  );
+
+  // Agent 3: Risk Assessment
+  const riskAssessment = await OrchestrationTracer.traceAgent(
+    'riskAssessor',
+    3,
+    { dealAnalysis, creditRules, ...input },
+    () => this.riskAssessmentAgent(dealAnalysis),
+    RISK_ASSESSMENT_PROMPT
+  );
+
+  // Agent 4: Recommendation Engine
+  const recommendation = await OrchestrationTracer.traceAgent(
+    'recommendationEngine',
+    4,
+    { riskAssessment, dealAnalysis, creditRules, ...input },
+    () => this.recommendationEngine(riskAssessment),
+    RECOMMENDATION_PROMPT
+  );
+
+  return { creditRules, dealAnalysis, riskAssessment, recommendation };
+}
+```
+
+### 2.2 WebSocket Server for Real-Time Streaming (`websocket/orchestrationEvents.ts`)
+
+**Purpose**: Stream execution events to connected debugger clients in real-time.
+
+**Implementation:**
+
+```typescript
+// websocket/orchestrationEvents.ts
+import WebSocket from 'ws';
+import { OrchestrationTracer } from '../services/orchestrationTracing';
+
+const debuggerClients = new Set<WebSocket>();
+
+export function setupOrchestrationWebSocket(server: any) {
+  const wss = new WebSocket.Server({ server, path: '/ws/orchestration' });
+
+  wss.on('connection', (ws: WebSocket, req: any) => {
+    // Verify debugger access (dev-only or admin-only)
+    if (!isDebuggerAccessAllowed(req)) {
+      ws.close(4003, 'Unauthorized');
+      return;
+    }
+
+    debuggerClients.add(ws);
+    console.log(`Debugger connected. Clients: ${debuggerClients.size}`);
+
+    // Subscribe to orchestration events
+    const unsubscribe = OrchestrationTracer.subscribe((event) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'orchestration_event',
+          data: event,
+        }));
+      }
+    });
+
+    ws.on('close', () => {
+      debuggerClients.delete(ws);
+      unsubscribe();
+    });
+
+    ws.on('message', async (message: string) => {
+      try {
+        const { action, payload } = JSON.parse(message);
+
+        if (action === 'replay_agent') {
+          // Handle prompt replay (see section 2.3)
+          await handleReplayAgent(payload, ws);
+        }
+      } catch (error) {
+        console.error('WebSocket message error:', error);
+      }
+    });
+  });
+
+  return wss;
+}
+
+function isDebuggerAccessAllowed(req: any): boolean {
+  // In development: always allow
+  if (process.env.NODE_ENV === 'development') return true;
+
+  // In production: check admin role (implement based on your auth)
+  const user = req.user; // Assumes authentication middleware sets this
+  return user?.role === 'super_admin' || user?.role === 'admin';
+}
+
+export function broadcastToDebuggers(event: any) {
+  debuggerClients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(event));
+    }
+  });
+}
+```
+
+### 2.3 Prompt Replay Endpoint
+
+**Purpose**: Allow isolated agent re-runs or cascade replays with modified prompts.
+
+```typescript
+// routes/debugger.ts (new file)
+import express from 'express';
+import { Orchestrator } from '../services/orchestrator';
+
+const router = express.Router();
+
+router.post('/api/debug/replay-agent', async (req, res) => {
+  const { agentName, input, customPrompt, replayMode } = req.body;
+
+  // replayMode: 'isolated' (just this agent) | 'cascade' (this agent + downstream agents)
+
+  try {
+    let result;
+
+    if (replayMode === 'isolated') {
+      // Run just this single agent with custom prompt
+      result = await replayIsolatedAgent(agentName, input, customPrompt);
+    } else if (replayMode === 'cascade') {
+      // Run this agent + all downstream agents with custom prompt
+      result = await replayCascadeAgents(agentName, input, customPrompt);
+    }
+
+    res.json({ success: true, result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+async function replayIsolatedAgent(
+  agentName: string,
+  input: Record<string, any>,
+  customPrompt: string
+): Promise<any> {
+  // Create temporary orchestrator with custom prompt
+  const orchestrator = new Orchestrator();
+
+  // Override the agent's prompt temporarily
+  orchestrator.setCustomPrompt(agentName, customPrompt);
+
+  // Call just that agent
+  const result = await orchestrator.callAgent(agentName, input);
+
+  return result;
+}
+
+async function replayCascadeAgents(
+  startAgentName: string,
+  input: Record<string, any>,
+  customPrompt: string
+): Promise<any> {
+  // Find starting agent index
+  const agents = ['creditExtractor', 'dealAnalyzer', 'riskAssessor', 'recommendationEngine'];
+  const startIndex = agents.indexOf(startAgentName);
+
+  if (startIndex === -1) throw new Error(`Unknown agent: ${startAgentName}`);
+
+  // Execute from that point onward with custom prompt for that agent
+  const orchestrator = new Orchestrator();
+  orchestrator.setCustomPrompt(startAgentName, customPrompt);
+
+  return orchestrator.executeOrchestrationFrom(startIndex, input);
+}
+
+export default router;
+```
+
+### 2.4 Credit Extraction Preview Events
+
+For credit policy uploads, emit more granular events:
+
+```typescript
+// In credit extraction agent, emit rule-by-rule events
+interface CreditExtractionEvent extends OrchestrationEvent {
+  eventType: 'credit_rule_extracted' | 'credit_extraction_batch';
+  rules?: Array<{
+    id: string;
+    rule: string;
+    category: string;
+    confidence: number;
+    reasoning: string; // Why this was extracted
+    sourceText?: string; // From which part of policy
+  }>;
+  progress?: {
+    current: number;
+    total: number;
+    percentage: number;
+  };
+}
+
+// In orchestrator when processing credit policy:
+async extractCreditRules(policyDocument: string) {
+  const rules = [];
+
+  // Stream rules as they're extracted
+  for await (const rule of this.creditExtractionAgent.streamRules(policyDocument)) {
+    rules.push(rule);
+
+    // Emit real-time event
+    OrchestrationTracer.emit({
+      eventType: 'credit_rule_extracted',
+      agentName: 'creditExtractor',
+      agentIndex: 1,
+      rules: [rule],
+      progress: {
+        current: rules.length,
+        total: estimatedTotal,
+        percentage: (rules.length / estimatedTotal) * 100,
+      },
+      timestamp: new Date().toISOString(),
+      sessionId: this.sessionId,
+    });
+  }
+
+  return rules;
+}
+```
+
+---
+
+## 3. Frontend Implementation
+
+### 3.1 WebSocket Hook (`hooks/useOrchestrationEvents.ts`)
+
+```typescript
+// hooks/useOrchestrationEvents.ts
+import { useEffect, useRef, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+
+export function useOrchestrationEvents(onEvent?: (event: OrchestrationEvent) => void) {
+  const wsRef = useRef<WebSocket | null>(null);
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    // Connect to orchestration WebSocket
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    wsRef.current = new WebSocket(`${protocol}//${window.location.host}/ws/orchestration`);
+
+    wsRef.current.onopen = () => {
+      console.log('Connected to orchestration debugger');
+    };
+
+    wsRef.current.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.type === 'orchestration_event') {
+          onEvent?.(message.data);
+        }
+      } catch (error) {
+        console.error('Failed to parse WebSocket message:', error);
+      }
+    };
+
+    wsRef.current.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+
+    return () => {
+      wsRef.current?.close();
+    };
+  }, [onEvent]);
+
+  const replayAgent = useCallback(
+    async (agentName: string, input: any, customPrompt: string, replayMode: 'isolated' | 'cascade') => {
+      try {
+        const response = await fetch('/api/debug/replay-agent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentName, input, customPrompt, replayMode }),
+        });
+
+        if (!response.ok) throw new Error('Replay failed');
+        return await response.json();
+      } catch (error) {
+        console.error('Agent replay error:', error);
+        throw error;
+      }
+    },
+    []
+  );
+
+  return { replayAgent };
+}
+```
+
+### 3.2 Main Debugger Sidebar Component (`components/AIOrchestrationDebugger/DebuggerSidebar.tsx`)
+
+```typescript
+// components/AIOrchestrationDebugger/DebuggerSidebar.tsx
+import React, { useState, useCallback } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useOrchestrationEvents } from '@/hooks/useOrchestrationEvents';
+import { AgentTracePanel } from './AgentTracePanel';
+import { RealTimeOutput } from './RealTimeOutput';
+import { PromptEditor } from './PromptEditor';
+import { CreditExtractionPreview } from './CreditExtractionPreview';
+
+interface OrchestrationSession {
+  sessionId: string;
+  startTime: Date;
+  events: OrchestrationEvent[];
+  currentAgent?: string;
+  status: 'running' | 'completed' | 'error';
+}
+
+export const AIOrchestrationDebugger: React.FC = () => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [sessions, setSessions] = useState<OrchestrationSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [editingAgent, setEditingAgent] = useState<string | null>(null);
+
+  const { replayAgent } = useOrchestrationEvents((event) => {
+    setSessions(prev => {
+      // Add event to appropriate session
+      return prev.map(session => {
+        if (session.sessionId === event.sessionId) {
+          return {
+            ...session,
+            events: [...session.events, event],
+            currentAgent: event.agentName,
+            status: event.eventType === 'agent_error' ? 'error' : 'running',
+          };
+        }
+        return session;
+      });
+    });
+  });
+
+  // Create new session when orchestration starts
+  const handleNewSession = useCallback((sessionId: string) => {
+    const newSession: OrchestrationSession = {
+      sessionId,
+      startTime: new Date(),
+      events: [],
+      status: 'running',
+    };
+    setSessions(prev => [newSession, ...prev]);
+    setActiveSessionId(sessionId);
+  }, []);
+
+  const activeSession = sessions.find(s => s.sessionId === activeSessionId);
+
+  if (!isOpen) {
+    return (
+      <button
+        onClick={() => setIsOpen(true)}
+        className="fixed bottom-4 right-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-lg z-40"
+      >
+        🤖 AI Debugger
+      </button>
+    );
+  }
+
+  return (
+    <motion.div
+      initial={{ x: '100%' }}
+      animate={{ x: 0 }}
+      exit={{ x: '100%' }}
+      transition={{ type: 'spring', damping: 25 }}
+      className="fixed right-0 top-0 h-screen w-96 bg-slate-900 border-l border-slate-700 shadow-xl overflow-hidden flex flex-col z-50"
+    >
+      {/* Header */}
+      <div className="bg-slate-800 border-b border-slate-700 p-4 flex justify-between items-center">
+        <h2 className="text-lg font-bold text-white">AI Orchestration Debugger</h2>
+        <button
+          onClick={() => setIsOpen(false)}
+          className="text-slate-400 hover:text-white text-xl"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-slate-700 bg-slate-800">
+        <button className="flex-1 px-4 py-2 text-sm font-medium text-blue-400 border-b-2 border-blue-500">
+          Sessions ({sessions.length})
+        </button>
+        <button className="flex-1 px-4 py-2 text-sm font-medium text-slate-400 hover:text-white">
+          Log
+        </button>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {activeSession ? (
+          <>
+            {/* Agent Trace Panel */}
+            <AgentTracePanel
+              session={activeSession}
+              onSelectAgent={setEditingAgent}
+            />
+
+            {/* Real-Time Output */}
+            <RealTimeOutput
+              events={activeSession.events}
+              currentAgent={activeSession.currentAgent}
+            />
+
+            {/* Prompt Editor (if agent selected) */}
+            <AnimatePresence>
+              {editingAgent && (
+                <PromptEditor
+                  agentName={editingAgent}
+                  input={activeSession.events[0]?.input}
+                  onReplay={(customPrompt, mode) =>
+                    replayAgent(editingAgent, activeSession.events[0]?.input, customPrompt, mode)
+                  }
+                />
+              )}
+            </AnimatePresence>
+
+            {/* Credit Extraction Preview (if applicable) */}
+            {activeSession.events.some(e => e.agentName === 'creditExtractor') && (
+              <CreditExtractionPreview
+                session={activeSession}
+              />
+            )}
+          </>
+        ) : (
+          <div className="text-slate-400 text-center py-8">
+            <p>No active sessions. Run orchestration to see events.</p>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+};
+```
+
+### 3.3 Agent Trace Panel (`components/AIOrchestrationDebugger/AgentTracePanel.tsx`)
+
+```typescript
+// components/AIOrchestrationDebugger/AgentTracePanel.tsx
+import React from 'react';
+import { motion } from 'framer-motion';
+import { Badge } from '@/components/ui/badge';
+
+const AGENT_COLORS = {
+  creditExtractor: 'bg-purple-900',
+  dealAnalyzer: 'bg-blue-900',
+  riskAssessor: 'bg-amber-900',
+  recommendationEngine: 'bg-green-900',
+};
+
+interface AgentTracePanelProps {
+  session: OrchestrationSession;
+  onSelectAgent: (agentName: string) => void;
+}
+
+export const AgentTracePanel: React.FC<AgentTracePanelProps> = ({ session, onSelectAgent }) => {
+  // Build sequence of agents from events
+  const agents = Array.from(
+    new Map(
+      session.events
+        .filter(e => e.agentName)
+        .map(e => [e.agentIndex, { name: e.agentName, status: e.eventType }])
+    ).values()
+  );
+
+  return (
+    <div className="bg-slate-800 rounded p-3 border border-slate-700">
+      <p className="text-xs font-semibold text-slate-300 mb-2 uppercase">Agent Flow</p>
+
+      <div className="space-y-2">
+        {agents.map((agent, idx) => {
+          const isActive = session.currentAgent === agent.name;
+          const hasError = session.events.some(
+            e => e.agentName === agent.name && e.eventType === 'agent_error'
+          );
+
+          return (
+            <motion.button
+              key={agent.name}
+              whileHover={{ scale: 1.02 }}
+              onClick={() => onSelectAgent(agent.name)}
+              className={`w-full p-2 rounded text-left text-sm font-medium transition-all ${
+                AGENT_COLORS[agent.name as keyof typeof AGENT_COLORS] || 'bg-slate-700'
+              } ${isActive ? 'ring-2 ring-cyan-400' : ''} ${
+                hasError ? 'ring-2 ring-red-500' : ''
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-white">{idx + 1}. {agent.name}</span>
+                {isActive && <span className="animate-pulse text-cyan-400">●</span>}
+                {hasError && <span className="text-red-400">✕</span>}
+              </div>
+            </motion.button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+```
+
+### 3.4 Real-Time Output (`components/AIOrchestrationDebugger/RealTimeOutput.tsx`)
+
+```typescript
+// components/AIOrchestrationDebugger/RealTimeOutput.tsx
+import React, { useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
+
+interface RealTimeOutputProps {
+  events: OrchestrationEvent[];
+  currentAgent?: string;
+}
+
+export const RealTimeOutput: React.FC<RealTimeOutputProps> = ({ events, currentAgent }) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Auto-scroll to bottom
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [events]);
+
+  const currentAgentEvents = events.filter(e => e.agentName === currentAgent);
+  const latestEvent = currentAgentEvents[currentAgentEvents.length - 1];
+
+  return (
+    <div className="bg-slate-800 rounded p-3 border border-slate-700">
+      <p className="text-xs font-semibold text-slate-300 mb-2 uppercase">
+        {currentAgent ? `${currentAgent} Output` : 'Output'}
+      </p>
+
+      <div
+        ref={scrollRef}
+        className="bg-slate-950 rounded p-2 max-h-48 overflow-y-auto text-xs text-slate-300 font-mono"
+      >
+        {latestEvent ? (
+          <motion.div
+            key={latestEvent.timestamp}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="space-y-1"
+          >
+            {latestEvent.output && (
+              <div>
+                <p className="text-cyan-400">Output:</p>
+                <pre className="text-slate-300 whitespace-pre-wrap break-words text-xs">
+                  {JSON.stringify(latestEvent.output, null, 2)}
+                </pre>
+              </div>
+            )}
+
+            {latestEvent.rawResponse && (
+              <div>
+                <p className="text-green-400">Raw Response:</p>
+                <pre className="text-slate-300 whitespace-pre-wrap break-words text-xs">
+                  {latestEvent.rawResponse.substring(0, 500)}...
+                </pre>
+              </div>
+            )}
+
+            {latestEvent.error && (
+              <div className="text-red-400">
+                <p>Error: {latestEvent.error}</p>
+              </div>
+            )}
+
+            {latestEvent.duration && (
+              <p className="text-slate-400">Duration: {latestEvent.duration}ms</p>
+            )}
+          </motion.div>
+        ) : (
+          <p className="text-slate-500">Waiting for output...</p>
+        )}
+      </div>
+    </div>
+  );
+};
+```
+
+### 3.5 Prompt Editor (`components/AIOrchestrationDebugger/PromptEditor.tsx`)
+
+```typescript
+// components/AIOrchestrationDebugger/PromptEditor.tsx
+import React, { useState } from 'react';
+import { motion } from 'framer-motion';
+
+interface PromptEditorProps {
+  agentName: string;
+  input: Record<string, any>;
+  onReplay: (customPrompt: string, mode: 'isolated' | 'cascade') => void;
+}
+
+export const PromptEditor: React.FC<PromptEditorProps> = ({ agentName, input, onReplay }) => {
+  const [customPrompt, setCustomPrompt] = useState('');
+  const [replayMode, setReplayMode] = useState<'isolated' | 'cascade'>('isolated');
+  const [isReplaying, setIsReplaying] = useState(false);
+
+  const handleReplay = async () => {
+    if (!customPrompt.trim()) return;
+    setIsReplaying(true);
+    try {
+      await onReplay(customPrompt, replayMode);
+    } finally {
+      setIsReplaying(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: 'auto' }}
+      exit={{ opacity: 0, height: 0 }}
+      className="bg-slate-800 rounded p-3 border border-slate-700 space-y-2"
+    >
+      <p className="text-xs font-semibold text-slate-300 uppercase">Edit & Replay</p>
+
+      {/* Mode Selection */}
+      <div className="flex gap-2 mb-2">
+        <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+          <input
+            type="radio"
+            value="isolated"
+            checked={replayMode === 'isolated'}
+            onChange={(e) => setReplayMode(e.target.value as any)}
+            className="w-3 h-3"
+          />
+          Isolated Agent
+        </label>
+        <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+          <input
+            type="radio"
+            value="cascade"
+            checked={replayMode === 'cascade'}
+            onChange={(e) => setReplayMode(e.target.value as any)}
+            className="w-3 h-3"
+          />
+          Cascade Downstream
+        </label>
+      </div>
+
+      {/* Prompt Editor */}
+      <textarea
+        value={customPrompt}
+        onChange={(e) => setCustomPrompt(e.target.value)}
+        placeholder="Enter custom system prompt for testing..."
+        className="w-full h-24 p-2 bg-slate-950 text-slate-300 text-xs border border-slate-600 rounded font-mono resize-none"
+      />
+
+      {/* Replay Button */}
+      <button
+        onClick={handleReplay}
+        disabled={!customPrompt.trim() || isReplaying}
+        className="w-full bg-cyan-600 hover:bg-cyan-700 disabled:bg-slate-700 text-white py-2 rounded text-sm font-medium transition-colors"
+      >
+        {isReplaying ? 'Replaying...' : 'Replay Agent'}
+      </button>
+    </motion.div>
+  );
+};
+```
+
+### 3.6 Credit Extraction Preview (`components/AIOrchestrationDebugger/CreditExtractionPreview.tsx`)
+
+```typescript
+// components/AIOrchestrationDebugger/CreditExtractionPreview.tsx
+import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Badge } from '@/components/ui/badge';
+
+interface CreditExtractionPreviewProps {
+  session: OrchestrationSession;
+}
+
+export const CreditExtractionPreview: React.FC<CreditExtractionPreviewProps> = ({ session }) => {
+  // Extract credit extraction events
+  const creditEvents = session.events.filter(e =>
+    e.eventType === 'credit_rule_extracted' || e.eventType === 'credit_extraction_batch'
+  );
+
+  const allRules = creditEvents.flatMap(e => e.rules || []);
+  const lastProgress = creditEvents[creditEvents.length - 1]?.progress;
+
+  return (
+    <div className="bg-slate-800 rounded p-3 border border-slate-700 space-y-2">
+      <p className="text-xs font-semibold text-slate-300 uppercase">
+        Credit Extraction Preview
+      </p>
+
+      {/* Progress Bar */}
+      {lastProgress && (
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs text-slate-400">
+            <span>Progress</span>
+            <span>{lastProgress.percentage.toFixed(0)}%</span>
+          </div>
+          <div className="w-full bg-slate-950 rounded h-2">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${lastProgress.percentage}%` }}
+              className="h-full bg-green-600 rounded transition-all"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Rules List */}
+      <div className="max-h-40 overflow-y-auto space-y-1">
+        <AnimatePresence>
+          {allRules.map((rule, idx) => (
+            <motion.div
+              key={`${rule.id}-${idx}`}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="bg-slate-950 p-2 rounded text-xs border border-slate-700"
+            >
+              <div className="flex justify-between items-start mb-1">
+                <span className="font-mono text-cyan-400">Rule #{idx + 1}</span>
+                <Badge variant="outline" className="text-xs">
+                  {(rule.confidence * 100).toFixed(0)}%
+                </Badge>
+              </div>
+              <p className="text-slate-300 font-medium mb-1">{rule.rule}</p>
+              <p className="text-slate-500 text-xs italic">{rule.reasoning}</p>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
+      <p className="text-xs text-slate-400">
+        {allRules.length} rules extracted
+      </p>
+    </div>
+  );
+};
+```
+
+---
+
+## 4. Integration Checklist
+
+### Backend Setup
+- [ ] Create `services/orchestrationTracing.ts` with `OrchestrationTracer` class
+- [ ] Create `websocket/orchestrationEvents.ts` with WebSocket server setup
+- [ ] Create `routes/debugger.ts` with replay endpoints
+- [ ] Integrate `OrchestrationTracer.traceAgent()` into each agent call in `orchestrator.ts`
+- [ ] Add WebSocket server initialization in `server.ts`
+- [ ] Create `middleware/debuggerAuth.ts` for access control
+- [ ] Add `exports/orchestrationTracing` to export existing prompts as constants (CREDIT_EXTRACTION_PROMPT, etc.)
+
+### Frontend Setup
+- [ ] Create `components/AIOrchestrationDebugger/` directory
+- [ ] Create all sub-components (DebuggerSidebar, AgentTracePanel, RealTimeOutput, PromptEditor, CreditExtractionPreview)
+- [ ] Create `hooks/useOrchestrationEvents.ts` WebSocket hook
+- [ ] Create `types/orchestration.ts` with TypeScript interfaces
+- [ ] Add `<AIOrchestrationDebugger />` to main layout (e.g., in root App.tsx or Layout.tsx)
+- [ ] Import necessary dependencies (framer-motion, shadcn/ui components)
+
+### Type Definitions (`types/orchestration.ts`)
+- [ ] `interface OrchestrationEvent` with all event properties
+- [ ] `interface CreditExtractionEvent` extending `OrchestrationEvent`
+- [ ] `interface OrchestrationSession`
+- [ ] Agent type union (`'creditExtractor' | 'dealAnalyzer' | 'riskAssessor' | 'recommendationEngine'`)
+
+### Configuration
+- [ ] Add `DEBUGGER_ENABLED` environment variable (default: true in dev, false in prod)
+- [ ] Update `CORS` or WebSocket origin whitelist if needed
+- [ ] Configure WebSocket path: `/ws/orchestration`
+- [ ] Export all agent prompts as constants for editing/display
+
+---
+
+## 5. Usage Flow
+
+### Credit Extraction Preview
+1. User uploads credit policy document
+2. Backend `creditExtractionAgent` processes policy
+3. For each extracted rule, emit `OrchestrationEvent` with rule data + reasoning
+4. Frontend receives events and renders in `CreditExtractionPreview` component
+5. As stream completes, show final count and allow reviewing individual rules
+
+### Real-Time Agent Orchestration
+1. User triggers AI orchestration workflow
+2. Backend starts session with `OrchestrationTracer.startSession()`
+3. Each agent wrapped with `traceAgent()`, emits events for start/processing/complete
+4. WebSocket streams events to frontend debugger in real-time
+5. Developer sees:
+   - Agent 1 running → output → complete
+   - → switches to Agent 2 → output → complete
+   - → switches to Agent 3 → output → complete
+   - → switches to Agent 4 → final recommendation
+
+### Prompt Editing & Replay
+1. Developer clicks on agent in sidebar
+2. `PromptEditor` component opens with current system prompt
+3. Developer modifies prompt
+4. Developer selects mode:
+   - **Isolated**: Re-run just Agent 2 with new prompt, same input as before
+   - **Cascade**: Re-run Agent 2 + 3 + 4 with new Agent 2 prompt, using Agent 1's output
+5. Backend replays via `POST /api/debug/replay-agent`
+6. New execution traced and streamed to debugger
+7. Developer compares side-by-side with previous run
+
+---
+
+## 6. Development Considerations
+
+### Performance
+- Stream large outputs incrementally (don't send entire 100KB response at once)
+- Batch credit extraction rules (emit every 5-10 rules, not every single rule)
+- Limit event history to last 50 events per session to avoid memory issues
+- Consider storing detailed sessions in browser IndexedDB for longer history
+
+### Security
+- Restrict debugger access to dev environment OR admin users only
+- Don't expose full API keys or sensitive data in event streams
+- Consider redacting PII from displayed outputs
+- Implement CSRF protection for replay endpoint
+
+### UX Enhancements (Phase 2)
+- Export session as JSON for sharing
+- Diff tool to compare prompt variations side-by-side
+- Save favorite prompts and compare results
+- Integration with GitHub to save optimized prompts as code commits
+- Replay with historical data (run Agent 3 with Agent 1/2 outputs from a past session)
+
+---
+
+## 7. Testing
+
+### Backend Testing
+- Test `OrchestrationTracer` event emission
+- Test WebSocket connection and message streaming
+- Test replay endpoints with various input combinations
+- Test access control (dev vs prod vs admin)
+
+### Frontend Testing
+- Test WebSocket connection and event handling
+- Test real-time rendering of agent flow
+- Test prompt editor state management
+- Test credit extraction list animation and scrolling
+
+---
+
+## 8. File Structure Summary
+
+```
+backend/
+├── services/
+│   ├── orchestrator.ts (MODIFY - add tracing)
+│   └── orchestrationTracing.ts (NEW)
+├── websocket/
+│   └── orchestrationEvents.ts (NEW)
+├── routes/
+│   └── debugger.ts (NEW)
+├── middleware/
+│   └── debuggerAuth.ts (NEW)
+└── server.ts (MODIFY - add WebSocket server)
+
+frontend/
+├── components/
+│   └── AIOrchestrationDebugger/
+│       ├── DebuggerSidebar.tsx
+│       ├── AgentTracePanel.tsx
+│       ├── RealTimeOutput.tsx
+│       ├── PromptEditor.tsx
+│       └── CreditExtractionPreview.tsx
+├── hooks/
+│   └── useOrchestrationEvents.ts (NEW)
+├── types/
+│   └── orchestration.ts (NEW)
+└── App.tsx (MODIFY - add debugger component)
+```
+
+---
+
+## 9. Next Steps
+
+1. **Review this spec** with your team
+2. **Adjust based on your actual prompt constants** (ensure CREDIT_EXTRACTION_PROMPT, etc. are exported)
+3. **Give this spec to Replit** with instruction: "Build the AI Orchestration Debugger according to this specification"
+4. **Test credit extraction** with a sample policy document
+5. **Test orchestration flow** with a test deal scenario
+6. **Iterate on UX** based on developer feedback
+
+---
+
+**Questions to address during implementation:**
+- Where are prompts currently stored? (Constants, config file, database?)
+- What's the structure of input/output data for each agent?
+- Should replays be logged somewhere, or just displayed in debugger?
+- Do you want to save debugging sessions for later review?

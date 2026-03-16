@@ -1,0 +1,35 @@
+#9 - Borrower Portal My Loans & Deal Detail Redesign
+What & Why
+Redesign the borrower portal to separate My Loans list from deal detail. Currently, the BorrowerDashboard shows only one deal with everything inline. The user wants:
+
+My Loans page — a clean list view of all loans (multiple loans visible as rows/cards)
+Deal detail view — clicking a loan opens a detail page with progress bar, documents, borrower tasks, and loan info cards mirroring the lender deal detail layout
+Progress bar — shows "X/Y completed" format where numerator = completed tasks + approved/uploaded docs, denominator = total tasks + total docs
+Done looks like
+Borrower sees all their loans listed on the My Loans page (property address, loan amount, status, stage, progress fraction)
+Clicking a loan navigates to a deal detail view at /deals/:id (borrower-scoped)
+Deal detail shows: stage progress bar with "X/Y completed" text, loan info cards (Borrower Details, Property Details, Loan Details mirroring lender's TabOverview), documents section with upload capability, tasks assigned to borrower
+Progress fraction counts completed tasks + approved/uploaded documents as numerator, total tasks + total required documents as denominator
+Design matches existing Lendry.AI dark navy style with gold accents
+Out of scope
+Borrower portal messaging changes (already works)
+Borrower settings page changes
+New backend API endpoints (reuse existing /api/deals and portal dashboard data)
+Tasks
+Refactor BorrowerDashboard into a loans list view — Replace the current single-deal dashboard with a list/table of all deals showing property address, loan amount, status badge, current stage, and progress fraction. Each row links to the deal detail.
+
+Build borrower deal detail page — Create a new view within the borrower flow (at /deals/:id) that loads deal data and shows: stage progress bar with "X/Y completed" indicator, loan info cards (Borrower Details, Property Details, Loan Details) mirroring the lender TabOverview layout, documents checklist with upload, and borrower-visible tasks.
+
+Update progress bar component — Modify or extend the stage progress bar to display a "X/Y completed" format below it, counting completed tasks + approved/uploaded docs vs total tasks + total required docs.
+
+Wire routing — Ensure borrower role users navigating to /deals/:id see the borrower deal detail (not the admin version), and the back button returns to the loans list.
+
+Relevant files
+client/src/components/BorrowerDashboard.tsx
+client/src/pages/deal-detail-v2.tsx
+client/src/components/admin/deal-v2/TabOverview.tsx
+client/src/pages/borrower-portal.tsx
+client/src/pages/home.tsx:86-89
+client/src/App.tsx:268-269
+server/routes/portal.ts
+client/src/components/ui/phase1/stage-progress-bar.tsx

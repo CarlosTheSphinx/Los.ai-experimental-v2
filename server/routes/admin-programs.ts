@@ -3,6 +3,7 @@ import type { AuthRequest } from '../auth';
 import type { RouteDeps } from './types';
 import multer from 'multer';
 import { eq, sql, inArray, and } from 'drizzle-orm';
+import { getTenantId } from '../utils/tenant';
 import {
   loanPrograms,
   programDocumentTemplates,
@@ -20,6 +21,12 @@ import {
 export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
   const { storage, db, authenticateUser, requireAdmin, requirePermission, objectStorageService } = deps;
 
+  async function resolveUserTenantId(userId: number): Promise<number | null> {
+    const user = await storage.getUserById(userId);
+    if (!user) return null;
+    return getTenantId({ id: user.id, role: user.role, invitedBy: user.invitedBy ?? undefined });
+  }
+
   async function verifyProgramOwnership(req: AuthRequest, res: Response, programId: number): Promise<boolean> {
     const [program] = await db.select().from(loanPrograms).where(eq(loanPrograms.id, programId));
     if (!program) {
@@ -27,11 +34,18 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
       return false;
     }
     const user = await storage.getUserById(req.user!.id);
-    if (user?.role !== 'super_admin' && program.createdBy !== req.user!.id) {
-      res.status(403).json({ error: 'Not authorized to access this program' });
-      return false;
+    if (user?.role === 'super_admin') {
+      return true;
     }
-    return true;
+    const userTenantId = await resolveUserTenantId(req.user!.id);
+    if (program.tenantId != null && userTenantId != null && program.tenantId === userTenantId) {
+      return true;
+    }
+    if (program.createdBy === req.user!.id) {
+      return true;
+    }
+    res.status(403).json({ error: 'Not authorized to access this program' });
+    return false;
   }
 
   // ==================== LOAN PROGRAMS ROUTES ====================
@@ -40,8 +54,9 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
     try {
       const user = await storage.getUserById(req.user!.id);
       const isSuperAdmin = user?.role === 'super_admin';
+      const userTenantId = isSuperAdmin ? null : await resolveUserTenantId(req.user!.id);
       const programs = await db.select().from(loanPrograms)
-        .where(isSuperAdmin ? undefined : eq(loanPrograms.createdBy, req.user!.id))
+        .where(isSuperAdmin ? undefined : (userTenantId != null ? eq(loanPrograms.tenantId, userTenantId) : eq(loanPrograms.createdBy, req.user!.id)))
         .orderBy(loanPrograms.sortOrder);
 
       const programsWithCounts = await Promise.all(programs.map(async (program) => {
@@ -93,6 +108,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         stepOrder: programWorkflowSteps.stepOrder,
         isRequired: programWorkflowSteps.isRequired,
         estimatedDays: programWorkflowSteps.estimatedDays,
+        color: programWorkflowSteps.color,
         createdAt: programWorkflowSteps.createdAt,
         definition: {
           id: workflowStepDefinitions.id,
@@ -123,6 +139,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         minLoanAmount, maxLoanAmount,
         minLtv, maxLtv,
         minInterestRate, maxInterestRate,
+        minDscr, minFico,
         minUnits, maxUnits,
         termOptions, eligiblePropertyTypes,
         isActive,
@@ -130,7 +147,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         documents,
         tasks,
         steps,
-        creditPolicyId
+        creditPolicyId,
+        pricingMode, externalPricingConfig,
       } = req.body;
 
       if (!name || !loanType) {
@@ -149,6 +167,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
           maxLtv: maxLtv ? parseFloat(maxLtv) : 80,
           minInterestRate: minInterestRate ? parseFloat(minInterestRate) : 8,
           maxInterestRate: maxInterestRate ? parseFloat(maxInterestRate) : 15,
+          minDscr: minDscr ? parseFloat(minDscr) : null,
+          minFico: minFico ? parseInt(minFico) : null,
           minUnits: minUnits ? parseInt(minUnits) : null,
           maxUnits: maxUnits ? parseInt(maxUnits) : null,
           termOptions,
@@ -157,6 +177,9 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
           isActive: isActive !== false,
           creditPolicyId: creditPolicyId ? parseInt(creditPolicyId) : null,
           createdBy: req.user!.id,
+          tenantId: await resolveUserTenantId(req.user!.id),
+          pricingMode: pricingMode || 'none',
+          externalPricingConfig: externalPricingConfig || null,
         }).returning();
 
         // Create inline workflow steps if provided (must be created before docs/tasks to resolve stepIndex)
@@ -210,6 +233,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
               documentCategory: doc.documentCategory || 'other',
               documentDescription: doc.documentDescription || null,
               isRequired: doc.isRequired !== false,
+              assignedTo: doc.assignedTo || 'borrower',
+              visibility: doc.visibility || 'all',
               sortOrder: index,
               stepId: doc.stepIndex !== null && doc.stepIndex !== undefined && doc.stepIndex >= 0 && doc.stepIndex < createdStepIds.length && createdStepIds[doc.stepIndex] > 0 ? createdStepIds[doc.stepIndex] : null,
             }));
@@ -267,6 +292,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
               priority: task.priority || 'medium',
               sortOrder: index,
               stepId: task.stepIndex !== null && task.stepIndex !== undefined && task.stepIndex >= 0 && task.stepIndex < createdStepIds.length && createdStepIds[task.stepIndex] > 0 ? createdStepIds[task.stepIndex] : null,
+              assignToRole: task.assignToRole || task.assignee || null,
+              formTemplateId: task.formTemplateId || null,
             }));
             await tx.insert(programTaskTemplates).values(taskEntries);
           }
@@ -286,8 +313,9 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
   app.put('/api/admin/programs/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
+      const programId = parseInt(id);
 
-      const [existingProgram] = await db.select().from(loanPrograms).where(eq(loanPrograms.id, parseInt(id)));
+      const [existingProgram] = await db.select().from(loanPrograms).where(eq(loanPrograms.id, programId));
       if (!existingProgram) return res.status(404).json({ error: 'Program not found' });
       const user = await storage.getUserById(req.user!.id);
       if (user?.role !== 'super_admin' && existingProgram.createdBy !== req.user!.id) {
@@ -299,36 +327,218 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         minLoanAmount, maxLoanAmount,
         minLtv, maxLtv,
         minInterestRate, maxInterestRate,
+        minDscr, minFico,
         minUnits, maxUnits,
         termOptions, eligiblePropertyTypes,
-        isActive, quoteFormFields, reviewGuidelines, creditPolicyId
+        isActive, quoteFormFields, reviewGuidelines, creditPolicyId,
+        steps, documents, tasks,
+        pricingMode, externalPricingConfig,
       } = req.body;
 
-      const updateData: any = { updatedAt: new Date() };
-      if (name !== undefined) updateData.name = name;
-      if (description !== undefined) updateData.description = description;
-      if (loanType !== undefined) updateData.loanType = loanType;
-      if (minLoanAmount !== undefined) updateData.minLoanAmount = parseFloat(minLoanAmount);
-      if (maxLoanAmount !== undefined) updateData.maxLoanAmount = parseFloat(maxLoanAmount);
-      if (minLtv !== undefined) updateData.minLtv = parseFloat(minLtv);
-      if (maxLtv !== undefined) updateData.maxLtv = parseFloat(maxLtv);
-      if (minInterestRate !== undefined) updateData.minInterestRate = parseFloat(minInterestRate);
-      if (maxInterestRate !== undefined) updateData.maxInterestRate = parseFloat(maxInterestRate);
-      if (minUnits !== undefined) updateData.minUnits = minUnits ? parseInt(minUnits) : null;
-      if (maxUnits !== undefined) updateData.maxUnits = maxUnits ? parseInt(maxUnits) : null;
-      if (termOptions !== undefined) updateData.termOptions = termOptions;
-      if (eligiblePropertyTypes !== undefined) updateData.eligiblePropertyTypes = eligiblePropertyTypes;
-      if (quoteFormFields !== undefined) updateData.quoteFormFields = quoteFormFields ? JSON.stringify(quoteFormFields) : null;
-      if (isActive !== undefined) updateData.isActive = isActive;
-      if (reviewGuidelines !== undefined) updateData.reviewGuidelines = reviewGuidelines;
-      if (creditPolicyId !== undefined) updateData.creditPolicyId = creditPolicyId ? parseInt(creditPolicyId) : null;
+      const result = await db.transaction(async (tx) => {
+        const updateData: any = { updatedAt: new Date() };
+        if (name !== undefined) updateData.name = name;
+        if (description !== undefined) updateData.description = description;
+        if (loanType !== undefined) updateData.loanType = loanType;
+        if (minLoanAmount !== undefined) updateData.minLoanAmount = parseFloat(minLoanAmount);
+        if (maxLoanAmount !== undefined) updateData.maxLoanAmount = parseFloat(maxLoanAmount);
+        if (minLtv !== undefined) updateData.minLtv = parseFloat(minLtv);
+        if (maxLtv !== undefined) updateData.maxLtv = parseFloat(maxLtv);
+        if (minInterestRate !== undefined) updateData.minInterestRate = parseFloat(minInterestRate);
+        if (maxInterestRate !== undefined) updateData.maxInterestRate = parseFloat(maxInterestRate);
+        if (minDscr !== undefined) updateData.minDscr = minDscr ? parseFloat(minDscr) : null;
+        if (minFico !== undefined) updateData.minFico = minFico ? parseInt(minFico) : null;
+        if (minUnits !== undefined) updateData.minUnits = minUnits ? parseInt(minUnits) : null;
+        if (maxUnits !== undefined) updateData.maxUnits = maxUnits ? parseInt(maxUnits) : null;
+        if (termOptions !== undefined) updateData.termOptions = termOptions;
+        if (eligiblePropertyTypes !== undefined) updateData.eligiblePropertyTypes = eligiblePropertyTypes;
+        if (quoteFormFields !== undefined) updateData.quoteFormFields = quoteFormFields ? JSON.stringify(quoteFormFields) : null;
+        if (isActive !== undefined) updateData.isActive = isActive;
+        if (reviewGuidelines !== undefined) updateData.reviewGuidelines = reviewGuidelines;
+        if (creditPolicyId !== undefined) updateData.creditPolicyId = creditPolicyId ? parseInt(creditPolicyId) : null;
+        if (pricingMode !== undefined) updateData.pricingMode = pricingMode;
+        if (externalPricingConfig !== undefined) updateData.externalPricingConfig = externalPricingConfig;
 
-      const [program] = await db.update(loanPrograms)
-        .set(updateData)
-        .where(eq(loanPrograms.id, parseInt(id)))
-        .returning();
+        const [program] = await tx.update(loanPrograms)
+          .set(updateData)
+          .where(eq(loanPrograms.id, programId))
+          .returning();
 
-      res.json({ program });
+        let stepIds: number[] = [];
+        if (steps && Array.isArray(steps)) {
+          const existingSteps = await tx.select()
+            .from(programWorkflowSteps)
+            .where(eq(programWorkflowSteps.programId, programId))
+            .orderBy(programWorkflowSteps.stepOrder);
+          const existingStepMap = new Map(existingSteps.map(s => [s.id, s]));
+          const keptStepIds = new Set<number>();
+
+          for (let i = 0; i < steps.length; i++) {
+            const step = steps[i];
+            let stepDefId = step.stepDefinitionId;
+
+            if (!stepDefId && step.stepName?.trim()) {
+              const key = step.stepName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+              const existing = await tx.select().from(workflowStepDefinitions).where(eq(workflowStepDefinitions.key, key));
+              if (existing.length > 0) {
+                stepDefId = existing[0].id;
+              } else {
+                const maxOrder = await tx.select({ max: sql<number>`COALESCE(MAX(sort_order), 0)` }).from(workflowStepDefinitions);
+                const [newStep] = await tx.insert(workflowStepDefinitions).values({
+                  name: step.stepName.trim(),
+                  key,
+                  sortOrder: (maxOrder[0]?.max || 0) + 1,
+                  isActive: true,
+                  isDefault: false,
+                }).returning();
+                stepDefId = newStep.id;
+              }
+            }
+
+            if (stepDefId) {
+              if (step.id && existingStepMap.has(step.id)) {
+                await tx.update(programWorkflowSteps)
+                  .set({
+                    stepDefinitionId: stepDefId,
+                    stepOrder: i + 1,
+                    isRequired: step.isRequired !== false,
+                    estimatedDays: step.estimatedDays ? parseInt(step.estimatedDays) : null,
+                  })
+                  .where(eq(programWorkflowSteps.id, step.id));
+                stepIds.push(step.id);
+                keptStepIds.add(step.id);
+              } else {
+                const [createdStep] = await tx.insert(programWorkflowSteps).values({
+                  programId,
+                  stepDefinitionId: stepDefId,
+                  stepOrder: i + 1,
+                  isRequired: step.isRequired !== false,
+                  estimatedDays: step.estimatedDays ? parseInt(step.estimatedDays) : null,
+                }).returning();
+                stepIds.push(createdStep.id);
+              }
+            } else {
+              stepIds.push(-1);
+            }
+          }
+
+          const removedStepIds = existingSteps.filter(s => !keptStepIds.has(s.id)).map(s => s.id);
+          if (removedStepIds.length > 0) {
+            await tx.delete(programWorkflowSteps).where(inArray(programWorkflowSteps.id, removedStepIds));
+          }
+        }
+
+        if (stepIds.length === 0 && (documents || tasks)) {
+          const existingSteps = await tx.select({ id: programWorkflowSteps.id })
+            .from(programWorkflowSteps)
+            .where(eq(programWorkflowSteps.programId, programId))
+            .orderBy(programWorkflowSteps.stepOrder);
+          stepIds = existingSteps.map(s => s.id);
+        }
+
+        if (documents && Array.isArray(documents)) {
+          const existingDocs = await tx.select()
+            .from(programDocumentTemplates)
+            .where(eq(programDocumentTemplates.programId, programId));
+          const existingDocMap = new Map(existingDocs.map(d => [d.id, d]));
+          const keptDocIds = new Set<number>();
+
+          const validDocs = documents.filter((doc: any) => doc.documentName?.trim());
+          for (let i = 0; i < validDocs.length; i++) {
+            const doc = validDocs[i];
+            const resolvedStepId = doc.stepIndex !== null && doc.stepIndex !== undefined && doc.stepIndex >= 0 && doc.stepIndex < stepIds.length && stepIds[doc.stepIndex] > 0 ? stepIds[doc.stepIndex] : null;
+
+            if (doc.id && existingDocMap.has(doc.id)) {
+              await tx.update(programDocumentTemplates)
+                .set({
+                  documentName: doc.documentName.trim(),
+                  documentCategory: doc.documentCategory || 'other',
+                  documentDescription: doc.documentDescription || null,
+                  isRequired: doc.isRequired !== false,
+                  assignedTo: doc.assignedTo || 'borrower',
+                  visibility: doc.visibility || 'all',
+                  sortOrder: i,
+                  stepId: resolvedStepId,
+                })
+                .where(eq(programDocumentTemplates.id, doc.id));
+              keptDocIds.add(doc.id);
+            } else {
+              await tx.insert(programDocumentTemplates).values({
+                programId,
+                documentName: doc.documentName.trim(),
+                documentCategory: doc.documentCategory || 'other',
+                documentDescription: doc.documentDescription || null,
+                isRequired: doc.isRequired !== false,
+                assignedTo: doc.assignedTo || 'borrower',
+                visibility: doc.visibility || 'all',
+                sortOrder: i,
+                stepId: resolvedStepId,
+              });
+            }
+          }
+
+          const removedDocIds = existingDocs.filter(d => !keptDocIds.has(d.id)).map(d => d.id);
+          if (removedDocIds.length > 0) {
+            await tx.delete(programDocumentTemplates).where(inArray(programDocumentTemplates.id, removedDocIds));
+          }
+        }
+
+        if (tasks && Array.isArray(tasks)) {
+          const existingTasks = await tx.select()
+            .from(programTaskTemplates)
+            .where(eq(programTaskTemplates.programId, programId));
+          const existingTaskMap = new Map(existingTasks.map(t => [t.id, t]));
+          const keptTaskIds = new Set<number>();
+
+          const validTasks = tasks.filter((task: any) => task.taskName?.trim());
+          for (let i = 0; i < validTasks.length; i++) {
+            const task = validTasks[i];
+            const resolvedStepId = task.stepIndex !== null && task.stepIndex !== undefined && task.stepIndex >= 0 && task.stepIndex < stepIds.length && stepIds[task.stepIndex] > 0 ? stepIds[task.stepIndex] : null;
+
+            if (task.id && existingTaskMap.has(task.id)) {
+              await tx.update(programTaskTemplates)
+                .set({
+                  taskName: task.taskName.trim(),
+                  taskDescription: task.taskDescription || null,
+                  taskCategory: task.taskCategory || 'other',
+                  priority: task.priority || 'medium',
+                  sortOrder: i,
+                  stepId: resolvedStepId,
+                  assignToRole: task.assignToRole || task.assignee || null,
+                  formTemplateId: task.formTemplateId || null,
+                })
+                .where(eq(programTaskTemplates.id, task.id));
+              keptTaskIds.add(task.id);
+            } else {
+              await tx.insert(programTaskTemplates).values({
+                programId,
+                taskName: task.taskName.trim(),
+                taskDescription: task.taskDescription || null,
+                taskCategory: task.taskCategory || 'other',
+                priority: task.priority || 'medium',
+                sortOrder: i,
+                stepId: resolvedStepId,
+                assignToRole: task.assignToRole || task.assignee || null,
+                formTemplateId: task.formTemplateId || null,
+              });
+            }
+          }
+
+          const removedTaskIds = existingTasks.filter(t => !keptTaskIds.has(t.id)).map(t => t.id);
+          if (removedTaskIds.length > 0) {
+            await tx.delete(programTaskTemplates).where(inArray(programTaskTemplates.id, removedTaskIds));
+          }
+        }
+
+        return program;
+      });
+
+      res.json({ program: result });
+
+      if (steps || documents || tasks) {
+        const { syncProgramToProjects } = await import('../services/projectPipeline');
+        syncProgramToProjects(programId).catch(err => console.error('[ProgramSync] Error syncing after program update:', err));
+      }
     } catch (error) {
       console.error('Update program error:', error);
       res.status(500).json({ error: 'Failed to update program' });
@@ -380,6 +590,127 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
     } catch (error) {
       console.error('Delete program error:', error);
       res.status(500).json({ error: 'Failed to delete program' });
+    }
+  });
+
+  // Duplicate loan program
+  app.post('/api/admin/programs/:id/duplicate', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const programId = parseInt(id);
+
+      const [sourceProgram] = await db.select().from(loanPrograms).where(eq(loanPrograms.id, programId));
+      if (!sourceProgram) {
+        return res.status(404).json({ error: 'Program not found' });
+      }
+
+      const user = await storage.getUserById(req.user!.id);
+      if (user?.role !== 'super_admin') {
+        const userTenantId = await resolveUserTenantId(req.user!.id);
+        const hasTenantAccess = sourceProgram.tenantId != null && userTenantId != null && sourceProgram.tenantId === userTenantId;
+        if (!hasTenantAccess && sourceProgram.createdBy !== req.user!.id) {
+          return res.status(403).json({ error: 'Not authorized to duplicate this program' });
+        }
+      }
+
+      const sourceDocs = await db.select().from(programDocumentTemplates)
+        .where(eq(programDocumentTemplates.programId, programId))
+        .orderBy(programDocumentTemplates.sortOrder);
+
+      const sourceTasks = await db.select().from(programTaskTemplates)
+        .where(eq(programTaskTemplates.programId, programId))
+        .orderBy(programTaskTemplates.sortOrder);
+
+      const sourceSteps = await db.select().from(programWorkflowSteps)
+        .where(eq(programWorkflowSteps.programId, programId))
+        .orderBy(programWorkflowSteps.stepOrder);
+
+      const result = await db.transaction(async (tx) => {
+        const [newProgram] = await tx.insert(loanPrograms).values({
+          name: `${sourceProgram.name} (Copy)`,
+          description: sourceProgram.description,
+          loanType: sourceProgram.loanType,
+          minLoanAmount: sourceProgram.minLoanAmount,
+          maxLoanAmount: sourceProgram.maxLoanAmount,
+          minLtv: sourceProgram.minLtv,
+          maxLtv: sourceProgram.maxLtv,
+          minInterestRate: sourceProgram.minInterestRate,
+          maxInterestRate: sourceProgram.maxInterestRate,
+          minDscr: sourceProgram.minDscr,
+          minFico: sourceProgram.minFico,
+          minUnits: sourceProgram.minUnits,
+          maxUnits: sourceProgram.maxUnits,
+          termOptions: sourceProgram.termOptions,
+          eligiblePropertyTypes: sourceProgram.eligiblePropertyTypes,
+          quoteFormFields: sourceProgram.quoteFormFields,
+          yspEnabled: sourceProgram.yspEnabled,
+          yspBrokerCanToggle: sourceProgram.yspBrokerCanToggle,
+          yspFixedAmount: sourceProgram.yspFixedAmount,
+          yspMin: sourceProgram.yspMin,
+          yspMax: sourceProgram.yspMax,
+          yspStep: sourceProgram.yspStep,
+          basePoints: sourceProgram.basePoints,
+          basePointsMin: sourceProgram.basePointsMin,
+          basePointsMax: sourceProgram.basePointsMax,
+          brokerPointsEnabled: sourceProgram.brokerPointsEnabled,
+          brokerPointsMax: sourceProgram.brokerPointsMax,
+          brokerPointsStep: sourceProgram.brokerPointsStep,
+          isActive: false,
+          creditPolicyId: sourceProgram.creditPolicyId,
+          createdBy: req.user!.id,
+          tenantId: await resolveUserTenantId(req.user!.id),
+          reviewGuidelines: sourceProgram.reviewGuidelines,
+        }).returning();
+
+        const stepIdMap = new Map<number, number>();
+        for (const step of sourceSteps) {
+          const [newStep] = await tx.insert(programWorkflowSteps).values({
+            programId: newProgram.id,
+            stepDefinitionId: step.stepDefinitionId,
+            stepOrder: step.stepOrder,
+            isRequired: step.isRequired,
+            estimatedDays: step.estimatedDays,
+          }).returning();
+          stepIdMap.set(step.id, newStep.id);
+        }
+
+        for (const doc of sourceDocs) {
+          await tx.insert(programDocumentTemplates).values({
+            programId: newProgram.id,
+            documentName: doc.documentName,
+            documentCategory: doc.documentCategory,
+            documentDescription: doc.documentDescription,
+            isRequired: doc.isRequired,
+            sortOrder: doc.sortOrder,
+            stepId: doc.stepId ? (stepIdMap.get(doc.stepId) || null) : null,
+            assignedTo: doc.assignedTo,
+            visibility: doc.visibility,
+            templateUrl: doc.templateUrl,
+            templateFileName: doc.templateFileName,
+          });
+        }
+
+        for (const task of sourceTasks) {
+          await tx.insert(programTaskTemplates).values({
+            programId: newProgram.id,
+            taskName: task.taskName,
+            taskDescription: task.taskDescription,
+            taskCategory: task.taskCategory,
+            priority: task.priority,
+            sortOrder: task.sortOrder,
+            stepId: task.stepId ? (stepIdMap.get(task.stepId) || null) : null,
+            assignToRole: task.assignToRole || null,
+            formTemplateId: task.formTemplateId || null,
+          });
+        }
+
+        return newProgram;
+      });
+
+      res.json({ program: result });
+    } catch (error) {
+      console.error('Duplicate program error:', error);
+      res.status(500).json({ error: 'Failed to duplicate program' });
     }
   });
 
@@ -479,7 +810,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
     try {
       const { programId } = req.params;
       if (!await verifyProgramOwnership(req, res, parseInt(programId))) return;
-      const { documentName, documentCategory, documentDescription, isRequired, sortOrder, stepId } = req.body;
+      const { documentName, documentCategory, documentDescription, isRequired, sortOrder, stepId, visibility, assignedTo } = req.body;
 
       if (!documentName || !documentCategory) {
         return res.status(400).json({ error: 'Document name and category are required' });
@@ -492,6 +823,8 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         documentCategory,
         documentDescription,
         isRequired: isRequired !== false,
+        assignedTo: assignedTo || 'borrower',
+        visibility: visibility || 'all',
         sortOrder: sortOrder || 0,
         stepId: stepId || null,
       }).returning();
@@ -535,7 +868,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
 
       res.json({ document: doc });
       const { syncProgramToProjects } = await import('../services/projectPipeline');
-      syncProgramToProjects(pid).catch(err => console.error('Sync error:', err));
+      syncProgramToProjects(pid).catch(err => console.error('[ProgramSync] Error syncing after document add:', err));
     } catch (error) {
       console.error('Add program document error:', error);
       res.status(500).json({ error: 'Failed to add document template' });
@@ -560,7 +893,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
       });
       res.json({ success: true });
       const { syncProgramToProjects } = await import('../services/projectPipeline');
-      syncProgramToProjects(parseInt(programId)).catch(err => console.error('Sync error:', err));
+      syncProgramToProjects(parseInt(programId)).catch(err => console.error('[ProgramSync] Error syncing after document batch-step update:', err));
     } catch (error) {
       console.error('Batch update document steps error:', error);
       res.status(500).json({ error: 'Failed to update document assignments' });
@@ -591,7 +924,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
 
       res.json({ document: doc });
       const { syncProgramToProjects } = await import('../services/projectPipeline');
-      syncProgramToProjects(parseInt(req.params.programId)).catch(err => console.error('Sync error:', err));
+      syncProgramToProjects(parseInt(req.params.programId)).catch(err => console.error('[ProgramSync] Error syncing after document update:', err));
     } catch (error) {
       console.error('Update program document error:', error);
       res.status(500).json({ error: 'Failed to update document template' });
@@ -608,7 +941,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
 
       res.json({ success: true });
       const { syncProgramToProjects } = await import('../services/projectPipeline');
-      syncProgramToProjects(parseInt(programId)).catch(err => console.error('Sync error:', err));
+      syncProgramToProjects(parseInt(programId)).catch(err => console.error('[ProgramSync] Error syncing after document delete:', err));
     } catch (error) {
       console.error('Delete program document error:', error);
       res.status(500).json({ error: 'Failed to delete document template' });
@@ -789,7 +1122,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
 
       res.json({ task });
       const { syncProgramToProjects } = await import('../services/projectPipeline');
-      syncProgramToProjects(parseInt(programId)).catch(err => console.error('Sync error:', err));
+      syncProgramToProjects(parseInt(programId)).catch(err => console.error('[ProgramSync] Error syncing after task add:', err));
     } catch (error) {
       console.error('Add program task error:', error);
       res.status(500).json({ error: 'Failed to add task template' });
@@ -816,7 +1149,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
       });
       res.json({ success: true });
       const { syncProgramToProjects } = await import('../services/projectPipeline');
-      syncProgramToProjects(parseInt(programId)).catch(err => console.error('Sync error:', err));
+      syncProgramToProjects(parseInt(programId)).catch(err => console.error('[ProgramSync] Error syncing after task batch-step update:', err));
     } catch (error) {
       console.error('Batch update task steps error:', error);
       res.status(500).json({ error: 'Failed to update task assignments' });
@@ -828,7 +1161,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
     try {
       const { programId, taskId } = req.params;
       if (!await verifyProgramOwnership(req, res, parseInt(programId))) return;
-      const { taskName, taskDescription, taskCategory, priority, sortOrder, stepId, assignToRole } = req.body;
+      const { taskName, taskDescription, taskCategory, priority, sortOrder, stepId, assignToRole, formTemplateId } = req.body;
 
       const updateData: any = {};
       if (taskName !== undefined) updateData.taskName = taskName;
@@ -838,6 +1171,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
       if (sortOrder !== undefined) updateData.sortOrder = sortOrder;
       if (stepId !== undefined) updateData.stepId = stepId;
       if (assignToRole !== undefined) updateData.assignToRole = assignToRole;
+      if (formTemplateId !== undefined) updateData.formTemplateId = formTemplateId;
 
       const [task] = await db.update(programTaskTemplates)
         .set(updateData)
@@ -846,7 +1180,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
 
       res.json({ task });
       const { syncProgramToProjects } = await import('../services/projectPipeline');
-      syncProgramToProjects(parseInt(req.params.programId)).catch(err => console.error('Sync error:', err));
+      syncProgramToProjects(parseInt(req.params.programId)).catch(err => console.error('[ProgramSync] Error syncing after task update:', err));
     } catch (error) {
       console.error('Update program task error:', error);
       res.status(500).json({ error: 'Failed to update task template' });
@@ -863,7 +1197,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
 
       res.json({ success: true });
       const { syncProgramToProjects } = await import('../services/projectPipeline');
-      syncProgramToProjects(parseInt(programId)).catch(err => console.error('Sync error:', err));
+      syncProgramToProjects(parseInt(programId)).catch(err => console.error('[ProgramSync] Error syncing after task delete:', err));
     } catch (error) {
       console.error('Delete program task error:', error);
       res.status(500).json({ error: 'Failed to delete task template' });
@@ -964,6 +1298,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         stepOrder: programWorkflowSteps.stepOrder,
         isRequired: programWorkflowSteps.isRequired,
         estimatedDays: programWorkflowSteps.estimatedDays,
+        color: programWorkflowSteps.color,
         createdAt: programWorkflowSteps.createdAt,
         definition: {
           id: workflowStepDefinitions.id,
@@ -1014,8 +1349,10 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
             stepOrder: index + 1,
             isRequired: step.isRequired !== false,
             estimatedDays: step.estimatedDays || null,
+            color: step.color || null,
           }));
           await tx.insert(programWorkflowSteps).values(entries);
+
         }
       });
 
@@ -1087,6 +1424,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         stepOrder: programWorkflowSteps.stepOrder,
         isRequired: programWorkflowSteps.isRequired,
         estimatedDays: programWorkflowSteps.estimatedDays,
+        color: programWorkflowSteps.color,
         createdAt: programWorkflowSteps.createdAt,
         definition: {
           id: workflowStepDefinitions.id,
@@ -1103,7 +1441,7 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
         .orderBy(programWorkflowSteps.stepOrder);
       res.json(updated);
       const { syncProgramToProjects } = await import('../services/projectPipeline');
-      syncProgramToProjects(parseInt(programId)).catch(err => console.error('Sync error:', err));
+      syncProgramToProjects(parseInt(programId)).catch(err => console.error('[ProgramSync] Error syncing after workflow steps update:', err));
     } catch (error) {
       console.error('Save program workflow steps error:', error);
       res.status(500).json({ error: 'Failed to save workflow steps' });

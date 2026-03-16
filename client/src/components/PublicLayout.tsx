@@ -24,36 +24,30 @@ export function PublicLayout({ children }: PublicLayoutProps) {
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0F1729]">
+      <header className="sticky top-0 z-50 bg-[#0F1729]">
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <Link href="/">
-            <div className="flex items-center gap-0 cursor-pointer">
-              <span className="text-lg font-bold text-white">
-                Lendry.
-              </span>
-              <span className="text-lg font-bold text-blue-500">
-                AI
-              </span>
+            <div className="flex items-baseline gap-1 cursor-pointer">
+              <span className="text-[26px] font-display font-bold text-white tracking-[0.3em]">LENDRY</span>
+              <span className="text-[16px] font-display font-bold text-amber-500 tracking-[0.15em]">AI</span>
             </div>
           </Link>
 
-          <div className="hidden md:flex items-center gap-8">
+          <div className="hidden md:flex items-center gap-14">
             {navLinks.map((link) => (
-              <Link key={link.href} href={link.href} className="text-sm font-medium text-gray-400 hover:text-white transition-colors">
+              <Link key={link.href} href={link.href} className="text-xl font-medium text-gray-400 hover:text-white transition-colors">
                 {link.label}
               </Link>
             ))}
           </div>
 
-          <div className="hidden md:flex items-center gap-4">
-            <Link href="/login" className="text-sm font-medium text-gray-400 hover:text-white transition-colors cursor-pointer">
+          <div className="hidden md:flex items-center gap-10">
+            <Link href="/login" className="text-xl font-medium text-gray-400 hover:text-white transition-colors cursor-pointer">
               Log in
             </Link>
             <Link href="/register">
               <Button
-                variant="outline"
-                size="sm"
-                className="border border-white text-white rounded-md hover:bg-white hover:text-[#0F1729] transition-colors"
+                className="bg-amber-700 hover:bg-amber-800 text-white rounded-full px-7 py-2.5 text-lg transition-colors"
               >
                 Sign Up
               </Button>
@@ -77,19 +71,18 @@ export function PublicLayout({ children }: PublicLayoutProps) {
           <div className="md:hidden border-t border-white/10 bg-[#0F1729]">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col gap-4">
               {navLinks.map((link) => (
-                <Link key={link.href} href={link.href} className="text-sm font-medium text-gray-400 hover:text-white transition-colors block py-2">
+                <Link key={link.href} href={link.href} className="text-base font-medium text-gray-400 hover:text-white transition-colors block py-2">
                   {link.label}
                 </Link>
               ))}
               <div className="flex flex-col gap-2 pt-4 border-t border-white/10">
-                <Link href="/login" className="text-sm font-medium text-gray-400 hover:text-white transition-colors block py-2">
+                <Link href="/login" className="text-base font-medium text-gray-400 hover:text-white transition-colors block py-2">
                   Log in
                 </Link>
                 <Link href="/register">
                   <Button
-                    variant="outline"
                     size="sm"
-                    className="border border-white text-white rounded-md hover:bg-white hover:text-[#0F1729] transition-colors w-full"
+                    className="bg-amber-700 hover:bg-amber-800 text-white rounded-full px-6 transition-colors w-full"
                   >
                     Sign Up
                   </Button>
@@ -102,17 +95,13 @@ export function PublicLayout({ children }: PublicLayoutProps) {
 
       <main className="flex-1">{children}</main>
 
-      <footer className="bg-[#0F1729] border-t border-white/10 mt-24">
+      <footer className="bg-[#0F1729] border-t border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="grid grid-cols-1 md:grid-cols-5 gap-8 mb-12">
             <div className="md:col-span-1">
-              <div className="flex items-center gap-0 mb-4">
-                <span className="text-sm font-bold text-white">
-                  Lendry.
-                </span>
-                <span className="text-sm font-bold text-blue-500">
-                  AI
-                </span>
+              <div className="flex items-baseline gap-0.5 mb-4">
+                <span className="text-sm font-display font-bold text-white tracking-[0.3em]">LENDRY</span>
+                <span className="text-[10px] font-display font-bold text-amber-500 tracking-[0.15em]">AI</span>
               </div>
               <p className="text-xs text-gray-400">
                 The intelligent loan origination platform for modern lenders.

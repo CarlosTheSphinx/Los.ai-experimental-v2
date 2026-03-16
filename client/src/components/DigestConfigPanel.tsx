@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { formatPhoneNumber, getPhoneError, getEmailError } from "@/lib/validation";
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
@@ -928,23 +929,29 @@ export function DigestConfigPanel({ dealId }: DigestConfigPanelProps) {
                 </div>
                 <div className="space-y-2">
                   <Label>Email</Label>
-                  <Input 
+                  <Input
                     type="email"
                     value={newRecipient.recipientEmail}
                     onChange={(e) => setNewRecipient({...newRecipient, recipientEmail: e.target.value})}
                     placeholder="email@example.com"
                     data-testid="input-recipient-email"
                   />
+                  {getEmailError(newRecipient.recipientEmail) && (
+                    <p className="text-sm text-red-500">{getEmailError(newRecipient.recipientEmail)}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>Phone (for SMS)</Label>
-                  <Input 
+                  <Input
                     type="tel"
                     value={newRecipient.recipientPhone}
-                    onChange={(e) => setNewRecipient({...newRecipient, recipientPhone: e.target.value})}
-                    placeholder="+1234567890"
+                    onChange={(e) => setNewRecipient({...newRecipient, recipientPhone: formatPhoneNumber(e.target.value)})}
+                    placeholder="(123) 456-7890"
                     data-testid="input-recipient-phone"
                   />
+                  {getPhoneError(newRecipient.recipientPhone) && (
+                    <p className="text-sm text-red-500">{getPhoneError(newRecipient.recipientPhone)}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>Delivery Method</Label>

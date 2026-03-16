@@ -140,7 +140,7 @@ export default function OnboardingPage() {
         description: 'Your onboarding is complete. You can now access all features.',
       });
       queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
-      const dashboardUrl = user?.userType === 'admin' ? '/admin' : '/';
+      const dashboardUrl = ['super_admin', 'lender', 'admin', 'staff', 'processor'].includes(user?.role || '') ? '/admin' : '/';
       setLocation(dashboardUrl);
     },
     onError: (error: any) => {
@@ -237,8 +237,8 @@ export default function OnboardingPage() {
     }
   };
 
-  const isBroker = user?.userType === 'broker';
-  const accountTypeDesc = ACCOUNT_TYPE_DESCRIPTIONS[user?.userType?.toLowerCase() || 'broker'];
+  const isBroker = user?.role === 'broker';
+  const accountTypeDesc = ACCOUNT_TYPE_DESCRIPTIONS[user?.role?.toLowerCase() || 'broker'];
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -299,7 +299,7 @@ export default function OnboardingPage() {
                   </div>
 
                   <div className="bg-card border border-border rounded-lg p-8 space-y-4">
-                    <h2 className="text-2xl font-semibold">{user?.userType?.charAt(0).toUpperCase() + user?.userType?.slice(1) || 'User'}</h2>
+                    <h2 className="text-2xl font-semibold">{user?.role?.charAt(0).toUpperCase() + (user?.role?.slice(1) || '') || 'User'}</h2>
                     <p className="text-lg text-muted-foreground">{currentStepConfig?.content?.description || accountTypeDesc}</p>
                   </div>
 

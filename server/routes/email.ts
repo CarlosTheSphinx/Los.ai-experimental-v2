@@ -3,7 +3,7 @@ import type { AuthRequest } from '../auth';
 import type { RouteDeps } from './types';
 import { eq, desc, and, sql, ilike, or, inArray } from 'drizzle-orm';
 import { emailAccounts, emailThreads, emailMessages, emailThreadDealLinks, projects, users } from '@shared/schema';
-import { getGmailAuthUrl, exchangeGmailCode, syncEmails, getAttachment, checkLinkedThreadsForNewEmails, sendReply } from '../services/gmail';
+import { getGmailAuthUrl, exchangeGmailCode, syncEmails, getAttachment, checkLinkedThreadsForNewEmails, sendReply, sendNewEmail } from '../services/gmail';
 import { encryptToken } from '../utils/encryption';
 
 export function registerEmailRoutes(app: Express, deps: RouteDeps) {
@@ -520,7 +520,7 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
       const dealId = parseInt(req.params.dealId);
       if (isNaN(dealId)) return res.status(400).json({ error: 'Invalid deal ID' });
 
-      const isAdminUser = req.user!.role && ['admin', 'staff', 'super_admin'].includes(req.user!.role);
+      const isAdminUser = req.user!.role && ['admin', 'staff', 'super_admin', 'lender', 'processor'].includes(req.user!.role);
       if (!isAdminUser) {
         const [deal] = await db.select({ id: projects.id }).from(projects)
           .where(and(eq(projects.id, dealId), eq(projects.userId, req.user!.id)));
@@ -544,6 +544,36 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
     } catch (error: any) {
       console.error('Error fetching deal email threads:', error);
       res.status(500).json({ error: 'Failed to fetch deal email threads' });
+    }
+  });
+
+  // POST /api/email/compose - Compose and send a new email
+  app.post('/api/email/compose', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const { to, subject, body, dealId } = req.body;
+
+      if (!to || !subject || !body) {
+        return res.status(400).json({ error: 'to, subject, and body are required' });
+      }
+
+      const [account] = await db.select().from(emailAccounts)
+        .where(and(
+          eq(emailAccounts.userId, req.user!.id),
+          eq(emailAccounts.isActive, true)
+        ));
+
+      if (!account) {
+        return res.status(400).json({ error: 'no_account', message: 'No email account connected' });
+      }
+
+      const result = await sendNewEmail(account.id, to, subject, body);
+
+      await syncEmails(account.id, 10);
+
+      res.json({ success: true, messageId: result.messageId });
+    } catch (error: any) {
+      console.error('Error composing email:', error);
+      res.status(500).json({ error: 'Failed to send email' });
     }
   });
 

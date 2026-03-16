@@ -4,6 +4,7 @@ import { db } from '../db';
 import { emailAccounts, emailThreads, emailMessages, emailThreadDealLinks, notifications } from '@shared/schema';
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import { decryptToken, encryptToken } from '../utils/encryption';
+import { isNotificationEnabled } from './notificationHelper';
 
 const GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
@@ -339,6 +340,35 @@ export async function sendReply(
   return { messageId: result.data.id || '' };
 }
 
+export async function sendNewEmail(
+  accountId: number,
+  to: string,
+  subject: string,
+  body: string
+): Promise<{ messageId: string }> {
+  const { gmail, account } = await getGmailClient(accountId);
+
+  const fromEmail = account.emailAddress;
+  const headers = [
+    `From: ${fromEmail}`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    `Content-Type: text/html; charset=utf-8`,
+  ];
+
+  const rawMessage = headers.join('\r\n') + '\r\n\r\n' + body;
+  const encodedMessage = Buffer.from(rawMessage).toString('base64url');
+
+  const result = await gmail.users.messages.send({
+    userId: 'me',
+    requestBody: {
+      raw: encodedMessage,
+    },
+  });
+
+  return { messageId: result.data.id || '' };
+}
+
 export async function checkLinkedThreadsForNewEmails(accountId: number): Promise<void> {
   try {
     const linkedThreads = await db.select({
@@ -366,15 +396,17 @@ export async function checkLinkedThreadsForNewEmails(accountId: number): Promise
         const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
         if (recentNotif && recentNotif.createdAt > oneHourAgo) continue;
         
-        await db.insert(notifications).values({
-          userId: account.userId,
-          type: 'new_email',
-          title: 'New Email on Linked Deal',
-          message: `New email from ${emailThread.fromName || emailThread.fromAddress}: "${emailThread.subject}"`,
-          dealId: link.dealId,
-          link: `/messages?tab=email&threadId=${emailThread.id}`,
-          isRead: false,
-        });
+        if (await isNotificationEnabled('new_email')) {
+          await db.insert(notifications).values({
+            userId: account.userId,
+            type: 'new_email',
+            title: 'New Email on Linked Deal',
+            message: `New email from ${emailThread.fromName || emailThread.fromAddress}: "${emailThread.subject}"`,
+            dealId: link.dealId,
+            link: `/messages?tab=email&threadId=${emailThread.id}`,
+            isRead: false,
+          });
+        }
       }
     }
   } catch (error) {

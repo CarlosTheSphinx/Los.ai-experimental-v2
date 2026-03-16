@@ -55,6 +55,7 @@ interface MemoryEntry {
   sourceType: string | null;
   sourceUserId: number | null;
   sourceUserName: string | null;
+  sourceUserFullName: string | null;
   sourceUserEmail: string | null;
   createdAt: string;
 }
@@ -108,11 +109,16 @@ function formatRelativeTime(dateStr: string) {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  // Exact time portion (always shown)
+  const timeStr = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+  // Relative label for context
+  if (diffMins < 1) return `Just now · ${timeStr}`;
+  if (diffMins < 60) return `${diffMins}m ago · ${timeStr}`;
+  if (diffHours < 24) return `${diffHours}h ago · ${timeStr}`;
+  // For older entries, show full date + time
+  const dateStr2 = date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: diffDays > 365 ? "numeric" : undefined });
+  return `${dateStr2} at ${timeStr}`;
 }
 
 export function DealMemoryPanel({ dealId, projectId, collapsed, onToggle }: DealMemoryPanelProps) {
@@ -279,7 +285,18 @@ export function DealMemoryPanel({ dealId, projectId, collapsed, onToggle }: Deal
     return groups;
   };
 
-  const groupedEntries = groupEntriesByDate(entries);
+  // Filter out plain notes from timeline — keep notes with @mentions
+  const timelineEntries = entries.filter((entry) => {
+    if (entry.entryType === "note_added") {
+      // Keep note in timeline only if it has @mentions
+      const hasMentions = entry.description?.includes("@") || entry.title?.includes("@") ||
+        (entry.metadata?.mentions && Array.isArray(entry.metadata.mentions) && entry.metadata.mentions.length > 0);
+      return hasMentions;
+    }
+    return true;
+  });
+
+  const groupedEntries = groupEntriesByDate(timelineEntries);
 
   function renderHighlightedContent(content: string) {
     const parts = content.split(/(@[\w\s]+?)(?=\s|$)/g);
@@ -372,22 +389,20 @@ export function DealMemoryPanel({ dealId, projectId, collapsed, onToggle }: Deal
                               <Icon className="h-3.5 w-3.5" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium leading-tight">{entry.title}</p>
+                              <p className="text-xs font-medium leading-tight">
+                                {entry.title}
+                                {(entry.sourceUserFullName || entry.sourceUserName) && (
+                                  <span className="text-muted-foreground font-normal"> — {entry.sourceUserFullName || entry.sourceUserName}</span>
+                                )}
+                              </p>
                               {entry.description && (
                                 <p className="text-xs text-muted-foreground mt-0.5 leading-snug line-clamp-2">
                                   {entry.description}
                                 </p>
                               )}
-                              <div className="flex items-center gap-2 mt-0.5">
-                                <span className="text-[10px] text-muted-foreground">
-                                  {formatRelativeTime(entry.createdAt)}
-                                </span>
-                                {entry.sourceUserName && (
-                                  <span className="text-[10px] text-muted-foreground">
-                                    by {entry.sourceUserName}
-                                  </span>
-                                )}
-                              </div>
+                              <span className="text-[10px] text-muted-foreground mt-0.5 block">
+                                {formatRelativeTime(entry.createdAt)}
+                              </span>
                             </div>
                           </div>
                         );

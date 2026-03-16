@@ -23,7 +23,7 @@ const requireBroker = async (req: AuthRequest, res: Response, next: Function) =>
       where: (u) => eq(u.id, req.user!.id),
     });
 
-    if (!user || user.userType !== 'broker') {
+    if (!user || user.role !== 'broker') {
       return res.status(403).json({ error: 'Broker access required' });
     }
 

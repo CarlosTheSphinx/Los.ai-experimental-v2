@@ -7,7 +7,7 @@ import { users } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 export { encryptToken, decryptToken } from './utils/encryption';
 
-const SALT_ROUNDS = 10;
+const SALT_ROUNDS = 12;
 const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET;
 if (!JWT_SECRET) {
   throw new Error('CRITICAL: JWT_SECRET or SESSION_SECRET environment variable must be set. Server cannot start without a secure signing key.');
@@ -17,6 +17,7 @@ const JWT_EXPIRES_IN = '7d';
 export interface JWTPayload {
   userId: number;
   email: string;
+  tokenVersion?: number;
 }
 
 export interface AuthRequest extends Request {
@@ -35,9 +36,9 @@ export const comparePassword = async (password: string, hash: string): Promise<b
   return await bcrypt.compare(password, hash);
 };
 
-export const generateToken = (userId: number, email: string): string => {
+export const generateToken = (userId: number, email: string, tokenVersion: number = 0): string => {
   return jwt.sign(
-    { userId, email } as JWTPayload,
+    { userId, email, tokenVersion } as JWTPayload,
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }
   );
@@ -61,8 +62,37 @@ export const authenticateUser = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    const authHeader = req.headers.authorization;
     const token = req.cookies?.auth_token || 
-                  req.headers.authorization?.replace('Bearer ', '');
+                  (authHeader && !authHeader.startsWith('Bearer sk_prod_') ? authHeader.replace('Bearer ', '') : undefined);
+
+    if (authHeader && authHeader.startsWith('Bearer sk_prod_')) {
+      try {
+        const { authenticateAPIKey } = await import('./middleware/apiKeyAuth');
+        return authenticateAPIKey(req, res, async () => {
+          if (req.apiKey) {
+            const [apiKeyUser] = await db.select({ role: users.role, email: users.email })
+              .from(users)
+              .where(eq(users.id, req.apiKey!.userId))
+              .limit(1);
+            if (apiKeyUser) {
+              req.user = {
+                id: req.apiKey!.userId,
+                email: apiKeyUser.email,
+                role: apiKeyUser.role || 'user'
+              };
+            }
+            const { enforceAPIKeyRateLimit } = await import('./middleware/apiKeyRateLimiter');
+            return enforceAPIKeyRateLimit(req, res, next);
+          }
+          res.status(401).json({ error: 'Authentication required' });
+        });
+      } catch (apiKeyError) {
+        console.error('API key auth error:', apiKeyError);
+        res.status(401).json({ error: 'Authentication failed' });
+        return;
+      }
+    }
     
     if (!token) {
       res.status(401).json({ error: 'Authentication required' });
@@ -76,16 +106,26 @@ export const authenticateUser = async (
       return;
     }
     
-    // Fetch user's role from database
-    const [user] = await db.select({ role: users.role })
+    const [user] = await db.select({ role: users.role, tokenVersion: users.tokenVersion })
       .from(users)
       .where(eq(users.id, decoded.userId))
       .limit(1);
+
+    if (!user) {
+      res.status(401).json({ error: 'User not found' });
+      return;
+    }
+
+    const tokenVer = decoded.tokenVersion ?? 0;
+    if (tokenVer !== user.tokenVersion) {
+      res.status(401).json({ error: 'Token has been invalidated. Please log in again.' });
+      return;
+    }
     
     req.user = {
       id: decoded.userId,
       email: decoded.email,
-      role: user?.role || 'user'
+      role: user.role || 'user'
     };
     
     next();
@@ -106,12 +146,13 @@ export const optionalAuth = async (
   if (token) {
     const decoded = verifyToken(token);
     if (decoded) {
-      // Fetch user's role from database
-      const [user] = await db.select({ role: users.role })
+      const [user] = await db.select({ role: users.role, tokenVersion: users.tokenVersion })
         .from(users)
         .where(eq(users.id, decoded.userId))
         .limit(1);
-      req.user = { id: decoded.userId, email: decoded.email, role: user?.role || 'user' };
+      if (user && (decoded.tokenVersion ?? 0) === user.tokenVersion) {
+        req.user = { id: decoded.userId, email: decoded.email, role: user.role || 'user' };
+      }
     }
   }
   

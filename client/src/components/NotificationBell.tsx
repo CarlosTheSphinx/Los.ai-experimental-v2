@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
-import { Bell, FileUp, MessageSquare, Check, CheckCheck, ExternalLink, ClipboardList, AtSign, Mail, Paperclip } from "lucide-react";
+import { Bell, FileUp, MessageSquare, Check, CheckCheck, ExternalLink, ClipboardList, AtSign, Mail, Paperclip, FileCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
@@ -79,6 +79,8 @@ export function NotificationBell() {
         return <Mail className="h-4 w-4 text-indigo-500" />;
       case "email_document_detected":
         return <Paperclip className="h-4 w-4 text-amber-500" />;
+      case "term_sheet_signed":
+        return <FileCheck className="h-4 w-4 text-emerald-500" />;
       default:
         return <Bell className="h-4 w-4 text-muted-foreground" />;
     }
@@ -99,13 +101,13 @@ export function NotificationBell() {
       <Button
         size="icon"
         onClick={() => setIsOpen(!isOpen)}
-        className="relative h-10 w-10 rounded-full bg-primary hover:bg-primary/90 text-white"
+        className="relative h-7 w-7 rounded-full bg-primary hover:bg-primary/90 text-white"
         data-testid="button-notification-bell"
       >
-        <Bell className="!h-6 !w-6" />
+        <Bell className="!h-3.5 !w-3.5" />
         {unreadCount > 0 && (
           <span
-            className="absolute -top-1 -right-1 flex items-center justify-center min-w-[20px] h-[20px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none ring-2 ring-background"
+            className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[16px] h-[16px] px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none ring-2 ring-background"
             data-testid="badge-notification-count"
           >
             {unreadCount > 99 ? "99+" : unreadCount}
@@ -166,7 +168,9 @@ export function NotificationBell() {
                     </p>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-[11px] text-muted-foreground/70">
-                        {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
+                        {notif.createdAt && !isNaN(new Date(notif.createdAt).getTime())
+                          ? formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })
+                          : "recently"}
                       </span>
                       {notif.dealId && (
                         <Badge variant="secondary" className="text-[10px] h-4 px-1.5">

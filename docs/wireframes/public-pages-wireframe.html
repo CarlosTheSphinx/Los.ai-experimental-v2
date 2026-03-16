@@ -1,0 +1,2773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lendry.AI - Marketing Wireframes</title>
+    <style>
+        :root {
+            --bg: #F1F3F6;
+            --card: #FAFAFA;
+            --navy: #1A3A52;
+            --blue: #2E7FD6;
+            --blue-light: #EBF3FC;
+            --emerald: #10B981;
+            --emerald-light: #ECFDF5;
+            --amber: #F59E0B;
+            --amber-light: #FFFBEB;
+            --red: #EF4444;
+            --red-light: #FEF2F2;
+            --gray-50: #F8FAFC;
+            --gray-100: #F1F5F9;
+            --gray-200: #E2E8F0;
+            --gray-300: #CBD5E1;
+            --gray-400: #94A3B8;
+            --gray-500: #64748B;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --border: #E2E6EB;
+            --radius: 10px;
+            --shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", sans-serif;
+            color: var(--gray-700);
+            background-color: #fff;
+            line-height: 1.6;
+        }
+
+        /* Design Notes Banner */
+        .design-notes-banner {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 20px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .design-notes-banner button {
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.4);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .design-notes-banner button:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        /* View Picker */
+        .view-picker {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 9999;
+        }
+
+        .view-picker label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--gray-600);
+            margin-bottom: 8px;
+        }
+
+        .view-picker select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            background-color: white;
+            color: var(--navy);
+        }
+
+        .view-picker select:hover {
+            border-color: var(--blue);
+        }
+
+        /* Page Container */
+        .page {
+            display: none;
+            min-height: 100vh;
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        /* Navbar */
+        .navbar {
+            position: sticky;
+            top: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            box-shadow: var(--shadow);
+        }
+
+        .navbar-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .navbar-logo {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--navy);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .navbar-logo span {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--blue), var(--navy));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+        }
+
+        .navbar-nav {
+            display: flex;
+            gap: 32px;
+            align-items: center;
+        }
+
+        .navbar-nav a {
+            color: var(--gray-700);
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 14px;
+            transition: color 0.3s;
+        }
+
+        .navbar-nav a:hover {
+            color: var(--blue);
+        }
+
+        .navbar-cta {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .btn-login {
+            padding: 10px 20px;
+            background: transparent;
+            border: 1px solid var(--gray-300);
+            border-radius: 8px;
+            color: var(--gray-700);
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .btn-login:hover {
+            border-color: var(--blue);
+            color: var(--blue);
+        }
+
+        .btn-primary {
+            padding: 10px 24px;
+            background: linear-gradient(135deg, var(--blue), #1e5db8);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(46, 127, 214, 0.3);
+        }
+
+        /* Hero Section */
+        .hero {
+            background: linear-gradient(135deg, #0F1729 0%, var(--navy) 100%);
+            color: white;
+            padding: 120px 24px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            background: rgba(46, 127, 214, 0.15);
+            border-radius: 50%;
+            top: -100px;
+            right: -100px;
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .hero::after {
+            content: '';
+            position: absolute;
+            width: 200px;
+            height: 200px;
+            background: rgba(16, 185, 129, 0.1);
+            border-radius: 50%;
+            bottom: -50px;
+            left: -50px;
+            animation: float 8s ease-in-out infinite reverse;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(20px); }
+        }
+
+        .hero-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 10;
+            text-align: center;
+        }
+
+        .hero h1 {
+            font-size: 56px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            line-height: 1.2;
+        }
+
+        .hero .subheadline {
+            font-size: 20px;
+            font-weight: 300;
+            margin-bottom: 32px;
+            color: rgba(255, 255, 255, 0.9);
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .hero-cta {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn-secondary {
+            padding: 12px 28px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-2px);
+        }
+
+        /* Section Container */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        .section {
+            padding: 80px 24px;
+        }
+
+        .section-light {
+            background-color: white;
+        }
+
+        .section-dark {
+            background: linear-gradient(135deg, #0F1729 0%, var(--navy) 100%);
+            color: white;
+        }
+
+        .section-gray {
+            background-color: var(--gray-50);
+        }
+
+        .section-title {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 48px;
+            text-align: center;
+        }
+
+        .section-subtitle {
+            font-size: 18px;
+            color: var(--gray-600);
+            text-align: center;
+            margin-bottom: 48px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* Social Proof Bar */
+        .social-proof {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 40px;
+            flex-wrap: wrap;
+            padding: 40px 24px;
+            background-color: white;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .proof-text {
+            font-weight: 600;
+            color: var(--gray-700);
+            font-size: 14px;
+        }
+
+        .proof-badges {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: var(--gray-50);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 12px;
+            color: var(--gray-700);
+            font-weight: 500;
+        }
+
+        .badge-icon {
+            font-size: 18px;
+        }
+
+        /* Cards Grid */
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 32px;
+            transition: all 0.3s;
+            box-shadow: var(--shadow);
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.12);
+            border-color: var(--blue);
+        }
+
+        .card-dark {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        .card-icon {
+            font-size: 36px;
+            margin-bottom: 16px;
+        }
+
+        .card h3 {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .card p {
+            font-size: 14px;
+            line-height: 1.6;
+            color: var(--gray-600);
+        }
+
+        .card-dark p {
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        /* Problem Section Cards */
+        .problem-card {
+            text-align: center;
+        }
+
+        .problem-card .card-icon {
+            font-size: 48px;
+        }
+
+        /* Timeline */
+        .timeline {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+            position: relative;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            top: 40px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--border) 0%, var(--border) 100%);
+            z-index: 0;
+        }
+
+        .timeline-step {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+        }
+
+        .timeline-circle {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, var(--blue), #1e5db8);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 24px;
+            margin: 0 auto 16px;
+            border: 4px solid white;
+            box-shadow: 0 4px 12px rgba(46, 127, 214, 0.3);
+        }
+
+        .timeline-label {
+            font-weight: 600;
+            color: var(--gray-700);
+            font-size: 14px;
+        }
+
+        /* Feature Blocks */
+        .feature-blocks {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 32px;
+            margin-bottom: 32px;
+        }
+
+        .feature-block {
+            text-align: center;
+        }
+
+        .feature-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .feature-block h3 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: var(--navy);
+        }
+
+        .feature-block p {
+            font-size: 14px;
+            color: var(--gray-600);
+            margin-bottom: 16px;
+            line-height: 1.6;
+        }
+
+        .feature-screenshot {
+            width: 100%;
+            height: 200px;
+            background: linear-gradient(135deg, var(--blue-light), var(--emerald-light));
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--gray-500);
+            font-size: 12px;
+            margin-top: 16px;
+            border: 1px solid var(--border);
+        }
+
+        /* Metrics Bar */
+        .metrics-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 24px;
+        }
+
+        .metric {
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--blue);
+            margin-bottom: 8px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .metric-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-700);
+        }
+
+        @keyframes counter {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* Testimonials */
+        .testimonials {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+        }
+
+        .testimonial {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 28px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .testimonial-quote {
+            font-size: 14px;
+            font-style: italic;
+            color: var(--gray-700);
+            margin-bottom: 20px;
+            line-height: 1.6;
+            flex-grow: 1;
+        }
+
+        .testimonial-author {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-top: 1px solid var(--border);
+            padding-top: 16px;
+        }
+
+        .testimonial-avatar {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--blue), var(--navy));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        .testimonial-info h4 {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 2px;
+        }
+
+        .testimonial-info p {
+            font-size: 12px;
+            color: var(--gray-600);
+        }
+
+        /* Pricing Cards */
+        .pricing-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .pricing-card {
+            border: 2px solid var(--border);
+            border-radius: var(--radius);
+            padding: 32px;
+            background: white;
+            position: relative;
+            transition: all 0.3s;
+        }
+
+        .pricing-card:hover {
+            border-color: var(--blue);
+            box-shadow: 0 12px 24px rgba(46, 127, 214, 0.15);
+        }
+
+        .pricing-card.featured {
+            border-color: var(--blue);
+            transform: scale(1.05);
+            box-shadow: 0 12px 32px rgba(46, 127, 214, 0.2);
+        }
+
+        .pricing-badge {
+            position: absolute;
+            top: -12px;
+            left: 32px;
+            background: var(--emerald);
+            color: white;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .pricing-name {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 12px;
+        }
+
+        .pricing-price {
+            font-size: 36px;
+            font-weight: 700;
+            color: var(--blue);
+            margin-bottom: 8px;
+        }
+
+        .pricing-price .period {
+            font-size: 14px;
+            color: var(--gray-600);
+            font-weight: 400;
+        }
+
+        .pricing-description {
+            font-size: 13px;
+            color: var(--gray-600);
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+
+        .pricing-features {
+            list-style: none;
+            margin-bottom: 24px;
+            font-size: 13px;
+        }
+
+        .pricing-features li {
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+            color: var(--gray-700);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .pricing-features li::before {
+            content: '✓';
+            color: var(--emerald);
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        .pricing-features li.unavailable {
+            color: var(--gray-400);
+        }
+
+        .pricing-features li.unavailable::before {
+            content: '✕';
+            color: var(--gray-300);
+        }
+
+        .btn-pricing {
+            width: 100%;
+            padding: 12px 24px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .btn-pricing.primary {
+            background: var(--blue);
+            color: white;
+        }
+
+        .btn-pricing.primary:hover {
+            background: #1e5db8;
+            transform: translateY(-2px);
+        }
+
+        .btn-pricing.secondary {
+            border: 2px solid var(--border);
+            background: transparent;
+            color: var(--gray-700);
+        }
+
+        .btn-pricing.secondary:hover {
+            border-color: var(--blue);
+            color: var(--blue);
+        }
+
+        /* Feature Comparison Table */
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 32px;
+            font-size: 14px;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            padding: 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .comparison-table th {
+            background: var(--gray-50);
+            font-weight: 700;
+            color: var(--navy);
+        }
+
+        .comparison-table th:first-child {
+            text-align: left;
+        }
+
+        .comparison-table td:first-child {
+            font-weight: 600;
+            color: var(--gray-700);
+            width: 250px;
+        }
+
+        .comparison-table td {
+            text-align: center;
+            color: var(--gray-600);
+        }
+
+        .check-mark {
+            color: var(--emerald);
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        .cross-mark {
+            color: var(--gray-300);
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        /* FAQ Accordion */
+        .faq-container {
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .faq-item {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 12px;
+            overflow: hidden;
+        }
+
+        .faq-question {
+            padding: 20px;
+            background: white;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 600;
+            color: var(--navy);
+            font-size: 14px;
+            user-select: none;
+        }
+
+        .faq-question:hover {
+            background: var(--gray-50);
+        }
+
+        .faq-toggle {
+            font-size: 20px;
+            transition: transform 0.3s;
+        }
+
+        .faq-item.open .faq-toggle {
+            transform: rotate(180deg);
+        }
+
+        .faq-answer {
+            padding: 0 20px;
+            max-height: 0;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            background: var(--gray-50);
+            color: var(--gray-700);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .faq-item.open .faq-answer {
+            padding: 20px;
+            max-height: 500px;
+        }
+
+        /* Use Cases Persona Cards */
+        .persona-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .persona-card {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 28px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .persona-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--blue);
+            box-shadow: 0 8px 16px rgba(46, 127, 214, 0.15);
+        }
+
+        .persona-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .persona-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 8px;
+        }
+
+        .persona-pain {
+            font-size: 13px;
+            color: var(--gray-600);
+            margin-bottom: 16px;
+            font-style: italic;
+        }
+
+        .persona-solutions {
+            text-align: left;
+            list-style: none;
+            margin-bottom: 16px;
+            font-size: 13px;
+        }
+
+        .persona-solutions li {
+            padding: 6px 0;
+            color: var(--gray-700);
+            display: flex;
+            gap: 8px;
+        }
+
+        .persona-solutions li::before {
+            content: '→';
+            color: var(--blue);
+            font-weight: 700;
+        }
+
+        .persona-stat {
+            background: var(--blue-light);
+            padding: 12px;
+            border-radius: 8px;
+            margin: 16px 0;
+            text-align: center;
+        }
+
+        .persona-stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--blue);
+        }
+
+        .persona-stat-label {
+            font-size: 12px;
+            color: var(--gray-600);
+            font-weight: 500;
+        }
+
+        /* Integrations Grid */
+        .integrations-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .integration-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            padding: 20px;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .integration-item:hover {
+            border-color: var(--blue);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .integration-icon {
+            font-size: 32px;
+        }
+
+        .integration-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--gray-700);
+        }
+
+        /* About Page - Founder Story */
+        .founder-story {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 48px;
+            align-items: center;
+            margin-bottom: 32px;
+        }
+
+        .founder-image {
+            width: 100%;
+            height: 400px;
+            background: linear-gradient(135deg, var(--blue-light), var(--emerald-light));
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--gray-500);
+            font-size: 14px;
+            border: 2px solid var(--border);
+        }
+
+        .founder-text h2 {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 20px;
+        }
+
+        .founder-text p {
+            font-size: 14px;
+            color: var(--gray-700);
+            margin-bottom: 16px;
+            line-height: 1.8;
+        }
+
+        /* Values Grid */
+        .values-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .value-card {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 28px;
+            text-align: center;
+        }
+
+        .value-icon {
+            font-size: 40px;
+            margin-bottom: 16px;
+        }
+
+        .value-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 12px;
+        }
+
+        .value-description {
+            font-size: 13px;
+            color: var(--gray-600);
+            line-height: 1.6;
+        }
+
+        /* Company Stats */
+        .company-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .stat-block {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .stat-number {
+            font-size: 40px;
+            font-weight: 700;
+            color: var(--blue);
+            margin-bottom: 8px;
+        }
+
+        .stat-description {
+            font-size: 14px;
+            color: var(--gray-700);
+            font-weight: 500;
+        }
+
+        /* Team Grid */
+        .team-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .team-card {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+
+        .team-card:hover {
+            box-shadow: 0 8px 16px rgba(0,0,0,0.12);
+            border-color: var(--blue);
+        }
+
+        .team-image {
+            width: 100%;
+            height: 200px;
+            background: linear-gradient(135deg, var(--blue-light), var(--emerald-light));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--gray-500);
+            font-size: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .team-info {
+            padding: 20px;
+            text-align: center;
+        }
+
+        .team-name {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 4px;
+        }
+
+        .team-role {
+            font-size: 12px;
+            color: var(--gray-600);
+        }
+
+        /* Contact Page - Form Layout */
+        .contact-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 48px;
+            margin-bottom: 32px;
+        }
+
+        .contact-form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .form-group label {
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--navy);
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            padding: 12px 16px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px var(--blue-light);
+        }
+
+        .form-group textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .contact-info {
+            display: flex;
+            flex-direction: column;
+            gap: 32px;
+        }
+
+        .info-section h3 {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 16px;
+        }
+
+        .info-item {
+            display: flex;
+            gap: 12px;
+        }
+
+        .info-icon {
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+
+        .info-text p {
+            font-size: 13px;
+            color: var(--gray-700);
+            line-height: 1.6;
+        }
+
+        .info-text a {
+            color: var(--blue);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .info-text a:hover {
+            text-decoration: underline;
+        }
+
+        .map-placeholder {
+            width: 100%;
+            height: 300px;
+            background: linear-gradient(135deg, var(--blue-light), var(--gray-100));
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--gray-500);
+            font-size: 14px;
+            border: 1px solid var(--border);
+            margin-top: 32px;
+        }
+
+        /* Pricing Toggle */
+        .pricing-toggle {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 48px;
+        }
+
+        .toggle-switch {
+            width: 50px;
+            height: 28px;
+            background: var(--border);
+            border-radius: 14px;
+            cursor: pointer;
+            position: relative;
+            transition: background 0.3s;
+        }
+
+        .toggle-switch.active {
+            background: var(--emerald);
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            background: white;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: left 0.3s;
+        }
+
+        .toggle-switch.active::after {
+            left: 24px;
+        }
+
+        .toggle-label {
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--gray-700);
+            cursor: pointer;
+        }
+
+        .toggle-label.active {
+            color: var(--emerald);
+        }
+
+        /* Footer */
+        .footer {
+            background: var(--navy);
+            color: white;
+            padding: 60px 24px 24px;
+        }
+
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+
+        .footer-section h4 {
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 16px;
+        }
+
+        .footer-section ul {
+            list-style: none;
+        }
+
+        .footer-section li {
+            margin-bottom: 12px;
+        }
+
+        .footer-section a {
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            font-size: 13px;
+            transition: color 0.3s;
+        }
+
+        .footer-section a:hover {
+            color: white;
+        }
+
+        .footer-bottom {
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .footer-copyright {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .footer-socials {
+            display: flex;
+            gap: 16px;
+        }
+
+        .social-link {
+            width: 32px;
+            height: 32px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            text-decoration: none;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .social-link:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .navbar-nav {
+                display: none;
+            }
+
+            .hero h1 {
+                font-size: 36px;
+            }
+
+            .hero .subheadline {
+                font-size: 16px;
+            }
+
+            .timeline::before {
+                display: none;
+            }
+
+            .founder-story,
+            .contact-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .comparison-table {
+                font-size: 12px;
+            }
+
+            .comparison-table th,
+            .comparison-table td {
+                padding: 12px;
+            }
+
+            .pricing-card.featured {
+                transform: scale(1);
+            }
+
+            .section-title {
+                font-size: 28px;
+                margin-bottom: 32px;
+            }
+
+            .footer-content {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        /* Pulse animation for CTAs */
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(46, 127, 214, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(46, 127, 214, 0); }
+        }
+
+        .btn-primary:focus {
+            animation: pulse 2s;
+        }
+    </style>
+</head>
+<body>
+    <!-- Design Notes Banner -->
+    <div class="design-notes-banner">
+        <span>📐 Lendry.AI Marketing Wireframes - All pages switchable below</span>
+        <button onclick="alert('Design System: Dark navy (#1A3A52), Light blue (#2E7FD6), Emerald accents (#10B981), Shadow & radius defaults applied. Animations: floating orbs, fade-in-up sections, counter animations, card hover effects.')">View Design System</button>
+    </div>
+
+    <!-- PAGE 1: HOME PAGE -->
+    <div id="home-page" class="page active">
+        <!-- Navbar -->
+        <nav class="navbar">
+            <div class="navbar-content">
+                <div class="navbar-logo">
+                    <span>L</span>
+                    <span style="margin-left: -8px;">Lendry.AI</span>
+                </div>
+                <div class="navbar-nav">
+                    <a href="#product">Product</a>
+                    <a href="#pricing">Pricing</a>
+                    <a href="#use-cases">Use Cases</a>
+                    <a href="#about">About</a>
+                    <a href="#contact">Contact</a>
+                </div>
+                <div class="navbar-cta">
+                    <button class="btn-login">Log In</button>
+                    <button class="btn-primary">Start Free Trial</button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Hero Section -->
+        <section class="hero">
+            <div class="hero-content">
+                <h1>Stop Hiring. Start Automating.</h1>
+                <p class="subheadline">AI-powered loan processing that scales your business without scaling your team. Process more deals, faster.</p>
+                <div class="hero-cta">
+                    <button class="btn-primary">Start Free Trial</button>
+                    <button class="btn-secondary">Watch Demo →</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Social Proof Bar -->
+        <div class="social-proof">
+            <span class="proof-text">Trusted by 200+ lending teams</span>
+            <div class="proof-badges">
+                <div class="badge"><span class="badge-icon">🔒</span> SOC2 Type II</div>
+                <div class="badge"><span class="badge-icon">🛡️</span> SSL Encrypted</div>
+                <div class="badge"><span class="badge-icon">🏦</span> Bank-grade</div>
+            </div>
+        </div>
+
+        <!-- Problem Section -->
+        <section class="section section-light">
+            <div class="container">
+                <h2 class="section-title">The Lending Scaling Problem</h2>
+                <p class="section-subtitle">Sound familiar? You're not alone. Most lenders face the same squeeze.</p>
+                <div class="grid-3">
+                    <div class="card problem-card">
+                        <div class="card-icon">📈</div>
+                        <h3>More Deals = More Hires</h3>
+                        <p>Every new loan means hiring another processor. Your overhead grows faster than revenue.</p>
+                    </div>
+                    <div class="card problem-card">
+                        <div class="card-icon">🌑</div>
+                        <h3>Borrowers Left in the Dark</h3>
+                        <p>Manual processes mean radio silence. Borrowers can't track progress, leading to dropped deals.</p>
+                    </div>
+                    <div class="card problem-card">
+                        <div class="card-icon">🔗</div>
+                        <h3>Scattered Tools Slow You Down</h3>
+                        <p>Juggling 5+ platforms. Data doesn't sync. Time wasted copying and pasting between systems.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Solution Pillars -->
+        <section class="section section-gray">
+            <div class="container">
+                <h2 class="section-title">Built to Scale Your Lending Business</h2>
+                <p class="section-subtitle">Three pillars. One platform. Infinite growth.</p>
+                <div class="grid-3">
+                    <div class="card">
+                        <div class="card-icon">🤖</div>
+                        <h3>Automate Processing</h3>
+                        <p>AI agents handle 80% of loan processing tasks. Document review, data extraction, compliance checks — all automated 24/7.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">👁️</div>
+                        <h3>Borrower Visibility</h3>
+                        <p>Magic links give borrowers real-time updates. They see exactly where their application stands, reducing phone calls by 60%.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">📊</div>
+                        <h3>Scale Without Hiring</h3>
+                        <p>Your team processes 3x more loans. No new hires needed. Same people, 10x productivity through intelligent automation.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- AI Features -->
+        <section class="section section-light">
+            <div class="container">
+                <h2 class="section-title">Intelligent Automation at Work</h2>
+                <p class="section-subtitle">Purpose-built features for lending teams</p>
+                <div class="feature-blocks">
+                    <div class="feature-block">
+                        <div class="feature-icon">🧠</div>
+                        <h3>Smart Document Review</h3>
+                        <p>AI reads documents 100x faster than humans. Automatically extracts key data, flags risks, verifies compliance.</p>
+                        <div class="feature-screenshot">📄 Smart Review Demo</div>
+                    </div>
+                    <div class="feature-block">
+                        <div class="feature-icon">💬</div>
+                        <h3>AI Assistant</h3>
+                        <p>Natural language interface. Ask questions about loans, get instant answers. No training required.</p>
+                        <div class="feature-screenshot">💬 Chat Interface Demo</div>
+                    </div>
+                    <div class="feature-block">
+                        <div class="feature-icon">🎯</div>
+                        <h3>Smart Prospect Scoring</h3>
+                        <p>ML models predict loan quality before processing. Focus on high-probability deals first.</p>
+                        <div class="feature-screenshot">📊 Scoring Demo</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- How It Works -->
+        <section class="section section-gray">
+            <div class="container">
+                <h2 class="section-title">How It Works</h2>
+                <p class="section-subtitle">From setup to automation in minutes</p>
+                <div class="timeline">
+                    <div class="timeline-step">
+                        <div class="timeline-circle">1</div>
+                        <div class="timeline-label">Connect</div>
+                    </div>
+                    <div class="timeline-step">
+                        <div class="timeline-circle">2</div>
+                        <div class="timeline-label">Configure</div>
+                    </div>
+                    <div class="timeline-step">
+                        <div class="timeline-circle">3</div>
+                        <div class="timeline-label">Automate</div>
+                    </div>
+                    <div class="timeline-step">
+                        <div class="timeline-circle">4</div>
+                        <div class="timeline-label">Communicate</div>
+                    </div>
+                    <div class="timeline-step">
+                        <div class="timeline-circle">5</div>
+                        <div class="timeline-label">Close</div>
+                    </div>
+                </div>
+                <p style="text-align: center; color: var(--gray-600); margin-top: 24px; font-size: 14px;">
+                    Step 1: Connect your existing CRM and loan management systems. Step 2: Define your processing rules and approval criteria. Step 3: AI agents take over loan processing. Step 4: Borrowers receive automatic updates via Magic Links. Step 5: Closed loans → Revenue generated.
+                </p>
+            </div>
+        </section>
+
+        <!-- Metrics Bar -->
+        <section class="section section-light">
+            <div class="container">
+                <h2 class="section-title">The Impact</h2>
+                <div class="metrics-bar">
+                    <div class="metric">
+                        <div class="metric-value">70%</div>
+                        <div class="metric-label">Less Manual Work</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">3x</div>
+                        <div class="metric-label">Loan Volume</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">$2.5k</div>
+                        <div class="metric-label">Monthly Savings vs. Hiring</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">5 min</div>
+                        <div class="metric-label">Setup Time</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Testimonials -->
+        <section class="section section-gray">
+            <div class="container">
+                <h2 class="section-title">Loved by Lending Teams</h2>
+                <div class="testimonials">
+                    <div class="testimonial">
+                        <p class="testimonial-quote">"We tripled our loan volume without hiring a single new person. Lendry.AI is a game changer."</p>
+                        <div class="testimonial-author">
+                            <div class="testimonial-avatar">JM</div>
+                            <div class="testimonial-info">
+                                <h4>James Martinez</h4>
+                                <p>Founder, Fast Track Lending</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="testimonial">
+                        <p class="testimonial-quote">"Borrowers love the transparency. We cut support calls by 60%. It's incredible."</p>
+                        <div class="testimonial-author">
+                            <div class="testimonial-avatar">SP</div>
+                            <div class="testimonial-info">
+                                <h4>Sarah Patel</h4>
+                                <p>VP of Operations, Capital Bridge</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="testimonial">
+                        <p class="testimonial-quote">"The AI is scary good at catching document issues. It's like having a compliance expert reviewing every deal."</p>
+                        <div class="testimonial-author">
+                            <div class="testimonial-avatar">DK</div>
+                            <div class="testimonial-info">
+                                <h4>David Kim</h4>
+                                <p>Chief Credit Officer, Regional Bank</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Pricing Preview -->
+        <section class="section section-light">
+            <div class="container">
+                <h2 class="section-title">Simple Pricing. Infinite Scale.</h2>
+                <p class="section-subtitle">Start free, grow without limits</p>
+                <div class="pricing-cards">
+                    <div class="pricing-card">
+                        <div class="pricing-name">Starter</div>
+                        <div class="pricing-price">$199<span class="period">/month</span></div>
+                        <p class="pricing-description">Perfect for getting started</p>
+                        <ul class="pricing-features">
+                            <li>Up to 50 loans/month</li>
+                            <li>Basic AI review</li>
+                            <li>Email support</li>
+                            <li class="unavailable">Advanced integrations</li>
+                            <li class="unavailable">Dedicated account manager</li>
+                        </ul>
+                        <button class="btn-pricing secondary">Get Started</button>
+                    </div>
+                    <div class="pricing-card featured">
+                        <div class="pricing-badge">Most Popular</div>
+                        <div class="pricing-name">Professional</div>
+                        <div class="pricing-price">$499<span class="period">/month</span></div>
+                        <p class="pricing-description">For growing lending teams</p>
+                        <ul class="pricing-features">
+                            <li>Up to 500 loans/month</li>
+                            <li>Full AI suite</li>
+                            <li>Priority support</li>
+                            <li>Advanced integrations</li>
+                            <li class="unavailable">Dedicated account manager</li>
+                        </ul>
+                        <button class="btn-pricing primary">Start Free Trial</button>
+                    </div>
+                    <div class="pricing-card">
+                        <div class="pricing-name">Enterprise</div>
+                        <div class="pricing-price">Custom</div>
+                        <p class="pricing-description">For large-scale lenders</p>
+                        <ul class="pricing-features">
+                            <li>Unlimited loans/month</li>
+                            <li>Custom AI models</li>
+                            <li>24/7 premium support</li>
+                            <li>Advanced integrations</li>
+                            <li>Dedicated account manager</li>
+                        </ul>
+                        <button class="btn-pricing secondary">Contact Sales</button>
+                    </div>
+                </div>
+                <p style="text-align: center; margin-top: 32px;">
+                    <a href="#pricing" style="color: var(--blue); text-decoration: none; font-weight: 600;">See full pricing details →</a>
+                </p>
+            </div>
+        </section>
+
+        <!-- Final CTA -->
+        <section class="section section-dark">
+            <div class="container" style="text-align: center;">
+                <h2 class="section-title" style="color: white;">Ready to Process More Deals?</h2>
+                <p style="font-size: 18px; margin-bottom: 32px; color: rgba(255,255,255,0.9); max-width: 600px; margin-left: auto; margin-right: auto;">
+                    Join 200+ lending teams automating their operations. No credit card required.
+                </p>
+                <button class="btn-primary">Start Your Free Trial</button>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>Product</h4>
+                    <ul>
+                        <li><a href="#">Features</a></li>
+                        <li><a href="#">Pricing</a></li>
+                        <li><a href="#">Security</a></li>
+                        <li><a href="#">Integrations</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Company</h4>
+                    <ul>
+                        <li><a href="#">About</a></li>
+                        <li><a href="#">Blog</a></li>
+                        <li><a href="#">Press</a></li>
+                        <li><a href="#">Careers</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Resources</h4>
+                    <ul>
+                        <li><a href="#">Documentation</a></li>
+                        <li><a href="#">API Reference</a></li>
+                        <li><a href="#">Support</a></li>
+                        <li><a href="#">Community</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Legal</h4>
+                    <ul>
+                        <li><a href="#">Privacy Policy</a></li>
+                        <li><a href="#">Terms of Service</a></li>
+                        <li><a href="#">Security</a></li>
+                        <li><a href="#">Contact</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p class="footer-copyright">© 2026 Lendry.AI. All rights reserved.</p>
+                <div class="footer-socials">
+                    <a href="#" class="social-link">f</a>
+                    <a href="#" class="social-link">in</a>
+                    <a href="#" class="social-link">tw</a>
+                    <a href="#" class="social-link">gh</a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- PAGE 2: PRICING PAGE -->
+    <div id="pricing-page" class="page">
+        <!-- Navbar -->
+        <nav class="navbar">
+            <div class="navbar-content">
+                <div class="navbar-logo">
+                    <span>L</span>
+                    <span style="margin-left: -8px;">Lendry.AI</span>
+                </div>
+                <div class="navbar-nav">
+                    <a href="#">Product</a>
+                    <a href="#">Pricing</a>
+                    <a href="#">Use Cases</a>
+                    <a href="#">About</a>
+                    <a href="#">Contact</a>
+                </div>
+                <div class="navbar-cta">
+                    <button class="btn-login">Log In</button>
+                    <button class="btn-primary">Start Free Trial</button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Hero -->
+        <section class="hero">
+            <div class="hero-content">
+                <h1>Simple Pricing. Powerful Automation.</h1>
+                <p class="subheadline">No hidden fees. No setup costs. Scale as you grow.</p>
+            </div>
+        </section>
+
+        <!-- Pricing Section -->
+        <section class="section section-light">
+            <div class="container">
+                <!-- Toggle -->
+                <div class="pricing-toggle">
+                    <span class="toggle-label">Monthly</span>
+                    <div class="toggle-switch" onclick="this.classList.toggle('active'); document.querySelectorAll('.toggle-label').forEach(l => l.classList.toggle('active'));">
+                    </div>
+                    <span class="toggle-label">Annual (Save 15%)</span>
+                </div>
+
+                <!-- Pricing Cards -->
+                <div class="pricing-cards">
+                    <div class="pricing-card">
+                        <div class="pricing-name">Starter</div>
+                        <div class="pricing-price">$199<span class="period">/month</span></div>
+                        <p class="pricing-description">Perfect for getting started with AI loan automation</p>
+                        <ul class="pricing-features">
+                            <li>Up to 50 loans/month</li>
+                            <li>Basic AI document review</li>
+                            <li>Email support</li>
+                            <li>Standard integrations</li>
+                            <li>Basic reporting</li>
+                            <li class="unavailable">API access</li>
+                            <li class="unavailable">Advanced customization</li>
+                            <li class="unavailable">Dedicated support</li>
+                        </ul>
+                        <button class="btn-pricing secondary">Get Started</button>
+                    </div>
+                    <div class="pricing-card featured">
+                        <div class="pricing-badge">Most Popular</div>
+                        <div class="pricing-name">Professional</div>
+                        <div class="pricing-price">$499<span class="period">/month</span></div>
+                        <p class="pricing-description">For growing lending teams ready to scale</p>
+                        <ul class="pricing-features">
+                            <li>Up to 500 loans/month</li>
+                            <li>Full AI automation suite</li>
+                            <li>Priority support</li>
+                            <li>Advanced integrations</li>
+                            <li>Advanced reporting & analytics</li>
+                            <li>API access</li>
+                            <li>Custom workflows</li>
+                            <li class="unavailable">Dedicated account manager</li>
+                        </ul>
+                        <button class="btn-pricing primary">Start Free Trial</button>
+                    </div>
+                    <div class="pricing-card">
+                        <div class="pricing-name">Enterprise</div>
+                        <div class="pricing-price">Custom</div>
+                        <p class="pricing-description">For large-scale lending operations</p>
+                        <ul class="pricing-features">
+                            <li>Unlimited loans/month</li>
+                            <li>Custom AI models</li>
+                            <li>24/7 phone & email support</li>
+                            <li>Custom integrations</li>
+                            <li>Custom reporting</li>
+                            <li>Full API access</li>
+                            <li>Advanced customization</li>
+                            <li>Dedicated account manager</li>
+                        </ul>
+                        <button class="btn-pricing secondary">Contact Sales</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Feature Comparison Table -->
+        <section class="section section-gray">
+            <div class="container">
+                <h2 class="section-title">Feature Comparison</h2>
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Feature</th>
+                            <th>Starter</th>
+                            <th>Professional</th>
+                            <th>Enterprise</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Monthly loan capacity</td>
+                            <td><span class="check-mark">✓</span> 50</td>
+                            <td><span class="check-mark">✓</span> 500</td>
+                            <td><span class="check-mark">✓</span> Unlimited</td>
+                        </tr>
+                        <tr>
+                            <td>AI document review</td>
+                            <td><span class="check-mark">✓</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                        </tr>
+                        <tr>
+                            <td>Borrower visibility (Magic Links)</td>
+                            <td><span class="check-mark">✓</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                        </tr>
+                        <tr>
+                            <td>AI risk scoring</td>
+                            <td><span class="check-mark">✓</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                        </tr>
+                        <tr>
+                            <td>API access</td>
+                            <td><span class="cross-mark">✕</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                        </tr>
+                        <tr>
+                            <td>Custom workflows</td>
+                            <td><span class="cross-mark">✕</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                        </tr>
+                        <tr>
+                            <td>Advanced integrations</td>
+                            <td><span class="cross-mark">✕</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                        </tr>
+                        <tr>
+                            <td>Custom AI models</td>
+                            <td><span class="cross-mark">✕</span></td>
+                            <td><span class="cross-mark">✕</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                        </tr>
+                        <tr>
+                            <td>Advanced analytics</td>
+                            <td><span class="cross-mark">✕</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                        </tr>
+                        <tr>
+                            <td>Priority support</td>
+                            <td><span class="cross-mark">✕</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                        </tr>
+                        <tr>
+                            <td>24/7 support</td>
+                            <td><span class="cross-mark">✕</span></td>
+                            <td><span class="cross-mark">✕</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                        </tr>
+                        <tr>
+                            <td>Dedicated account manager</td>
+                            <td><span class="cross-mark">✕</span></td>
+                            <td><span class="cross-mark">✕</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                        </tr>
+                        <tr>
+                            <td>SLA guarantee</td>
+                            <td><span class="cross-mark">✕</span></td>
+                            <td>99.5%</td>
+                            <td>99.99%</td>
+                        </tr>
+                        <tr>
+                            <td>Setup assistance</td>
+                            <td><span class="cross-mark">✕</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                        </tr>
+                        <tr>
+                            <td>Custom integrations</td>
+                            <td><span class="cross-mark">✕</span></td>
+                            <td><span class="cross-mark">✕</span></td>
+                            <td><span class="check-mark">✓</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- FAQ -->
+        <section class="section section-light">
+            <div class="container">
+                <h2 class="section-title">Frequently Asked Questions</h2>
+                <div class="faq-container">
+                    <div class="faq-item">
+                        <div class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+                            <span>How does the free trial work?</span>
+                            <span class="faq-toggle">▼</span>
+                        </div>
+                        <div class="faq-answer">
+                            You get 14 days of full access to any plan you choose. No credit card required. After 14 days, your plan expires unless you add payment information. During your trial, you get full access to all features at that tier level.
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <div class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+                            <span>Can I change plans anytime?</span>
+                            <span class="faq-toggle">▼</span>
+                        </div>
+                        <div class="faq-answer">
+                            Yes, absolutely. Upgrade or downgrade your plan at any time. Changes take effect immediately. If you upgrade mid-billing cycle, we'll prorate the difference. If you downgrade, the new rate applies to your next billing date.
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <div class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+                            <span>What happens if I exceed my monthly loan limit?</span>
+                            <span class="faq-toggle">▼</span>
+                        </div>
+                        <div class="faq-answer">
+                            We'll notify you when you're approaching your limit. You have two options: upgrade to a higher plan immediately, or pay per additional loan at $2-5 per loan depending on your tier. No service interruption.
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <div class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+                            <span>Do you offer annual discounts?</span>
+                            <span class="faq-toggle">▼</span>
+                        </div>
+                        <div class="faq-answer">
+                            Yes! Annual plans save you 15% compared to monthly billing. For example, Professional annual is $5,088/year instead of $5,988 if billed monthly. You can switch to annual anytime from your account settings.
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <div class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+                            <span>What's included in implementation support?</span>
+                            <span class="faq-toggle">▼</span>
+                        </div>
+                        <div class="faq-answer">
+                            Professional and Enterprise plans include setup assistance from our onboarding team. We'll help you connect your systems, configure your workflows, and train your team. Typical implementation takes 5-10 days.
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <div class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+                            <span>Can I get a custom quote for my specific needs?</span>
+                            <span class="faq-toggle">▼</span>
+                        </div>
+                        <div class="faq-answer">
+                            Absolutely. If our standard tiers don't match your needs, our sales team can create a custom Enterprise plan. Contact our sales team and we'll work with you to build the perfect solution.
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <div class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+                            <span>Is there a contract or can I cancel anytime?</span>
+                            <span class="faq-toggle">▼</span>
+                        </div>
+                        <div class="faq-answer">
+                            Month-to-month plans have no contract. You can cancel anytime with one click. Enterprise plans typically have 12-month terms with specific exit clauses. We want to earn your business every month.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Final CTA -->
+        <section class="section section-dark">
+            <div class="container" style="text-align: center;">
+                <h2 class="section-title" style="color: white;">Ready to Transform Your Lending Process?</h2>
+                <p style="font-size: 18px; margin-bottom: 32px; color: rgba(255,255,255,0.9);">14 Days Free. No Credit Card Required.</p>
+                <button class="btn-primary">Start Your Free Trial</button>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>Product</h4>
+                    <ul>
+                        <li><a href="#">Features</a></li>
+                        <li><a href="#">Pricing</a></li>
+                        <li><a href="#">Security</a></li>
+                        <li><a href="#">Integrations</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Company</h4>
+                    <ul>
+                        <li><a href="#">About</a></li>
+                        <li><a href="#">Blog</a></li>
+                        <li><a href="#">Press</a></li>
+                        <li><a href="#">Careers</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Resources</h4>
+                    <ul>
+                        <li><a href="#">Documentation</a></li>
+                        <li><a href="#">API Reference</a></li>
+                        <li><a href="#">Support</a></li>
+                        <li><a href="#">Community</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Legal</h4>
+                    <ul>
+                        <li><a href="#">Privacy Policy</a></li>
+                        <li><a href="#">Terms of Service</a></li>
+                        <li><a href="#">Security</a></li>
+                        <li><a href="#">Contact</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p class="footer-copyright">© 2026 Lendry.AI. All rights reserved.</p>
+                <div class="footer-socials">
+                    <a href="#" class="social-link">f</a>
+                    <a href="#" class="social-link">in</a>
+                    <a href="#" class="social-link">tw</a>
+                    <a href="#" class="social-link">gh</a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- PAGE 3: USE CASES PAGE -->
+    <div id="use-cases-page" class="page">
+        <!-- Navbar -->
+        <nav class="navbar">
+            <div class="navbar-content">
+                <div class="navbar-logo">
+                    <span>L</span>
+                    <span style="margin-left: -8px;">Lendry.AI</span>
+                </div>
+                <div class="navbar-nav">
+                    <a href="#">Product</a>
+                    <a href="#">Pricing</a>
+                    <a href="#">Use Cases</a>
+                    <a href="#">About</a>
+                    <a href="#">Contact</a>
+                </div>
+                <div class="navbar-cta">
+                    <button class="btn-login">Log In</button>
+                    <button class="btn-primary">Start Free Trial</button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Hero -->
+        <section class="hero">
+            <div class="hero-content">
+                <h1>Built for Every Lender</h1>
+                <p class="subheadline">Whether you're a broker, bank, or alternative lender — Lendry.AI scales with you.</p>
+            </div>
+        </section>
+
+        <!-- Persona Cards -->
+        <section class="section section-light">
+            <div class="container">
+                <div class="persona-cards">
+                    <div class="persona-card">
+                        <div class="persona-icon">🏢</div>
+                        <h3 class="persona-title">Mortgage Brokers</h3>
+                        <p class="persona-pain">Processing applications manually = bottleneck that kills growth</p>
+                        <ul class="persona-solutions">
+                            <li>Auto-qualify borrowers in minutes</li>
+                            <li>Instant document verification</li>
+                            <li>Real-time borrower updates</li>
+                        </ul>
+                        <div class="persona-stat">
+                            <div class="persona-stat-value">5x</div>
+                            <div class="persona-stat-label">Deal volume increase</div>
+                        </div>
+                        <button class="btn-primary" style="width: 100%; margin-top: 12px;">Learn More</button>
+                    </div>
+                    <div class="persona-card">
+                        <div class="persona-icon">🏦</div>
+                        <h3 class="persona-title">Community Banks</h3>
+                        <p class="persona-pain">Limited staff can't keep up with loan volume without hiring</p>
+                        <ul class="persona-solutions">
+                            <li>Automate repetitive tasks</li>
+                            <li>Free up loan officers for relationship building</li>
+                            <li>Reduce approval times by 60%</li>
+                        </ul>
+                        <div class="persona-stat">
+                            <div class="persona-stat-value">60%</div>
+                            <div class="persona-stat-label">Faster approvals</div>
+                        </div>
+                        <button class="btn-primary" style="width: 100%; margin-top: 12px;">Learn More</button>
+                    </div>
+                    <div class="persona-card">
+                        <div class="persona-icon">💰</div>
+                        <h3 class="persona-title">Private Lenders</h3>
+                        <p class="persona-pain">Manual underwriting = slower closings and lost deals</p>
+                        <ul class="persona-solutions">
+                            <li>AI-powered risk assessment</li>
+                            <li>Quick turnaround on due diligence</li>
+                            <li>Competitive edge with speed</li>
+                        </ul>
+                        <div class="persona-stat">
+                            <div class="persona-stat-value">3 days</div>
+                            <div class="persona-stat-label">Average closing time</div>
+                        </div>
+                        <button class="btn-primary" style="width: 100%; margin-top: 12px;">Learn More</button>
+                    </div>
+                    <div class="persona-card">
+                        <div class="persona-icon">🎓</div>
+                        <h3 class="persona-title">Credit Unions</h3>
+                        <p class="persona-pain">Legacy systems can't scale with member demand</p>
+                        <ul class="persona-solutions">
+                            <li>Seamless integration with existing systems</li>
+                            <li>Member satisfaction through visibility</li>
+                            <li>Compliance automation built-in</li>
+                        </ul>
+                        <div class="persona-stat">
+                            <div class="persona-stat-value">99%</div>
+                            <div class="persona-stat-label">Member satisfaction</div>
+                        </div>
+                        <button class="btn-primary" style="width: 100%; margin-top: 12px;">Learn More</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Stats Bar -->
+        <section class="section section-gray">
+            <div class="container">
+                <h2 class="section-title">Impact Across the Industry</h2>
+                <div class="metrics-bar">
+                    <div class="metric">
+                        <div class="metric-value">200+</div>
+                        <div class="metric-label">Lending Teams Trust Us</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">$50M+</div>
+                        <div class="metric-label">In Loans Processed</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">1.2M+</div>
+                        <div class="metric-label">Applications Automated</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">99.9%</div>
+                        <div class="metric-label">Uptime SLA</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Integrations -->
+        <section class="section section-light">
+            <div class="container">
+                <h2 class="section-title">Works with Your Existing Stack</h2>
+                <p class="section-subtitle">Seamlessly integrate with tools you already use</p>
+                <div class="integrations-grid">
+                    <div class="integration-item">
+                        <div class="integration-icon">🔗</div>
+                        <div class="integration-name">Loan Depot</div>
+                    </div>
+                    <div class="integration-item">
+                        <div class="integration-icon">🔗</div>
+                        <div class="integration-name">Encompass</div>
+                    </div>
+                    <div class="integration-item">
+                        <div class="integration-icon">🔗</div>
+                        <div class="integration-name">Salesforce</div>
+                    </div>
+                    <div class="integration-item">
+                        <div class="integration-icon">🔗</div>
+                        <div class="integration-name">Stripe</div>
+                    </div>
+                    <div class="integration-item">
+                        <div class="integration-icon">🔗</div>
+                        <div class="integration-name">DocuSign</div>
+                    </div>
+                    <div class="integration-item">
+                        <div class="integration-icon">🔗</div>
+                        <div class="integration-name">Slack</div>
+                    </div>
+                    <div class="integration-item">
+                        <div class="integration-icon">🔗</div>
+                        <div class="integration-name">Zapier</div>
+                    </div>
+                    <div class="integration-item">
+                        <div class="integration-icon">🔗</div>
+                        <div class="integration-name">Webhooks</div>
+                    </div>
+                </div>
+                <p style="text-align: center; margin-top: 32px; color: var(--gray-600);">
+                    Don't see your tool? We support custom API integrations.
+                </p>
+            </div>
+        </section>
+
+        <!-- Final CTA -->
+        <section class="section section-dark">
+            <div class="container" style="text-align: center;">
+                <h2 class="section-title" style="color: white;">Your Lending Automation Starts Here</h2>
+                <p style="font-size: 18px; margin-bottom: 32px; color: rgba(255,255,255,0.9);">See how your team could benefit</p>
+                <button class="btn-primary">Schedule a Demo</button>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>Product</h4>
+                    <ul>
+                        <li><a href="#">Features</a></li>
+                        <li><a href="#">Pricing</a></li>
+                        <li><a href="#">Security</a></li>
+                        <li><a href="#">Integrations</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Company</h4>
+                    <ul>
+                        <li><a href="#">About</a></li>
+                        <li><a href="#">Blog</a></li>
+                        <li><a href="#">Press</a></li>
+                        <li><a href="#">Careers</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Resources</h4>
+                    <ul>
+                        <li><a href="#">Documentation</a></li>
+                        <li><a href="#">API Reference</a></li>
+                        <li><a href="#">Support</a></li>
+                        <li><a href="#">Community</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Legal</h4>
+                    <ul>
+                        <li><a href="#">Privacy Policy</a></li>
+                        <li><a href="#">Terms of Service</a></li>
+                        <li><a href="#">Security</a></li>
+                        <li><a href="#">Contact</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p class="footer-copyright">© 2026 Lendry.AI. All rights reserved.</p>
+                <div class="footer-socials">
+                    <a href="#" class="social-link">f</a>
+                    <a href="#" class="social-link">in</a>
+                    <a href="#" class="social-link">tw</a>
+                    <a href="#" class="social-link">gh</a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- PAGE 4: ABOUT PAGE -->
+    <div id="about-page" class="page">
+        <!-- Navbar -->
+        <nav class="navbar">
+            <div class="navbar-content">
+                <div class="navbar-logo">
+                    <span>L</span>
+                    <span style="margin-left: -8px;">Lendry.AI</span>
+                </div>
+                <div class="navbar-nav">
+                    <a href="#">Product</a>
+                    <a href="#">Pricing</a>
+                    <a href="#">Use Cases</a>
+                    <a href="#">About</a>
+                    <a href="#">Contact</a>
+                </div>
+                <div class="navbar-cta">
+                    <button class="btn-login">Log In</button>
+                    <button class="btn-primary">Start Free Trial</button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Hero -->
+        <section class="hero">
+            <div class="hero-content">
+                <h1>Built by Lenders. For Lenders.</h1>
+                <p class="subheadline">We've been in your shoes. We know the pain of manual processing. That's why we built Lendry.AI.</p>
+            </div>
+        </section>
+
+        <!-- Founder Story -->
+        <section class="section section-light">
+            <div class="container">
+                <h2 class="section-title">Our Story</h2>
+                <div class="founder-story">
+                    <div class="founder-image">📷 Founder Photo</div>
+                    <div class="founder-text">
+                        <h2>From Frustration to Solution</h2>
+                        <p>
+                            Our founder, James Chen, spent 12 years in mortgage lending. He watched teams struggle with the same problem year after year: processes that couldn't scale without hiring, borrowers left in the dark, systems that didn't talk to each other. When he scaled a portfolio from $5M to $100M per year, he discovered that 70% of his staff was doing repetitive manual work.
+                        </p>
+                        <p>
+                            In 2022, he partnered with AI researchers to build a solution. Not another loan management tool. Something different. An AI agent that actually automates the work, improves with use, and gives borrowers the transparency they deserve. That's Lendry.AI.
+                        </p>
+                        <p>
+                            Today, we're trusted by 200+ lending teams processing over $50M in loans. We're proving that lending doesn't have to be stuck in the past. It can be fast, transparent, and actually intelligent.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Mission -->
+        <section class="section section-gray">
+            <div class="container" style="text-align: center;">
+                <blockquote style="font-size: 24px; font-weight: 300; color: var(--navy); margin: 40px 0; line-height: 1.8; max-width: 800px; margin-left: auto; margin-right: auto;">
+                    "To eliminate the friction in lending through intelligent automation. We believe lending teams should focus on relationships, not paperwork. Borrowers should know what's happening, not wonder. That's the future we're building."
+                </blockquote>
+                <p style="font-size: 14px; color: var(--gray-600);">— James Chen, Founder & CEO</p>
+            </div>
+        </section>
+
+        <!-- Values -->
+        <section class="section section-light">
+            <div class="container">
+                <h2 class="section-title">Our Values</h2>
+                <div class="values-grid">
+                    <div class="value-card">
+                        <div class="value-icon">⚡</div>
+                        <h3 class="value-title">Speed</h3>
+                        <p class="value-description">Fast processing means fast closings. We're obsessed with reducing friction and decision time for our users.</p>
+                    </div>
+                    <div class="value-card">
+                        <div class="value-icon">🔍</div>
+                        <h3 class="value-title">Transparency</h3>
+                        <p class="value-description">Borrowers deserve to know what's happening. Lenders deserve to understand their AI. No black boxes.</p>
+                    </div>
+                    <div class="value-card">
+                        <div class="value-icon">🛡️</div>
+                        <h3 class="value-title">Security</h3>
+                        <p class="value-description">Financial data is sacred. Bank-grade encryption, SOC2 compliance, and privacy by default in everything we build.</p>
+                    </div>
+                    <div class="value-card">
+                        <div class="value-icon">🚀</div>
+                        <h3 class="value-title">Simplicity</h3>
+                        <p class="value-description">Powerful automation shouldn't be complicated. We obsess over making complex things easy.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- By the Numbers -->
+        <section class="section section-gray">
+            <div class="container">
+                <h2 class="section-title">By the Numbers</h2>
+                <div class="company-stats">
+                    <div class="stat-block">
+                        <div class="stat-number">200+</div>
+                        <div class="stat-description">Active Lending Teams</div>
+                    </div>
+                    <div class="stat-block">
+                        <div class="stat-number">$50M+</div>
+                        <div class="stat-description">Loans Processed</div>
+                    </div>
+                    <div class="stat-block">
+                        <div class="stat-number">1.2M+</div>
+                        <div class="stat-description">Applications Automated</div>
+                    </div>
+                    <div class="stat-block">
+                        <div class="stat-number">99.9%</div>
+                        <div class="stat-description">Uptime</div>
+                    </div>
+                    <div class="stat-block">
+                        <div class="stat-number">24/7</div>
+                        <div class="stat-description">AI Agent Availability</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Team -->
+        <section class="section section-light">
+            <div class="container">
+                <h2 class="section-title">Meet the Team</h2>
+                <p class="section-subtitle">Former lenders, engineers, and AI researchers building the future of lending</p>
+                <div class="team-grid">
+                    <div class="team-card">
+                        <div class="team-image">👤 James Chen</div>
+                        <div class="team-info">
+                            <h4 class="team-name">James Chen</h4>
+                            <p class="team-role">Founder & CEO</p>
+                        </div>
+                    </div>
+                    <div class="team-card">
+                        <div class="team-image">👤 Sarah Johnson</div>
+                        <div class="team-info">
+                            <h4 class="team-name">Sarah Johnson</h4>
+                            <p class="team-role">VP of Product</p>
+                        </div>
+                    </div>
+                    <div class="team-card">
+                        <div class="team-image">👤 Dr. Alex Kumar</div>
+                        <div class="team-info">
+                            <h4 class="team-name">Dr. Alex Kumar</h4>
+                            <p class="team-role">Head of AI</p>
+                        </div>
+                    </div>
+                    <div class="team-card">
+                        <div class="team-image">👤 Michael Park</div>
+                        <div class="team-info">
+                            <h4 class="team-name">Michael Park</h4>
+                            <p class="team-role">VP of Sales</p>
+                        </div>
+                    </div>
+                </div>
+                <p style="text-align: center; margin-top: 32px; color: var(--gray-600); font-size: 14px;">
+                    We're hiring! <a href="#" style="color: var(--blue); text-decoration: none; font-weight: 600;">Join our team →</a>
+                </p>
+            </div>
+        </section>
+
+        <!-- Final CTA -->
+        <section class="section section-dark">
+            <div class="container" style="text-align: center;">
+                <h2 class="section-title" style="color: white;">Start Your Lending Transformation</h2>
+                <p style="font-size: 18px; margin-bottom: 32px; color: rgba(255,255,255,0.9);">Join hundreds of lending teams already using Lendry.AI</p>
+                <button class="btn-primary">Start Your Free Trial</button>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>Product</h4>
+                    <ul>
+                        <li><a href="#">Features</a></li>
+                        <li><a href="#">Pricing</a></li>
+                        <li><a href="#">Security</a></li>
+                        <li><a href="#">Integrations</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Company</h4>
+                    <ul>
+                        <li><a href="#">About</a></li>
+                        <li><a href="#">Blog</a></li>
+                        <li><a href="#">Press</a></li>
+                        <li><a href="#">Careers</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Resources</h4>
+                    <ul>
+                        <li><a href="#">Documentation</a></li>
+                        <li><a href="#">API Reference</a></li>
+                        <li><a href="#">Support</a></li>
+                        <li><a href="#">Community</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Legal</h4>
+                    <ul>
+                        <li><a href="#">Privacy Policy</a></li>
+                        <li><a href="#">Terms of Service</a></li>
+                        <li><a href="#">Security</a></li>
+                        <li><a href="#">Contact</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p class="footer-copyright">© 2026 Lendry.AI. All rights reserved.</p>
+                <div class="footer-socials">
+                    <a href="#" class="social-link">f</a>
+                    <a href="#" class="social-link">in</a>
+                    <a href="#" class="social-link">tw</a>
+                    <a href="#" class="social-link">gh</a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- PAGE 5: CONTACT PAGE -->
+    <div id="contact-page" class="page">
+        <!-- Navbar -->
+        <nav class="navbar">
+            <div class="navbar-content">
+                <div class="navbar-logo">
+                    <span>L</span>
+                    <span style="margin-left: -8px;">Lendry.AI</span>
+                </div>
+                <div class="navbar-nav">
+                    <a href="#">Product</a>
+                    <a href="#">Pricing</a>
+                    <a href="#">Use Cases</a>
+                    <a href="#">About</a>
+                    <a href="#">Contact</a>
+                </div>
+                <div class="navbar-cta">
+                    <button class="btn-login">Log In</button>
+                    <button class="btn-primary">Start Free Trial</button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Hero -->
+        <section class="hero">
+            <div class="hero-content">
+                <h1>Let's Talk Lending</h1>
+                <p class="subheadline">Have questions? Our team is here to help. Get in touch.</p>
+            </div>
+        </section>
+
+        <!-- Contact Section -->
+        <section class="section section-light">
+            <div class="container">
+                <div class="contact-layout">
+                    <!-- Form -->
+                    <div class="contact-form">
+                        <h2 style="font-size: 20px; font-weight: 700; color: var(--navy); margin-bottom: 24px;">Send us a message</h2>
+                        <div class="form-group">
+                            <label>Full Name</label>
+                            <input type="text" placeholder="James Martinez">
+                        </div>
+                        <div class="form-group">
+                            <label>Email Address</label>
+                            <input type="email" placeholder="james@fasttrack.com">
+                        </div>
+                        <div class="form-group">
+                            <label>Company Name</label>
+                            <input type="text" placeholder="Fast Track Lending">
+                        </div>
+                        <div class="form-group">
+                            <label>Phone Number</label>
+                            <input type="tel" placeholder="+1 (555) 123-4567">
+                        </div>
+                        <div class="form-group">
+                            <label>What are you interested in?</label>
+                            <select>
+                                <option>-- Select an option --</option>
+                                <option>Product Demo</option>
+                                <option>Pricing Questions</option>
+                                <option>Integration Help</option>
+                                <option>Partnership</option>
+                                <option>Other</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Message</label>
+                            <textarea placeholder="Tell us more about your lending operation and how we can help..."></textarea>
+                        </div>
+                        <button class="btn-primary" style="width: 100%; padding: 14px;">Send Message</button>
+                    </div>
+
+                    <!-- Contact Info -->
+                    <div class="contact-info">
+                        <div class="info-section">
+                            <h3>Get in Touch</h3>
+                            <div class="info-item">
+                                <div class="info-icon">📧</div>
+                                <div class="info-text">
+                                    <p><strong>Email</strong></p>
+                                    <a href="mailto:hello@lendry.ai">hello@lendry.ai</a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="info-section">
+                            <h3>Sales Inquiries</h3>
+                            <div class="info-item">
+                                <div class="info-icon">💼</div>
+                                <div class="info-text">
+                                    <p><strong>Our sales team responds within 2 hours</strong></p>
+                                    <a href="mailto:sales@lendry.ai">sales@lendry.ai</a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="info-section">
+                            <h3>Support</h3>
+                            <div class="info-item">
+                                <div class="info-icon">🆘</div>
+                                <div class="info-text">
+                                    <p><strong>24/7 Support</strong></p>
+                                    <p style="font-size: 13px; color: var(--gray-600); margin-top: 4px;">Live chat available in-app for all users</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="info-section">
+                            <h3>Office</h3>
+                            <div class="info-item">
+                                <div class="info-icon">📍</div>
+                                <div class="info-text">
+                                    <p><strong>San Francisco, CA</strong></p>
+                                    <p style="font-size: 13px; color: var(--gray-600); margin-top: 4px;">123 Fintech Ave<br>San Francisco, CA 94105</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="map-placeholder">🗺️ Map Placeholder</div>
+                    </div>
+                </div>
+
+                <!-- Alternative CTA -->
+                <div style="margin-top: 80px; padding: 40px; background: var(--gray-50); border-radius: var(--radius); border: 1px solid var(--border); text-align: center;">
+                    <h3 style="font-size: 18px; font-weight: 700; color: var(--navy); margin-bottom: 12px;">Prefer to try it yourself?</h3>
+                    <p style="color: var(--gray-600); margin-bottom: 20px; font-size: 14px;">
+                        Get started with a free 14-day trial. No credit card required. Set up in just 5 minutes.
+                    </p>
+                    <button class="btn-primary">Start Free Trial</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>Product</h4>
+                    <ul>
+                        <li><a href="#">Features</a></li>
+                        <li><a href="#">Pricing</a></li>
+                        <li><a href="#">Security</a></li>
+                        <li><a href="#">Integrations</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Company</h4>
+                    <ul>
+                        <li><a href="#">About</a></li>
+                        <li><a href="#">Blog</a></li>
+                        <li><a href="#">Press</a></li>
+                        <li><a href="#">Careers</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Resources</h4>
+                    <ul>
+                        <li><a href="#">Documentation</a></li>
+                        <li><a href="#">API Reference</a></li>
+                        <li><a href="#">Support</a></li>
+                        <li><a href="#">Community</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Legal</h4>
+                    <ul>
+                        <li><a href="#">Privacy Policy</a></li>
+                        <li><a href="#">Terms of Service</a></li>
+                        <li><a href="#">Security</a></li>
+                        <li><a href="#">Contact</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p class="footer-copyright">© 2026 Lendry.AI. All rights reserved.</p>
+                <div class="footer-socials">
+                    <a href="#" class="social-link">f</a>
+                    <a href="#" class="social-link">in</a>
+                    <a href="#" class="social-link">tw</a>
+                    <a href="#" class="social-link">gh</a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- View Picker -->
+    <div class="view-picker">
+        <label>View Page</label>
+        <select onchange="switchPage(this.value)">
+            <option value="home-page">🏠 Home</option>
+            <option value="pricing-page">💰 Pricing</option>
+            <option value="use-cases-page">🎯 Use Cases</option>
+            <option value="about-page">ℹ️ About</option>
+            <option value="contact-page">📧 Contact</option>
+        </select>
+    </div>
+
+    <script>
+        function switchPage(pageId) {
+            // Hide all pages
+            document.querySelectorAll('.page').forEach(page => {
+                page.classList.remove('active');
+            });
+            // Show selected page
+            document.getElementById(pageId).classList.add('active');
+            // Scroll to top
+            window.scrollTo(0, 0);
+        }
+
+        // Initialize with home page
+        window.addEventListener('load', function() {
+            document.getElementById('home-page').classList.add('active');
+        });
+    </script>
+</body>
+</html>

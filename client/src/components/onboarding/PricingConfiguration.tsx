@@ -1,699 +1,1492 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Separator } from '@/components/ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 import {
-  DollarSign,
   Calculator,
   Plus,
-  Trash2,
   CheckCircle2,
   Loader2,
   ChevronRight,
   ChevronLeft,
-  Info,
-  Sparkles,
+  ChevronDown,
   Upload,
   Globe,
   X,
-  Settings,
-  ShieldAlert,
-  TrendingUp,
-  Percent,
+  Ban,
   AlertTriangle,
+  Search,
 } from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────────
 
 type PricingMode = 'none' | 'rule-based' | 'ai-upload' | 'external';
 
-interface AdjusterEntry {
+interface TierEntry {
   id: string;
   label: string;
-  condition: string;       // human-readable condition key
-  conditionValue: string;  // value for condition
   rateAdd: string;
-  pointsAdd: string;
+  isDisqualified: boolean;
 }
 
-interface EligibilityEntry {
+interface AdjusterCategory {
   id: string;
-  label: string;
-  condition: string;
-  conditionValue: string;
+  name: string;
+  tiers: TierEntry[];
 }
 
-// ─── Common adjuster templates ──────────────────────────────────
+// ─── External Pricing Config Types ──────────────────────────────
 
-const COMMON_ADJUSTERS = [
-  { id: 'fico_lt_700', label: 'FICO below 700', condition: 'ficoLt', value: '700', rateAdd: '0.25', pointsAdd: '0' },
-  { id: 'fico_lt_680', label: 'FICO below 680', condition: 'ficoLt', value: '680', rateAdd: '0.50', pointsAdd: '0' },
-  { id: 'fico_lt_660', label: 'FICO below 660', condition: 'ficoLt', value: '660', rateAdd: '0.75', pointsAdd: '0' },
-  { id: 'cash_out', label: 'Cash-out refinance', condition: 'purpose', value: 'cash_out', rateAdd: '0.50', pointsAdd: '0' },
-  { id: 'multifamily', label: 'Multifamily (5+ units)', condition: 'propertyType', value: 'multifamily-5-plus', rateAdd: '1.00', pointsAdd: '0' },
-  { id: 'mixed_use', label: 'Mixed-use property', condition: 'propertyType', value: 'mixed-use', rateAdd: '0.50', pointsAdd: '0' },
-  { id: 'ltv_gt_75', label: 'LTV above 75%', condition: 'ltvGt', value: '75', rateAdd: '0.25', pointsAdd: '0' },
-  { id: 'loan_gt_2m', label: 'Loan over $2M', condition: 'loanAmountGt', value: '2000000', rateAdd: '0.25', pointsAdd: '0' },
-  { id: 'low_dscr', label: 'DSCR below 1.10', condition: 'dscrLt', value: '1.10', rateAdd: '0.50', pointsAdd: '0' },
+type FieldSourceType = 'borrower' | 'default' | 'calculated';
+
+interface ExternalTextInput {
+  id: string;
+  fieldKey: string;
+  label: string;
+  sourceType: FieldSourceType;
+  defaultValue?: string;
+  formula?: string;
+  mappedFrom?: string;
+}
+
+interface ConditionalRule {
+  operator: '>=' | '>' | '<=' | '<' | '==' | 'between';
+  value: string;
+  value2?: string;
+  option: string;
+}
+
+interface ExternalDropdown {
+  label: string;
+  fieldKey: string;
+  options: string[];
+  sourceType: FieldSourceType;
+  defaultValue?: string;
+  formula?: string;
+  conditionalRules?: ConditionalRule[];
+  fallbackOption?: string;
+  mappedFrom?: string;
+}
+
+interface ExternalPricingConfig {
+  scraperUrl: string;
+  textInputs: ExternalTextInput[];
+  dropdowns: ExternalDropdown[];
+}
+
+const NQX_DEFAULTS: ExternalPricingConfig = {
+  scraperUrl: 'https://www.b-diya.nqxpricer.com/69af4d475dd9d8d5dc27b54b',
+  textInputs: [
+    { id: ':r0:', fieldKey: 'loanAmount', label: 'Loan Amount' },
+    { id: ':r1:', fieldKey: 'propertyValue', label: 'Property Value' },
+  ],
+  dropdowns: [
+    { label: 'LTV', fieldKey: 'ltv', options: ['≤ 50%', '50.01% - 55%', '55.01% - 60%', '60.01% - 65%', '65.01% - 70%', '70.01% - 75%', '75.01% - 80%'] },
+    { label: 'Loan Type', fieldKey: 'loanType', options: ['30 YR Fixed Rate', '10/6 ARM (30 YR)', '7/6 ARM (30 YR)', '5/6 ARM (30 YR)'] },
+    { label: 'Interest Only', fieldKey: 'interestOnly', options: ['Yes', 'No'] },
+    { label: 'Loan Purpose', fieldKey: 'loanPurpose', options: ['Purchase', 'Rate/Term Refinance', 'Cash Out Refinance'] },
+    { label: 'Property Type', fieldKey: 'propertyType', options: ['Single Family Residence', 'Condo (Warrantable)', 'Condo (Non-Warrantable)', '2-4 Unit', 'Multifamily (5+ Units)'] },
+    { label: 'Est. DSCR', fieldKey: 'dscr', options: ['≥ 1.50', '1.25 - 1.49', '1.00 - 1.24', '0.75 - 0.99', '< 0.75', 'No Ratio'] },
+    { label: 'Stated FICO Score', fieldKey: 'ficoScore', options: ['≥ 780', '760 - 779', '740 - 759', '720 - 739', '700 - 719', '680 - 699', '660 - 679'] },
+    { label: 'Prepayment Penalty', fieldKey: 'prepaymentPenalty', options: ['5 Years', '4 Years', '3 Years', '2 Years', '1 Year', 'None'] },
+    { label: 'TPO Premium', fieldKey: 'tpoPremium', options: ['1', '2', '3'] },
+  ],
+};
+
+// ─── Default tier-based adjuster categories ─────────────────────
+
+const DEFAULT_CATEGORIES: AdjusterCategory[] = [
+  {
+    id: 'fico',
+    name: 'FICO Score Adjustments',
+    tiers: [
+      { id: 'fico_760', label: 'FICO ≥ 760', rateAdd: '-0.250', isDisqualified: false },
+      { id: 'fico_720', label: 'FICO 720 – 759', rateAdd: '0.000', isDisqualified: false },
+      { id: 'fico_680', label: 'FICO 680 – 719', rateAdd: '0.250', isDisqualified: false },
+      { id: 'fico_660', label: 'FICO 660 – 679', rateAdd: '0.500', isDisqualified: false },
+      { id: 'fico_lt_660', label: 'FICO < 660', rateAdd: '0', isDisqualified: true },
+    ],
+  },
+  {
+    id: 'ltv',
+    name: 'LTV Adjustments',
+    tiers: [
+      { id: 'ltv_65', label: 'LTV ≤ 65%', rateAdd: '-0.250', isDisqualified: false },
+      { id: 'ltv_75', label: 'LTV 65% – 75%', rateAdd: '0.000', isDisqualified: false },
+      { id: 'ltv_80', label: 'LTV 75% – 80%', rateAdd: '0.250', isDisqualified: false },
+    ],
+  },
+  {
+    id: 'property',
+    name: 'Property Type Adjustments',
+    tiers: [
+      { id: 'prop_multi', label: 'Multifamily (5+ units)', rateAdd: '0.500', isDisqualified: false },
+      { id: 'prop_mixed', label: 'Mixed-use property', rateAdd: '0.250', isDisqualified: false },
+    ],
+  },
+  {
+    id: 'purpose',
+    name: 'Loan Purpose Adjustments',
+    tiers: [
+      { id: 'purpose_cashout', label: 'Cash-out refinance', rateAdd: '0.500', isDisqualified: false },
+    ],
+  },
+  {
+    id: 'dscr',
+    name: 'DSCR Adjustments',
+    tiers: [
+      { id: 'dscr_125', label: 'DSCR ≥ 1.25', rateAdd: '-0.125', isDisqualified: false },
+      { id: 'dscr_100', label: 'DSCR 1.00 – 1.24', rateAdd: '0.000', isDisqualified: false },
+      { id: 'dscr_lt_100', label: 'DSCR < 1.00', rateAdd: '0.500', isDisqualified: false },
+    ],
+  },
 ];
 
-const COMMON_DISQUALIFIERS = [
-  { id: 'fico_min', label: 'FICO below 620', condition: 'ficoLt', value: '620' },
-  { id: 'loan_too_small', label: 'Loan under $75,000', condition: 'loanAmountLt', value: '75000' },
-  { id: 'loan_too_large', label: 'Loan over $5,000,000', condition: 'loanAmountGt', value: '5000000' },
-  { id: 'ltv_too_high', label: 'LTV over 85%', condition: 'ltvGt', value: '85' },
-  { id: 'dscr_too_low', label: 'DSCR below 0.75', condition: 'dscrLt', value: '0.75' },
-];
+const CATEGORY_COLORS = ['#3B82F6', '#8B5CF6', '#F59E0B', '#10B981', '#EF4444', '#06B6D4', '#EC4899', '#6366F1'];
 
-const conditionOptions = [
-  { value: 'ficoLt', label: 'FICO below' },
-  { value: 'ficoGt', label: 'FICO above' },
-  { value: 'ltvLt', label: 'LTV below' },
-  { value: 'ltvGt', label: 'LTV above' },
-  { value: 'dscrLt', label: 'DSCR below' },
-  { value: 'dscrGt', label: 'DSCR above' },
-  { value: 'loanAmountLt', label: 'Loan amount below' },
-  { value: 'loanAmountGt', label: 'Loan amount above' },
-  { value: 'purpose', label: 'Loan purpose is' },
-  { value: 'propertyType', label: 'Property type is' },
-  { value: 'state', label: 'State is' },
-  { value: 'isMidstream', label: 'Is midstream' },
-];
+// ─── Helpers ────────────────────────────────────────────────────
+
+function getTierTag(rateAdd: string, isDisqualified: boolean): { label: string; className: string } {
+  if (isDisqualified) return { label: 'DISQUALIFIED', className: 'bg-red-100 text-red-700 border-red-200' };
+  const val = parseFloat(rateAdd) || 0;
+  if (val < 0) return { label: 'Discount', className: 'bg-green-100 text-green-700 border-green-200' };
+  if (val === 0) return { label: 'Base', className: 'bg-gray-100 text-gray-600 border-gray-200' };
+  return { label: 'Premium', className: 'bg-amber-100 text-amber-700 border-amber-200' };
+}
+
+function formatRate(val: string): string {
+  const num = parseFloat(val) || 0;
+  const prefix = num > 0 ? '+' : '';
+  return `${prefix}${num.toFixed(3)}%`;
+}
 
 // ─── Main Component ─────────────────────────────────────────────
+
+export interface PricingConfigState {
+  pricingMode: string;
+  externalPricingConfig: ExternalPricingConfig | null;
+  yspEnabled: boolean;
+  yspMin: number;
+  yspMax: number;
+  yspStep: number;
+  yspBrokerCanToggle: boolean;
+  basePoints: number;
+  basePointsMin: number;
+  basePointsMax: number;
+  brokerPointsEnabled: boolean;
+  brokerPointsStep: number;
+}
 
 export function PricingConfiguration({
   onNext,
   onBack,
+  hideNavigation = false,
+  programId: propProgramId,
+  onChange,
 }: {
-  onNext: () => void;
-  onBack: () => void;
+  onNext?: () => void;
+  onBack?: () => void;
+  hideNavigation?: boolean;
+  programId?: number | null;
+  onChange?: (state: PricingConfigState) => void;
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const { data: programsData, isLoading: programsLoading } = useQuery<any>({
     queryKey: ['/api/admin/programs'],
+    enabled: !hideNavigation,
   });
 
-  const programs: any[] = Array.isArray(programsData)
-    ? programsData
-    : programsData?.programs
-      ? programsData.programs
-      : programsData
-        ? Object.values(programsData).filter((v: any) => v && typeof v === 'object' && v.id)
-        : [];
-  const [selectedProgramId, setSelectedProgramId] = useState<number | null>(null);
-  const [pricingMode, setPricingMode] = useState<PricingMode>('none');
+  const programs: any[] = !hideNavigation
+    ? (Array.isArray(programsData)
+        ? programsData
+        : programsData?.programs
+          ? programsData.programs
+          : programsData
+            ? Object.values(programsData).filter((v: any) => v && typeof v === 'object' && v.id)
+            : [])
+    : [];
 
-  // Rule-based state
-  const [baseRate, setBaseRate] = useState('9.25');
-  const [defaultPoints, setDefaultPoints] = useState('2.0');
-  const [adjusters, setAdjusters] = useState<AdjusterEntry[]>([]);
-  const [disqualifiers, setDisqualifiers] = useState<EligibilityEntry[]>([]);
+  const [selectedProgramId, setSelectedProgramId] = useState<number | null>(propProgramId ?? null);
+  const [pricingMode, setPricingMode] = useState<PricingMode>('rule-based');
 
-  // YSP & Points state
-  const [yspEnabled, setYspEnabled] = useState(false);
-  const [yspBrokerCanToggle, setYspBrokerCanToggle] = useState(false);
-  const [yspFixedAmount, setYspFixedAmount] = useState('0');
-  const [yspMin, setYspMin] = useState('0');
-  const [yspMax, setYspMax] = useState('3');
+  const [baseRate, setBaseRate] = useState('7.125');
+  const [rateFloor, setRateFloor] = useState('6.500');
+  const [rateCeiling, setRateCeiling] = useState('10.000');
+
+  const [categories, setCategories] = useState<AdjusterCategory[]>(
+    DEFAULT_CATEGORIES.map((c) => ({ ...c, tiers: c.tiers.map((t) => ({ ...t })) }))
+  );
+  const [expandedCategory, setExpandedCategory] = useState<string>('fico');
+
+  const [yspEnabled, setYspEnabled] = useState(true);
+  const [yspMin, setYspMin] = useState('0.50');
+  const [yspMax, setYspMax] = useState('2.00');
   const [yspStep, setYspStep] = useState('0.125');
-  const [basePoints, setBasePoints] = useState('1');
-  const [basePointsMin, setBasePointsMin] = useState('0.5');
-  const [basePointsMax, setBasePointsMax] = useState('3');
-  const [brokerPointsEnabled, setBrokerPointsEnabled] = useState(true);
-  const [brokerPointsMax, setBrokerPointsMax] = useState('2');
-  const [brokerPointsStep, setBrokerPointsStep] = useState('0.125');
+  const [yspBrokerAdjustable, setYspBrokerAdjustable] = useState(true);
 
-  // External pricer state
-  const [externalUrl, setExternalUrl] = useState('');
+  const [basePoints, setBasePoints] = useState('1.00');
+  const [pointsMin, setPointsMin] = useState('1.00');
+  const [pointsMax, setPointsMax] = useState('3.00');
+  const [pointsStep, setPointsStep] = useState('0.25');
+  const [pointsBrokerAdjustable, setPointsBrokerAdjustable] = useState(true);
 
-  // Check if program already has a ruleset
-  const { data: existingRuleset } = useQuery<{ rulesets: any[] }>({
-    queryKey: ['/api/admin/programs', selectedProgramId, 'rulesets'],
-    enabled: !!selectedProgramId,
+  const [extScraperUrl, setExtScraperUrl] = useState('');
+  const [extTextInputs, setExtTextInputs] = useState<ExternalTextInput[]>([]);
+  const [extDropdowns, setExtDropdowns] = useState<ExternalDropdown[]>([]);
+  const [extExpandedDropdown, setExtExpandedDropdown] = useState<number | null>(null);
+
+  const scanFieldsMutation = useMutation({
+    mutationFn: async (scanUrl: string) => {
+      const res = await apiRequest('POST', '/api/admin/programs/scan-pricing-fields', { url: scanUrl });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      if (data.success) {
+        const scannedDropdowns: ExternalDropdown[] = (data.dropdowns || []).map((dd: any) => ({
+          label: dd.label || '',
+          fieldKey: (dd.label || '').toLowerCase().replace(/[^a-z0-9]+/g, ''),
+          options: dd.options || [],
+          sourceType: 'borrower' as FieldSourceType,
+        }));
+        const dropdownLabels = new Set(scannedDropdowns.map(d => d.label.toLowerCase()));
+        const dropdownKeys = new Set(scannedDropdowns.map(d => d.fieldKey));
+        const scannedTextInputs: ExternalTextInput[] = (data.textInputs || [])
+          .filter((ti: any) => {
+            const label = (ti.label || ti.placeholder || '').toLowerCase();
+            const key = label.replace(/[^a-z0-9]+/g, '');
+            return !dropdownLabels.has(label) && !dropdownKeys.has(key);
+          })
+          .map((ti: any) => ({
+            id: ti.id || '',
+            fieldKey: (ti.placeholder || ti.label || ti.name || '').toLowerCase().replace(/[^a-z0-9]+/g, ''),
+            label: ti.label || ti.placeholder || ti.name || '',
+            sourceType: 'borrower' as FieldSourceType,
+          }));
+        setExtTextInputs(scannedTextInputs);
+        setExtDropdowns(scannedDropdowns);
+        toast({ title: `Scan complete`, description: `Found ${scannedTextInputs.length} text inputs and ${scannedDropdowns.length} dropdowns.` });
+      } else {
+        toast({ title: 'Scan failed', description: data.error || 'Unknown error', variant: 'destructive' });
+      }
+    },
+    onError: (error: any) => {
+      toast({ title: 'Scan failed', description: error?.message || 'Could not scan the pricing page', variant: 'destructive' });
+    },
+  });
+
+  const effectiveProgramId = selectedProgramId ?? propProgramId ?? null;
+
+  const { data: existingRuleset, isFetched: rulesetsFetched } = useQuery<{ rulesets: any[] }>({
+    queryKey: ['/api/admin/programs', effectiveProgramId, 'rulesets'],
+    enabled: !!effectiveProgramId,
     queryFn: async () => {
-      const res = await fetch(`/api/admin/programs/${selectedProgramId}/rulesets`);
+      const res = await fetch(`/api/admin/programs/${effectiveProgramId}/rulesets`);
       return res.json();
     },
   });
 
-  const hasExistingRuleset = (existingRuleset?.rulesets?.length || 0) > 0;
+  const { data: editProgramData, isFetched: programFetched } = useQuery<any>({
+    queryKey: ['/api/admin/programs', effectiveProgramId],
+    enabled: !!effectiveProgramId && hideNavigation,
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/programs/${effectiveProgramId}`);
+      return res.json();
+    },
+  });
 
-  // Save ruleset mutation
-  const saveRulesetMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedProgramId) throw new Error('Select a program first');
+  const quoteFormVariables: { key: string; label: string }[] = (() => {
+    const prog = programs.find((p: any) => p.id === effectiveProgramId) || editProgramData?.program;
+    if (!prog?.quoteFormFields || !Array.isArray(prog.quoteFormFields)) return [];
+    return prog.quoteFormFields
+      .filter((f: any) => f.fieldKey && f.visible !== false)
+      .map((f: any) => ({ key: f.fieldKey, label: f.label || f.fieldKey }));
+  })();
 
-      const program = programs.find((p: any) => p.id === selectedProgramId);
-      const loanType = program?.loanType || 'rtl';
+  const [pricingDataLoaded, setPricingDataLoaded] = useState(false);
+  useEffect(() => {
+    if (pricingDataLoaded || !effectiveProgramId) return;
+    if (!hideNavigation) return;
+    if (!programFetched || !rulesetsFetched) return;
 
-      // Build the PricingRules JSON
-      const rulesJson: any = {
-        product: loanType.toUpperCase(),
-        baseRates: {
-          [loanType]: parseFloat(baseRate) || 9.25,
-        },
-        points: { default: parseFloat(defaultPoints) || 2.0 },
-        adjusters: adjusters.map((a) => ({
-          id: a.id,
-          label: a.label,
-          when: buildCondition(a.condition, a.conditionValue),
-          rateAdd: parseFloat(a.rateAdd) || 0,
-          pointsAdd: parseFloat(a.pointsAdd) || 0,
-        })),
-        eligibilityRules: disqualifiers.map((d) => ({
-          id: d.id,
-          label: d.label,
-          when: buildCondition(d.condition, d.conditionValue),
-          result: 'ineligible' as const,
-        })),
-      };
+    const prog = editProgramData?.program;
+    if (prog) {
+      setSelectedProgramId(effectiveProgramId);
+      setYspEnabled(prog.yspEnabled ?? true);
+      setYspBrokerAdjustable(prog.yspBrokerCanToggle ?? true);
+      setYspMin(String(prog.yspMin ?? '0.50'));
+      setYspMax(String(prog.yspMax ?? '2.00'));
+      setYspStep(String(prog.yspStep ?? '0.125'));
+      setBasePoints(String(prog.basePoints ?? '1.00'));
+      setPointsMin(String(prog.basePointsMin ?? '1.00'));
+      setPointsMax(String(prog.basePointsMax ?? '3.00'));
+      setPointsBrokerAdjustable(prog.brokerPointsEnabled ?? true);
+      setPointsStep(String(prog.brokerPointsStep ?? '0.25'));
 
-      // Save as draft, then activate
-      const res = await apiRequest('POST', `/api/admin/programs/${selectedProgramId}/rulesets`, {
-        name: 'Initial Pricing Rules',
-        description: 'Created during onboarding',
-        rulesJson,
-      });
-      const data = await res.json();
+      if (prog.pricingMode) {
+        const modeMap: Record<string, PricingMode> = { rule_based: 'rule-based', external: 'external', none: 'none' };
+        setPricingMode(modeMap[prog.pricingMode] || (prog.pricingMode as PricingMode));
+      }
+      if (prog.externalPricingConfig) {
+        const cfg = prog.externalPricingConfig as ExternalPricingConfig;
+        setExtScraperUrl(cfg.scraperUrl || '');
+        setExtTextInputs((cfg.textInputs || []).map(ti => ({ ...ti, sourceType: ti.sourceType || 'borrower' })));
+        setExtDropdowns((cfg.dropdowns || []).map(dd => ({ ...dd, sourceType: dd.sourceType || 'borrower' })));
+      }
+    }
 
-      // Activate it
-      if (data.ruleset?.id) {
-        await apiRequest('PATCH', `/api/admin/programs/${selectedProgramId}/rulesets/${data.ruleset.id}`, {
-          status: 'active',
+    const activeRuleset = existingRuleset?.rulesets?.find((r: any) => r.status === 'active') || existingRuleset?.rulesets?.[0];
+    if (activeRuleset?.rulesJson) {
+      const rj = activeRuleset.rulesJson;
+      if (rj.baseRates) {
+        const firstRate = Object.values(rj.baseRates)[0];
+        if (firstRate != null) setBaseRate(String(firstRate));
+      }
+      if (rj.rateFloor != null) setRateFloor(String(rj.rateFloor));
+      if (rj.rateCeiling != null) setRateCeiling(String(rj.rateCeiling));
+
+      if (rj.adjusters && Array.isArray(rj.adjusters) && rj.adjusters.length > 0) {
+        setCategories(prev => {
+          const updated = prev.map(cat => {
+            const matchingAdjusters = rj.adjusters.filter((a: any) => a.category === cat.name);
+            const matchingEligibility = (rj.eligibilityRules || []).filter((e: any) => e.category === cat.name);
+            if (matchingAdjusters.length === 0 && matchingEligibility.length === 0) return cat;
+            const tiers: TierEntry[] = [
+              ...matchingAdjusters.map((a: any) => ({
+                id: a.id || `${cat.id}-${a.label}`,
+                label: a.label || '',
+                condition: '',
+                value: '',
+                rateAdd: String(a.rateAdd ?? 0),
+                isDisqualified: false,
+              })),
+              ...matchingEligibility.map((e: any) => ({
+                id: e.id || `${cat.id}-${e.label}-dq`,
+                label: e.label || '',
+                condition: '',
+                value: '',
+                rateAdd: '0',
+                isDisqualified: true,
+              })),
+            ];
+            return { ...cat, tiers: tiers.length > 0 ? tiers : cat.tiers };
+          });
+          return updated;
         });
       }
+    }
 
-      // Also save YSP/points config on the program
-      await apiRequest('PUT', `/api/admin/programs/${selectedProgramId}`, {
-        yspEnabled,
-        yspBrokerCanToggle,
-        yspFixedAmount: parseFloat(yspFixedAmount) || 0,
-        yspMin: parseFloat(yspMin) || 0,
-        yspMax: parseFloat(yspMax) || 3,
-        yspStep: parseFloat(yspStep) || 0.125,
-        basePoints: parseFloat(basePoints) || 1,
-        basePointsMin: parseFloat(basePointsMin) || 0.5,
-        basePointsMax: parseFloat(basePointsMax) || 3,
-        brokerPointsEnabled,
-        brokerPointsMax: parseFloat(brokerPointsMax) || 2,
-        brokerPointsStep: parseFloat(brokerPointsStep) || 0.125,
-      });
+    setPricingDataLoaded(true);
+  }, [effectiveProgramId, editProgramData, existingRuleset, hideNavigation, pricingDataLoaded, programFetched, rulesetsFetched]);
 
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/programs'] });
-      toast({ title: 'Pricing rules saved and activated!' });
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Failed to save pricing rules',
-        description: error?.message || 'Please check your configuration',
-        variant: 'destructive',
-      });
-    },
-  });
+  useEffect(() => {
+    if (!onChange) return;
+    const pricingModeDb = pricingMode === 'rule-based' ? 'rule_based' : pricingMode;
+    const extConfig: ExternalPricingConfig | null = pricingMode === 'external'
+      ? { scraperUrl: extScraperUrl, textInputs: extTextInputs, dropdowns: extDropdowns }
+      : null;
+    onChange({
+      pricingMode: pricingModeDb,
+      externalPricingConfig: extConfig,
+      yspEnabled,
+      yspMin: parseFloat(yspMin) || 0,
+      yspMax: parseFloat(yspMax) || 3,
+      yspStep: parseFloat(yspStep) || 0.125,
+      yspBrokerCanToggle: yspBrokerAdjustable,
+      basePoints: parseFloat(basePoints) || 1,
+      basePointsMin: parseFloat(pointsMin) || 0.5,
+      basePointsMax: parseFloat(pointsMax) || 3,
+      brokerPointsEnabled: pointsBrokerAdjustable,
+      brokerPointsStep: parseFloat(pointsStep) || 0.25,
+    });
+  }, [pricingMode, extScraperUrl, extTextInputs, extDropdowns, yspEnabled, yspMin, yspMax, yspStep, yspBrokerAdjustable, basePoints, pointsMin, pointsMax, pointsBrokerAdjustable, pointsStep]);
 
-  // Save YSP/points config standalone (for non-rule-based modes)
-  const saveCompensationMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedProgramId) throw new Error('Select a program first');
-      await apiRequest('PUT', `/api/admin/programs/${selectedProgramId}`, {
-        yspEnabled,
-        yspBrokerCanToggle,
-        yspFixedAmount: parseFloat(yspFixedAmount) || 0,
-        yspMin: parseFloat(yspMin) || 0,
-        yspMax: parseFloat(yspMax) || 3,
-        yspStep: parseFloat(yspStep) || 0.125,
-        basePoints: parseFloat(basePoints) || 1,
-        basePointsMin: parseFloat(basePointsMin) || 0.5,
-        basePointsMax: parseFloat(basePointsMax) || 3,
-        brokerPointsEnabled,
-        brokerPointsMax: parseFloat(brokerPointsMax) || 2,
-        brokerPointsStep: parseFloat(brokerPointsStep) || 0.125,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/programs'] });
-      toast({ title: 'Compensation settings saved!' });
-    },
-    onError: (error: any) => {
-      toast({ title: 'Failed to save compensation settings', description: error?.message, variant: 'destructive' });
-    },
-  });
+  const hasExistingRuleset = (existingRuleset?.rulesets?.length || 0) > 0;
 
-  // Helpers
   function buildCondition(condition: string, value: string): Record<string, any> {
-    const numericConditions = ['ficoLt', 'ficoGt', 'ficoLte', 'ficoGte', 'ltvLt', 'ltvGt', 'ltvLte', 'ltvGte', 'dscrLt', 'dscrGt', 'dscrLte', 'dscrGte', 'loanAmountLt', 'loanAmountGt', 'loanAmountLte', 'loanAmountGte'];
-    if (numericConditions.includes(condition)) {
-      return { [condition]: parseFloat(value) || 0 };
-    }
-    if (condition === 'isMidstream') {
-      return { isMidstream: true };
-    }
+    const numericConditions = ['ficoLt', 'ficoGt', 'ltvLt', 'ltvGt', 'dscrLt', 'dscrGt', 'loanAmountLt', 'loanAmountGt'];
+    if (numericConditions.includes(condition)) return { [condition]: parseFloat(value) || 0 };
     return { [condition]: value };
   }
 
-  function addCommonAdjuster(template: typeof COMMON_ADJUSTERS[0]) {
-    if (adjusters.some((a) => a.id === template.id)) return;
-    setAdjusters([...adjusters, {
-      id: template.id,
-      label: template.label,
-      condition: template.condition,
-      conditionValue: template.value,
-      rateAdd: template.rateAdd,
-      pointsAdd: template.pointsAdd,
-    }]);
-  }
+  const saveRulesetMutation = useMutation({
+    mutationFn: async () => {
+      const saveProgramId = selectedProgramId || effectiveProgramId;
+      if (!saveProgramId) throw new Error('Select a program first');
+      const program = programs.find((p: any) => p.id === saveProgramId) || editProgramData?.program;
+      const loanType = program?.loanType || 'rtl';
 
-  function addCommonDisqualifier(template: typeof COMMON_DISQUALIFIERS[0]) {
-    if (disqualifiers.some((d) => d.id === template.id)) return;
-    setDisqualifiers([...disqualifiers, {
-      id: template.id,
-      label: template.label,
-      condition: template.condition,
-      conditionValue: template.value,
-    }]);
-  }
+      const pricingModeDb = pricingMode === 'rule-based' ? 'rule_based' : pricingMode;
 
-  // ─── Render ─────────────────────────────────────────────────
+      if (pricingMode === 'rule-based') {
+        const allAdjusters = categories.flatMap((cat) =>
+          cat.tiers.filter((t) => !t.isDisqualified && t.label.trim()).map((t) => ({
+            id: t.id,
+            label: t.label,
+            category: cat.name,
+            rateAdd: parseFloat(t.rateAdd) || 0,
+            pointsAdd: 0,
+          }))
+        );
+        const eligibilityRules = categories.flatMap((cat) =>
+          cat.tiers.filter((t) => t.isDisqualified && t.label.trim()).map((t) => ({
+            id: t.id,
+            label: t.label,
+            category: cat.name,
+            result: 'ineligible' as const,
+          }))
+        );
+
+        const rulesJson: any = {
+          product: loanType.toUpperCase(),
+          baseRates: { [loanType]: parseFloat(baseRate) || 7.125 },
+          rateFloor: parseFloat(rateFloor) || 6.5,
+          rateCeiling: parseFloat(rateCeiling) || 10,
+          adjusters: allAdjusters,
+          eligibilityRules,
+        };
+
+        const res = await apiRequest('POST', `/api/admin/programs/${saveProgramId}/rulesets`, {
+          name: 'Initial Pricing Rules',
+          description: 'Created during onboarding',
+          rulesJson,
+        });
+        const data = await res.json();
+
+        if (data.ruleset?.id) {
+          await apiRequest('PATCH', `/api/admin/programs/${saveProgramId}/rulesets/${data.ruleset.id}`, { status: 'active' });
+        }
+      }
+
+      const extConfig: ExternalPricingConfig | null = pricingMode === 'external'
+        ? { scraperUrl: extScraperUrl, textInputs: extTextInputs, dropdowns: extDropdowns }
+        : null;
+
+      await apiRequest('PUT', `/api/admin/programs/${saveProgramId}`, {
+        yspEnabled,
+        yspMin: parseFloat(yspMin) || 0,
+        yspMax: parseFloat(yspMax) || 3,
+        yspStep: parseFloat(yspStep) || 0.125,
+        yspBrokerCanToggle: yspBrokerAdjustable,
+        basePoints: parseFloat(basePoints) || 1,
+        basePointsMin: parseFloat(pointsMin) || 0.5,
+        basePointsMax: parseFloat(pointsMax) || 3,
+        brokerPointsEnabled: pointsBrokerAdjustable,
+        brokerPointsStep: parseFloat(pointsStep) || 0.25,
+        pricingMode: pricingModeDb,
+        externalPricingConfig: extConfig,
+      });
+
+      return {};
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/programs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/programs-with-pricing'] });
+      const msg = pricingMode === 'external' ? 'External pricing config saved!' : 'Pricing rules saved and activated!';
+      toast({ title: msg });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Failed to save pricing config', description: error?.message, variant: 'destructive' });
+    },
+  });
+
+  const updateTier = (catId: string, tierId: string, field: keyof TierEntry, value: any) => {
+    setCategories((prev) =>
+      prev.map((c) =>
+        c.id === catId
+          ? { ...c, tiers: c.tiers.map((t) => (t.id === tierId ? { ...t, [field]: value } : t)) }
+          : c
+      )
+    );
+  };
+
+  const removeTier = (catId: string, tierId: string) => {
+    setCategories((prev) =>
+      prev.map((c) =>
+        c.id === catId ? { ...c, tiers: c.tiers.filter((t) => t.id !== tierId) } : c
+      )
+    );
+  };
+
+  const addTier = (catId: string) => {
+    const id = `tier_${Date.now()}`;
+    setCategories((prev) =>
+      prev.map((c) =>
+        c.id === catId
+          ? { ...c, tiers: [...c.tiers, { id, label: '', rateAdd: '0.000', isDisqualified: false }] }
+          : c
+      )
+    );
+    setExpandedCategory(catId);
+  };
+
+  const addCategory = () => {
+    const id = `cat_${Date.now()}`;
+    setCategories((prev) => [
+      ...prev,
+      { id, name: 'New Category', tiers: [{ id: `tier_${Date.now()}`, label: '', rateAdd: '0.000', isDisqualified: false }] },
+    ]);
+    setExpandedCategory(id);
+  };
+
+  const removeCategory = (catId: string) => {
+    setCategories((prev) => prev.filter((c) => c.id !== catId));
+  };
+
+  const updateCategoryName = (catId: string, name: string) => {
+    setCategories((prev) => prev.map((c) => (c.id === catId ? { ...c, name } : c)));
+  };
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <DollarSign className="h-5 w-5" />
-            Pricing Configuration
-          </CardTitle>
-          <CardDescription>
-            Set up how your programs price deals. When a borrower submits a quote request, the pricing engine can instantly calculate a rate, points, and leverage caps — and send the term sheet to PandaDoc for e-signature automatically.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Program selector */}
+      <div>
+        <h2 className="text-[26px] font-bold leading-tight">Pricing Configuration</h2>
+        <p className="text-[16px] text-muted-foreground mt-1">
+          Set up how rates are calculated for this program. Choose a pricing mode and configure rate adjusters.
+        </p>
+      </div>
+
+      {!hideNavigation && (
+        <div className="border-t pt-5">
+          <h3 className="text-[13px] uppercase tracking-wider font-semibold text-muted-foreground mb-4">
+            Program
+          </h3>
           {programsLoading ? (
-            <div className="flex items-center gap-3 p-4">
+            <div className="flex items-center gap-3 py-4">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Loading your programs...</span>
+              <span className="text-[14px] text-muted-foreground">Loading programs...</span>
             </div>
           ) : programs.length === 0 ? (
-            <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-md border border-amber-200 dark:border-amber-800">
+            <div className="flex items-center gap-3 p-4 rounded-[10px] border border-amber-200 bg-amber-50/60">
               <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0" />
-              <div>
-                <p className="font-medium text-amber-800 dark:text-amber-300">No programs found</p>
-                <p className="text-sm text-amber-700 dark:text-amber-400">
-                  Go back to the Loan Programs step to create a program first. Pricing rules are attached to specific programs.
-                </p>
-              </div>
+              <p className="text-[14px] text-amber-800">No programs found. Create a program first to configure pricing.</p>
             </div>
           ) : (
-            <>
-              <div className="space-y-2">
-                <Label>Select a program to configure pricing for</Label>
-                <Select
-                  value={selectedProgramId?.toString() || ''}
-                  onValueChange={(val) => {
-                    const pid = parseInt(val);
-                    setSelectedProgramId(pid);
-                    setPricingMode('none');
-                    const prog = programs.find((p: any) => p.id === pid);
-                    if (prog) {
-                      setYspEnabled(prog.yspEnabled ?? false);
-                      setYspBrokerCanToggle(prog.yspBrokerCanToggle ?? false);
-                      setYspFixedAmount(String(prog.yspFixedAmount ?? 0));
-                      setYspMin(String(prog.yspMin ?? 0));
-                      setYspMax(String(prog.yspMax ?? 3));
-                      setYspStep(String(prog.yspStep ?? 0.125));
-                      setBasePoints(String(prog.basePoints ?? 1));
-                      setBasePointsMin(String(prog.basePointsMin ?? 0.5));
-                      setBasePointsMax(String(prog.basePointsMax ?? 3));
-                      setBrokerPointsEnabled(prog.brokerPointsEnabled ?? true);
-                      setBrokerPointsMax(String(prog.brokerPointsMax ?? 2));
-                      setBrokerPointsStep(String(prog.brokerPointsStep ?? 0.125));
+            <div className="space-y-2">
+              <Select
+                value={selectedProgramId?.toString() || ''}
+                onValueChange={(val) => {
+                  const pid = parseInt(val);
+                  setSelectedProgramId(pid);
+                  const prog = programs.find((p: any) => p.id === pid);
+                  if (prog) {
+                    setYspEnabled(prog.yspEnabled ?? true);
+                    setYspBrokerAdjustable(prog.yspBrokerCanToggle ?? true);
+                    setYspMin(String(prog.yspMin ?? '0.50'));
+                    setYspMax(String(prog.yspMax ?? '2.00'));
+                    setYspStep(String(prog.yspStep ?? '0.125'));
+                    setBasePoints(String(prog.basePoints ?? '1.00'));
+                    setPointsMin(String(prog.basePointsMin ?? '1.00'));
+                    setPointsMax(String(prog.basePointsMax ?? '3.00'));
+                    setPointsBrokerAdjustable(prog.brokerPointsEnabled ?? true);
+                    setPointsStep(String(prog.brokerPointsStep ?? '0.25'));
+                    const modeMap: Record<string, PricingMode> = { rule_based: 'rule-based', external: 'external', none: 'none' };
+                    setPricingMode(modeMap[prog.pricingMode] || 'none');
+                    if (prog.externalPricingConfig) {
+                      const cfg = prog.externalPricingConfig as ExternalPricingConfig;
+                      setExtScraperUrl(cfg.scraperUrl || '');
+                      setExtTextInputs((cfg.textInputs || []).map(ti => ({ ...ti, sourceType: ti.sourceType || 'borrower' })));
+                      setExtDropdowns((cfg.dropdowns || []).map(dd => ({ ...dd, sourceType: dd.sourceType || 'borrower' })));
+                    } else {
+                      setExtScraperUrl('');
+                      setExtTextInputs([]);
+                      setExtDropdowns([]);
                     }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose a program..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {programs.map((p: any) => (
-                      <SelectItem key={p.id} value={p.id.toString()}>
-                        <span className="flex items-center gap-2">
-                          {p.name} ({p.loanType?.toUpperCase()})
-                          {!p.isActive && <span className="text-xs text-muted-foreground">(inactive)</span>}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {hasExistingRuleset && selectedProgramId && (
-                  <div className="flex items-center gap-2 text-sm text-green-700">
-                    <CheckCircle2 className="h-4 w-4" />
-                    This program already has pricing rules configured.
-                  </div>
-                )}
+                  }
+                }}
+                data-testid="select-program"
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a program..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {programs.map((p: any) => (
+                    <SelectItem key={p.id} value={p.id.toString()}>
+                      {p.name} ({p.loanType?.toUpperCase()})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {hasExistingRuleset && selectedProgramId && (
+                <div className="flex items-center gap-2 text-[13px] text-green-700">
+                  <CheckCircle2 className="h-4 w-4" />
+                  This program already has pricing rules configured.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="border-t pt-5">
+        <h3 className="text-[13px] uppercase tracking-wider font-semibold text-muted-foreground mb-4" data-testid="section-pricing-mode">
+          Pricing Mode
+        </h3>
+        <div className="grid grid-cols-4 gap-3">
+          <ModeCard
+            icon={<Ban className="h-5 w-5" />}
+            title="No Pricing"
+            subtitle="Manual quotes only"
+            selected={pricingMode === 'none'}
+            onClick={() => setPricingMode('none')}
+          />
+          <ModeCard
+            icon={<Calculator className="h-5 w-5" />}
+            title="Rule-Based"
+            subtitle="Base rate + adjusters"
+            selected={pricingMode === 'rule-based'}
+            onClick={() => setPricingMode('rule-based')}
+          />
+          <ModeCard
+            icon={<Upload className="h-5 w-5" />}
+            title="AI Upload"
+            subtitle="Upload rate sheet PDF"
+            selected={pricingMode === 'ai-upload'}
+            onClick={() => setPricingMode('ai-upload')}
+          />
+          <ModeCard
+            icon={<Globe className="h-5 w-5" />}
+            title="External URL"
+            subtitle="Link to pricing API"
+            selected={pricingMode === 'external'}
+            onClick={() => setPricingMode('external')}
+          />
+        </div>
+      </div>
+
+      {pricingMode === 'rule-based' && (
+        <>
+          <div className="border-t pt-5">
+            <h3 className="text-[13px] uppercase tracking-wider font-semibold text-muted-foreground mb-4" data-testid="section-base-rate">
+              Base Rate
+            </h3>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-[14px] text-muted-foreground">Base Rate</Label>
+                <div className="relative">
+                  <Input
+                    value={baseRate}
+                    onChange={(e) => setBaseRate(e.target.value)}
+                    className="pr-6"
+                    data-testid="input-base-rate"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground">%</span>
+                </div>
               </div>
+              <div className="space-y-1.5">
+                <Label className="text-[14px] text-muted-foreground">Floor (Min)</Label>
+                <div className="relative">
+                  <Input
+                    value={rateFloor}
+                    onChange={(e) => setRateFloor(e.target.value)}
+                    className="pr-6"
+                    data-testid="input-rate-floor"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground">%</span>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[14px] text-muted-foreground">Ceiling (Max)</Label>
+                <div className="relative">
+                  <Input
+                    value={rateCeiling}
+                    onChange={(e) => setRateCeiling(e.target.value)}
+                    className="pr-6"
+                    data-testid="input-rate-ceiling"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground">%</span>
+                </div>
+              </div>
+            </div>
+          </div>
 
-              {selectedProgramId && (
-                <>
-                  <Separator />
+          <div className="border-t pt-5">
+            <h3 className="text-[13px] uppercase tracking-wider font-semibold text-muted-foreground mb-2" data-testid="section-rate-adjusters">
+              Rate Adjusters
+            </h3>
+            <p className="text-[14px] text-muted-foreground mb-4">
+              Add or subtract from base rate based on deal characteristics. Mark tiers as "Disqualified" to reject deals that don't meet criteria.
+            </p>
 
-                  {/* Mode selector */}
-                  <div className="space-y-3">
-                    <Label>How would you like to set up pricing?</Label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <ModeCard
-                        icon={Calculator}
-                        title="Rule-Based Pricing"
-                        description="Set a base rate, add adjusters for FICO, LTV, property type, etc. Instant pricing on every quote."
-                        selected={pricingMode === 'rule-based'}
-                        onClick={() => setPricingMode('rule-based')}
-                        recommended
+            <div className="space-y-2">
+              {categories.map((cat, catIdx) => {
+                const isExpanded = expandedCategory === cat.id;
+                const color = CATEGORY_COLORS[catIdx % CATEGORY_COLORS.length];
+
+                return (
+                  <div key={cat.id} data-testid={`adjuster-category-${cat.id}`}>
+                    <button
+                      className="w-full flex items-center gap-3 py-3 px-4 rounded-[10px] border bg-white hover:bg-muted/20 transition-colors text-left"
+                      onClick={() => setExpandedCategory(isExpanded ? '' : cat.id)}
+                      style={{ borderLeftWidth: '4px', borderLeftColor: color }}
+                      data-testid={`button-toggle-category-${cat.id}`}
+                    >
+                      <ChevronDown
+                        className={cn('h-4 w-4 text-muted-foreground transition-transform', isExpanded && 'rotate-180')}
                       />
-                      <ModeCard
-                        icon={Upload}
-                        title="Upload Rate Sheet (AI)"
-                        description="Upload your rate sheet PDF. AI extracts the rules automatically. Review and activate."
-                        selected={pricingMode === 'ai-upload'}
-                        onClick={() => setPricingMode('ai-upload')}
-                      />
-                      <ModeCard
-                        icon={Globe}
-                        title="External Pricer"
-                        description="Connect to a third-party pricing tool. We fill the form with the borrower's data and extract the rate."
-                        selected={pricingMode === 'external'}
-                        onClick={() => setPricingMode('external')}
-                      />
-                      <ModeCard
-                        icon={Settings}
-                        title="No Automated Pricing"
-                        description="You'll price each deal manually when quotes come in."
-                        selected={pricingMode === 'none'}
-                        onClick={() => setPricingMode('none')}
-                      />
-                    </div>
-                  </div>
+                      <span className="text-[15px] font-bold flex-1">{cat.name}</span>
+                      <span className="text-[12px] text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full">
+                        {cat.tiers.length} {cat.tiers.length === 1 ? 'tier' : 'tiers'}
+                      </span>
+                      <span
+                        className="text-[12px] text-primary font-medium hover:text-primary/80 ml-1"
+                        onClick={(e) => { e.stopPropagation(); addTier(cat.id); }}
+                        data-testid={`button-add-tier-${cat.id}`}
+                      >
+                        + Add Tier
+                      </span>
+                    </button>
 
-                  {/* Compensation & Pricing Section */}
-                  <div className="border-t pt-6 space-y-4">
-                    <Label className="text-base font-semibold flex items-center gap-2">
-                      <DollarSign className="h-4 w-4" />
-                      Compensation & Pricing
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Configure YSP and origination points for this program
-                    </p>
-
-                    <div className="bg-muted/30 rounded-lg p-4 space-y-3 border">
-                      <h4 className="text-sm font-semibold">Origination Points</h4>
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="space-y-1">
-                          <Label className="text-xs">Base Points</Label>
-                          <Input type="number" step="0.125" min="0" max="10" value={basePoints} onChange={(e) => setBasePoints(e.target.value)} data-testid="input-base-points" />
+                    {isExpanded && (
+                      <div className="ml-4 mt-1 mb-2 rounded-[10px] border bg-white overflow-hidden" style={{ borderLeftWidth: '3px', borderLeftColor: color }}>
+                        <div className="flex items-center gap-2 px-4 py-2 border-b border-border/40">
+                          <input
+                            className="text-[14px] font-semibold bg-transparent border-0 outline-none flex-1 focus:bg-muted/30 focus:px-2 rounded transition-all"
+                            value={cat.name}
+                            onChange={(e) => updateCategoryName(cat.id, e.target.value)}
+                            data-testid={`input-category-name-${cat.id}`}
+                          />
+                          <button
+                            className="text-[11px] text-red-500 hover:text-red-700 font-medium transition-colors"
+                            onClick={() => removeCategory(cat.id)}
+                            data-testid={`button-remove-category-${cat.id}`}
+                          >
+                            Remove
+                          </button>
                         </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Min Base</Label>
-                          <Input type="number" step="0.125" min="0" value={basePointsMin} onChange={(e) => setBasePointsMin(e.target.value)} data-testid="input-base-points-min" />
+                        <div className="divide-y divide-border/30">
+                          {cat.tiers.map((tier) => {
+                            const tag = getTierTag(tier.rateAdd, tier.isDisqualified);
+                            return (
+                              <div
+                                key={tier.id}
+                                className="flex items-center gap-3 py-2.5 px-4 hover:bg-muted/20 group transition-colors"
+                                data-testid={`tier-row-${tier.id}`}
+                              >
+                                <input
+                                  className="text-[14px] text-foreground bg-transparent border-0 outline-none flex-1 min-w-0 placeholder:text-muted-foreground/40 focus:bg-muted/30 focus:px-2 rounded transition-all"
+                                  value={tier.label}
+                                  onChange={(e) => updateTier(cat.id, tier.id, 'label', e.target.value)}
+                                  placeholder="Tier label (e.g., FICO ≥ 760)"
+                                  data-testid={`input-tier-label-${tier.id}`}
+                                />
+                                {tier.isDisqualified ? (
+                                  <span className={cn('text-[11px] font-semibold px-2.5 py-1 rounded border', tag.className)} data-testid={`tag-tier-${tier.id}`}>
+                                    {tag.label}
+                                  </span>
+                                ) : (
+                                  <input
+                                    className={cn(
+                                      'w-[90px] text-[14px] text-center font-medium rounded border px-2 py-1 outline-none transition-colors',
+                                      parseFloat(tier.rateAdd) < 0 ? 'text-green-700 border-green-200 bg-green-50' :
+                                      parseFloat(tier.rateAdd) === 0 ? 'text-gray-600 border-gray-200 bg-gray-50' :
+                                      'text-amber-700 border-amber-200 bg-amber-50'
+                                    )}
+                                    value={tier.rateAdd}
+                                    onChange={(e) => updateTier(cat.id, tier.id, 'rateAdd', e.target.value)}
+                                    data-testid={`input-tier-rate-${tier.id}`}
+                                  />
+                                )}
+                                <span className="text-[12px] text-muted-foreground w-[70px] text-right" data-testid={`tag-tier-${tier.id}`}>
+                                  {tier.isDisqualified ? (
+                                    <span className="text-red-600 font-medium">Reject</span>
+                                  ) : (
+                                    tag.label
+                                  )}
+                                </span>
+                                <button
+                                  className={cn(
+                                    'text-[11px] px-1.5 py-0.5 rounded font-medium transition-colors',
+                                    tier.isDisqualified
+                                      ? 'text-green-600 hover:text-green-800'
+                                      : 'text-red-500 hover:text-red-700'
+                                  )}
+                                  onClick={() => updateTier(cat.id, tier.id, 'isDisqualified', !tier.isDisqualified)}
+                                  data-testid={`button-toggle-disqualified-${tier.id}`}
+                                >
+                                  {tier.isDisqualified ? 'Enable' : 'DQ'}
+                                </button>
+                                <button
+                                  className="text-muted-foreground/40 hover:text-red-500 transition-colors p-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0"
+                                  onClick={() => removeTier(cat.id, tier.id)}
+                                  data-testid={`button-remove-tier-${tier.id}`}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            );
+                          })}
                         </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Max Base</Label>
-                          <Input type="number" step="0.125" min="0" value={basePointsMax} onChange={(e) => setBasePointsMax(e.target.value)} data-testid="input-base-points-max" />
+                        <div className="px-4 py-2 border-t border-border/30">
+                          <button
+                            className="text-[12px] text-primary hover:text-primary/80 font-medium flex items-center gap-1"
+                            onClick={() => addTier(cat.id)}
+                            data-testid={`button-add-tier-inline-${cat.id}`}
+                          >
+                            <Plus className="h-3 w-3" /> Add tier
+                          </button>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-3 pt-2">
-                        <Switch checked={brokerPointsEnabled} onCheckedChange={(v) => setBrokerPointsEnabled(v)} data-testid="switch-broker-points" />
-                        <Label className="text-sm">Broker Can Add Additional Points</Label>
-                      </div>
-                      {brokerPointsEnabled && (
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <Label className="text-xs">Max Additional Broker Points</Label>
-                            <Input type="number" step="0.125" min="0" max="10" value={brokerPointsMax} onChange={(e) => setBrokerPointsMax(e.target.value)} data-testid="input-broker-points-max" />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">Step Size</Label>
-                            <Input type="number" step="0.0625" min="0.0625" value={brokerPointsStep} onChange={(e) => setBrokerPointsStep(e.target.value)} data-testid="input-broker-points-step" />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="bg-muted/30 rounded-lg p-4 space-y-3 border">
-                      <div className="flex items-center gap-3">
-                        <Switch checked={yspEnabled} onCheckedChange={(v) => setYspEnabled(v)} data-testid="switch-ysp-enabled" />
-                        <h4 className="text-sm font-semibold">YSP (Yield Spread Premium) Available</h4>
-                      </div>
-                      {yspEnabled && (
-                        <>
-                          <div className="flex items-center gap-3 pt-1">
-                            <Switch checked={yspBrokerCanToggle} onCheckedChange={(v) => setYspBrokerCanToggle(v)} data-testid="switch-ysp-broker-toggle" />
-                            <Label className="text-sm">Broker Can Adjust YSP on Quotes</Label>
-                          </div>
-                          {!yspBrokerCanToggle && (
-                            <div className="space-y-1">
-                              <Label className="text-xs">Fixed YSP Amount (%)</Label>
-                              <Input type="number" step="0.125" min="0" max="5" value={yspFixedAmount} onChange={(e) => setYspFixedAmount(e.target.value)} data-testid="input-ysp-fixed" />
-                              <p className="text-xs text-muted-foreground">This fixed YSP % will be applied to every quote</p>
-                            </div>
-                          )}
-                          <div className="grid grid-cols-3 gap-3">
-                            <div className="space-y-1">
-                              <Label className="text-xs">Min YSP (%)</Label>
-                              <Input type="number" step="0.125" min="0" value={yspMin} onChange={(e) => setYspMin(e.target.value)} data-testid="input-ysp-min" />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs">Max YSP (%)</Label>
-                              <Input type="number" step="0.125" min="0" value={yspMax} onChange={(e) => setYspMax(e.target.value)} data-testid="input-ysp-max" />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs">Step Size</Label>
-                              <Input type="number" step="0.0625" min="0.0625" value={yspStep} onChange={(e) => setYspStep(e.target.value)} data-testid="input-ysp-step" />
-                            </div>
-                          </div>
-                          <div className="bg-amber-50 border border-amber-200 rounded p-2 text-xs text-amber-800">
-                            <Info className="h-3 w-3 inline mr-1" />
-                            YSP rate impact tiers can be configured in the pricing ruleset for this program. Add a <code>yspPricing</code> array to define how each YSP% tier affects the interest rate.
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    {pricingMode !== 'rule-based' && (
-                      <div className="flex items-center gap-3">
-                        <Button
-                          onClick={() => saveCompensationMutation.mutate()}
-                          disabled={saveCompensationMutation.isPending}
-                          variant="outline"
-                          data-testid="button-save-compensation"
-                        >
-                          {saveCompensationMutation.isPending ? (
-                            <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</>
-                          ) : (
-                            <><CheckCircle2 className="h-4 w-4 mr-2" />Save Compensation Settings</>
-                          )}
-                        </Button>
-                        {saveCompensationMutation.isSuccess && (
-                          <span className="text-sm text-green-600 flex items-center gap-1">
-                            <CheckCircle2 className="h-4 w-4" /> Saved
-                          </span>
-                        )}
                       </div>
                     )}
                   </div>
+                );
+              })}
+            </div>
 
-                  <Separator />
+            <Button variant="outline" className="mt-3" onClick={addCategory} data-testid="button-add-category">
+              <Plus className="h-4 w-4 mr-1.5" />
+              Add Category
+            </Button>
+          </div>
+        </>
+      )}
 
-                  {/* Mode content */}
-                  {pricingMode === 'rule-based' && (
-                    <RuleBasedPricing
-                      baseRate={baseRate}
-                      setBaseRate={setBaseRate}
-                      defaultPoints={defaultPoints}
-                      setDefaultPoints={setDefaultPoints}
-                      adjusters={adjusters}
-                      setAdjusters={setAdjusters}
-                      disqualifiers={disqualifiers}
-                      setDisqualifiers={setDisqualifiers}
-                      onAddCommonAdjuster={addCommonAdjuster}
-                      onAddCommonDisqualifier={addCommonDisqualifier}
-                      loanType={programs.find((p: any) => p.id === selectedProgramId)?.loanType || 'rtl'}
-                    />
-                  )}
+      {pricingMode === 'ai-upload' && (
+        <div className="border-t pt-5">
+          <div className="rounded-[10px] border bg-white p-6 text-center space-y-3">
+            <Upload className="h-8 w-8 text-muted-foreground/40 mx-auto" />
+            <h4 className="text-[16px] font-semibold">Upload Your Rate Sheet</h4>
+            <p className="text-[14px] text-muted-foreground max-w-md mx-auto">
+              Upload a PDF of your rate sheet. AI will extract base rates, adjusters, and disqualifiers automatically. You can review and edit before activating.
+            </p>
+            <p className="text-[13px] text-muted-foreground">
+              Available from program settings after setup. Use Rule-Based to get started now.
+            </p>
+          </div>
+        </div>
+      )}
 
-                  {pricingMode === 'ai-upload' && (
-                    <AIUploadPricing />
-                  )}
+      {pricingMode === 'external' && (
+        <div className="border-t pt-5 space-y-5">
+          <h3 className="text-[13px] uppercase tracking-wider font-semibold text-muted-foreground" data-testid="section-external-config">
+            External Pricing Configuration
+          </h3>
 
-                  {pricingMode === 'external' && (
-                    <ExternalPricing
-                      externalUrl={externalUrl}
-                      setExternalUrl={setExternalUrl}
-                    />
-                  )}
-
-                  {/* Save button */}
-                  {pricingMode === 'rule-based' && (
-                    <div className="flex items-center gap-3">
-                      <Button
-                        onClick={() => saveRulesetMutation.mutate()}
-                        disabled={saveRulesetMutation.isPending}
-                      >
-                        {saveRulesetMutation.isPending ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Saving...
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="h-4 w-4 mr-2" />
-                            Save & Activate Pricing Rules
-                          </>
-                        )}
-                      </Button>
-                      {saveRulesetMutation.isSuccess && (
-                        <span className="text-sm text-green-600 flex items-center gap-1">
-                          <CheckCircle2 className="h-4 w-4" /> Saved
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </>
+          <div className="rounded-[10px] border bg-white p-5 space-y-4">
+            <h4 className="text-[16px] font-bold">Scraper URL</h4>
+            <Input
+              placeholder="https://www.b-diya.nqxpricer.com/..."
+              value={extScraperUrl}
+              onChange={(e) => setExtScraperUrl(e.target.value)}
+              data-testid="input-scraper-url"
+            />
+            <Button
+              size="sm"
+              disabled={scanFieldsMutation.isPending}
+              onClick={() => {
+                if (!extScraperUrl.trim()) {
+                  toast({ title: 'Enter a URL first', description: 'Paste the external pricing page URL above, then click Extract Form Fields.', variant: 'destructive' });
+                  return;
+                }
+                scanFieldsMutation.mutate(extScraperUrl.trim());
+              }}
+              className="w-full bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-600/90 text-white font-semibold shadow-md"
+              data-testid="button-load-defaults"
+            >
+              {scanFieldsMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Scanning Page...</>
+              ) : (
+                <><Search className="h-4 w-4 mr-2" />Extract Form Fields</>
               )}
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Comprehensive explainer section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Info className="h-5 w-5 text-blue-600" />
-            Understanding the Pricing Engine
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="space-y-2">
-            <p className="text-sm font-medium">Why pricing configuration matters</p>
-            <p className="text-sm text-muted-foreground">
-              Pricing is the core of your quote workflow. Without it, every quote request requires manual rate calculation.
-              With pricing rules configured, your borrowers get instant, consistent quotes the moment they submit a request &mdash;
-              no back-and-forth, no delays. This speeds up your pipeline and ensures every quote follows your underwriting guidelines.
-            </p>
+            </Button>
           </div>
 
-          <Separator />
-
-          <div className="space-y-2">
-            <p className="text-sm font-medium">What the pricing engine does</p>
-            <p className="text-sm text-muted-foreground">
-              When a borrower fills out a quote form linked to a program, the engine takes their inputs (FICO score,
-              loan amount, LTV, property type, loan purpose, etc.) and runs them against your pricing rules. It calculates:
-            </p>
-            <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
-              <li><strong>Interest rate</strong> &mdash; starting from your base rate, adjusted up or down based on risk factors</li>
-              <li><strong>Points / origination fees</strong> &mdash; automatically adjusted for loan characteristics</li>
-              <li><strong>Eligibility</strong> &mdash; disqualifies deals that fall outside your credit box (e.g., FICO too low, LTV too high)</li>
-            </ul>
+          <div className="rounded-[10px] border bg-white p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-[16px] font-bold">Text Input Mappings</h4>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setExtTextInputs(prev => [...prev, { id: '', fieldKey: '', label: '', sourceType: 'borrower' }])}
+                data-testid="button-add-text-input"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Add
+              </Button>
+            </div>
+            <p className="text-[13px] text-muted-foreground">Map element IDs on the external site to field keys in the quote form.</p>
+            {extTextInputs.map((ti, idx) => (
+              <div key={idx} className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="Element ID (e.g. :r0:)"
+                    value={ti.id}
+                    onChange={(e) => {
+                      const updated = [...extTextInputs];
+                      updated[idx] = { ...updated[idx], id: e.target.value };
+                      setExtTextInputs(updated);
+                    }}
+                    className="w-32"
+                    data-testid={`input-text-id-${idx}`}
+                  />
+                  <Input
+                    placeholder="Field Key"
+                    value={ti.fieldKey}
+                    onChange={(e) => {
+                      const updated = [...extTextInputs];
+                      updated[idx] = { ...updated[idx], fieldKey: e.target.value };
+                      setExtTextInputs(updated);
+                    }}
+                    className="w-32"
+                    data-testid={`input-text-fieldkey-${idx}`}
+                  />
+                  <Input
+                    placeholder="Label"
+                    value={ti.label}
+                    onChange={(e) => {
+                      const updated = [...extTextInputs];
+                      updated[idx] = { ...updated[idx], label: e.target.value };
+                      setExtTextInputs(updated);
+                    }}
+                    className="w-36"
+                    data-testid={`input-text-label-${idx}`}
+                  />
+                  <Select
+                    value={ti.sourceType || 'borrower'}
+                    onValueChange={(val) => {
+                      const updated = [...extTextInputs];
+                      updated[idx] = { ...updated[idx], sourceType: val as FieldSourceType, defaultValue: val === 'borrower' ? undefined : updated[idx].defaultValue };
+                      setExtTextInputs(updated);
+                    }}
+                  >
+                    <SelectTrigger className="w-36" data-testid={`select-text-source-${idx}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="borrower">Borrower Input</SelectItem>
+                      <SelectItem value="default">Fixed Default</SelectItem>
+                      <SelectItem value="calculated">Calculated</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setExtTextInputs(prev => prev.filter((_, i) => i !== idx))}
+                    data-testid={`button-remove-text-${idx}`}
+                  >
+                    <X className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                </div>
+                {ti.sourceType === 'default' && (
+                  <div className="pl-[calc(8rem+0.5rem)]">
+                    <Input
+                      placeholder="Default value"
+                      value={ti.defaultValue || ''}
+                      onChange={(e) => {
+                        const updated = [...extTextInputs];
+                        updated[idx] = { ...updated[idx], defaultValue: e.target.value };
+                        setExtTextInputs(updated);
+                      }}
+                      className="w-48"
+                      data-testid={`input-text-default-${idx}`}
+                    />
+                  </div>
+                )}
+                {ti.sourceType === 'calculated' && (
+                  <div className="pl-[calc(8rem+0.5rem)] space-y-2">
+                    <Input
+                      placeholder="{fieldA} / ({fieldB} * {fieldC} / 100)"
+                      value={ti.formula || ''}
+                      onChange={(e) => {
+                        const updated = [...extTextInputs];
+                        updated[idx] = { ...updated[idx], formula: e.target.value };
+                        setExtTextInputs(updated);
+                      }}
+                      className="font-mono text-[13px]"
+                      data-testid={`input-text-formula-${idx}`}
+                    />
+                    {(() => {
+                      const pricingVars = [...extTextInputs.filter((_, i) => i !== idx).map(f => ({ key: f.fieldKey, label: f.label })),
+                        ...extDropdowns.map(f => ({ key: f.fieldKey, label: f.label }))].filter(f => f.key);
+                      const quoteVars = quoteFormVariables.filter(qf => !pricingVars.some(pv => pv.key === qf.key));
+                      const allVars = [...pricingVars, ...quoteVars];
+                      return allVars.length > 0 ? (
+                        <div>
+                          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Available Variables</span>
+                          <div className="flex flex-wrap gap-1 mt-0.5">
+                            {allVars.map((f, fi) => (
+                              <button key={fi} type="button" className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-mono hover:bg-primary/20 transition-colors cursor-pointer" onClick={() => { const updated = [...extTextInputs]; updated[idx] = { ...updated[idx], formula: (updated[idx].formula || '') + `{${f.key}}` }; setExtTextInputs(updated); }} data-testid={`chip-text-var-${idx}-${fi}`}>
+                                {`{${f.key}}`} <span className="opacity-60 font-sans">{f.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
+                    <p className="text-[11px] text-muted-foreground">Use {'{fieldKey}'} to reference other fields. Supports +, -, *, /, parentheses.</p>
+                  </div>
+                )}
+              </div>
+            ))}
+            {extTextInputs.length === 0 && (
+              <p className="text-[13px] text-muted-foreground italic">No text inputs defined. Click Add or Extract Form Fields.</p>
+            )}
           </div>
 
-          <Separator />
+          <div className="rounded-[10px] border bg-white p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-[16px] font-bold">Dropdown Field Definitions</h4>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setExtDropdowns(prev => [...prev, { label: '', fieldKey: '', options: [], sourceType: 'borrower' }])}
+                data-testid="button-add-dropdown"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Add Dropdown
+              </Button>
+            </div>
+            <p className="text-[13px] text-muted-foreground">Define each dropdown on the external pricing form with its label, field key, and option values.</p>
 
-          <div className="space-y-3">
-            <p className="text-sm font-medium">Four ways to set up pricing</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="p-3 rounded-md bg-muted/50 space-y-1">
+            {extDropdowns.map((dd, ddIdx) => (
+              <div key={ddIdx} className="rounded-lg border p-4 space-y-3">
                 <div className="flex items-center gap-2">
-                  <Calculator className="h-4 w-4 text-primary" />
-                  <p className="text-sm font-medium">Rule-Based</p>
+                  <Input
+                    placeholder="Dropdown Label (e.g. LTV)"
+                    value={dd.label}
+                    onChange={(e) => {
+                      const updated = [...extDropdowns];
+                      updated[ddIdx] = { ...updated[ddIdx], label: e.target.value };
+                      setExtDropdowns(updated);
+                    }}
+                    className="w-40"
+                    data-testid={`input-dd-label-${ddIdx}`}
+                  />
+                  <Input
+                    placeholder="Field Key (e.g. ltv)"
+                    value={dd.fieldKey}
+                    onChange={(e) => {
+                      const updated = [...extDropdowns];
+                      updated[ddIdx] = { ...updated[ddIdx], fieldKey: e.target.value };
+                      setExtDropdowns(updated);
+                    }}
+                    className="w-40"
+                    data-testid={`input-dd-fieldkey-${ddIdx}`}
+                  />
+                  <Select
+                    value={dd.sourceType || 'borrower'}
+                    onValueChange={(val) => {
+                      const updated = [...extDropdowns];
+                      updated[ddIdx] = { ...updated[ddIdx], sourceType: val as FieldSourceType, defaultValue: val === 'borrower' ? undefined : updated[ddIdx].defaultValue };
+                      setExtDropdowns(updated);
+                    }}
+                  >
+                    <SelectTrigger className="w-36" data-testid={`select-dd-source-${ddIdx}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="borrower">Borrower Input</SelectItem>
+                      <SelectItem value="default">Fixed Default</SelectItem>
+                      <SelectItem value="calculated">Calculated</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="flex-1" />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setExtExpandedDropdown(extExpandedDropdown === ddIdx ? null : ddIdx)}
+                    data-testid={`button-toggle-dd-${ddIdx}`}
+                  >
+                    <ChevronDown className={cn('h-4 w-4 transition-transform', extExpandedDropdown === ddIdx && 'rotate-180')} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setExtDropdowns(prev => prev.filter((_, i) => i !== ddIdx))}
+                    data-testid={`button-remove-dd-${ddIdx}`}
+                  >
+                    <X className="h-4 w-4 text-muted-foreground" />
+                  </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Define a base rate and add adjusters (e.g., +0.25% for FICO below 700). Best for straightforward pricing with clear rules.
-                </p>
+                <div className="flex items-center gap-3">
+                  <span className="text-[12px] text-muted-foreground">{dd.options.length} option{dd.options.length !== 1 ? 's' : ''}</span>
+                  {dd.sourceType === 'default' && (
+                    <Select
+                      value={dd.defaultValue || ''}
+                      onValueChange={(val) => {
+                        const updated = [...extDropdowns];
+                        updated[ddIdx] = { ...updated[ddIdx], defaultValue: val };
+                        setExtDropdowns(updated);
+                      }}
+                    >
+                      <SelectTrigger className="w-48" data-testid={`select-dd-default-${ddIdx}`}>
+                        <SelectValue placeholder="Select default value" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {dd.options.map((opt, oi) => (
+                          <SelectItem key={oi} value={opt}>{opt}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {dd.sourceType === 'calculated' && (
+                    <span className="text-[12px] text-muted-foreground italic">Calculated from other fields</span>
+                  )}
+                </div>
+                {dd.sourceType === 'calculated' && (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label className="text-[12px] text-muted-foreground uppercase tracking-wider">Formula</Label>
+                      <Input
+                        placeholder="{grossMonthlyRent} / (({loanAmount} * {interestRate} / 100 / 12) + {monthlyTaxes} + {monthlyInsurance})"
+                        value={dd.formula || ''}
+                        onChange={(e) => {
+                          const updated = [...extDropdowns];
+                          updated[ddIdx] = { ...updated[ddIdx], formula: e.target.value };
+                          setExtDropdowns(updated);
+                        }}
+                        className="font-mono text-[13px]"
+                        data-testid={`input-dd-formula-${ddIdx}`}
+                      />
+                      {(() => {
+                        const pricingVars = [...extTextInputs.map(f => ({ key: f.fieldKey, label: f.label })),
+                          ...extDropdowns.filter((_, i) => i !== ddIdx).map(f => ({ key: f.fieldKey, label: f.label }))].filter(f => f.key);
+                        const quoteVars = quoteFormVariables.filter(qf => !pricingVars.some(pv => pv.key === qf.key));
+                        const allVars = [...pricingVars, ...quoteVars];
+                        return allVars.length > 0 ? (
+                          <div>
+                            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Available Variables</span>
+                            <div className="flex flex-wrap gap-1 mt-0.5">
+                              {allVars.map((f, fi) => (
+                                <button key={fi} type="button" className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-mono hover:bg-primary/20 transition-colors cursor-pointer" onClick={() => { const updated = [...extDropdowns]; updated[ddIdx] = { ...updated[ddIdx], formula: (updated[ddIdx].formula || '') + `{${f.key}}` }; setExtDropdowns(updated); }} data-testid={`chip-dd-var-${ddIdx}-${fi}`}>
+                                  {`{${f.key}}`} <span className="opacity-60 font-sans">{f.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null;
+                      })()}
+                    </div>
+
+                    <div className="space-y-2 border-t pt-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[12px] text-muted-foreground uppercase tracking-wider">Conditional Rules</Label>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const updated = [...extDropdowns];
+                            const rules = [...(updated[ddIdx].conditionalRules || []), { operator: '>=' as const, value: '', option: '' }];
+                            updated[ddIdx] = { ...updated[ddIdx], conditionalRules: rules };
+                            setExtDropdowns(updated);
+                          }}
+                          data-testid={`button-add-rule-${ddIdx}`}
+                        >
+                          <Plus className="h-3.5 w-3.5 mr-1" />
+                          Add Rule
+                        </Button>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">Rules are checked top-to-bottom. The first matching rule determines the dropdown selection.</p>
+
+                      {(dd.conditionalRules || []).map((rule, rIdx) => (
+                        <div key={rIdx} className="flex items-center gap-2 pl-2 border-l-2 border-primary/20">
+                          <span className="text-[12px] text-muted-foreground whitespace-nowrap">If result</span>
+                          <Select
+                            value={rule.operator}
+                            onValueChange={(val) => {
+                              const updated = [...extDropdowns];
+                              const rules = [...(updated[ddIdx].conditionalRules || [])];
+                              rules[rIdx] = { ...rules[rIdx], operator: val as ConditionalRule['operator'] };
+                              updated[ddIdx] = { ...updated[ddIdx], conditionalRules: rules };
+                              setExtDropdowns(updated);
+                            }}
+                          >
+                            <SelectTrigger className="w-20" data-testid={`select-rule-op-${ddIdx}-${rIdx}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value=">=">≥</SelectItem>
+                              <SelectItem value=">">{'>'}</SelectItem>
+                              <SelectItem value="<=">≤</SelectItem>
+                              <SelectItem value="<">{'<'}</SelectItem>
+                              <SelectItem value="==">=</SelectItem>
+                              <SelectItem value="between">between</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            placeholder={rule.operator === 'between' ? 'min' : 'value'}
+                            value={rule.value}
+                            onChange={(e) => {
+                              const updated = [...extDropdowns];
+                              const rules = [...(updated[ddIdx].conditionalRules || [])];
+                              rules[rIdx] = { ...rules[rIdx], value: e.target.value };
+                              updated[ddIdx] = { ...updated[ddIdx], conditionalRules: rules };
+                              setExtDropdowns(updated);
+                            }}
+                            className="w-24 font-mono text-[13px]"
+                            data-testid={`input-rule-val-${ddIdx}-${rIdx}`}
+                          />
+                          {rule.operator === 'between' && (
+                            <>
+                              <span className="text-[12px] text-muted-foreground whitespace-nowrap">and</span>
+                              <Input
+                                placeholder="max"
+                                value={rule.value2 || ''}
+                                onChange={(e) => {
+                                  const updated = [...extDropdowns];
+                                  const rules = [...(updated[ddIdx].conditionalRules || [])];
+                                  rules[rIdx] = { ...rules[rIdx], value2: e.target.value };
+                                  updated[ddIdx] = { ...updated[ddIdx], conditionalRules: rules };
+                                  setExtDropdowns(updated);
+                                }}
+                                className="w-24 font-mono text-[13px]"
+                                data-testid={`input-rule-val2-${ddIdx}-${rIdx}`}
+                              />
+                            </>
+                          )}
+                          <span className="text-[12px] text-muted-foreground whitespace-nowrap">then select</span>
+                          <Select
+                            value={rule.option || ''}
+                            onValueChange={(val) => {
+                              const updated = [...extDropdowns];
+                              const rules = [...(updated[ddIdx].conditionalRules || [])];
+                              rules[rIdx] = { ...rules[rIdx], option: val };
+                              updated[ddIdx] = { ...updated[ddIdx], conditionalRules: rules };
+                              setExtDropdowns(updated);
+                            }}
+                          >
+                            <SelectTrigger className="w-40" data-testid={`select-rule-opt-${ddIdx}-${rIdx}`}>
+                              <SelectValue placeholder="Choose option" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {dd.options.filter(o => o).map((opt, oi) => (
+                                <SelectItem key={oi} value={opt}>{opt}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const updated = [...extDropdowns];
+                              const rules = (updated[ddIdx].conditionalRules || []).filter((_, i) => i !== rIdx);
+                              updated[ddIdx] = { ...updated[ddIdx], conditionalRules: rules };
+                              setExtDropdowns(updated);
+                            }}
+                            data-testid={`button-remove-rule-${ddIdx}-${rIdx}`}
+                          >
+                            <X className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                        </div>
+                      ))}
+
+                      <div className="flex items-center gap-2 pl-2 border-l-2 border-muted-foreground/20 pt-1">
+                        <span className="text-[12px] text-muted-foreground whitespace-nowrap">Otherwise select</span>
+                        <Select
+                          value={dd.fallbackOption || ''}
+                          onValueChange={(val) => {
+                            const updated = [...extDropdowns];
+                            updated[ddIdx] = { ...updated[ddIdx], fallbackOption: val };
+                            setExtDropdowns(updated);
+                          }}
+                        >
+                          <SelectTrigger className="w-40" data-testid={`select-rule-fallback-${ddIdx}`}>
+                            <SelectValue placeholder="Fallback option" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {dd.options.filter(o => o).map((opt, oi) => (
+                              <SelectItem key={oi} value={opt}>{opt}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {extExpandedDropdown === ddIdx && (
+                  <div className="pl-4 space-y-2 border-l-2 border-primary/20">
+                    {dd.options.map((opt, optIdx) => (
+                      <div key={optIdx} className="flex items-center gap-2">
+                        <Input
+                          value={opt}
+                          onChange={(e) => {
+                            const updated = [...extDropdowns];
+                            const opts = [...updated[ddIdx].options];
+                            opts[optIdx] = e.target.value;
+                            updated[ddIdx] = { ...updated[ddIdx], options: opts };
+                            setExtDropdowns(updated);
+                          }}
+                          className="flex-1"
+                          data-testid={`input-dd-opt-${ddIdx}-${optIdx}`}
+                        />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            const updated = [...extDropdowns];
+                            updated[ddIdx] = { ...updated[ddIdx], options: updated[ddIdx].options.filter((_, i) => i !== optIdx) };
+                            setExtDropdowns(updated);
+                          }}
+                          data-testid={`button-remove-opt-${ddIdx}-${optIdx}`}
+                        >
+                          <X className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const updated = [...extDropdowns];
+                        updated[ddIdx] = { ...updated[ddIdx], options: [...updated[ddIdx].options, ''] };
+                        setExtDropdowns(updated);
+                      }}
+                      data-testid={`button-add-opt-${ddIdx}`}
+                    >
+                      <Plus className="h-3.5 w-3.5 mr-1" />
+                      Add Option
+                    </Button>
+                  </div>
+                )}
               </div>
-              <div className="p-3 rounded-md bg-muted/50 space-y-1">
+            ))}
+            {extDropdowns.length === 0 && (
+              <p className="text-[13px] text-muted-foreground italic">No dropdowns defined. Click Add Dropdown or Extract Form Fields.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="border-t pt-5">
+        <h3 className="text-[13px] uppercase tracking-wider font-semibold text-muted-foreground mb-4" data-testid="section-ysp-points">
+          YSP & Points
+        </h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="rounded-[10px] border bg-white p-5 space-y-4">
+            <h4 className="text-[16px] font-bold">YSP</h4>
+            <div className="flex items-center justify-between">
+              <Label className="text-[14px]">Enabled</Label>
+              <Switch checked={yspEnabled} onCheckedChange={setYspEnabled} data-testid="switch-ysp-enabled" />
+            </div>
+            {yspEnabled && (
+              <>
                 <div className="flex items-center gap-2">
-                  <Upload className="h-4 w-4 text-primary" />
-                  <p className="text-sm font-medium">AI Rate Sheet Upload</p>
+                  <Label className="text-[14px] w-16">Range</Label>
+                  <Input
+                    value={yspMin}
+                    onChange={(e) => setYspMin(e.target.value)}
+                    className="w-20 text-center"
+                    data-testid="input-ysp-min"
+                  />
+                  <span className="text-[13px] text-muted-foreground">to</span>
+                  <Input
+                    value={yspMax}
+                    onChange={(e) => setYspMax(e.target.value)}
+                    className="w-20 text-center"
+                    data-testid="input-ysp-max"
+                  />
+                  <span className="text-[13px] text-muted-foreground">%</span>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Upload your existing rate sheet PDF. AI reads and extracts the rules automatically. You review before activating.
-                </p>
-              </div>
-              <div className="p-3 rounded-md bg-muted/50 space-y-1">
                 <div className="flex items-center gap-2">
-                  <Globe className="h-4 w-4 text-primary" />
-                  <p className="text-sm font-medium">External Pricer</p>
+                  <Label className="text-[14px] w-16">Step</Label>
+                  <Input
+                    value={yspStep}
+                    onChange={(e) => setYspStep(e.target.value)}
+                    className="w-20 text-center"
+                    data-testid="input-ysp-step"
+                  />
+                  <span className="text-[13px] text-muted-foreground">%</span>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Connect to a third-party pricing tool. We submit the borrower's data and pull back the rate automatically.
-                </p>
-              </div>
-              <div className="p-3 rounded-md bg-muted/50 space-y-1">
-                <div className="flex items-center gap-2">
-                  <Settings className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-sm font-medium">Manual / Skip</p>
+                <div className="flex items-center justify-between">
+                  <Label className="text-[14px]">Broker Adjustable</Label>
+                  <Switch checked={yspBrokerAdjustable} onCheckedChange={setYspBrokerAdjustable} data-testid="switch-ysp-broker" />
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  No automated pricing. Quotes come in and you manually assign a rate and terms for each deal.
-                </p>
-              </div>
+              </>
+            )}
+          </div>
+
+          <div className="rounded-[10px] border bg-white p-5 space-y-4">
+            <h4 className="text-[16px] font-bold">Points</h4>
+            <div className="flex items-center gap-2">
+              <Label className="text-[14px] w-24">Base Points</Label>
+              <Input
+                value={basePoints}
+                onChange={(e) => setBasePoints(e.target.value)}
+                className="w-20 text-center"
+                data-testid="input-base-points"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-[14px] w-24">Range</Label>
+              <Input
+                value={pointsMin}
+                onChange={(e) => setPointsMin(e.target.value)}
+                className="w-20 text-center"
+                data-testid="input-points-min"
+              />
+              <span className="text-[13px] text-muted-foreground">to</span>
+              <Input
+                value={pointsMax}
+                onChange={(e) => setPointsMax(e.target.value)}
+                className="w-20 text-center"
+                data-testid="input-points-max"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-[14px] w-24">Step</Label>
+              <Input
+                value={pointsStep}
+                onChange={(e) => setPointsStep(e.target.value)}
+                className="w-20 text-center"
+                data-testid="input-points-step"
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label className="text-[14px]">Broker Adjustable</Label>
+              <Switch checked={pointsBrokerAdjustable} onCheckedChange={setPointsBrokerAdjustable} data-testid="switch-points-broker" />
             </div>
           </div>
-
-          <Separator />
-
-          <div className="space-y-2">
-            <p className="text-sm font-medium">How pricing connects to your quote forms</p>
-            <p className="text-sm text-muted-foreground">
-              Each loan program has a quote form that borrowers fill out. The fields on that form (FICO, loan amount, property type, LTV, etc.)
-              are the same inputs the pricing engine uses. When a borrower submits the form:
-            </p>
-            <ol className="text-sm text-muted-foreground list-decimal pl-5 space-y-1">
-              <li>The form data is sent to the pricing engine for the selected program</li>
-              <li>The engine checks eligibility rules first &mdash; if the deal is disqualified, the borrower is notified immediately</li>
-              <li>If eligible, it calculates the rate and points using your base rate + adjusters</li>
-              <li>A quote is generated and saved. If PandaDoc is connected, a term sheet is auto-generated and sent for e-signature</li>
-              <li>The quote appears in your pipeline as a new deal, ready for you to review or follow up</li>
-            </ol>
-            <p className="text-sm text-muted-foreground mt-2">
-              You can customize the quote form fields in each program's settings to collect exactly the data your pricing rules need.
-              Any custom fields you add to the form can also be used as pricing adjuster conditions.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Navigation */}
-      <div className="flex items-center justify-between gap-4">
-        <Button variant="outline" onClick={onBack}>
-          <ChevronLeft className="mr-2 h-4 w-4" />
-          Back
-        </Button>
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" onClick={onNext} className="text-muted-foreground">
-            {pricingMode === 'none' ? 'Skip for now' : 'Continue'}
-          </Button>
-          <Button onClick={onNext}>
-            Next: Communications & AI
-            <ChevronRight className="ml-2 h-4 w-4" />
-          </Button>
         </div>
       </div>
+
+      {(pricingMode === 'rule-based' || pricingMode === 'external') && (selectedProgramId || effectiveProgramId) && (
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={() => saveRulesetMutation.mutate()}
+            disabled={saveRulesetMutation.isPending}
+            data-testid="button-save-pricing"
+          >
+            {saveRulesetMutation.isPending ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</>
+            ) : pricingMode === 'external' ? (
+              <><CheckCircle2 className="h-4 w-4 mr-2" />Save External Pricing Config</>
+            ) : (
+              <><CheckCircle2 className="h-4 w-4 mr-2" />Save & Activate Pricing Rules</>
+            )}
+          </Button>
+          {saveRulesetMutation.isSuccess && (
+            <span className="text-[13px] text-green-600 flex items-center gap-1">
+              <CheckCircle2 className="h-4 w-4" /> Saved
+            </span>
+          )}
+        </div>
+      )}
+
+      {!hideNavigation && (
+        <div className="flex items-center justify-between gap-4 pt-4">
+          <Button variant="outline" onClick={onBack} data-testid="button-pricing-back">
+            <ChevronLeft className="mr-2 h-4 w-4" />
+            Back
+          </Button>
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" onClick={onNext} className="text-muted-foreground" data-testid="button-pricing-skip">
+              {pricingMode === 'none' ? 'Skip for now' : 'Continue'}
+            </Button>
+            <Button onClick={onNext} data-testid="button-pricing-continue">
+              Continue
+              <ChevronRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -701,378 +1494,34 @@ export function PricingConfiguration({
 // ─── Mode Card ──────────────────────────────────────────────────
 
 function ModeCard({
-  icon: Icon,
+  icon,
   title,
-  description,
+  subtitle,
   selected,
   onClick,
-  recommended,
 }: {
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ReactNode;
   title: string;
-  description: string;
+  subtitle: string;
   selected: boolean;
   onClick: () => void;
-  recommended?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`relative text-left p-4 rounded-lg border-2 transition-all ${
+      className={cn(
+        'flex flex-col items-center gap-1.5 py-4 px-3 rounded-[10px] border-2 transition-all text-center',
         selected
           ? 'border-primary bg-primary/5'
-          : 'border-border hover:border-primary/40 bg-card'
-      }`}
+          : 'border-border bg-white hover:border-primary/40'
+      )}
+      data-testid={`mode-card-${title.toLowerCase().replace(/\s+/g, '-')}`}
     >
-      {recommended && (
-        <Badge className="absolute -top-2 right-2 text-[10px]">Recommended</Badge>
-      )}
-      <Icon className={`h-5 w-5 mb-2 ${selected ? 'text-primary' : 'text-muted-foreground'}`} />
-      <p className="font-medium text-sm">{title}</p>
-      <p className="text-xs text-muted-foreground mt-1">{description}</p>
+      <span className={cn('mb-0.5', selected ? 'text-primary' : 'text-muted-foreground')}>
+        {icon}
+      </span>
+      <span className="text-[14px] font-semibold">{title}</span>
+      <span className="text-[12px] text-muted-foreground leading-tight">{subtitle}</span>
     </button>
-  );
-}
-
-// ─── Mode 1: Rule-Based Pricing ─────────────────────────────────
-
-function RuleBasedPricing({
-  baseRate,
-  setBaseRate,
-  defaultPoints,
-  setDefaultPoints,
-  adjusters,
-  setAdjusters,
-  disqualifiers,
-  setDisqualifiers,
-  onAddCommonAdjuster,
-  onAddCommonDisqualifier,
-  loanType,
-}: {
-  baseRate: string;
-  setBaseRate: (v: string) => void;
-  defaultPoints: string;
-  setDefaultPoints: (v: string) => void;
-  adjusters: AdjusterEntry[];
-  setAdjusters: (a: AdjusterEntry[]) => void;
-  disqualifiers: EligibilityEntry[];
-  setDisqualifiers: (d: EligibilityEntry[]) => void;
-  onAddCommonAdjuster: (t: typeof COMMON_ADJUSTERS[0]) => void;
-  onAddCommonDisqualifier: (t: typeof COMMON_DISQUALIFIERS[0]) => void;
-  loanType: string;
-}) {
-  const removeAdjuster = (i: number) => setAdjusters(adjusters.filter((_, idx) => idx !== i));
-  const removeDisqualifier = (i: number) => setDisqualifiers(disqualifiers.filter((_, idx) => idx !== i));
-
-  const updateAdjuster = (i: number, field: keyof AdjusterEntry, value: string) => {
-    const updated = [...adjusters];
-    updated[i] = { ...updated[i], [field]: value };
-    setAdjusters(updated);
-  };
-
-  const addCustomAdjuster = () => {
-    const id = `custom_${Date.now()}`;
-    setAdjusters([...adjusters, {
-      id,
-      label: '',
-      condition: 'ficoLt',
-      conditionValue: '',
-      rateAdd: '0',
-      pointsAdd: '0',
-    }]);
-  };
-
-  const addCustomDisqualifier = () => {
-    const id = `dq_${Date.now()}`;
-    setDisqualifiers([...disqualifiers, {
-      id,
-      label: '',
-      condition: 'ficoLt',
-      conditionValue: '',
-    }]);
-  };
-
-  const updateDisqualifier = (i: number, field: keyof EligibilityEntry, value: string) => {
-    const updated = [...disqualifiers];
-    updated[i] = { ...updated[i], [field]: value };
-    setDisqualifiers(updated);
-  };
-
-  return (
-    <div className="space-y-5">
-      {/* Base rate + points */}
-      <div className="p-4 bg-muted/50 rounded-lg space-y-3">
-        <h4 className="font-medium text-sm flex items-center gap-2">
-          <Percent className="h-4 w-4 text-primary" />
-          Base Rate & Points
-        </h4>
-        <p className="text-xs text-muted-foreground">
-          This is your starting rate before any adjustments. The engine adds or subtracts from this based on the deal characteristics.
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Base Interest Rate (%)</Label>
-            <Input value={baseRate} onChange={(e) => setBaseRate(e.target.value)} placeholder="9.25" />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Default Points (%)</Label>
-            <Input value={defaultPoints} onChange={(e) => setDefaultPoints(e.target.value)} placeholder="2.0" />
-          </div>
-        </div>
-      </div>
-
-      {/* Rate Adjusters */}
-      <div className="space-y-3">
-        <h4 className="font-medium text-sm flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-primary" />
-          Rate Adjusters
-          <span className="text-xs text-muted-foreground font-normal">— "If this, add that to rate"</span>
-        </h4>
-
-        <div>
-          <Label className="text-xs text-muted-foreground mb-1.5 block">Quick add common adjusters:</Label>
-          <div className="flex flex-wrap gap-1.5">
-            {COMMON_ADJUSTERS.filter((t) => {
-              // Show DSCR-specific adjusters only for DSCR
-              if (t.id === 'low_dscr' && loanType !== 'dscr') return false;
-              return true;
-            }).map((t) => (
-              <Button
-                key={t.id}
-                variant={adjusters.some((a) => a.id === t.id) ? 'secondary' : 'outline'}
-                size="sm"
-                className="text-xs h-7"
-                disabled={adjusters.some((a) => a.id === t.id)}
-                onClick={() => onAddCommonAdjuster(t)}
-              >
-                {adjusters.some((a) => a.id === t.id) ? (
-                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                ) : (
-                  <Plus className="h-3 w-3 mr-1" />
-                )}
-                {t.label}: +{t.rateAdd}%
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        {adjusters.length > 0 && (
-          <div className="space-y-2 max-h-48 overflow-y-auto">
-            {adjusters.map((adj, i) => (
-              <div key={adj.id} className="flex items-center gap-2 p-2 bg-muted/40 rounded-md">
-                <div className="flex-1 min-w-0">
-                  <div className="flex gap-2 items-center">
-                    <Input
-                      className="h-7 text-xs flex-1"
-                      placeholder="Label"
-                      value={adj.label}
-                      onChange={(e) => updateAdjuster(i, 'label', e.target.value)}
-                    />
-                    <Select value={adj.condition} onValueChange={(v) => updateAdjuster(i, 'condition', v)}>
-                      <SelectTrigger className="h-7 text-xs w-36">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {conditionOptions.map((c) => (
-                          <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      className="h-7 text-xs w-20"
-                      placeholder="Value"
-                      value={adj.conditionValue}
-                      onChange={(e) => updateAdjuster(i, 'conditionValue', e.target.value)}
-                    />
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs text-muted-foreground">+</span>
-                      <Input
-                        className="h-7 text-xs w-16"
-                        value={adj.rateAdd}
-                        onChange={(e) => updateAdjuster(i, 'rateAdd', e.target.value)}
-                      />
-                      <span className="text-xs text-muted-foreground">%</span>
-                    </div>
-                  </div>
-                </div>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive flex-shrink-0" onClick={() => removeAdjuster(i)}>
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <Button variant="outline" size="sm" onClick={addCustomAdjuster}>
-          <Plus className="h-3.5 w-3.5 mr-1" />
-          Add Custom Adjuster
-        </Button>
-      </div>
-
-      <Separator />
-
-      {/* Disqualifiers */}
-      <div className="space-y-3">
-        <h4 className="font-medium text-sm flex items-center gap-2">
-          <ShieldAlert className="h-4 w-4 text-destructive" />
-          Disqualifiers
-          <span className="text-xs text-muted-foreground font-normal">— "If this, deal is ineligible"</span>
-        </h4>
-
-        <div>
-          <Label className="text-xs text-muted-foreground mb-1.5 block">Quick add common disqualifiers:</Label>
-          <div className="flex flex-wrap gap-1.5">
-            {COMMON_DISQUALIFIERS.map((t) => (
-              <Button
-                key={t.id}
-                variant={disqualifiers.some((d) => d.id === t.id) ? 'secondary' : 'outline'}
-                size="sm"
-                className="text-xs h-7"
-                disabled={disqualifiers.some((d) => d.id === t.id)}
-                onClick={() => onAddCommonDisqualifier(t)}
-              >
-                {disqualifiers.some((d) => d.id === t.id) ? (
-                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                ) : (
-                  <Plus className="h-3 w-3 mr-1" />
-                )}
-                {t.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        {disqualifiers.length > 0 && (
-          <div className="space-y-2 max-h-40 overflow-y-auto">
-            {disqualifiers.map((dq, i) => (
-              <div key={dq.id} className="flex items-center gap-2 p-2 bg-red-50/50 dark:bg-red-950/20 rounded-md border border-red-200/50 dark:border-red-800/50">
-                <div className="flex-1 flex gap-2 items-center">
-                  <Input
-                    className="h-7 text-xs flex-1"
-                    placeholder="Label"
-                    value={dq.label}
-                    onChange={(e) => updateDisqualifier(i, 'label', e.target.value)}
-                  />
-                  <Select value={dq.condition} onValueChange={(v) => updateDisqualifier(i, 'condition', v)}>
-                    <SelectTrigger className="h-7 text-xs w-36">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {conditionOptions.map((c) => (
-                        <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    className="h-7 text-xs w-24"
-                    placeholder="Value"
-                    value={dq.conditionValue}
-                    onChange={(e) => updateDisqualifier(i, 'conditionValue', e.target.value)}
-                  />
-                </div>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive flex-shrink-0" onClick={() => removeDisqualifier(i)}>
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <Button variant="outline" size="sm" onClick={addCustomDisqualifier}>
-          <Plus className="h-3.5 w-3.5 mr-1" />
-          Add Custom Disqualifier
-        </Button>
-      </div>
-
-      {/* Preview */}
-      {adjusters.length > 0 && (
-        <>
-          <Separator />
-          <div className="p-3 bg-muted/50 rounded-lg">
-            <h4 className="font-medium text-xs mb-2">Pricing Preview Example</h4>
-            <p className="text-xs text-muted-foreground">
-              Base rate: <span className="font-mono font-medium text-foreground">{baseRate}%</span>
-              {adjusters.length > 0 && (
-                <> + up to <span className="font-mono font-medium text-foreground">
-                  {adjusters.reduce((sum, a) => sum + (parseFloat(a.rateAdd) || 0), 0).toFixed(2)}%
-                </span> in adjustments</>
-              )}
-              {' '}= worst case <span className="font-mono font-medium text-foreground">
-                {(parseFloat(baseRate) + adjusters.reduce((sum, a) => sum + (parseFloat(a.rateAdd) || 0), 0)).toFixed(2)}%
-              </span>
-              {' '}| Points: <span className="font-mono font-medium text-foreground">{defaultPoints}%</span>
-            </p>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// ─── Mode 2: AI Upload Pricing ──────────────────────────────────
-
-function AIUploadPricing() {
-  return (
-    <div className="p-4 bg-muted/50 rounded-lg space-y-3">
-      <div className="flex items-start gap-3">
-        <Sparkles className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-        <div>
-          <h4 className="font-medium text-sm">Upload Your Rate Sheet</h4>
-          <p className="text-sm text-muted-foreground mt-1">
-            Upload a PDF of your rate sheet or lending guidelines. Our AI will extract the base rates, adjusters, leverage caps, and disqualifiers automatically. You'll review everything before activating.
-          </p>
-          <p className="text-xs text-muted-foreground mt-2">
-            This feature is available from the program settings page after onboarding. Navigate to <span className="font-medium text-foreground">Loan Products → Your Program → Pricing</span> to upload your guidelines and let the AI build your ruleset.
-          </p>
-          <div className="flex items-center gap-2 mt-3 p-2 bg-blue-50 dark:bg-blue-950/30 rounded border border-blue-200 dark:border-blue-800">
-            <Info className="h-4 w-4 text-blue-600 flex-shrink-0" />
-            <p className="text-xs text-blue-700 dark:text-blue-300">
-              For now, you can use Rule-Based Pricing to get started quickly, then upload your full rate sheet later.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Mode 3: External Pricer ────────────────────────────────────
-
-function ExternalPricing({
-  externalUrl,
-  setExternalUrl,
-}: {
-  externalUrl: string;
-  setExternalUrl: (v: string) => void;
-}) {
-  return (
-    <div className="p-4 bg-muted/50 rounded-lg space-y-3">
-      <div className="flex items-start gap-3">
-        <Globe className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-        <div className="space-y-3 flex-1">
-          <div>
-            <h4 className="font-medium text-sm">External Pricing Tool</h4>
-            <p className="text-sm text-muted-foreground mt-1">
-              Connect to a third-party pricing platform. When a quote comes in, we'll fill out the external form with the borrower's data and extract the rate automatically using browser automation.
-            </p>
-          </div>
-          <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-md border border-blue-200 dark:border-blue-800">
-            <ShieldAlert className="h-5 w-5 text-blue-600 flex-shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-blue-900 dark:text-blue-300">Contact Lendry Support to set up external pricing</p>
-              <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
-                External pricing integrations require custom configuration by our team. Please reach out to Lendry Support and we'll get your third-party pricing tool connected for you.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 p-2 bg-amber-50 dark:bg-amber-950/30 rounded border border-amber-200 dark:border-amber-800">
-            <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
-            <p className="text-xs text-amber-700 dark:text-amber-300">
-              External pricing is slower than rule-based (5-15 seconds per quote) and depends on the third-party site being available.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }

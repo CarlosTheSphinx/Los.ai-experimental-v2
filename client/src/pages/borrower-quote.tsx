@@ -16,6 +16,7 @@ import { Calculator, CheckCircle2, AlertCircle, Loader2, RotateCcw, Save, MapPin
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { formatPhoneNumber, isValidPhone } from "@/lib/validation";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 
 interface ProgramWithPricing {
@@ -67,6 +68,8 @@ export default function BorrowerQuote() {
 
   const { data: programsData } = useQuery<{ programs: ProgramWithPricing[] }>({
     queryKey: ["/api/programs-with-pricing"],
+    staleTime: 30000,
+    refetchOnWindowFocus: true,
   });
 
   const allActivePrograms = programsData?.programs || [];
@@ -149,7 +152,7 @@ export default function BorrowerQuote() {
       toast({ title: "Invalid Email", description: "Please enter a valid email address.", variant: "destructive" });
       return;
     }
-    if (borrowerPhone && borrowerPhone.length > 0 && borrowerPhone.length < 10) {
+    if (borrowerPhone && !isValidPhone(borrowerPhone)) {
       toast({ title: "Invalid Phone", description: "Phone number must be 10 digits.", variant: "destructive" });
       return;
     }
@@ -325,14 +328,10 @@ export default function BorrowerQuote() {
                         id="borrower-phone"
                         type="tel"
                         value={borrowerPhone}
-                        onChange={(e) => {
-                          const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
-                          setBorrowerPhone(digits);
-                        }}
+                        onChange={(e) => setBorrowerPhone(formatPhoneNumber(e.target.value))}
                         placeholder="(555) 123-4567"
-                        maxLength={14}
                       />
-                      {borrowerPhone && borrowerPhone.length > 0 && borrowerPhone.length < 10 && (
+                      {borrowerPhone && !isValidPhone(borrowerPhone) && (
                         <p className="text-xs text-destructive">Phone number must be 10 digits</p>
                       )}
                     </div>

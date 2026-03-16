@@ -218,8 +218,8 @@ function AccountStep({ portalType, token, returnPath }: { portalType: "broker" |
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (regPassword.length < 8) {
-      toast({ title: "Password must be at least 8 characters", variant: "destructive" });
+    if (regPassword.length < 12) {
+      toast({ title: "Password must be at least 12 characters", variant: "destructive" });
       return;
     }
     setIsSubmitting(true);
@@ -334,7 +334,7 @@ function AccountStep({ portalType, token, returnPath }: { portalType: "broker" |
               value={regPassword}
               onChange={(e) => setRegPassword(e.target.value)}
               required
-              minLength={8}
+              minLength={12}
               data-testid="input-onboarding-reg-password"
             />
           </div>

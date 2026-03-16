@@ -8,9 +8,15 @@ import { apiLimiter, authLimiter, pricingLimiter, uploadLimiter } from "./middle
 import { validateConfig } from "./utils/validateConfig";
 import { seedDefaultAgentConfigs } from "./routes/agents";
 import { db } from "./db";
+import { seedSuperAdmins } from "./seedAdmins";
+import { seedInquiryFormTemplates, registerInquiryFormRoutes } from "./routes/inquiryForms";
+import { initializePIIContext, autoDecryptResponseMiddleware } from "./middleware/piiDecryption";
+import { setupOrchestrationWebSocket } from "./websocket/orchestrationEvents";
 const app = express();
 app.set('trust proxy', 1);
 const httpServer = createServer(app);
+
+setupOrchestrationWebSocket(httpServer);
 
 declare module "http" {
   interface IncomingMessage {
@@ -39,9 +45,25 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   if (process.env.NODE_ENV === 'production') {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    res.setHeader('Content-Security-Policy',
+      "default-src 'self'; " +
+      "script-src 'self' 'unsafe-inline'; " +
+      "style-src 'self' 'unsafe-inline'; " +
+      "img-src 'self' data: https:; " +
+      "font-src 'self' data:; " +
+      "connect-src 'self' https:; " +
+      "frame-ancestors 'none'"
+    );
   }
   next();
 });
+
+// Make db available on app.locals for middleware
+app.locals.db = db;
+
+// PII encryption middleware
+app.use(initializePIIContext);
+app.use(autoDecryptResponseMiddleware);
 
 // Rate limiting - applied globally to all /api routes
 app.use('/api/', apiLimiter);
@@ -58,6 +80,26 @@ app.use((req: Request, _res: Response, next: Function) => {
   }
   next();
 });
+
+// Landing mode guard — blocks unauthenticated API access except auth/subscribe/health
+const siteMode = process.env.SITE_MODE || 'full';
+if (siteMode === 'landing') {
+  console.log('🚧 Site running in LANDING mode — API routes restricted');
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (!req.path.startsWith('/api')) return next();
+    if (req.path === '/api/subscribe') return next();
+    if (req.path === '/api/health') return next();
+    if (req.path.startsWith('/api/auth/')) return next();
+    if (req.path.startsWith('/api/sign/')) return next();
+    if (req.path.startsWith('/api/portal/')) return next();
+    if (req.path.startsWith('/api/resolve-portal/')) return next();
+    if (req.path.startsWith('/api/join/')) return next();
+    if (req.path.startsWith('/api/broker-portal/')) return next();
+    const token = req.cookies?.auth_token || req.headers.authorization?.replace('Bearer ', '');
+    if (token) return next();
+    return res.status(403).json({ error: 'Site is in preview mode' });
+  });
+}
 
 // Health check endpoint (no auth required)
 app.get('/health', (_req: Request, res: Response) => {
@@ -129,6 +171,14 @@ app.use((req, res, next) => {
     console.error('⚠️ Failed to auto-seed agent configs:', err);
   }
 
+  // Register inquiry form routes and seed templates
+  registerInquiryFormRoutes(app);
+  try {
+    await seedInquiryFormTemplates();
+  } catch (err) {
+    console.error('⚠️ Failed to seed inquiry form templates:', err);
+  }
+
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
@@ -156,6 +206,11 @@ app.use((req, res, next) => {
     const { setupVite } = await import("./vite");
     await setupVite(httpServer, app);
   }
+
+  await seedSuperAdmins();
+  
+  const { backfillTenantIds } = await import('./utils/backfill-tenants');
+  await backfillTenantIds();
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
   // Other ports are firewalled. Default to 5000 if not specified.

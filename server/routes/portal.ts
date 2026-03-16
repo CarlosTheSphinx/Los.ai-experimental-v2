@@ -1,11 +1,12 @@
 import type { Express, Request, Response } from 'express';
 import type { RouteDeps } from './types';
-import { eq, asc, and, ne, isNotNull } from 'drizzle-orm';
-import { dealDocuments, dealDocumentFiles, projectStages, loanPrograms, projectActivity, platformSettings, systemSettings, projects } from '@shared/schema';
+import { eq, asc, and, ne, isNotNull, desc, gt, sql, or } from 'drizzle-orm';
+import { dealDocuments, dealDocumentFiles, projectStages, loanPrograms, projectActivity, platformSettings, systemSettings, projects, messageThreads, messages, messageReads, users, borrowerProfiles, borrowerDocuments } from '@shared/schema';
 import multer from 'multer';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
+import { generateRandomToken } from '../auth';
 
 async function getOnboardingConfig(db: any, configKey: string) {
   try {
@@ -230,10 +231,69 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
         return { ...doc, files };
       }));
 
-      res.json({ documents: docsWithFiles, stages });
+      const visibleDocs = docsWithFiles.filter(doc =>
+        doc.visibility === 'all' || doc.visibility === 'borrower' || !doc.visibility
+      );
+
+      res.json({ documents: visibleDocs, stages });
     } catch (error) {
       console.error('Portal documents error:', error);
       res.status(500).json({ error: 'Failed to load documents' });
+    }
+  });
+
+  app.post('/api/portal/:token/borrower-documents/upload-url', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const { name, size, contentType } = req.body;
+
+      const project = await storage.getProjectByToken(token);
+      if (!project) return res.status(404).json({ error: 'Project not found' });
+      if (!project.borrowerPortalEnabled) return res.status(403).json({ error: 'Portal disabled' });
+      if (!name) return res.status(400).json({ error: 'File name is required' });
+
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const isLocal = uploadURL.startsWith('__local__:');
+      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+
+      res.json({
+        uploadURL: isLocal ? `/api/portal/${token}/borrower-documents/upload-direct` : uploadURL,
+        objectPath,
+        useDirectUpload: isLocal,
+        metadata: { name, size, contentType },
+      });
+    } catch (error) {
+      console.error('Portal borrower doc upload URL error:', error);
+      res.status(500).json({ error: 'Failed to generate upload URL' });
+    }
+  });
+
+  const borrowerDocMulter = multer({ dest: path.join(process.cwd(), 'uploads', 'temp') });
+  app.post('/api/portal/:token/borrower-documents/upload-direct', borrowerDocMulter.single('file'), async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const project = await storage.getProjectByToken(token);
+      if (!project) return res.status(404).json({ error: 'Project not found' });
+      if (!project.borrowerPortalEnabled) return res.status(403).json({ error: 'Portal disabled' });
+
+      if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+      const uploadsDir = path.join(process.cwd(), 'uploads', 'uploads');
+      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+      const objectId = randomUUID();
+      const destPath = path.join(uploadsDir, objectId);
+      fs.renameSync(req.file.path, destPath);
+      fs.writeFileSync(destPath + '.meta', JSON.stringify({
+        name: req.file.originalname,
+        contentType: req.file.mimetype,
+        size: req.file.size,
+      }));
+
+      res.json({ objectPath: `uploads/${objectId}` });
+    } catch (error) {
+      console.error('Portal borrower doc direct upload error:', error);
+      res.status(500).json({ error: 'Upload failed' });
     }
   });
 
@@ -389,6 +449,50 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
         });
       } catch (reviewErr: any) {
         console.error('Doc review orchestrator error:', reviewErr.message);
+      }
+
+      try {
+        const borrowerEmail = project.borrowerEmail?.toLowerCase();
+        if (borrowerEmail && objectPath) {
+          let [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, borrowerEmail));
+          if (!profile) {
+            const [inserted] = await db.insert(borrowerProfiles).values({ email: borrowerEmail }).returning();
+            profile = inserted;
+          }
+          const docName = fileName || updated?.documentName || 'Document';
+          const dealLabel = project.loanNumber || project.propertyAddress || `Deal #${project.id}`;
+          const existingVaultDoc = await db.select().from(borrowerDocuments)
+            .where(and(
+              eq(borrowerDocuments.borrowerProfileId, profile.id),
+              eq(borrowerDocuments.sourceDealId, project.id),
+              eq(borrowerDocuments.fileName, docName),
+              eq(borrowerDocuments.isActive, true)
+            ));
+          if (existingVaultDoc.length) {
+            await db.update(borrowerDocuments)
+              .set({
+                storagePath: objectPath,
+                fileType: mimeType || null,
+                fileSize: fileSize ? Number(fileSize) : null,
+                updatedAt: new Date(),
+              })
+              .where(eq(borrowerDocuments.id, existingVaultDoc[0].id));
+          } else {
+            await db.insert(borrowerDocuments).values({
+              borrowerProfileId: profile.id,
+              fileName: docName,
+              fileType: mimeType || null,
+              fileSize: fileSize ? Number(fileSize) : null,
+              storagePath: objectPath,
+              category: updated?.documentCategory || 'general',
+              documentClassification: 'standalone',
+              sourceDealId: project.id,
+              sourceDealName: dealLabel,
+            });
+          }
+        }
+      } catch (syncErr: any) {
+        console.error('Auto-sync to borrower vault error (portal):', syncErr.message);
       }
 
       res.json({ document: updated, file: newFile });
@@ -764,6 +868,50 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
         console.error('Doc review orchestrator error:', reviewErr.message);
       }
 
+      try {
+        const borrowerEmail = project.borrowerEmail?.toLowerCase();
+        if (borrowerEmail && objectPath) {
+          let [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, borrowerEmail));
+          if (!profile) {
+            const [inserted] = await db.insert(borrowerProfiles).values({ email: borrowerEmail }).returning();
+            profile = inserted;
+          }
+          const docName = fileName || updated?.documentName || 'Document';
+          const dealLabel = project.loanNumber || project.propertyAddress || `Deal #${project.id}`;
+          const existingVaultDoc = await db.select().from(borrowerDocuments)
+            .where(and(
+              eq(borrowerDocuments.borrowerProfileId, profile.id),
+              eq(borrowerDocuments.sourceDealId, project.id),
+              eq(borrowerDocuments.fileName, docName),
+              eq(borrowerDocuments.isActive, true)
+            ));
+          if (existingVaultDoc.length) {
+            await db.update(borrowerDocuments)
+              .set({
+                storagePath: objectPath,
+                fileType: mimeType || null,
+                fileSize: fileSize ? Number(fileSize) : null,
+                updatedAt: new Date(),
+              })
+              .where(eq(borrowerDocuments.id, existingVaultDoc[0].id));
+          } else {
+            await db.insert(borrowerDocuments).values({
+              borrowerProfileId: profile.id,
+              fileName: docName,
+              fileType: mimeType || null,
+              fileSize: fileSize ? Number(fileSize) : null,
+              storagePath: objectPath,
+              category: updated?.documentCategory || 'general',
+              documentClassification: 'standalone',
+              sourceDealId: project.id,
+              sourceDealName: dealLabel,
+            });
+          }
+        }
+      } catch (syncErr: any) {
+        console.error('Broker portal auto-sync to borrower vault error:', syncErr.message);
+      }
+
       res.json({ document: updated, file: newFile });
     } catch (error) {
       console.error('Broker portal upload complete error:', error);
@@ -801,6 +949,432 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
     } catch (error) {
       console.error('Broker portal documents error:', error);
       res.status(500).json({ error: 'Failed to load documents' });
+    }
+  });
+
+  // ==================== BORROWER PORTAL MESSAGING ====================
+
+  async function getBorrowerDealIds(token: string): Promise<{ project: any; dealIds: number[] } | null> {
+    const project = await storage.getProjectByToken(token);
+    if (!project) return null;
+
+    let dealIds: number[] = [project.id];
+    if (project.borrowerEmail) {
+      const relatedDeals = await db.select({ id: projects.id })
+        .from(projects)
+        .where(and(
+          eq(projects.borrowerEmail, project.borrowerEmail),
+          isNotNull(projects.borrowerPortalToken),
+          eq(projects.borrowerPortalEnabled, true),
+        ));
+      dealIds = relatedDeals.map(d => d.id);
+    }
+    return { project, dealIds };
+  }
+
+  async function getPortalReadTimestamp(threadId: number): Promise<Date | null> {
+    const key = 'portal_read_' + threadId;
+    const rows = await db.select().from(systemSettings)
+      .where(eq(systemSettings.settingKey, key)).limit(1);
+    if (rows[0]?.settingValue) return new Date(rows[0].settingValue);
+    return null;
+  }
+
+  async function setPortalReadTimestamp(threadId: number): Promise<void> {
+    const key = 'portal_read_' + threadId;
+    const now = new Date().toISOString();
+    const existing = await db.select().from(systemSettings)
+      .where(eq(systemSettings.settingKey, key)).limit(1);
+    if (existing[0]) {
+      await db.update(systemSettings).set({ settingValue: now })
+        .where(eq(systemSettings.settingKey, key));
+    } else {
+      await db.insert(systemSettings).values({ settingKey: key, settingValue: now });
+    }
+  }
+
+  app.get('/api/portal/:token/messages/unread-count', async (req: Request, res: Response) => {
+    try {
+      const result = await getBorrowerDealIds(req.params.token);
+      if (!result) return res.status(404).json({ error: 'Not found' });
+
+      const { dealIds } = result;
+      if (dealIds.length === 0) return res.json({ unreadCount: 0 });
+
+      let totalUnread = 0;
+      for (const dealId of dealIds) {
+        const threads = await db.select({ id: messageThreads.id })
+          .from(messageThreads)
+          .where(eq(messageThreads.dealId, dealId));
+
+        for (const thread of threads) {
+          const lastRead = await getPortalReadTimestamp(thread.id);
+
+          if (lastRead) {
+            const unread = await db.select({ count: sql<number>`count(*)::int` })
+              .from(messages)
+              .where(and(
+                eq(messages.threadId, thread.id),
+                gt(messages.createdAt, lastRead),
+                ne(messages.senderRole, 'user')
+              ));
+            totalUnread += unread[0]?.count || 0;
+          } else {
+            const all = await db.select({ count: sql<number>`count(*)::int` })
+              .from(messages)
+              .where(and(eq(messages.threadId, thread.id), ne(messages.senderRole, 'user')));
+            totalUnread += all[0]?.count || 0;
+          }
+        }
+      }
+
+      res.json({ unreadCount: totalUnread });
+    } catch (error) {
+      console.error('Portal unread count error:', error);
+      res.status(500).json({ error: 'Failed to get unread count' });
+    }
+  });
+
+  app.get('/api/portal/:token/messages/threads', async (req: Request, res: Response) => {
+    try {
+      const result = await getBorrowerDealIds(req.params.token);
+      if (!result) return res.status(404).json({ error: 'Not found' });
+
+      const { dealIds } = result;
+      if (dealIds.length === 0) return res.json({ threads: [] });
+
+      const allThreads = [];
+      for (const dealId of dealIds) {
+        const threads = await db.select()
+          .from(messageThreads)
+          .where(eq(messageThreads.dealId, dealId))
+          .orderBy(desc(messageThreads.lastMessageAt));
+        allThreads.push(...threads);
+      }
+
+      allThreads.sort((a, b) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime());
+
+      const threadsWithContext = await Promise.all(allThreads.map(async (thread) => {
+        let dealName = null;
+        let dealIdentifier = null;
+        if (thread.dealId) {
+          const deal = await db.select({
+            projectName: projects.projectName,
+            loanNumber: projects.loanNumber,
+          }).from(projects).where(eq(projects.id, thread.dealId)).limit(1);
+          if (deal[0]) {
+            dealName = deal[0].projectName;
+            dealIdentifier = deal[0].loanNumber || `DEAL-${thread.dealId}`;
+          }
+        }
+
+        const lastMsg = await db.select({ body: messages.body, createdAt: messages.createdAt, senderRole: messages.senderRole })
+          .from(messages)
+          .where(eq(messages.threadId, thread.id))
+          .orderBy(desc(messages.createdAt))
+          .limit(1);
+
+        let unreadCount = 0;
+        const lastRead = await getPortalReadTimestamp(thread.id);
+
+        if (lastRead) {
+          const unread = await db.select({ count: sql<number>`count(*)::int` })
+            .from(messages)
+            .where(and(eq(messages.threadId, thread.id), gt(messages.createdAt, lastRead), ne(messages.senderRole, 'user')));
+          unreadCount = unread[0]?.count || 0;
+        } else {
+          const all = await db.select({ count: sql<number>`count(*)::int` })
+            .from(messages)
+            .where(and(eq(messages.threadId, thread.id), ne(messages.senderRole, 'user')));
+          unreadCount = all[0]?.count || 0;
+        }
+
+        return {
+          id: thread.id,
+          dealId: thread.dealId,
+          subject: thread.subject,
+          isClosed: thread.isClosed,
+          lastMessageAt: thread.lastMessageAt instanceof Date ? thread.lastMessageAt.toISOString() : thread.lastMessageAt,
+          createdAt: thread.createdAt instanceof Date ? thread.createdAt.toISOString() : thread.createdAt,
+          dealName,
+          dealIdentifier,
+          lastMessagePreview: lastMsg[0]?.body?.substring(0, 100) || null,
+          lastMessageSenderRole: lastMsg[0]?.senderRole || null,
+          lastMessageCreatedAt: lastMsg[0]?.createdAt instanceof Date ? lastMsg[0].createdAt.toISOString() : lastMsg[0]?.createdAt || null,
+          unreadCount,
+        };
+      }));
+
+      res.json({ threads: threadsWithContext });
+    } catch (error) {
+      console.error('Portal threads error:', error);
+      res.status(500).json({ error: 'Failed to get threads' });
+    }
+  });
+
+  app.get('/api/portal/:token/messages/threads/:threadId', async (req: Request, res: Response) => {
+    try {
+      const result = await getBorrowerDealIds(req.params.token);
+      if (!result) return res.status(404).json({ error: 'Not found' });
+
+      const threadId = parseInt(req.params.threadId);
+      const { dealIds } = result;
+
+      const thread = await db.select()
+        .from(messageThreads)
+        .where(eq(messageThreads.id, threadId))
+        .limit(1);
+
+      if (!thread[0] || !thread[0].dealId || !dealIds.includes(thread[0].dealId)) {
+        return res.status(404).json({ error: 'Thread not found' });
+      }
+
+      const threadMessages = await db.select()
+        .from(messages)
+        .where(eq(messages.threadId, threadId))
+        .orderBy(messages.createdAt)
+        .limit(500);
+
+      const messagesWithSenders = await Promise.all(threadMessages.map(async (msg) => {
+        const serialized = {
+          ...msg,
+          createdAt: msg.createdAt instanceof Date ? msg.createdAt.toISOString() : msg.createdAt,
+          readAt: msg.readAt instanceof Date ? msg.readAt.toISOString() : msg.readAt,
+        };
+        if (msg.senderId) {
+          const sender = await db.select({ fullName: users.fullName, email: users.email })
+            .from(users).where(eq(users.id, msg.senderId)).limit(1);
+          return { ...serialized, senderName: sender[0]?.fullName || sender[0]?.email || 'Unknown' };
+        }
+        return { ...serialized, senderName: msg.senderRole === 'user' ? 'You' : 'System' };
+      }));
+
+      const threadSerialized = {
+        ...thread[0],
+        createdAt: thread[0].createdAt instanceof Date ? thread[0].createdAt.toISOString() : thread[0].createdAt,
+        lastMessageAt: (thread[0] as any).lastMessageAt instanceof Date ? (thread[0] as any).lastMessageAt.toISOString() : (thread[0] as any).lastMessageAt,
+      };
+      res.json({ thread: threadSerialized, messages: messagesWithSenders });
+    } catch (error) {
+      console.error('Portal thread detail error:', error);
+      res.status(500).json({ error: 'Failed to get thread' });
+    }
+  });
+
+  app.post('/api/portal/:token/messages/threads/:threadId/messages', async (req: Request, res: Response) => {
+    try {
+      const result = await getBorrowerDealIds(req.params.token);
+      if (!result) return res.status(404).json({ error: 'Not found' });
+
+      const threadId = parseInt(req.params.threadId);
+      const { dealIds } = result;
+      const { body } = req.body;
+
+      if (!body || typeof body !== 'string') {
+        return res.status(400).json({ error: 'body is required' });
+      }
+
+      const thread = await db.select()
+        .from(messageThreads)
+        .where(eq(messageThreads.id, threadId))
+        .limit(1);
+
+      if (!thread[0] || !thread[0].dealId || !dealIds.includes(thread[0].dealId)) {
+        return res.status(403).json({ error: 'Not authorized' });
+      }
+
+      const newMessage = await db.insert(messages).values({
+        threadId,
+        senderId: thread[0].userId,
+        senderRole: 'user',
+        type: 'message',
+        body,
+        meta: null,
+      }).returning();
+
+      await db.update(messageThreads)
+        .set({ lastMessageAt: new Date() })
+        .where(eq(messageThreads.id, threadId));
+
+      res.json({ message: {
+        ...newMessage[0],
+        createdAt: newMessage[0].createdAt instanceof Date ? newMessage[0].createdAt.toISOString() : newMessage[0].createdAt,
+        readAt: newMessage[0].readAt instanceof Date ? newMessage[0].readAt.toISOString() : newMessage[0].readAt,
+        senderName: 'You',
+      } });
+    } catch (error) {
+      console.error('Portal send message error:', error);
+      res.status(500).json({ error: 'Failed to send message' });
+    }
+  });
+
+  app.post('/api/portal/:token/messages/threads', async (req: Request, res: Response) => {
+    try {
+      const result = await getBorrowerDealIds(req.params.token);
+      if (!result) return res.status(404).json({ error: 'Not found' });
+
+      const { project, dealIds } = result;
+      const { dealId, subject, body } = req.body;
+
+      if (!dealId) return res.status(400).json({ error: 'dealId is required' });
+      if (!body || typeof body !== 'string') return res.status(400).json({ error: 'body is required' });
+      if (!dealIds.includes(parseInt(dealId))) return res.status(403).json({ error: 'Not authorized for this deal' });
+
+      const parsedDealId = parseInt(dealId);
+
+      const existingThread = await db.select()
+        .from(messageThreads)
+        .where(and(
+          eq(messageThreads.dealId, parsedDealId),
+          eq(messageThreads.userId, project.userId || 0),
+        )).limit(1);
+
+      let thread;
+      if (existingThread[0]) {
+        thread = existingThread[0];
+      } else {
+        const [newThread] = await db.insert(messageThreads).values({
+          dealId: parsedDealId,
+          userId: project.userId || 0,
+          createdBy: project.userId || null,
+          subject: subject || null,
+        }).returning();
+        thread = newThread;
+      }
+
+      const [newMessage] = await db.insert(messages).values({
+        threadId: thread.id,
+        senderId: project.userId || null,
+        senderRole: 'user',
+        type: 'message',
+        body,
+        meta: null,
+      }).returning();
+
+      await db.update(messageThreads)
+        .set({ lastMessageAt: new Date() })
+        .where(eq(messageThreads.id, thread.id));
+
+      const threadSerialized = {
+        ...thread,
+        createdAt: thread.createdAt instanceof Date ? thread.createdAt.toISOString() : thread.createdAt,
+        lastMessageAt: (thread as any).lastMessageAt instanceof Date ? (thread as any).lastMessageAt.toISOString() : (thread as any).lastMessageAt,
+      };
+      res.json({ thread: threadSerialized, message: {
+        ...newMessage,
+        createdAt: newMessage.createdAt instanceof Date ? newMessage.createdAt.toISOString() : newMessage.createdAt,
+        readAt: newMessage.readAt instanceof Date ? newMessage.readAt.toISOString() : newMessage.readAt,
+        senderName: 'You',
+      } });
+    } catch (error) {
+      console.error('Portal create thread error:', error);
+      res.status(500).json({ error: 'Failed to create thread' });
+    }
+  });
+
+  app.post('/api/portal/:token/messages/threads/:threadId/read', async (req: Request, res: Response) => {
+    try {
+      const result = await getBorrowerDealIds(req.params.token);
+      if (!result) return res.status(404).json({ error: 'Not found' });
+
+      const threadId = parseInt(req.params.threadId);
+      const { dealIds } = result;
+
+      const thread = await db.select()
+        .from(messageThreads)
+        .where(eq(messageThreads.id, threadId))
+        .limit(1);
+
+      if (!thread[0] || !thread[0].dealId || !dealIds.includes(thread[0].dealId)) {
+        return res.status(403).json({ error: 'Not authorized' });
+      }
+
+      await setPortalReadTimestamp(threadId);
+
+      res.json({ ok: true });
+    } catch (error) {
+      console.error('Portal mark read error:', error);
+      res.status(500).json({ error: 'Failed to mark read' });
+    }
+  });
+
+  app.get('/api/resolve-portal/broker/:token', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const project = await storage.getProjectByBrokerToken(token);
+      if (!project) {
+        return res.status(404).json({ error: 'Invalid portal link' });
+      }
+
+      if (!project.brokerPortalEnabled) {
+        return res.status(403).json({ error: 'Portal access is disabled for this deal' });
+      }
+
+      const brokerId = project.userId;
+      let user = brokerId ? await storage.getUserById(brokerId) : null;
+
+      if (!user) {
+        return res.status(404).json({ error: 'No user associated with this deal' });
+      }
+
+      if (!user.inviteToken) {
+        const inviteToken = generateRandomToken();
+        await db.update(users).set({ inviteToken, inviteStatus: user.inviteStatus || 'joined' }).where(eq(users.id, user.id));
+        return res.json({ redirectTo: `/join/personal/${inviteToken}` });
+      }
+
+      res.json({ redirectTo: `/join/personal/${user.inviteToken}` });
+    } catch (error) {
+      console.error('Resolve broker portal error:', error);
+      res.status(500).json({ error: 'Failed to resolve portal link' });
+    }
+  });
+
+  app.get('/api/resolve-portal/borrower/:token', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const project = await storage.getProjectByToken(token);
+      if (!project) {
+        return res.status(404).json({ error: 'Invalid portal link' });
+      }
+
+      if (!project.borrowerPortalEnabled) {
+        return res.status(403).json({ error: 'Portal access is disabled for this deal' });
+      }
+
+      const borrowerEmail = project.borrowerEmail;
+      if (!borrowerEmail) {
+        return res.status(404).json({ error: 'No borrower email on this deal' });
+      }
+
+      let user = await storage.getUserByEmail(borrowerEmail.toLowerCase().trim());
+
+      if (!user) {
+        const inviteToken = generateRandomToken();
+        user = await storage.createUser({
+          email: borrowerEmail.toLowerCase().trim(),
+          fullName: project.borrowerName || null,
+          phone: project.borrowerPhone || null,
+          role: 'borrower',
+          userType: 'borrower',
+          isActive: true,
+          emailVerified: true,
+          inviteToken,
+          inviteStatus: 'none',
+        } as any);
+        return res.json({ redirectTo: `/join/personal/${inviteToken}` });
+      }
+
+      if (!user.inviteToken) {
+        const inviteToken = generateRandomToken();
+        await db.update(users).set({ inviteToken, inviteStatus: user.inviteStatus || 'joined' }).where(eq(users.id, user.id));
+        return res.json({ redirectTo: `/join/personal/${inviteToken}` });
+      }
+
+      res.json({ redirectTo: `/join/personal/${user.inviteToken}` });
+    } catch (error) {
+      console.error('Resolve borrower portal error:', error);
+      res.status(500).json({ error: 'Failed to resolve portal link' });
     }
   });
 }

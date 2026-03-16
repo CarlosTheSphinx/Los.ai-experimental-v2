@@ -88,10 +88,14 @@ export default function AdminCreditPolicies() {
 
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractProgress, setExtractProgress] = useState(0);
+  const [chunkProgress, setChunkProgress] = useState<{ chunksCompleted: number; totalChunks: number; rulesFoundSoFar: number } | null>(null);
+  const [liveRules, setLiveRules] = useState<any[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [editingRuleIds, setEditingRuleIds] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const extractingLockRef = useRef(false);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -99,6 +103,7 @@ export default function AdminCreditPolicies() {
     return () => {
       if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
       if (progressTimeoutRef.current) clearTimeout(progressTimeoutRef.current);
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
     };
   }, []);
 
@@ -205,10 +210,41 @@ export default function AdminCreditPolicies() {
   }
 
   async function handleFileUpload(file: File) {
+    if (extractingLockRef.current) return;
+    extractingLockRef.current = true;
     setIsExtracting(true);
     setSourceFileName(file.name);
     setEditingRuleIds(new Set());
+    setChunkProgress(null);
+    setLiveRules([]);
     startProgressSimulation();
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/orchestration`);
+    wsRef.current = ws;
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.eventType === 'credit_extraction_progress' && msg.metadata) {
+          const pct = Math.round((msg.metadata.chunksCompleted / msg.metadata.totalChunks) * 100);
+          setExtractProgress(Math.min(pct, 95));
+          setChunkProgress({
+            chunksCompleted: msg.metadata.chunksCompleted,
+            totalChunks: msg.metadata.totalChunks,
+            rulesFoundSoFar: msg.metadata.rulesFoundSoFar,
+          });
+          if (msg.rules && Array.isArray(msg.rules)) {
+            setLiveRules(msg.rules);
+          }
+        }
+      } catch {}
+    };
+
+    await new Promise<void>((resolve) => {
+      ws.onopen = () => resolve();
+      setTimeout(resolve, 2000);
+    });
+
     try {
       const reader = new FileReader();
       const base64 = await new Promise<string>((resolve, reject) => {
@@ -230,9 +266,16 @@ export default function AdminCreditPolicies() {
       }
     } catch (error: any) {
       stopProgressSimulation();
-      toast({ title: "Failed to extract rules", description: error.message, variant: "destructive" });
+      if (error.message?.includes('already being extracted')) {
+        toast({ title: "Extraction already in progress", description: "Please wait for the current extraction to finish." });
+      } else {
+        toast({ title: "Failed to extract rules", description: error.message, variant: "destructive" });
+      }
     } finally {
+      extractingLockRef.current = false;
       setIsExtracting(false);
+      setChunkProgress(null);
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
     }
   }
 
@@ -382,16 +425,46 @@ export default function AdminCreditPolicies() {
           {isExtracting ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-8 gap-4">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                <p className="text-sm text-muted-foreground" data-testid="text-extracting-rules">
-                  AI is extracting rules from your document...
-                </p>
-                <div className="w-full max-w-xs space-y-1">
+                <div className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50">
+                  <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                  <span className="text-[14px] font-medium text-amber-800 dark:text-amber-200" data-testid="text-extracting-rules">
+                    {chunkProgress
+                      ? `Processing chunk ${chunkProgress.chunksCompleted} of ${chunkProgress.totalChunks} — ${chunkProgress.rulesFoundSoFar} rules found`
+                      : 'Parsing document...'}
+                  </span>
+                </div>
+                <div className="w-full space-y-1">
                   <Progress value={extractProgress} className="h-2" />
                   <p className="text-xs text-muted-foreground text-center" data-testid="text-extract-progress">
-                    {extractProgress}% complete
+                    {chunkProgress
+                      ? `Chunk ${chunkProgress.chunksCompleted}/${chunkProgress.totalChunks} complete — ${chunkProgress.rulesFoundSoFar} rules extracted so far`
+                      : 'The AI is reading and extracting individual lending rules'}
                   </p>
                 </div>
+                {liveRules.length > 0 && (
+                  <div className="w-full border rounded-lg overflow-hidden mt-2">
+                    <div className="px-3 py-2 border-b bg-muted/30 flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 text-amber-500 animate-spin" />
+                      <span className="text-[13px] font-medium">Live Extraction — {liveRules.length} rules so far</span>
+                      <span className="ml-auto text-[11px] text-muted-foreground">
+                        Chunk {chunkProgress?.chunksCompleted || 0}/{chunkProgress?.totalChunks || '?'}
+                      </span>
+                    </div>
+                    <div className="divide-y max-h-40 overflow-y-auto">
+                      {liveRules.slice(-8).map((rule: any, idx: number) => (
+                        <div key={rule.id || idx} className="px-3 py-1.5 text-[12px]">
+                          <span className="font-medium">{rule.rule || rule.ruleTitle}</span>
+                          {rule.category && <Badge variant="outline" className="ml-2 text-[10px] py-0">{rule.category}</Badge>}
+                        </div>
+                      ))}
+                      {liveRules.length > 8 && (
+                        <div className="px-3 py-1.5 text-[11px] text-muted-foreground text-center">
+                          + {liveRules.length - 8} more rules
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ) : !sourceFileName ? (

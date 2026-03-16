@@ -2,6 +2,7 @@ import { db } from "../db";
 import { esignEnvelopes, esignEvents } from "@shared/schema";
 import { eq, inArray, and } from "drizzle-orm";
 import { ObjectStorageService } from "../replit_integrations/object_storage";
+import { isNotificationEnabled } from './notificationHelper';
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -90,6 +91,7 @@ export async function syncEnvelopeStatus(envelopeId: number): Promise<{
               userId: quote.userId || envelope.createdBy!,
               projectName: `${borrowerName} — ${quote.propertyAddress || envelope.documentName || 'New Loan'}`,
               projectNumber,
+              ...(quote.loanNumber ? { loanNumber: quote.loanNumber } : {}),
               loanAmount: loanAmount || null,
               interestRate: !isNaN(rateNum) ? rateNum : null,
               loanType: loanData?.loanType || loanData?.selectedLoanType || (isRTLQuote ? 'fix_and_flip' : 'dscr'),
@@ -182,10 +184,63 @@ export async function syncEnvelopeStatus(envelopeId: number): Promise<{
 
             projectCreated = true;
             console.log(`[PandaDoc Poll] Deal ${projectNumber} created from envelope ${envelope.id}`);
+
+            try {
+              const { notifications } = await import('@shared/schema');
+              const { users } = await import('@shared/schema');
+              const adminUsers = await db.select({ id: users.id }).from(users)
+                .where(inArray(users.role, ['admin', 'super_admin', 'staff']));
+              const notifiedUserIds = new Set<number>();
+              if (await isNotificationEnabled('term_sheet_signed')) {
+                for (const admin of adminUsers) {
+                  await db.insert(notifications).values({
+                    userId: admin.id,
+                    type: 'term_sheet_signed',
+                    title: 'Term Sheet Signed',
+                    message: `${borrowerName} signed the term sheet. Deal ${projectNumber} has been created.`,
+                    dealId: project.id,
+                    link: `/admin/deals/${project.id}`,
+                  });
+                  notifiedUserIds.add(admin.id);
+                }
+                const ownerId = quote.userId || envelope.createdBy;
+                if (ownerId && !notifiedUserIds.has(ownerId)) {
+                  await db.insert(notifications).values({
+                    userId: ownerId,
+                    type: 'term_sheet_signed',
+                    title: 'Term Sheet Signed',
+                    message: `${borrowerName} signed the term sheet. Deal ${projectNumber} has been created.`,
+                    dealId: project.id,
+                    link: `/admin/deals/${project.id}`,
+                  });
+                }
+              }
+            } catch (notifErr: any) {
+              console.error(`[PandaDoc Poll] Notification error:`, notifErr.message);
+            }
           }
         }
       } catch (projErr: any) {
         console.error(`[PandaDoc Poll] Error creating deal from envelope ${envelope.id}:`, projErr);
+      }
+    }
+
+    if (newStatus === 'completed' && oldStatus !== 'completed' && !projectCreated && envelope.quoteId) {
+      try {
+        const { notifications, savedQuotes } = await import('@shared/schema');
+        const [quote] = await db.select().from(savedQuotes).where(eq(savedQuotes.id, envelope.quoteId));
+        if (quote && quote.userId && await isNotificationEnabled('term_sheet_signed')) {
+          const borrowerName = `${quote.customerFirstName || ''} ${quote.customerLastName || ''}`.trim();
+          await db.insert(notifications).values({
+            userId: quote.userId,
+            type: 'term_sheet_signed',
+            title: 'Term Sheet Signed',
+            message: `${borrowerName || 'Borrower'} has signed the term sheet for ${quote.propertyAddress || 'a quote'}.`,
+            link: `/quotes`,
+          });
+        }
+      } catch (notifErr: any) {
+        console.error(`[PandaDoc Poll] Notification error (no project):`, notifErr.message);
       }
     }
 

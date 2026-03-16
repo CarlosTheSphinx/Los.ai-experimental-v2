@@ -15,6 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Building2, Handshake, User, Check, Zap, Shield, Clock } from 'lucide-react';
 import { SiGoogle } from 'react-icons/si';
+import { formatPhoneNumber } from '@/lib/validation';
 
 const registerSchema = z.object({
   userType: z.enum(['broker', 'borrower', 'lender'], { required_error: 'Please select your account type' }),
@@ -22,7 +23,7 @@ const registerSchema = z.object({
   lastName: z.string().min(1, 'Last name is required'),
   email: z.string().email('Please enter a valid email address'),
   phone: z.string().optional(),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: z.string().min(12, 'Password must be at least 12 characters'),
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
@@ -109,7 +110,7 @@ export default function RegisterPage() {
         <div className="flex flex-col items-center justify-center h-full">
           <div className="flex items-center gap-0 mb-8">
             <span className="text-3xl font-bold text-white">Lendry.</span>
-            <span className="text-3xl font-bold text-blue-400">AI</span>
+            <span className="text-3xl font-bold text-amber-400">AI</span>
           </div>
           <h1 className="text-4xl font-bold tracking-tight text-center mb-4">Lending, Automated.</h1>
         </div>
@@ -289,6 +290,7 @@ export default function RegisterPage() {
                             data-testid="input-phone"
                             className="h-11"
                             {...field}
+                            onChange={(e) => field.onChange(formatPhoneNumber(e.target.value))}
                           />
                         </FormControl>
                         <FormMessage />
@@ -298,7 +300,7 @@ export default function RegisterPage() {
                   <div className="text-xs text-muted-foreground space-y-0.5 mb-4">
                     <p className="font-medium text-foreground/80">Password must contain:</p>
                     <ul className="list-disc list-inside space-y-0">
-                      <li>At least 8 characters</li>
+                      <li>At least 12 characters</li>
                       <li>One uppercase letter (A-Z)</li>
                       <li>One lowercase letter (a-z)</li>
                       <li>One number (0-9)</li>

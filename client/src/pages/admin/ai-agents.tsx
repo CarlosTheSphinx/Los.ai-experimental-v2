@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback, Fragment } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +53,9 @@ import {
   Paperclip,
   Info,
   RefreshCw,
+  Upload,
+  FileText,
+  X,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -650,7 +654,7 @@ function RunHistoryTable({
                     {run.userEmail || (run.triggerType ? run.triggerType : "-")}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    {format(new Date(run.startedAt), "MMM d, HH:mm")}
+                    {run.startedAt ? format(new Date(run.startedAt), "MMM d, HH:mm") : "—"}
                   </td>
                 </tr>
               ))}
@@ -1147,8 +1151,7 @@ function PipelineOrchestrationEditor({
   );
 }
 
-// Orchestration type constants
-type OrchestationType = "processor" | "email_doc_check";
+type OrchestationType = "processor" | "email_doc_check" | "credit_policy";
 
 const ORCHESTRATION_DESCRIPTIONS: Record<OrchestationType, { title: string; description: string }> = {
   processor: {
@@ -1158,6 +1161,10 @@ const ORCHESTRATION_DESCRIPTIONS: Record<OrchestationType, { title: string; desc
   email_doc_check: {
     title: "Email Doc Check Orchestration",
     description: "The Email Doc Check monitors your linked email threads for new attachments. Every hour (configurable), it scans for new documents, uses AI to classify them (pay stubs, tax returns, bank statements, etc.), and sends you a notification with the classification. Configure the classifier\u2019s AI prompt, polling interval, and review recent classifications below.",
+  },
+  credit_policy: {
+    title: "Credit Policy Extraction",
+    description: "The Credit Policy Extractor uses AI to analyze lending guideline documents and extract all specific, actionable underwriting rules. It identifies eligibility requirements, financial constraints, property rules, insurance requirements, and more across 16 categories. Configure the extraction prompt, model settings, and re-run extractions on cached documents below.",
   },
 };
 
@@ -1169,6 +1176,84 @@ interface EmailDocCheckSettings {
   intervalMinutes: number;
   lastRunAt: string | null;
   totalClassifications: number;
+}
+
+function CreditPolicyRulesTable({ rules }: { rules: any[] }) {
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+
+  return (
+    <div className="overflow-x-auto border rounded-lg">
+      <table className="w-full text-sm">
+        <thead className="bg-muted border-b">
+          <tr>
+            <th className="px-4 py-2 text-left font-medium">#</th>
+            <th className="px-4 py-2 text-left font-medium">Rule Title</th>
+            <th className="px-4 py-2 text-left font-medium">Category</th>
+            <th className="px-4 py-2 text-left font-medium">Doc Type</th>
+            <th className="px-4 py-2 text-left font-medium">Rule Type</th>
+            <th className="px-4 py-2 text-left font-medium">Confidence</th>
+            <th className="px-4 py-2 text-left font-medium">Source</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rules.map((rule: any, idx: number) => (
+            <Fragment key={idx}>
+              <tr
+                className="border-b hover:bg-muted/50 cursor-pointer"
+                onClick={() => setExpandedIdx(expandedIdx === idx ? null : idx)}
+              >
+                <td className="px-4 py-2 text-muted-foreground">{idx + 1}</td>
+                <td className="px-4 py-2 font-medium max-w-[200px] truncate">
+                  <div className="flex items-center gap-1.5">
+                    {rule.ruleTitle}
+                    {rule.clarificationNeeded && (
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    )}
+                  </div>
+                </td>
+                <td className="px-4 py-2">
+                  <Badge variant="outline" className="text-xs">{rule.category}</Badge>
+                </td>
+                <td className="px-4 py-2 text-muted-foreground text-xs">{rule.documentType}</td>
+                <td className="px-4 py-2">
+                  <Badge variant="outline" className="text-xs capitalize">{rule.ruleType?.replace(/_/g, " ")}</Badge>
+                </td>
+                <td className="px-4 py-2">
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-xs",
+                      rule.confidence === "high" && "bg-emerald-50 text-emerald-700 border-emerald-200",
+                      rule.confidence === "medium" && "bg-amber-50 text-amber-700 border-amber-200",
+                      rule.confidence === "low" && "bg-red-50 text-red-700 border-red-200"
+                    )}
+                  >
+                    {rule.confidence}
+                  </Badge>
+                </td>
+                <td className="px-4 py-2 text-muted-foreground text-xs max-w-[120px] truncate">
+                  {rule.sourceSection}
+                </td>
+              </tr>
+              {expandedIdx === idx && (
+                <tr className="border-b bg-muted/30">
+                  <td colSpan={7} className="px-6 py-3">
+                    <p className="text-sm text-foreground leading-relaxed">{rule.ruleDescription}</p>
+                    {rule.clarificationNeeded && (
+                      <div className="mt-2 flex items-center gap-1.5 text-xs text-amber-600">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        This rule may need clarification — contains subjective or ambiguous language
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 export default function AIAgentsPage() {
@@ -1270,6 +1355,234 @@ export default function AIAgentsPage() {
     },
   });
 
+  // ==================== CREDIT POLICY QUERIES ====================
+
+  const [cpPrompt, setCpPrompt] = useState("");
+  const [cpDefaultPrompt, setCpDefaultPrompt] = useState("");
+  const [cpSelectedSession, setCpSelectedSession] = useState("");
+  const [cpShowPrompt, setCpShowPrompt] = useState(true);
+  const [cpUploadFile, setCpUploadFile] = useState<File | null>(null);
+  const [cpExtractionTab, setCpExtractionTab] = useState<"upload" | "cached">("upload");
+  const [cpLatestResult, setCpLatestResult] = useState<any>(null);
+  const [cpChunkProgress, setCpChunkProgress] = useState<{ chunksCompleted: number; totalChunks: number; rulesFoundSoFar: number; partialRules: any[] } | null>(null);
+  const cpWsRef = useRef<WebSocket | null>(null);
+  const [cpModel, setCpModel] = useState("gpt-4o");
+  const [cpMaxTokens, setCpMaxTokens] = useState(16384);
+  const [cpTemperature, setCpTemperature] = useState(0);
+  const [cpTimeout, setCpTimeout] = useState(180);
+  const [cpDocLimit, setCpDocLimit] = useState(200000);
+  const [cpEditingSettings, setCpEditingSettings] = useState(false);
+
+  const { data: cpSettingsData } = useQuery({
+    queryKey: ["/api/debug/credit-extraction-settings"],
+    queryFn: async () => {
+      const res = await fetch("/api/debug/credit-extraction-settings");
+      if (!res.ok) throw new Error("Failed to load settings");
+      return res.json();
+    },
+    enabled: selectedOrchestration === "credit_policy",
+  });
+
+  useEffect(() => {
+    if (cpSettingsData?.settings) {
+      const s = cpSettingsData.settings;
+      setCpModel(s.model);
+      setCpMaxTokens(s.maxTokens);
+      setCpTemperature(s.temperature);
+      setCpTimeout(s.timeout);
+      setCpDocLimit(s.documentLimit);
+    }
+  }, [cpSettingsData]);
+
+  const defaultModelRegistry: Record<string, { maxCompletionTokens: number; description: string }> = {
+    'gpt-4o': { maxCompletionTokens: 16384, description: 'Best balance of speed, accuracy & cost' },
+    'gpt-4o-mini': { maxCompletionTokens: 16384, description: 'Fastest & cheapest — good for smaller docs' },
+    'gpt-4-turbo': { maxCompletionTokens: 4096, description: 'High accuracy, slower — best for complex policies' },
+    'gpt-4': { maxCompletionTokens: 8192, description: 'Original GPT-4 — reliable but slower' },
+    'gpt-3.5-turbo': { maxCompletionTokens: 4096, description: 'Legacy model — fast but less accurate' },
+  };
+
+  const cpModelRegistry = (cpSettingsData?.modelRegistry as typeof defaultModelRegistry) || defaultModelRegistry;
+  const cpCurrentModelMax = cpModelRegistry[cpModel]?.maxCompletionTokens ?? 16384;
+
+  const handleModelChange = (newModel: string) => {
+    setCpModel(newModel);
+    const newMax = cpModelRegistry[newModel]?.maxCompletionTokens ?? 16384;
+    if (cpMaxTokens > newMax) {
+      setCpMaxTokens(newMax);
+    }
+  };
+
+  const { mutate: saveCpSettings, isPending: cpSettingsSaving } = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/debug/credit-extraction-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: cpModel, maxTokens: cpMaxTokens, temperature: cpTemperature, timeout: cpTimeout, documentLimit: cpDocLimit }),
+      });
+      if (!res.ok) throw new Error("Failed to save settings");
+      return res.json();
+    },
+    onSuccess: () => {
+      setCpEditingSettings(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/debug/credit-extraction-settings"] });
+      toast({ title: "Saved", description: "Model settings updated successfully" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const { data: cpPromptData, isLoading: cpPromptLoading } = useQuery({
+    queryKey: ["/api/debug/credit-extraction-prompt"],
+    queryFn: async () => {
+      const res = await fetch("/api/debug/credit-extraction-prompt");
+      if (!res.ok) throw new Error("Failed to load prompt");
+      return res.json();
+    },
+    enabled: selectedOrchestration === "credit_policy",
+  });
+
+  useEffect(() => {
+    if (cpPromptData?.prompt && !cpPrompt) {
+      setCpPrompt(cpPromptData.prompt);
+      setCpDefaultPrompt(cpPromptData.defaultPrompt || cpPromptData.prompt);
+    }
+  }, [cpPromptData]);
+
+  const { data: cpSessions } = useQuery({
+    queryKey: ["/api/debug/credit-extraction-sessions"],
+    queryFn: async () => {
+      const res = await fetch("/api/debug/credit-extraction-sessions");
+      if (!res.ok) return { sessions: [] };
+      return res.json();
+    },
+    enabled: selectedOrchestration === "credit_policy",
+  });
+
+  useEffect(() => {
+    if (cpSessions?.sessions?.length > 0 && !cpSelectedSession) {
+      setCpSelectedSession(cpSessions.sessions[0].sessionId);
+    }
+  }, [cpSessions]);
+
+  useEffect(() => {
+    if (selectedOrchestration !== "credit_policy") return;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/orchestration`);
+    cpWsRef.current = ws;
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.type === 'orchestration_event') {
+          const data = message.data;
+          if (data.eventType === 'credit_extraction_progress' && data.metadata) {
+            setCpChunkProgress({
+              chunksCompleted: data.metadata.chunksCompleted,
+              totalChunks: data.metadata.totalChunks,
+              rulesFoundSoFar: data.metadata.rulesFoundSoFar,
+              partialRules: data.rules || [],
+            });
+          }
+        }
+      } catch {}
+    };
+    return () => { ws.close(); cpWsRef.current = null; };
+  }, [selectedOrchestration]);
+
+  const { mutate: saveCpPrompt, isPending: cpSaving } = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/debug/credit-extraction-prompt", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: cpPrompt }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to save prompt");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setCpDefaultPrompt(cpPrompt);
+      queryClient.invalidateQueries({ queryKey: ["/api/debug/credit-extraction-prompt"] });
+      toast({ title: "Saved", description: "Credit policy extraction prompt saved successfully" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const { mutate: runDirectExtraction, isPending: cpDirectExtracting } = useMutation({
+    mutationFn: async () => {
+      if (!cpUploadFile) throw new Error("No file selected");
+      setCpLatestResult(null);
+      setCpChunkProgress(null);
+      const reader = new FileReader();
+      const fileContent = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const base64 = (reader.result as string).split(",")[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(cpUploadFile);
+      });
+      const res = await fetch("/api/admin/credit-policies/extract-rules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileContent, fileName: cpUploadFile.name, customPrompt: cpPrompt }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        if (res.status === 409) {
+          throw new Error(err.error || "An extraction is already running. Please wait.");
+        }
+        throw new Error(err.error || "Extraction failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setCpLatestResult(data);
+      setCpChunkProgress(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/debug/credit-extraction-sessions"] });
+      toast({ title: "Extraction Complete", description: `${data.rules?.length || 0} rules extracted from ${cpUploadFile?.name}` });
+    },
+    onError: (err: any) => {
+      setCpChunkProgress(null);
+      toast({ title: "Extraction Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const { mutate: replayCreditPolicy, isPending: cpReplaying } = useMutation({
+    mutationFn: async () => {
+      setCpLatestResult(null);
+      const res = await fetch("/api/debug/replay-credit-extraction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ originalSessionId: cpSelectedSession, customPrompt: cpPrompt }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Extraction failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setCpLatestResult(data);
+      toast({
+        title: "Extraction Complete",
+        description: `Extracted ${data.rules?.length || 0} rules successfully`,
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Extraction Failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   // ==================== EMAIL DOC CHECK QUERIES ====================
 
   const { data: emailDocCheckSettings } = useQuery<EmailDocCheckSettings>({
@@ -1358,6 +1671,7 @@ export default function AIAgentsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="processor">Processor Orchestration</SelectItem>
+            <SelectItem value="credit_policy">Credit Policy Extraction</SelectItem>
             <SelectItem value="email_doc_check">Email Doc Check Orchestration</SelectItem>
           </SelectContent>
         </Select>
@@ -1510,6 +1824,434 @@ export default function AIAgentsPage() {
               </Card>
             </TabsContent>
           </Tabs>
+        </>
+      )}
+
+      {/* ==================== CREDIT POLICY EXTRACTION ==================== */}
+      {selectedOrchestration === "credit_policy" && (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Card className="lg:col-span-1">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Settings className="w-5 h-5" />
+                      Model Settings
+                    </CardTitle>
+                    <CardDescription>Extraction configuration</CardDescription>
+                  </div>
+                  {!cpEditingSettings ? (
+                    <Button variant="outline" size="sm" onClick={() => setCpEditingSettings(true)} data-testid="button-edit-model-settings">
+                      <Pencil className="w-3 h-3 mr-1" /> Edit
+                    </Button>
+                  ) : (
+                    <div className="flex gap-1">
+                      <Button variant="outline" size="sm" onClick={() => {
+                        if (cpSettingsData?.settings) {
+                          const s = cpSettingsData.settings;
+                          setCpModel(s.model); setCpMaxTokens(s.maxTokens); setCpTemperature(s.temperature); setCpTimeout(s.timeout); setCpDocLimit(s.documentLimit);
+                        }
+                        setCpEditingSettings(false);
+                      }} data-testid="button-cancel-model-settings">Cancel</Button>
+                      <Button size="sm" onClick={() => saveCpSettings()} disabled={cpSettingsSaving} data-testid="button-save-model-settings">
+                        {cpSettingsSaving ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Save className="w-3 h-3 mr-1" />}
+                        Save
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {cpEditingSettings ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1">Model</label>
+                      <div className="space-y-1.5" data-testid="select-model">
+                        {Object.entries(cpModelRegistry).map(([modelId, info]) => (
+                          <label
+                            key={modelId}
+                            className={`flex items-start gap-2 p-2 rounded-md border cursor-pointer transition-colors ${
+                              cpModel === modelId ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/30'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="cp-model"
+                              value={modelId}
+                              checked={cpModel === modelId}
+                              onChange={() => handleModelChange(modelId)}
+                              className="mt-0.5"
+                            />
+                            <div className="min-w-0">
+                              <p className="font-mono text-sm font-medium">{modelId}</p>
+                              <p className="text-[11px] text-muted-foreground">{info.description}</p>
+                              <p className="text-[10px] text-muted-foreground/70">Max output: {info.maxCompletionTokens.toLocaleString()} tokens</p>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1">Max Tokens (1,024 – {cpCurrentModelMax.toLocaleString()})</label>
+                      <input
+                        type="number"
+                        className="w-full rounded-md border bg-background px-3 py-2 text-sm font-mono"
+                        value={cpMaxTokens}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value) || cpCurrentModelMax;
+                          setCpMaxTokens(Math.min(val, cpCurrentModelMax));
+                        }}
+                        min={1024} max={cpCurrentModelMax}
+                        data-testid="input-max-tokens"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1">Temperature (0 – 2)</label>
+                      <input
+                        type="number"
+                        className="w-full rounded-md border bg-background px-3 py-2 text-sm font-mono"
+                        value={cpTemperature}
+                        onChange={(e) => setCpTemperature(parseFloat(e.target.value) || 0)}
+                        min={0} max={2} step={0.1}
+                        data-testid="input-temperature"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1">Timeout (30 – 600 seconds)</label>
+                      <input
+                        type="number"
+                        className="w-full rounded-md border bg-background px-3 py-2 text-sm font-mono"
+                        value={cpTimeout}
+                        onChange={(e) => setCpTimeout(parseInt(e.target.value) || 180)}
+                        min={30} max={600}
+                        data-testid="input-timeout"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1">Document Limit (10,000 – 500,000 chars)</label>
+                      <input
+                        type="number"
+                        className="w-full rounded-md border bg-background px-3 py-2 text-sm font-mono"
+                        value={cpDocLimit}
+                        onChange={(e) => setCpDocLimit(parseInt(e.target.value) || 200000)}
+                        min={10000} max={500000}
+                        data-testid="input-doc-limit"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <p className="text-xs text-muted-foreground">Model</p>
+                      <p className="font-mono text-sm font-medium" data-testid="text-model">{cpModel}</p>
+                      <p className="text-[11px] text-muted-foreground">{cpModelRegistry[cpModel]?.description}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Max Tokens</p>
+                      <p className="font-mono text-sm font-medium" data-testid="text-max-tokens">{cpMaxTokens.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Temperature</p>
+                      <p className="font-mono text-sm font-medium" data-testid="text-temperature">{cpTemperature}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Timeout</p>
+                      <p className="font-mono text-sm font-medium" data-testid="text-timeout">{cpTimeout}s</p>
+                    </div>
+                  </div>
+                )}
+                <div className="pt-3 border-t">
+                  <p className="text-xs text-muted-foreground mb-1">Categories Covered</p>
+                  <p className="text-sm font-medium">16 extraction categories</p>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {["Eligibility", "Financial", "Property", "Insurance", "Title", "Flood", "Escrow", "Location"].map(cat => (
+                      <Badge key={cat} variant="outline" className="text-[10px] py-0">{cat}</Badge>
+                    ))}
+                    <Badge variant="outline" className="text-[10px] py-0">+8 more</Badge>
+                  </div>
+                </div>
+                {!cpEditingSettings && (
+                  <div className="pt-3 border-t">
+                    <p className="text-xs text-muted-foreground mb-1">Document Limit</p>
+                    <p className="text-sm font-medium" data-testid="text-doc-limit">{cpDocLimit.toLocaleString()} characters</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileSearch className="w-5 h-5" />
+                      Run Extraction
+                    </CardTitle>
+                    <CardDescription>Upload a document or re-run against a cached one</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Tabs value={cpExtractionTab} onValueChange={(v) => setCpExtractionTab(v as any)}>
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="upload" className="flex items-center gap-1.5" data-testid="cp-upload-tab">
+                      <Upload className="w-3.5 h-3.5" />
+                      Upload Document
+                    </TabsTrigger>
+                    <TabsTrigger value="cached" className="flex items-center gap-1.5" data-testid="cp-cached-tab">
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Cached ({cpSessions?.sessions?.length || 0})
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="upload" className="space-y-4 mt-4">
+                    {cpUploadFile ? (
+                      <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30">
+                        <FileText className="w-8 h-8 text-blue-500 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{cpUploadFile.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {(cpUploadFile.size / 1024).toFixed(1)} KB
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="shrink-0 h-8 w-8"
+                          onClick={() => setCpUploadFile(null)}
+                          data-testid="cp-remove-file-btn"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <label
+                        className="flex flex-col items-center justify-center gap-2 p-8 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                        data-testid="cp-upload-dropzone"
+                      >
+                        <Upload className="w-8 h-8 text-muted-foreground" />
+                        <div className="text-center">
+                          <p className="text-sm font-medium">Upload a credit policy document</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            PDF, Excel (.xlsx/.xls), or plain text — up to 200K characters
+                          </p>
+                        </div>
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept=".pdf,.xlsx,.xls,.txt,.csv,.doc,.docx"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) setCpUploadFile(file);
+                            e.target.value = "";
+                          }}
+                          data-testid="cp-file-input"
+                        />
+                      </label>
+                    )}
+                    <Button
+                      onClick={() => runDirectExtraction()}
+                      disabled={cpDirectExtracting || !cpUploadFile || !cpPrompt.trim()}
+                      className="w-full"
+                      data-testid="cp-run-extraction-btn"
+                    >
+                      {cpDirectExtracting ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          {cpChunkProgress
+                            ? `Processing chunk ${cpChunkProgress.chunksCompleted} of ${cpChunkProgress.totalChunks} — ${cpChunkProgress.rulesFoundSoFar} rules found`
+                            : "Parsing document..."}
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-4 h-4 mr-2" />
+                          Run Extraction
+                        </>
+                      )}
+                    </Button>
+                    {cpDirectExtracting && cpChunkProgress && (
+                      <div className="space-y-1">
+                        <Progress value={Math.round((cpChunkProgress.chunksCompleted / cpChunkProgress.totalChunks) * 100)} className="h-2" />
+                        <p className="text-xs text-muted-foreground text-center">
+                          Chunk {cpChunkProgress.chunksCompleted}/{cpChunkProgress.totalChunks} complete — {cpChunkProgress.rulesFoundSoFar} rules extracted so far
+                        </p>
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="cached" className="space-y-4 mt-4">
+                    {cpSessions?.sessions?.length > 0 ? (
+                      <>
+                        <div className="space-y-2">
+                          <Label>Cached Document</Label>
+                          <Select value={cpSelectedSession} onValueChange={setCpSelectedSession}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a cached document..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {cpSessions.sessions.map((s: any) => (
+                                <SelectItem key={s.sessionId} value={s.sessionId}>
+                                  {s.fileName || "Untitled"} ({Math.round(s.textLength / 1000)}K chars) — {new Date(s.cachedAt).toLocaleString()}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            Documents are cached for 30 minutes after extraction. Previous uploads appear here automatically.
+                          </p>
+                        </div>
+                        <Button
+                          onClick={() => replayCreditPolicy()}
+                          disabled={cpReplaying || !cpPrompt.trim() || !cpSelectedSession}
+                          className="w-full"
+                          data-testid="credit-policy-rerun-btn"
+                        >
+                          {cpReplaying ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Re-running extraction...
+                            </>
+                          ) : (
+                            <>
+                              <Play className="w-4 h-4 mr-2" />
+                              Re-run with Current Prompt
+                            </>
+                          )}
+                        </Button>
+                      </>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <FileSearch className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                        <p className="font-medium">No cached documents</p>
+                        <p className="text-sm mt-1">
+                          Upload and run an extraction first. Documents are cached for 30 minutes for re-run testing.
+                        </p>
+                      </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>System Prompt</CardTitle>
+                  <CardDescription>
+                    The exhaustive 16-category extraction prompt used across all credit policy extraction endpoints
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  {cpDefaultPrompt && cpPrompt !== cpDefaultPrompt && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCpPrompt(cpDefaultPrompt)}
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                      Reset
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    onClick={() => saveCpPrompt()}
+                    disabled={cpSaving || !cpPrompt.trim()}
+                    data-testid="credit-policy-save-prompt-btn"
+                  >
+                    {cpSaving ? (
+                      <><Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> Saving...</>
+                    ) : (
+                      <><Save className="w-3.5 h-3.5 mr-1" /> Save</>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCpShowPrompt(!cpShowPrompt)}
+                  >
+                    {cpShowPrompt ? (
+                      <><ChevronUp className="w-3.5 h-3.5 mr-1" /> Hide</>
+                    ) : (
+                      <><ChevronDown className="w-3.5 h-3.5 mr-1" /> Show</>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            {cpShowPrompt && (
+              <CardContent>
+                {cpPromptLoading ? (
+                  <Skeleton className="h-96 w-full" />
+                ) : (
+                  <Textarea
+                    value={cpPrompt}
+                    onChange={(e) => setCpPrompt(e.target.value)}
+                    className="font-mono text-sm min-h-[500px] bg-slate-950 text-slate-50 border-slate-700"
+                    placeholder="Loading extraction prompt..."
+                    data-testid="credit-policy-prompt-editor"
+                  />
+                )}
+              </CardContent>
+            )}
+          </Card>
+
+          {cpDirectExtracting && cpChunkProgress && cpChunkProgress.partialRules.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Loader2 className="w-5 h-5 text-amber-500 animate-spin" />
+                  Live Extraction — {cpChunkProgress.partialRules.length} rules so far
+                  <Badge variant="outline" className="ml-2 text-xs">
+                    Chunk {cpChunkProgress.chunksCompleted}/{cpChunkProgress.totalChunks}
+                  </Badge>
+                </CardTitle>
+                <CardDescription>
+                  Rules are appearing as each document chunk is processed
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <CreditPolicyRulesTable rules={cpChunkProgress.partialRules.map((r: any) => ({
+                  ruleTitle: r.rule, category: r.category, confidence: r.confidence > 0.8 ? 'high' : r.confidence > 0.6 ? 'medium' : 'low',
+                  ruleDescription: r.reasoning, sourceSection: r.sourceSection, ruleType: r.ruleType,
+                  clarificationNeeded: r.clarificationNeeded, documentType: '',
+                }))} />
+              </CardContent>
+            </Card>
+          )}
+
+          {cpLatestResult?.rules && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                  Extraction Results ({cpLatestResult.rules.length} rules)
+                </CardTitle>
+                <CardDescription>
+                  Rules extracted from the last extraction run
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <CreditPolicyRulesTable rules={cpLatestResult.rules} />
+              </CardContent>
+            </Card>
+          )}
+
+          {cpLatestResult?.error && (
+            <Card className="border-red-200">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <XCircle className="w-5 h-5 text-red-600" />
+                  <div>
+                    <p className="font-medium text-red-900">Extraction Failed</p>
+                    <p className="text-sm text-red-700 mt-1">{cpLatestResult.error}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
 

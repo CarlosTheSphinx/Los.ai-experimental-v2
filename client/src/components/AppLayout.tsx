@@ -1,45 +1,35 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import {
-  Calculator,
   FileText,
-  ClipboardList,
   FolderKanban,
+  FolderOpen,
   LogOut,
   LayoutDashboard,
   Users,
   Settings,
   Settings2,
   Shield,
-  Handshake,
-  MessageSquare,
   BookOpen,
-  CalendarDays,
   Building2,
   DollarSign,
   Sparkles,
-  ClipboardEdit,
   Search,
-  Zap,
-  Send,
-
   Target,
-  BotMessageSquare,
+  Gauge,
   Pin,
-  PinOff,
   PanelLeftOpen,
   PanelLeftClose,
   Eye,
   X,
   Globe,
-
-  ShieldCheck,
-  Mail,
   Plug,
-  Cpu,
-  Database,
   GraduationCap,
   Inbox,
+  Blocks,
+  MessageSquare,
+  BotMessageSquare,
+  Home,
 } from "lucide-react";
 import {
   Select,
@@ -66,13 +56,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
+import { useFeatureFlags } from "@/hooks/use-feature-flags";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useBranding } from "@/hooks/use-branding";
 import { InboxBadge } from "@/components/InboxBadge";
 import { NotificationBell } from "@/components/NotificationBell";
 import { CommandPalette } from "@/components/CommandPalette";
 import { ProcessorAssistant } from "@/components/admin/ProcessorAssistant";
+import { AIOrchestrationDebugger } from "@/components/AIOrchestrationDebugger/DebuggerSidebar";
 import { TrainingChecklist } from "@/components/TrainingChecklist";
+import MessagesPage from "@/pages/messages";
 import type { PermissionKey } from "@shared/schema";
 
 interface AppLayoutProps {
@@ -91,47 +84,73 @@ interface NavItem {
   superAdminOnly?: boolean;
 }
 
+function NavIcon({ icon: IconComponent, isActive }: { icon: any; isActive: boolean }) {
+  const { open } = useSidebar();
+  const collapsed = !open;
+  const size = collapsed ? 18 : 14;
+  const inactiveColor = collapsed ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.3)';
+  return (
+    <span className="flex shrink-0 items-center justify-center" style={{ width: size, height: size }}>
+      <IconComponent size={size} color={isActive ? '#C9A84C' : inactiveColor} />
+    </span>
+  );
+}
+
 const brokerNavItems: NavItem[] = [
+  { href: "/", label: "New Quote", icon: Sparkles, shortcut: undefined },
   { href: "/quotes", label: "Quotes", icon: FileText, shortcut: undefined },
   { href: "/deals", label: "My Loans", icon: FolderKanban, shortcut: undefined },
   { href: "/commissions", label: "My Commissions", icon: DollarSign, shortcut: undefined },
-  { href: "/commercial/dashboard", label: "Commercial", icon: Building2, shortcut: undefined },
   { href: "/broker/contacts", label: "Contacts", icon: Users, shortcut: undefined },
-  { href: "/broker/outreach", label: "Smart Prospect", icon: Target, shortcut: undefined },
-  { href: "/inbox", label: "Inbox", icon: Inbox, showBadge: true, shortcut: undefined },
+  { href: "/inbox", label: "Inbox", icon: Inbox, shortcut: undefined },
   { href: "/resources", label: "Resources", icon: BookOpen, shortcut: undefined },
-  { href: "/admin/settings", label: "Settings", icon: Settings, requiredPermission: "settings.view", shortcut: undefined },
+  { href: "/settings", label: "Settings", icon: Settings, shortcut: undefined },
 ];
 
 const borrowerNavItems: NavItem[] = [
   { href: "/", label: "My Loans", icon: FolderKanban },
   { href: "/quotes", label: "Quotes", icon: FileText },
-  { href: "/inbox", label: "Inbox", icon: Inbox, showBadge: true },
+  { href: "/inbox", label: "Inbox", icon: Inbox },
+  { href: "/documents", label: "Documents", icon: FolderOpen },
+  { href: "/settings", label: "Settings", icon: Settings },
   { href: "/resources", label: "Resources", icon: BookOpen },
 ];
 
 // Lender admin items — visible to admin, staff, processor roles
 const adminNavItems: NavItem[] = [
-  { href: "/quotes", label: "Quotes", icon: FileText },
-  { href: "/admin/credit-policies", label: "Credit Policies", icon: ShieldCheck, requiredPermission: "programs.view" },
-  { href: "/admin/programs", label: "Programs", icon: Settings2, requiredPermission: "programs.view" },
+  { href: "/admin/overview", label: "Dashboard", icon: Gauge },
   { href: "/admin", label: "Pipeline", icon: LayoutDashboard, shortcut: "⌘1" },
-  { href: "/admin/digests", label: "Communications", icon: CalendarDays, requiredPermission: "digests.view" },
-  { href: "/admin/commercial-submissions", label: "Commercial Deals", icon: Building2, requiredPermission: "commercial.view" },
-  { href: "/admin/partners", label: "Partners", icon: Handshake, requiredPermission: "partners.view" },
-  { href: "/inbox", label: "Inbox", icon: Inbox, showBadge: true, requiredPermission: "messages.view" },
+  { href: "/admin/programs", label: "Programs", icon: Settings2, requiredPermission: "programs.view" },
+  { href: "/quotes", label: "Quotes", icon: FileText },
+  { href: "/inbox", label: "Messages", icon: Inbox, requiredPermission: "messages.view" },
   { href: "/admin/users", label: "Users", icon: Users, requiredPermission: "users.view", shortcut: "⌘2" },
-  { href: "/admin/team-permissions", label: "Permissions", icon: Shield, requiredPermission: "users.manage" },
-  { href: "/admin/commercial/config", label: "Commercial Config", icon: ClipboardEdit, requiredPermission: "commercial.manage" },
-  { href: "/admin/settings", label: "Settings", icon: Settings, requiredPermission: "settings.view" },
   { href: "/admin/onboarding", label: "Onboarding", icon: BookOpen, requiredPermission: "onboarding.view" },
+  { href: "/admin/settings", label: "Settings", icon: Settings, requiredPermission: "settings.view" },
+  { href: "/admin/integrations", label: "Integrations", icon: Blocks, requiredPermission: "settings.view" },
 ];
 
-// Super admin items — only visible to super_admin role (Lendry platform team)
-const superAdminNavItems: NavItem[] = [
+const adminNavItemsV2: NavItem[] = [
+  { href: "/admin/overview", label: "Dashboard", icon: Gauge },
+  { href: "/admin", label: "Pipeline", icon: LayoutDashboard, shortcut: "⌘1" },
+  { href: "/admin/programs", label: "Programs", icon: Settings2, requiredPermission: "programs.view" },
+  { href: "/quotes", label: "Quotes", icon: FileText },
+  { href: "/inbox", label: "Messages", icon: Inbox, requiredPermission: "messages.view" },
+  { href: "/admin/users", label: "Users", icon: Users, requiredPermission: "users.view", shortcut: "⌘2" },
+  { href: "/admin/onboarding", label: "Onboarding", icon: BookOpen, requiredPermission: "onboarding.view" },
+  { href: "/admin/settings", label: "Settings", icon: Settings, requiredPermission: "settings.view" },
+  { href: "/admin/integrations", label: "Integrations", icon: Blocks, requiredPermission: "settings.view" },
+];
+
+const borrowerViewNavItems: NavItem[] = [
+  { href: "/borrower-preview", label: "Borrower Dashboard", icon: Home },
+];
+
+// Lendry admin items — only visible to super_admin role (Lendry platform team)
+const lendryAdminNavItems: NavItem[] = [
   { href: "/admin/platform", label: "Platform Overview", icon: Globe },
   { href: "/admin/ai-agents", label: "AI Orchestration", icon: Sparkles },
-  { href: "/admin/integrations", label: "Integrations", icon: Plug },
+  { href: "/admin/platform-integrations", label: "Platform Integrations", icon: Plug },
+  { href: "/admin/users", label: "Users & Permissions", icon: Users },
   { href: "/admin/onboarding-config", label: "Broker/Borrower Links", icon: GraduationCap },
 ];
 
@@ -149,12 +168,20 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
   const sidebarPinned = sidebarPinnedProp ?? false;
   const setSidebarPinned = setSidebarPinnedProp ?? (() => {});
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [messagesOpen, setMessagesOpen] = useState(false);
   const [sidebarHovered, setSidebarHovered] = useState(false);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setOpen(sidebarPinned);
   }, [sidebarPinned, setOpen]);
+
+  useEffect(() => {
+    if (!messagesOpen) return;
+    const handleEsc = (e: KeyboardEvent) => { if (e.key === "Escape") setMessagesOpen(false); };
+    document.addEventListener("keydown", handleEsc);
+    return () => document.removeEventListener("keydown", handleEsc);
+  }, [messagesOpen]);
 
   const handleSidebarMouseEnter = () => {
     if (isMobile || sidebarPinned) return;
@@ -192,21 +219,26 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
     localStorage.setItem(VIEW_AS_STORAGE_KEY, viewAsMode);
   }, [viewAsMode]);
 
-  const isAdmin = user?.role && ['admin', 'staff', 'super_admin', 'processor'].includes(user.role);
-  const isBorrower = user?.userType === 'borrower';
+  const isAdmin = user?.role && ['admin', 'staff', 'super_admin', 'lender', 'processor'].includes(user.role);
+  const isBorrower = user?.role === 'borrower';
 
-  const isPreviewingOtherRole = isSuperAdmin && viewAsMode !== "super_admin";
-  const effectiveViewAsBorrower = isSuperAdmin && viewAsMode === "borrower";
-  const effectiveViewAsLender = isSuperAdmin && viewAsMode === "lender";
+  const userIsSuperAdmin = isSuperAdmin || user?.role === 'super_admin';
+
+  const isPreviewingOtherRole = userIsSuperAdmin && viewAsMode !== "super_admin";
+  const effectiveViewAsBorrower = userIsSuperAdmin && viewAsMode === "borrower";
+  const effectiveViewAsLender = userIsSuperAdmin && viewAsMode === "lender";
 
   const navItems = (effectiveViewAsBorrower || isBorrower) ? borrowerNavItems : brokerNavItems;
 
   const showAdminSection = isAdmin && !effectiveViewAsBorrower && !effectiveViewAsLender;
 
-  const filteredAdminItems = adminNavItems.filter(item => {
-    if (item.superAdminOnly && !isSuperAdmin) return false;
+  const { isEnabled: isFlagEnabled } = useFeatureFlags();
+  const useV2Nav = isFlagEnabled("phase1.sidebar");
+
+  const filteredAdminItems = (useV2Nav ? adminNavItemsV2 : adminNavItems).filter(item => {
+    if (item.superAdminOnly && !userIsSuperAdmin) return false;
     if (!item.requiredPermission) return true;
-    if (isSuperAdmin) return true;
+    if (userIsSuperAdmin) return true;
     return hasPermission(item.requiredPermission);
   });
 
@@ -257,12 +289,12 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
         <SidebarHeader className="p-3 border-b border-sidebar-border space-y-3">
           <div className="flex items-center justify-between gap-1">
             <div className="flex flex-col items-start gap-1 group-data-[collapsible=icon]:hidden">
-              <div className="flex items-center gap-0">
-                <span className="text-2xl font-bold text-white">Lendry.</span>
-                <span className="text-2xl font-bold text-primary">AI</span>
+              <div className="flex items-baseline gap-1">
+                <span className="text-[24px] font-display font-bold text-white tracking-[0.25em]">LENDRY</span>
+                <span className="text-[14px] font-display font-bold text-primary tracking-[0.15em]">AI</span>
               </div>
-              <span className="text-[13px] text-muted-foreground font-medium">
-                Loan Automation System
+              <span className="text-[16px] text-muted-foreground font-medium">
+                Lending Intelligence
               </span>
             </div>
             <div className="hidden group-data-[collapsible=icon]:flex w-full items-center justify-center">
@@ -307,10 +339,10 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
             <Search className="h-5 w-5" />
           </Button>
         </SidebarHeader>
-        <SidebarContent>
+        <SidebarContent className="font-ui font-normal">
           <SidebarGroup>
-            <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/60 px-0 pb-2">
-              {(effectiveViewAsBorrower || isBorrower) ? 'My Loans' : 'Pipeline'}
+            <SidebarGroupLabel className="text-[12px] uppercase tracking-[0.15em] text-muted-foreground/60 px-0 pb-2">
+              {(effectiveViewAsBorrower || isBorrower) ? 'My Loans' : 'Broker View'}
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
@@ -332,13 +364,13 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
                           data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                           onClick={handleNavClick}
                         >
-                          <Icon className="h-5 w-5 shrink-0" />
-                          <span className="flex items-center gap-1 flex-1">
+                          <NavIcon icon={Icon} isActive={isActive} />
+                          <span className="flex items-center gap-1 flex-1 text-[15px] group-data-[collapsible=icon]:hidden">
                             {item.label}
                             {'showBadge' in item && item.showBadge && <InboxBadge />}
                           </span>
                           {item.shortcut && (
-                            <span className="text-[10px] text-muted-foreground/50 group-hover:text-muted-foreground/70 transition-colors ml-2 hidden group-hover:inline">
+                            <span className="text-[12px] text-muted-foreground/50 group-hover:text-muted-foreground/70 transition-colors ml-2 hidden group-hover:inline group-data-[collapsible=icon]:!hidden">
                               {item.shortcut}
                             </span>
                           )}
@@ -353,8 +385,8 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
           
           {showAdminSection && (
             <SidebarGroup className="mt-4 pt-4 border-t border-sidebar-border">
-              <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/60 px-0 pb-2">
-                Administration
+              <SidebarGroupLabel className="text-[12px] uppercase tracking-[0.15em] text-muted-foreground/60 px-0 pb-2">
+                Lender View
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
@@ -376,13 +408,13 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
                             data-testid={`nav-admin-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                             onClick={handleNavClick}
                           >
-                            <Icon className="h-5 w-5 shrink-0" />
-                            <span className="flex items-center gap-1 flex-1">
+                            <NavIcon icon={Icon} isActive={isActive} />
+                            <span className="flex items-center gap-1 flex-1 text-[15px] group-data-[collapsible=icon]:hidden">
                               {item.label}
                               {'showBadge' in item && item.showBadge && <InboxBadge />}
                             </span>
                             {item.shortcut && (
-                              <span className="text-[10px] text-muted-foreground/50 group-hover:text-muted-foreground/70 transition-colors ml-2 hidden group-hover:inline">
+                              <span className="text-[12px] text-muted-foreground/50 group-hover:text-muted-foreground/70 transition-colors ml-2 hidden group-hover:inline group-data-[collapsible=icon]:!hidden">
                                 {item.shortcut}
                               </span>
                             )}
@@ -396,15 +428,54 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
             </SidebarGroup>
           )}
 
-          {/* Super Admin section — only visible to Lendry platform team */}
-          {isSuperAdmin && !effectiveViewAsBorrower && !effectiveViewAsLender && (
+          {showAdminSection && (
             <SidebarGroup className="mt-4 pt-4 border-t border-sidebar-border">
-              <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/60 px-0 pb-2">
-                Super Admin (Lendry Only)
+              <SidebarGroupLabel className="text-[12px] uppercase tracking-[0.15em] text-muted-foreground/60 px-0 pb-2">
+                Borrower View
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {superAdminNavItems.map((item) => {
+                  {borrowerViewNavItems.map((item) => {
+                    const isActive = location === item.href ||
+                      (item.href !== "/" && location.startsWith(item.href));
+                    const Icon = item.icon;
+
+                    return (
+                      <SidebarMenuItem key={item.href} className="group relative">
+                        <SidebarMenuButton
+                          asChild
+                          isActive={isActive}
+                          tooltip={item.label}
+                          className={isActive ? "border-l-2 border-primary bg-sidebar-accent" : ""}
+                        >
+                          <Link
+                            href={item.href}
+                            data-testid={`nav-borrower-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+                            onClick={handleNavClick}
+                          >
+                            <NavIcon icon={Icon} isActive={isActive} />
+                            <span className="flex items-center gap-1 flex-1 text-[15px] group-data-[collapsible=icon]:hidden">
+                              {item.label}
+                            </span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
+
+          {/* Lendry Admin section — only visible to super_admin / Lendry platform team */}
+          {userIsSuperAdmin && !effectiveViewAsBorrower && (
+            <SidebarGroup className="mt-4 pt-4 border-t border-sidebar-border">
+              <SidebarGroupLabel className="text-[12px] uppercase tracking-[0.15em] text-muted-foreground/60 px-0 pb-2">
+                Lendry Admin View
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {lendryAdminNavItems.map((item) => {
                     const isActive = location === item.href ||
                       (item.href !== "/admin" && location.startsWith(item.href));
                     const Icon = item.icon;
@@ -422,8 +493,8 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
                             data-testid={`nav-super-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                             onClick={handleNavClick}
                           >
-                            <Icon className="h-5 w-5 shrink-0" />
-                            <span className="flex items-center gap-1 flex-1">
+                            <NavIcon icon={Icon} isActive={isActive} />
+                            <span className="flex items-center gap-1 flex-1 text-[15px] group-data-[collapsible=icon]:hidden">
                               {item.label}
                             </span>
                           </Link>
@@ -438,11 +509,11 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border p-2">
           <div className="flex flex-col gap-2">
-            {isSuperAdmin && (
+            {userIsSuperAdmin && (
               <div className="px-2 py-1 group-data-[collapsible=icon]:hidden">
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <Eye className="h-3 w-3 text-[hsl(212,67%,51%)]" />
-                  <span className="text-[10px] uppercase tracking-wider font-medium text-[hsl(212,67%,51%)]">View As</span>
+                  <span className="text-[12px] uppercase tracking-wider font-medium text-[hsl(212,67%,51%)]">View As</span>
                 </div>
                 <Select
                   value={viewAsMode}
@@ -513,25 +584,42 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
             </Button>
           </div>
         )}
-        <div className="flex items-center justify-end gap-1 px-3 py-1.5 border-b shrink-0">
-          <Link href="/inbox">
-            <Button size="icon" className="relative h-10 w-10 rounded-full bg-primary hover:bg-primary/90 text-white" data-testid="button-header-messages">
-              <MessageSquare className="!h-6 !w-6" />
-              <InboxBadge />
-            </Button>
-          </Link>
+        <div className="flex items-center justify-end gap-2 px-4 py-2 border-b shrink-0">
+          <Button size="icon" className="relative h-7 w-7 rounded-full bg-primary hover:bg-primary/90 text-white" data-testid="button-header-messages" onClick={() => setMessagesOpen(!messagesOpen)}>
+            <MessageSquare className="!h-3.5 !w-3.5" />
+            <InboxBadge />
+          </Button>
           <NotificationBell />
         </div>
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto font-ui font-normal">
           {children}
         </main>
       </div>
 
       <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} />
 
+      {messagesOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" data-testid="messages-modal-overlay">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setMessagesOpen(false)} />
+          <div className="relative z-10 bg-card rounded-xl shadow-2xl w-full max-w-6xl max-h-[80vh] overflow-hidden flex flex-col" data-testid="messages-modal">
+            <div className="flex items-center justify-between px-5 py-3 border-b shrink-0">
+              <h2 className="text-lg font-semibold">Messages</h2>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setMessagesOpen(false)} data-testid="button-close-messages-modal">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-auto">
+              <MessagesPage />
+            </div>
+          </div>
+        </div>
+      )}
+
       {isAdmin && !isPreviewingOtherRole && <ProcessorAssistant isOpen={assistantOpen} onOpenChange={setAssistantOpen} />}
 
       {isAdmin && !isPreviewingOtherRole && <TrainingChecklist />}
+
+      {userIsSuperAdmin && !isPreviewingOtherRole && <AIOrchestrationDebugger />}
 
       {isAdmin && !assistantOpen && !isPreviewingOtherRole && (
         <button
@@ -547,22 +635,11 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
   );
 }
 
-const SIDEBAR_PINNED_KEY = "lendry_sidebar_pinned";
-
 export function AppLayout({ children }: AppLayoutProps) {
-  const [pinned, setPinned] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem(SIDEBAR_PINNED_KEY) === "true";
-    }
-    return false;
-  });
-
-  useEffect(() => {
-    localStorage.setItem(SIDEBAR_PINNED_KEY, String(pinned));
-  }, [pinned]);
+  const [pinned, setPinned] = useState(true);
 
   const style = {
-    "--sidebar-width": "17rem",
+    "--sidebar-width": "12.8rem",
     "--sidebar-width-icon": "2.75rem",
   };
 

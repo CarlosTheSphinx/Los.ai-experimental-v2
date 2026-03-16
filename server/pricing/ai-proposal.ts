@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { z } from "zod";
 import { pricingRulesSchema } from "@shared/schema";
+import { OrchestrationTracer } from "../services/orchestrationTracing";
 
 let openai: OpenAI | null = null;
 
@@ -148,9 +149,73 @@ Format your response as:
       return { success: false, error: "No response from AI" };
     }
 
+    const creditSessionId = OrchestrationTracer.hasSubscribers() ? OrchestrationTracer.startSession() : '';
+
+    if (creditSessionId) {
+      OrchestrationTracer.emit({
+        eventType: 'agent_processing',
+        agentName: 'creditExtractor',
+        agentIndex: 0,
+        timestamp: new Date().toISOString(),
+        sessionId: creditSessionId,
+        metadata: { model: 'gpt-5.2', temperature: 0.2 },
+      });
+    }
+
     const parsed = JSON.parse(content);
+
+    if (creditSessionId && parsed.ruleset) {
+      const categories = ['adjusters', 'leverageCaps', 'eligibilityRules', 'overlays'];
+      let ruleCount = 0;
+      const totalEstimate = categories.reduce((sum, cat) => sum + (Array.isArray(parsed.ruleset[cat]) ? parsed.ruleset[cat].length : 0), 0) + Object.keys(parsed.ruleset.baseRates || {}).length;
+
+      for (const [key, val] of Object.entries(parsed.ruleset.baseRates || {})) {
+        ruleCount++;
+        OrchestrationTracer.emit({
+          eventType: 'credit_rule_extracted',
+          agentName: 'creditExtractor',
+          agentIndex: 0,
+          timestamp: new Date().toISOString(),
+          sessionId: creditSessionId,
+          rules: [{
+            id: `base_rate_${key}`,
+            rule: `Base rate for ${key}: ${val}%`,
+            category: 'base_rates',
+            confidence: 0.95,
+            reasoning: 'Extracted from program guidelines',
+          }],
+          progress: { current: ruleCount, total: totalEstimate, percentage: (ruleCount / totalEstimate) * 100 },
+        });
+      }
+
+      for (const cat of categories) {
+        if (Array.isArray(parsed.ruleset[cat])) {
+          for (const item of parsed.ruleset[cat]) {
+            ruleCount++;
+            OrchestrationTracer.emit({
+              eventType: 'credit_rule_extracted',
+              agentName: 'creditExtractor',
+              agentIndex: 0,
+              timestamp: new Date().toISOString(),
+              sessionId: creditSessionId,
+              rules: [{
+                id: item.id || `${cat}_${ruleCount}`,
+                rule: item.label || JSON.stringify(item),
+                category: cat,
+                confidence: 0.85,
+                reasoning: 'AI-extracted from guideline text',
+              }],
+              progress: { current: ruleCount, total: totalEstimate, percentage: (ruleCount / totalEstimate) * 100 },
+            });
+          }
+        }
+      }
+    }
+
+    if (creditSessionId) {
+      OrchestrationTracer.endSession(creditSessionId);
+    }
     
-    // Validate the ruleset against our schema
     const rulesetResult = pricingRulesSchema.safeParse(parsed.ruleset);
     
     if (!rulesetResult.success) {

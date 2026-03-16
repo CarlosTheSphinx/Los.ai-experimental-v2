@@ -1,0 +1,60 @@
+{
+  "rulesExtracted": 4,
+  "categories": [
+    "Appraisals"
+  ],
+  "rules": [
+    {
+      "ruleTitle": "Appraisal Review - Requirement",
+      "category": "Appraisals",
+      "subcategory": "",
+      "ruleDescription": "An appraisal review product is required to support the appraised value for the transaction unless a second appraisal is obtained.",
+      "confidence": "high",
+      "sourceSection": "6.3",
+      "sourcePage": "",
+      "ruleType": "documentation",
+      "ruleId": "",
+      "clarificationNeeded": false,
+      "exception": ""
+    },
+    {
+      "ruleTitle": "Appraisal Review - Acceptable Products",
+      "category": "Appraisals",
+      "subcategory": "",
+      "ruleDescription": "Acceptable review products include ARR from Stewart, CDA from Clear Capital, and ARA from Computershare.",
+      "confidence": "high",
+      "sourceSection": "6.3",
+      "sourcePage": "",
+      "ruleType": "documentation",
+      "ruleId": "",
+      "clarificationNeeded": false,
+      "exception": ""
+    },
+    {
+      "ruleTitle": "Appraisal Review - Variance >10%",
+      "category": "Appraisals",
+      "subcategory": "",
+      "ruleDescription": "If the enhanced desk review product (ARR, CDA, or ARA) reflects a value more than 10% below the appraised value or cannot provide validation, the next option would be either a field review or a second appraisal. These must be from a different appraisal company and appraiser than the original appraisal.",
+      "confidence": "high",
+      "sourceSection": "6.3",
+      "sourcePage": "",
+      "ruleType": "conditional",
+      "ruleId": "",
+      "clarificationNeeded": false,
+      "exception": ""
+    },
+    {
+      "ruleTitle": "Appraisal Review - Multifamily Exception",
+      "category": "Appraisals",
+      "subcategory": "",
+      "ruleDescription": "An appraisal review report is not required for multi-family (5+ unit) properties that use a commercial appraisal.",
+      "confidence": "high",
+      "sourceSection": "6.3",
+      "sourcePage": "",
+      "ruleType": "exception",
+      "ruleId": "",
+      "clarificationNeeded": false,
+      "exception": ""
+    }
+  ]
+}

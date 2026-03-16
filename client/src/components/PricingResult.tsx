@@ -5,11 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { PricingResponse, LoanPricingFormData } from "@shared/schema";
-import { CheckCircle2, ArrowLeft, Download, AlertCircle, FileText, Save, DollarSign, Percent, User, Info } from "lucide-react";
+import { CheckCircle2, ArrowLeft, AlertCircle, FileText, Save, DollarSign, Percent, Info } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -36,15 +35,38 @@ interface PricingResultProps {
   programConfig?: ProgramConfig | null;
 }
 
+function normalizeKey(key: string): string {
+  return key.replace(/[-_\s]/g, '').toLowerCase();
+}
+
+function resolveField(data: Record<string, any> | null | undefined, ...aliases: string[]): any {
+  if (!data) return undefined;
+  for (const alias of aliases) {
+    if (data[alias] !== undefined && data[alias] !== '' && data[alias] !== null) return data[alias];
+  }
+  const normalized = aliases.map(normalizeKey);
+  for (const key of Object.keys(data)) {
+    const nk = normalizeKey(key);
+    if (normalized.includes(nk) && data[key] !== undefined && data[key] !== '' && data[key] !== null) {
+      return data[key];
+    }
+  }
+  return undefined;
+}
+
+function safeNumber(value: any): number {
+  if (value === undefined || value === null || value === '') return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const cleaned = String(value).replace(/[$,%\s]/g, '');
+  const num = Number(cleaned);
+  return Number.isFinite(num) ? num : 0;
+}
+
 export function PricingResult({ result, formData, onReset, programId, programConfig }: PricingResultProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  const [showQuoteForm, setShowQuoteForm] = useState(false);
-  const [customerFirstName, setCustomerFirstName] = useState("");
-  const [customerLastName, setCustomerLastName] = useState("");
-  const [customerCompanyName, setCustomerCompanyName] = useState("");
-  const [propertyAddress, setPropertyAddress] = useState("");
+  const propertyAddress = resolveField(formData, 'propertyAddress', 'property_address', 'address') || "";
 
   // Determine user role
   const isLender = user?.role === 'admin' || user?.role === 'super_admin';
@@ -69,13 +91,33 @@ export function PricingResult({ result, formData, onReset, programId, programCon
   const [basePointsValue, setBasePointsValue] = useState(programBasePoints);
   const [brokerPointsValue, setBrokerPointsValue] = useState(0);
 
-  // YSP state
-  const [yspValue, setYspValue] = useState(
-    programYspEnabled && !programYspBrokerCanToggle ? programYspFixedAmount : 0
+  // YSP state — when broker can toggle, they control an additional amount on top of fixed
+  const [brokerYspValue, setBrokerYspValue] = useState(0);
+  const [lenderYspOverride, setLenderYspOverride] = useState(
+    programYspEnabled && !programYspBrokerCanToggle ? programYspFixedAmount : programYspFixedAmount
   );
 
+  const totalYspValue = programYspBrokerCanToggle
+    ? programYspFixedAmount + brokerYspValue
+    : (isLender ? lenderYspOverride : programYspFixedAmount);
+
+  const fd = formData as Record<string, any> | null;
+  const resolvedLoanAmountRaw = resolveField(fd, 'loanAmount', 'requestedLoanAmount', 'loan_amount');
+  const resolvedPropertyValueRaw = resolveField(fd, 'propertyValue', 'estValuePurchasePrice', 'estimatedValue', 'purchasePrice', 'property_value');
+  const resolvedFicoScoreRaw = resolveField(fd, 'ficoScore', 'statedFicoScore', 'creditScore', 'fico_score', 'fico');
+  const resolvedLtvRaw = resolveField(fd, 'ltv', 'ltvRatio', 'ltv_ratio', 'requestedLTV');
+  const resolvedProgramName = resolveField(fd, 'loanType', 'programName', 'program', 'loan_type') || 'N/A';
+  const resolvedPropertyType = resolveField(fd, 'propertyType', 'property_type') || 'N/A';
+
+  const displayPropertyValue = safeNumber(resolvedPropertyValueRaw);
+  const displayFicoScore = resolvedFicoScoreRaw != null && resolvedFicoScoreRaw !== '' ? String(resolvedFicoScoreRaw) : '—';
+  const computedLtv = displayPropertyValue > 0 && safeNumber(resolvedLoanAmountRaw) > 0
+    ? ((safeNumber(resolvedLoanAmountRaw) / displayPropertyValue) * 100).toFixed(1) + '%'
+    : '—';
+  const displayLtv = resolvedLtvRaw != null && resolvedLtvRaw !== '' ? String(resolvedLtvRaw) : computedLtv;
+
   // Computed values
-  const loanAmount = formData?.loanAmount || 0;
+  const loanAmount = safeNumber(resolvedLoanAmountRaw);
   const tpoPremiumPercent = formData?.tpoPremium ? parseFloat(formData.tpoPremium) : 0;
   const tpoPremiumAmount = (loanAmount * tpoPremiumPercent) / 100;
 
@@ -86,13 +128,15 @@ export function PricingResult({ result, formData, onReset, programId, programCon
   const totalRevenue = totalPointsAmount + tpoPremiumAmount;
 
   // YSP calculations
-  const yspDollarAmount = (loanAmount * yspValue) / 100;
-  // YSP rate impact is approximate — the actual impact depends on the pricing ruleset tiers
-  // We use a simple linear estimate here: ~0.25% rate per 1% YSP
-  const yspRateImpactEstimate = yspValue * 0.25;
+  const yspDollarAmount = (loanAmount * totalYspValue) / 100;
+  const yspRateImpactEstimate = totalYspValue * 0.25;
 
   // Commission = broker's additional points + YSP dollar amount
   const brokerCommission = brokerPointsAmount + yspDollarAmount;
+
+  const customerFirstName = resolveField(fd, 'firstName', 'borrowerFirstName', 'first_name') || "";
+  const customerLastName = resolveField(fd, 'lastName', 'borrowerLastName', 'last_name') || "";
+  const customerCompanyName = resolveField(fd, 'companyName', 'entityName', 'company_name', 'company') || "";
 
   const saveQuoteMutation = useMutation({
     mutationFn: async () => {
@@ -104,12 +148,11 @@ export function PricingResult({ result, formData, onReset, programId, programCon
         customerLastName,
         customerCompanyName,
         propertyAddress,
-        loanData: formData,
+        loanData: result.loanData || formData,
         interestRate: formattedRate,
         pointsCharged: totalPointsCharged,
         programId: programId || null,
-        // New YSP + split points fields
-        yspAmount: yspValue,
+        yspAmount: totalYspValue,
         yspRateImpact: yspRateImpactEstimate,
         yspDollarAmount,
         basePointsCharged: basePointsValue,
@@ -117,14 +160,18 @@ export function PricingResult({ result, formData, onReset, programId, programCon
       });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       toast({
         title: "Quote Saved!",
         description: "Your quote has been saved successfully.",
       });
       queryClient.invalidateQueries({ queryKey: ['/api/quotes'] });
-      setShowQuoteForm(false);
-      setLocation('/quotes');
+      const savedId = data?.quote?.id;
+      if (savedId) {
+        setLocation(`/quotes/${savedId}/documents`);
+      } else {
+        setLocation('/quotes');
+      }
     },
     onError: (error) => {
       toast({
@@ -134,18 +181,6 @@ export function PricingResult({ result, formData, onReset, programId, programCon
       });
     }
   });
-
-  const handleSaveQuote = () => {
-    if (!customerFirstName.trim() || !customerLastName.trim() || !propertyAddress.trim()) {
-      toast({
-        title: "Missing Information",
-        description: "Please fill in all customer details.",
-        variant: "destructive"
-      });
-      return;
-    }
-    saveQuoteMutation.mutate();
-  };
 
   if (result.error || !result.success) {
     return (
@@ -186,7 +221,7 @@ export function PricingResult({ result, formData, onReset, programId, programCon
         <div className="text-5xl font-extrabold text-primary tracking-tight">
           {formattedRate}
         </div>
-        {programYspEnabled && yspValue > 0 && (
+        {programYspEnabled && totalYspValue > 0 && (
           <p className="text-xs text-amber-600 font-medium">
             +{yspRateImpactEstimate.toFixed(3)}% YSP rate impact (est.)
           </p>
@@ -205,93 +240,33 @@ export function PricingResult({ result, formData, onReset, programId, programCon
             <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
               <div>
                 <dt className="text-muted-foreground">Loan Amount</dt>
-                <dd className="font-medium text-foreground">${formData?.loanAmount?.toLocaleString()}</dd>
+                <dd className="font-medium text-foreground">${loanAmount.toLocaleString()}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Property Value</dt>
-                <dd className="font-medium text-foreground">${formData?.propertyValue?.toLocaleString()}</dd>
+                <dd className="font-medium text-foreground">{displayPropertyValue ? `$${displayPropertyValue.toLocaleString()}` : '—'}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">LTV</dt>
-                <dd className="font-medium text-foreground">{formData?.ltv}</dd>
+                <dd className="font-medium text-foreground">{displayLtv}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">FICO Score</dt>
-                <dd className="font-medium text-foreground">{formData?.ficoScore}</dd>
+                <dd className="font-medium text-foreground">{displayFicoScore}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Program</dt>
-                <dd className="font-medium text-foreground">{formData?.loanType}</dd>
+                <dd className="font-medium text-foreground">{resolvedProgramName}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Property Type</dt>
-                <dd className="font-medium text-foreground">{formData?.propertyType}</dd>
+                <dd className="font-medium text-foreground">{resolvedPropertyType}</dd>
               </div>
 {/* TPO Premium is auto-included but hidden from user */}
             </dl>
           </div>
 
-          {!showQuoteForm ? (
-            <Button
-              onClick={() => setShowQuoteForm(true)}
-              className="w-full h-12 text-lg font-semibold bg-gradient-to-r from-success to-success shadow-lg shadow-success/20"
-              data-testid="button-save-quote"
-            >
-              <Save className="mr-2 h-5 w-5" />
-              Save as Quote
-            </Button>
-          ) : (
-            <div className="bg-info/10 rounded-xl p-5 border border-info/20 space-y-5">
-              <h3 className="font-semibold text-foreground flex items-center gap-2">
-                <User className="w-4 h-4 text-primary" />
-                Customer Details
-              </h3>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="firstName">First Name</Label>
-                  <Input
-                    id="firstName"
-                    value={customerFirstName}
-                    onChange={(e) => setCustomerFirstName(e.target.value)}
-                    placeholder="John"
-                    data-testid="input-first-name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="lastName">Last Name</Label>
-                  <Input
-                    id="lastName"
-                    value={customerLastName}
-                    onChange={(e) => setCustomerLastName(e.target.value)}
-                    placeholder="Doe"
-                    data-testid="input-last-name"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="companyName">Company Name</Label>
-                <Input
-                  id="companyName"
-                  value={customerCompanyName}
-                  onChange={(e) => setCustomerCompanyName(e.target.value)}
-                  placeholder="ABC Investments LLC"
-                  data-testid="input-company-name"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="address">Property Address</Label>
-                <AddressAutocomplete
-                  id="address"
-                  value={propertyAddress}
-                  onChange={setPropertyAddress}
-                  placeholder="Start typing an address..."
-                  data-testid="input-property-address"
-                />
-              </div>
-
+          <div className="space-y-5">
               {/* ═══ ORIGINATION POINTS ═══ */}
               <div className="space-y-4">
                 <Label className="flex items-center gap-1 text-base font-semibold">
@@ -304,7 +279,7 @@ export function PricingResult({ result, formData, onReset, programId, programCon
                   {isLender ? (
                     <>
                       <div className="flex items-center justify-between">
-                        <Label className="text-sm">Base Lender Points</Label>
+                        <Label className="text-sm">Lender Points</Label>
                         <div className="flex items-center gap-2">
                           <Input
                             type="number"
@@ -340,18 +315,18 @@ export function PricingResult({ result, formData, onReset, programId, programCon
                     </>
                   ) : (
                     <div className="flex items-center justify-between bg-muted/40 rounded-lg p-3 border">
-                      <span className="text-sm text-muted-foreground">Lender Base Points</span>
+                      <span className="text-sm text-muted-foreground">Lender Points</span>
                       <span className="font-bold text-lg">{programBasePoints}</span>
                     </div>
                   )}
                 </div>
 
-                {/* Broker Additional Points — only if enabled */}
+                {/* Broker Points — only if enabled */}
                 {programBrokerPointsEnabled && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label className="text-sm">
-                        {isLender ? "Additional Points" : "Your Additional Points"}
+                        Broker Points
                       </Label>
                       <div className="flex items-center gap-2">
                         <Input
@@ -405,92 +380,100 @@ export function PricingResult({ result, formData, onReset, programId, programCon
                     YSP (Yield Spread Premium)
                   </Label>
 
-                  {/* Lender always gets the full slider */}
-                  {isLender ? (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-sm">YSP Amount</Label>
-                        <div className="flex items-center gap-2">
-                          <Input
-                            type="number"
-                            min={programYspMin}
-                            max={programYspMax}
-                            step={programYspStep}
-                            value={yspValue}
-                            onChange={(e) => {
-                              const val = parseFloat(e.target.value);
-                              if (!isNaN(val) && val >= programYspMin && val <= programYspMax) {
-                                setYspValue(val);
-                              }
-                            }}
-                            className="w-20 text-center font-bold"
-                          />
-                          <span className="text-sm text-muted-foreground">%</span>
-                        </div>
-                      </div>
-                      <div className="bg-background rounded-lg p-3 border border-border">
-                        <Slider
-                          value={[yspValue]}
-                          onValueChange={([val]) => setYspValue(val)}
-                          min={programYspMin}
-                          max={programYspMax}
-                          step={programYspStep}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                          <span>{programYspMin}%</span>
-                          <span>{programYspMax}%</span>
-                        </div>
-                      </div>
-                    </div>
-                  ) : programYspBrokerCanToggle ? (
-                    /* Broker CAN toggle — show slider within bounds */
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-sm">YSP Amount</Label>
-                        <div className="flex items-center gap-2">
-                          <Input
-                            type="number"
-                            min={programYspMin}
-                            max={programYspMax}
-                            step={programYspStep}
-                            value={yspValue}
-                            onChange={(e) => {
-                              const val = parseFloat(e.target.value);
-                              if (!isNaN(val) && val >= programYspMin && val <= programYspMax) {
-                                setYspValue(val);
-                              }
-                            }}
-                            className="w-20 text-center font-bold"
-                          />
-                          <span className="text-sm text-muted-foreground">%</span>
-                        </div>
-                      </div>
-                      <div className="bg-background rounded-lg p-3 border border-border">
-                        <Slider
-                          value={[yspValue]}
-                          onValueChange={([val]) => setYspValue(val)}
-                          min={programYspMin}
-                          max={programYspMax}
-                          step={programYspStep}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                          <span>{programYspMin}%</span>
-                          <span>{programYspMax}%</span>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    /* Broker can NOT toggle — show read-only fixed amount */
+                  {programYspFixedAmount > 0 && (
                     <div className="flex items-center justify-between bg-muted/40 rounded-lg p-3 border">
-                      <span className="text-sm text-muted-foreground">Fixed YSP</span>
+                      <span className="text-sm text-muted-foreground">Fixed YSP (included)</span>
                       <span className="font-bold">{programYspFixedAmount}%</span>
                     </div>
                   )}
 
-                  {/* YSP live info */}
-                  {yspValue > 0 && (
+                  {isLender && !programYspBrokerCanToggle ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm">YSP Override</Label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            min={programYspMin}
+                            max={programYspMax}
+                            step={programYspStep}
+                            value={lenderYspOverride}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              if (!isNaN(val) && val >= programYspMin && val <= programYspMax) {
+                                setLenderYspOverride(val);
+                              }
+                            }}
+                            className="w-20 text-center font-bold"
+                          />
+                          <span className="text-sm text-muted-foreground">%</span>
+                        </div>
+                      </div>
+                      <div className="bg-background rounded-lg p-3 border border-border">
+                        <Slider
+                          value={[lenderYspOverride]}
+                          onValueChange={([val]) => setLenderYspOverride(val)}
+                          min={programYspMin}
+                          max={programYspMax}
+                          step={programYspStep}
+                          className="w-full"
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                          <span>{programYspMin}%</span>
+                          <span>{programYspMax}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (isLender || programYspBrokerCanToggle) ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm">
+                          {isLender ? 'Broker YSP Addition' : 'Your Additional YSP'}
+                        </Label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            min={programYspMin}
+                            max={programYspMax}
+                            step={programYspStep}
+                            value={brokerYspValue}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              if (!isNaN(val) && val >= programYspMin && val <= programYspMax) {
+                                setBrokerYspValue(val);
+                              }
+                            }}
+                            className="w-20 text-center font-bold"
+                            data-testid="input-broker-ysp"
+                          />
+                          <span className="text-sm text-muted-foreground">%</span>
+                        </div>
+                      </div>
+                      <div className="bg-background rounded-lg p-3 border border-border">
+                        <Slider
+                          value={[brokerYspValue]}
+                          onValueChange={([val]) => setBrokerYspValue(val)}
+                          min={programYspMin}
+                          max={programYspMax}
+                          step={programYspStep}
+                          className="w-full"
+                          data-testid="slider-broker-ysp"
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                          <span>+{programYspMin}%</span>
+                          <span>+{programYspMax}%</span>
+                        </div>
+                      </div>
+                      {brokerYspValue > 0 && (
+                        <div className="flex items-center justify-between bg-muted/30 rounded-lg p-2 border text-sm">
+                          <span className="text-muted-foreground">Total YSP</span>
+                          <span className="font-bold">{totalYspValue.toFixed(3)}% (fixed {programYspFixedAmount}% + {brokerYspValue.toFixed(3)}%)</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+
+                  {totalYspValue > 0 && (
                     <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1 text-sm">
                       <div className="flex justify-between">
                         <span className="text-amber-800">Est. Rate Impact</span>
@@ -520,22 +503,22 @@ export function PricingResult({ result, formData, onReset, programId, programCon
 
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Base Points ({basePointsValue.toFixed(3)} pts)</span>
+                    <span className="text-muted-foreground">Lender Points ({basePointsValue.toFixed(3)} pts)</span>
                     <span className="font-medium">
                       ${basePointsAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
                   {programBrokerPointsEnabled && brokerPointsValue > 0 && (
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Additional Points ({brokerPointsValue.toFixed(3)} pts)</span>
+                      <span className="text-muted-foreground">Broker Points ({brokerPointsValue.toFixed(3)} pts)</span>
                       <span className="font-medium">
                         ${brokerPointsAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                   )}
-                  {programYspEnabled && yspValue > 0 && (
+                  {programYspEnabled && totalYspValue > 0 && (
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">YSP ({yspValue.toFixed(3)}%)</span>
+                      <span className="text-muted-foreground">YSP ({totalYspValue.toFixed(3)}%)</span>
                       <span className="font-medium">
                         ${yspDollarAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
@@ -554,7 +537,7 @@ export function PricingResult({ result, formData, onReset, programId, programCon
                   <div className="flex justify-between items-center">
                     <span className="font-semibold text-success text-sm">
                       {isBroker ? "Your" : "Broker"} Compensation
-                      {programYspEnabled && yspValue > 0 ? " (Points + YSP)" : ` (${brokerPointsValue.toFixed(2)} additional pts)`}
+                      {programYspEnabled && totalYspValue > 0 ? " (Points + YSP)" : ` (${brokerPointsValue.toFixed(2)} additional pts)`}
                     </span>
                     <span className="text-2xl font-bold text-success" data-testid="text-commission">
                       ${brokerCommission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -563,26 +546,7 @@ export function PricingResult({ result, formData, onReset, programId, programCon
                 </div>
               </div>
 
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowQuoteForm(false)}
-                  className="flex-1"
-                  data-testid="button-cancel-quote"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleSaveQuote}
-                  disabled={saveQuoteMutation.isPending}
-                  className="flex-1 bg-gradient-to-r from-success to-success"
-                  data-testid="button-confirm-save"
-                >
-                  {saveQuoteMutation.isPending ? "Saving..." : "Save Quote"}
-                </Button>
-              </div>
-            </div>
-          )}
+          </div>
 
 
           <div className="text-xs text-muted-foreground text-center px-4">
@@ -597,16 +561,19 @@ export function PricingResult({ result, formData, onReset, programId, programCon
             onClick={onReset}
             variant="outline"
             className="flex-1 h-12 text-lg font-semibold"
+            data-testid="button-edit-loan"
           >
             <ArrowLeft className="mr-2 h-5 w-5" />
             Edit Loan
           </Button>
           <Button
-            onClick={() => window.print()}
-            className="flex-1 h-12 text-lg font-semibold shadow-lg shadow-primary/20 bg-gradient-to-r from-primary to-primary"
+            onClick={() => saveQuoteMutation.mutate()}
+            disabled={saveQuoteMutation.isPending}
+            className="flex-1 h-12 text-lg font-semibold bg-gradient-to-r from-success to-success shadow-lg shadow-success/20"
+            data-testid="button-save-quote"
           >
-            <Download className="mr-2 h-5 w-5" />
-            Download PDF
+            <Save className="mr-2 h-5 w-5" />
+            {saveQuoteMutation.isPending ? "Saving..." : "Save as Quote"}
           </Button>
         </div>
       </CardFooter>

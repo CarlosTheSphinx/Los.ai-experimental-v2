@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { formatPhoneNumber, getPhoneError, getEmailError } from "@/lib/validation";
 import {
   Building2,
   DollarSign,
@@ -261,7 +262,7 @@ export default function PublicApplyPage() {
 
   if (step === "success") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-amber-50 dark:from-slate-900 dark:to-slate-800 flex items-center justify-center p-4">
         <Card className="max-w-md w-full text-center">
           <CardContent className="pt-8 pb-8 space-y-4">
             <div className="mx-auto w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
@@ -297,7 +298,7 @@ export default function PublicApplyPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-amber-50 dark:from-slate-900 dark:to-slate-800">
       <header className="border-b bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           <h1 className="text-xl font-bold text-primary" data-testid="text-company-name">{companyName}</h1>
@@ -445,6 +446,7 @@ export default function PublicApplyPage() {
                       required
                       data-testid="input-email"
                     />
+                    {getEmailError(email) && <p className="text-xs text-destructive mt-1">{getEmailError(email)}</p>}
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-sm flex items-center gap-1.5">
@@ -453,10 +455,11 @@ export default function PublicApplyPage() {
                     <Input
                       type="tel"
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
+                      onChange={(e) => setPhone(formatPhoneNumber(e.target.value))}
                       placeholder="(555) 123-4567"
                       data-testid="input-phone"
                     />
+                    {getPhoneError(phone) && <p className="text-xs text-destructive mt-1">{getPhoneError(phone)}</p>}
                   </div>
                 </CardContent>
               </Card>

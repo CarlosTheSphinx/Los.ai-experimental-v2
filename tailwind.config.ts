@@ -107,6 +107,7 @@ export default {
       fontFamily: {
         sans: ["var(--font-sans)"],
         display: ["var(--font-display)"],
+        ui: ["var(--font-ui)"],
         mono: ["var(--font-mono)"],
       },
       keyframes: {

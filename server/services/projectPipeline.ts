@@ -94,6 +94,8 @@ export async function buildProjectPipelineFromProgram(
     for (const task of tasks) {
       const taskVisibility = task.visibility || 'all';
       const isBorrowerVisible = taskVisibility === 'all' || taskVisibility === 'borrower';
+      const assignRole = (task.assignToRole || '').toLowerCase();
+      const isBorrowerAssigned = assignRole === 'user' || assignRole === 'borrower';
       await dbOrTx.insert(projectTasks).values({
         projectId,
         stageId: stage.id,
@@ -102,10 +104,12 @@ export async function buildProjectPipelineFromProgram(
         taskDescription: task.taskDescription,
         taskType: task.taskCategory || 'general',
         priority: task.priority || 'medium',
+        assignedTo: isBorrowerAssigned ? 'borrower' : (assignRole || 'admin'),
         requiresDocument: false,
         visibleToBorrower: isBorrowerVisible,
-        borrowerActionRequired: false,
+        borrowerActionRequired: isBorrowerAssigned || !!task.formTemplateId,
         status: 'pending',
+        formTemplateId: task.formTemplateId || null,
       });
       tasksCreated++;
     }
@@ -117,22 +121,39 @@ export async function buildProjectPipelineFromProgram(
     .orderBy(asc(programDocumentTemplates.sortOrder));
 
   if (docTemplates.length > 0) {
-    const newDocuments = docTemplates.map((doc, index) => ({
-      dealId: projectId,
-      programDocumentTemplateId: doc.id,
-      documentName: doc.documentName,
-      documentCategory: doc.documentCategory,
-      documentDescription: doc.documentDescription,
-      isRequired: doc.isRequired ?? true,
-      assignedTo: doc.assignedTo || 'borrower',
-      visibility: doc.visibility || 'all',
-      sortOrder: doc.sortOrder || index,
-      status: 'pending' as const,
-      stageId: doc.stepId ? (stageIdByStepId.get(doc.stepId) || stageIdByOrder.get(doc.stepId) || null) : null,
-    }));
+    const existingDocs = await dbOrTx.select({
+      id: dealDocuments.id,
+      programDocumentTemplateId: dealDocuments.programDocumentTemplateId,
+      documentName: dealDocuments.documentName,
+    }).from(dealDocuments).where(eq(dealDocuments.dealId, projectId));
 
-    await dbOrTx.insert(dealDocuments).values(newDocuments);
-    documentsCreated = newDocuments.length;
+    const existingByTemplateId = new Set(existingDocs.filter(d => d.programDocumentTemplateId).map(d => d.programDocumentTemplateId));
+    const existingByName = new Set(existingDocs.map(d => (d.documentName || '').trim().toLowerCase()));
+
+    const docsToInsert = docTemplates.filter((doc) => {
+      if (existingByTemplateId.has(doc.id)) return false;
+      if (existingByName.has((doc.documentName || '').trim().toLowerCase())) return false;
+      return true;
+    });
+
+    if (docsToInsert.length > 0) {
+      const newDocuments = docsToInsert.map((doc, index) => ({
+        dealId: projectId,
+        programDocumentTemplateId: doc.id,
+        documentName: doc.documentName,
+        documentCategory: doc.documentCategory,
+        documentDescription: doc.documentDescription,
+        isRequired: doc.isRequired ?? true,
+        assignedTo: doc.assignedTo || 'borrower',
+        visibility: doc.visibility || 'all',
+        sortOrder: doc.sortOrder || index,
+        status: 'pending' as const,
+        stageId: doc.stepId ? (stageIdByStepId.get(doc.stepId) || stageIdByOrder.get(doc.stepId) || null) : null,
+      }));
+
+      await dbOrTx.insert(dealDocuments).values(newDocuments);
+      documentsCreated = newDocuments.length;
+    }
   }
 
   // Always ensure a "Signed Agreement" placeholder exists in Stage 1
@@ -142,19 +163,24 @@ export async function buildProjectPipelineFromProgram(
       d => d.documentName === 'Signed Agreement'
     );
     if (!hasSignedAgreement) {
-      await dbOrTx.insert(dealDocuments).values({
-        dealId: projectId,
-        stageId: stage1Id,
-        documentName: 'Signed Agreement',
-        documentCategory: 'closing_docs',
-        documentDescription: 'PandaDoc signed agreement — auto-populated when the borrower signs',
-        status: 'pending',
-        isRequired: true,
-        assignedTo: 'admin',
-        visibility: 'all',
-        sortOrder: 0,
-      });
-      documentsCreated++;
+      const existingSignedAgreement = await dbOrTx.select({ id: dealDocuments.id })
+        .from(dealDocuments)
+        .where(and(eq(dealDocuments.dealId, projectId), eq(dealDocuments.documentName, 'Signed Agreement')));
+      if (existingSignedAgreement.length === 0) {
+        await dbOrTx.insert(dealDocuments).values({
+          dealId: projectId,
+          stageId: stage1Id,
+          documentName: 'Signed Agreement',
+          documentCategory: 'closing_docs',
+          documentDescription: 'PandaDoc signed agreement — auto-populated when the borrower signs',
+          status: 'pending',
+          isRequired: true,
+          assignedTo: 'admin',
+          visibility: 'all',
+          sortOrder: 0,
+        });
+        documentsCreated++;
+      }
     }
   }
 
@@ -340,14 +366,18 @@ export async function syncProgramToProjects(
   tx?: NodePgDatabase<typeof schemaTypes>
 ): Promise<{ projectsSynced: number }> {
   const dbOrTx = tx || db;
+  console.log(`[ProgramSync] Starting sync for program ${programId}`);
 
   const linkedProjects = await dbOrTx.select({ id: projects.id })
     .from(projects)
     .where(eq(projects.programId, programId));
 
   if (linkedProjects.length === 0) {
+    console.log(`[ProgramSync] No linked projects found for program ${programId}`);
     return { projectsSynced: 0 };
   }
+
+  console.log(`[ProgramSync] Found ${linkedProjects.length} linked project(s) for program ${programId}`);
 
   const workflowSteps = await dbOrTx.select({
     stepId: programWorkflowSteps.id,
@@ -373,11 +403,19 @@ export async function syncProgramToProjects(
     .where(eq(programTaskTemplates.programId, programId))
     .orderBy(asc(programTaskTemplates.sortOrder));
 
+  let successCount = 0;
   for (const project of linkedProjects) {
-    await syncSingleProject(project.id, workflowSteps, docTemplates, taskTemplates, tx);
+    try {
+      await syncSingleProject(project.id, workflowSteps, docTemplates, taskTemplates, tx);
+      successCount++;
+      console.log(`[ProgramSync] Successfully synced project ${project.id}`);
+    } catch (err) {
+      console.error(`[ProgramSync] Failed to sync project ${project.id} for program ${programId}:`, err);
+    }
   }
 
-  return { projectsSynced: linkedProjects.length };
+  console.log(`[ProgramSync] Completed sync for program ${programId}: ${successCount}/${linkedProjects.length} projects synced`);
+  return { projectsSynced: successCount };
 }
 
 async function syncSingleProject(
@@ -497,6 +535,8 @@ async function syncSingleProject(
     } else {
       const taskVis = template.visibility || 'all';
       const borrowerVis = taskVis === 'all' || taskVis === 'borrower';
+      const syncAssignRole = (template.assignToRole || '').toLowerCase();
+      const syncIsBorrower = syncAssignRole === 'user' || syncAssignRole === 'borrower';
       await dbOrTx.insert(projectTasks).values({
         projectId,
         stageId,
@@ -505,10 +545,12 @@ async function syncSingleProject(
         taskDescription: template.taskDescription,
         taskType: template.taskCategory || 'general',
         priority: template.priority || 'medium',
+        assignedTo: syncIsBorrower ? 'borrower' : (syncAssignRole || 'admin'),
         requiresDocument: false,
         visibleToBorrower: borrowerVis,
-        borrowerActionRequired: false,
+        borrowerActionRequired: syncIsBorrower || !!template.formTemplateId,
         status: 'pending',
+        formTemplateId: template.formTemplateId || null,
       });
     }
   }

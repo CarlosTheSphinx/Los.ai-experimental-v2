@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
+import { formatPhoneNumber } from "@/lib/validation";
 import {
   Search,
   Plus,
@@ -504,7 +505,7 @@ export default function AdminPartners() {
                   <Input
                     id="phone"
                     value={newPartner.phone}
-                    onChange={(e) => setNewPartner({ ...newPartner, phone: e.target.value })}
+                    onChange={(e) => setNewPartner({ ...newPartner, phone: formatPhoneNumber(e.target.value) })}
                     placeholder="(310) 555-1234"
                     data-testid="input-partner-phone"
                   />
@@ -928,8 +929,8 @@ function UsersStatus() {
   });
 
   const users = usersData?.users || [];
-  const brokersPendingOnboarding = users.filter(u => u.userType === 'broker' && !u.onboardingCompleted);
-  const brokersCompleted = users.filter(u => u.userType === 'broker' && u.onboardingCompleted);
+  const brokersPendingOnboarding = users.filter(u => u.role === 'broker' && !u.onboardingCompleted);
+  const brokersCompleted = users.filter(u => u.role === 'broker' && u.onboardingCompleted);
 
   return (
     <div className="space-y-6">

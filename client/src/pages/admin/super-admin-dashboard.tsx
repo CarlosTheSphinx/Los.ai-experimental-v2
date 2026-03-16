@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,7 @@ interface LenderAccount {
   teamMembersCount: number;
   activeDealsCount: number;
   totalLoanVolume: number;
+  programCount: number;
   isActive: boolean;
   createdAt: string;
 }
@@ -132,22 +134,76 @@ function StatCard({
 }
 
 function LenderAccountsTable({ accounts }: { accounts: LenderAccount[] }) {
+  const [, setLocation] = useLocation();
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+
+  const filtered = accounts.filter((a) => {
+    const matchesSearch = !search || 
+      (a.companyName || "").toLowerCase().includes(search.toLowerCase()) ||
+      (a.adminName || "").toLowerCase().includes(search.toLowerCase()) ||
+      a.adminEmail.toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = statusFilter === "all" || 
+      (statusFilter === "active" ? a.isActive : !a.isActive);
+    return matchesSearch && matchesStatus;
+  });
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Building2 className="h-5 w-5" />
-          Lender Accounts
-        </CardTitle>
-        <CardDescription>
-          All lender organizations on the platform
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              Lender Accounts
+            </CardTitle>
+            <CardDescription>
+              All lender organizations on the platform
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-sm">
+              <Button
+                variant={statusFilter === "all" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setStatusFilter("all")}
+                data-testid="filter-all"
+              >
+                All ({accounts.length})
+              </Button>
+              <Button
+                variant={statusFilter === "active" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setStatusFilter("active")}
+                data-testid="filter-active"
+              >
+                Active ({accounts.filter(a => a.isActive).length})
+              </Button>
+              <Button
+                variant={statusFilter === "inactive" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setStatusFilter("inactive")}
+                data-testid="filter-inactive"
+              >
+                Inactive ({accounts.filter(a => !a.isActive).length})
+              </Button>
+            </div>
+            <input
+              type="text"
+              placeholder="Search lenders..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 w-56 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              data-testid="input-search-lenders"
+            />
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
-        {accounts.length === 0 ? (
+        {filtered.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <Users className="h-8 w-8 mx-auto mb-2 opacity-40" />
-            <p className="text-sm">No lender accounts yet</p>
+            <p className="text-sm">{accounts.length === 0 ? "No lender accounts yet" : "No matching lender accounts"}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -159,6 +215,7 @@ function LenderAccountsTable({ accounts }: { accounts: LenderAccount[] }) {
                   <TableHead>Admin Email</TableHead>
                   <TableHead className="text-right">Team Members</TableHead>
                   <TableHead className="text-right">Active Deals</TableHead>
+                  <TableHead className="text-right">Programs</TableHead>
                   <TableHead className="text-right">Loan Volume</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Created</TableHead>
@@ -166,7 +223,7 @@ function LenderAccountsTable({ accounts }: { accounts: LenderAccount[] }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {accounts.map((account) => (
+                {filtered.map((account) => (
                   <TableRow key={account.id}>
                     <TableCell className="font-medium">
                       {account.companyName}
@@ -178,6 +235,9 @@ function LenderAccountsTable({ accounts }: { accounts: LenderAccount[] }) {
                     </TableCell>
                     <TableCell className="text-right">
                       {account.activeDealsCount}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {account.programCount}
                     </TableCell>
                     <TableCell className="text-right font-medium">
                       {formatCurrency(account.totalLoanVolume)}
@@ -194,7 +254,12 @@ function LenderAccountsTable({ accounts }: { accounts: LenderAccount[] }) {
                       {format(new Date(account.createdAt), "MMM d, yyyy")}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        data-testid={`btn-manage-tenant-${account.id}`}
+                        onClick={() => setLocation(`/admin/platform/tenants/${account.id}`)}
+                      >
                         Manage
                       </Button>
                     </TableCell>

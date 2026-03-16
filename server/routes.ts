@@ -3,10 +3,10 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, documentReviewResults, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema, projectActivity, projectTasks, platformSettings, dealMemoryEntries, dealNotes, insertDealMemoryEntrySchema, insertDealNoteSchema, notifications, dealStatuses, insertDealStatusSchema, insertMessageTemplateSchema, dealThirdParties } from "@shared/schema";
+import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, documentReviewResults, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema, projectActivity, projectTasks, platformSettings, dealMemoryEntries, dealNotes, insertDealMemoryEntrySchema, insertDealNoteSchema, notifications, dealStatuses, insertDealStatusSchema, insertMessageTemplateSchema, dealThirdParties, systemSettings, betaSignups, insertBetaSignupSchema, inquiryFormTemplates, taskFormSubmissions, externalPricingFormSchema } from "@shared/schema";
 import { priceQuote, validateRuleset, SAMPLE_RTL_RULESET, SAMPLE_DSCR_RULESET, type PricingInputs, analyzeGuidelines, refineProposal } from "./pricing";
 import { getDocumentTemplatesForLoanType } from "./document-templates";
-import { eq, desc, asc, inArray, and, gt, gte, lte, sql, isNull, or } from "drizzle-orm";
+import { eq, desc, asc, inArray, and, gt, gte, lte, sql, isNull, isNotNull, or } from "drizzle-orm";
 import { format } from "date-fns";
 import { api } from "@shared/routes";
 import { ApifyClient } from 'apify-client';
@@ -26,6 +26,8 @@ import {
   clearAuthCookie,
   type AuthRequest 
 } from './auth';
+import { getTenantId } from './utils/tenant';
+import { isNotificationEnabled } from './services/notificationHelper';
 import {
   runDigestJob,
   sendTestDigest,
@@ -33,7 +35,7 @@ import {
   getOutstandingDocuments,
   getRecentUpdates
 } from './digestService';
-import { loanDigestConfigs, loanDigestRecipients, loanUpdates, digestHistory, digestState, partnerBroadcasts, partnerBroadcastRecipients, inboundSmsMessages, scheduledDigestDrafts, esignEnvelopes, esignEvents, lenderReviewConfig } from '@shared/schema';
+import { loanDigestConfigs, loanDigestRecipients, loanUpdates, digestHistory, digestState, partnerBroadcasts, partnerBroadcastRecipients, inboundSmsMessages, scheduledDigestDrafts, esignEnvelopes, esignEvents, lenderReviewConfig, borrowerProfiles, borrowerDocuments } from '@shared/schema';
 import { sendPartnerBroadcast, handleIncomingSms, getInboundMessages, markMessageRead, getBroadcastHistory } from './broadcastService';
 import { registerObjectStorageRoutes, ObjectStorageService } from './replit_integrations/object_storage';
 import multer from 'multer';
@@ -43,13 +45,22 @@ import { randomUUID } from 'crypto';
 import { encryptToken } from './utils/encryption';
 import { registerAuthRoutes } from './routes/auth';
 import { registerMessagingRoutes } from './routes/messaging';
+import { registerTeamChatRoutes } from './routes/team-chat';
 import { registerPortalRoutes } from './routes/portal';
 import { registerAdminProgramsRoutes } from './routes/admin-programs';
+import { setupPermissionsRoutes } from './routes/permissions';
+import { setupAuditRoutes } from './routes/audit';
+import { setupApiKeysRoutes } from './routes/apiKeys';
+import { setupWebhookRoutes } from './routes/webhooks';
+import { createAuditLog, getClientIp, logUserAction, AuditActions, ResourceTypes } from './utils/audit';
 
 import { registerProcessorRoutes } from './routes/processor';
 import { registerBrokerSdrRoutes } from './routes/broker-sdr';
 import { registerAiAssistantRoutes } from './routes/ai-assistant';
 import { registerAgentRoutes } from './routes/agents';
+import { registerDebuggerRoutes } from './routes/debugger';
+import { OrchestrationTracer } from './services/orchestrationTracing';
+import { cacheReplayContext, getCreditExtractionDefaultPrompt, getActiveCreditExtractionPrompt, getActiveCreditExtractionSettings } from './routes/debugger';
 import { registerEmailRoutes } from './routes/email';
 import { registerGoogleConnectRoutes } from './routes/googleConnect';
 import { registerMicrosoftConnectRoutes } from './routes/microsoftConnect';
@@ -85,6 +96,20 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  async function getProjectWithBorrowerAccess(projectId: number, userId: number, userRole: string): Promise<any> {
+    let project = await storage.getProjectById(projectId, userId);
+    if (!project && userRole === 'borrower') {
+      const borrowerUser = await storage.getUserById(userId);
+      if (borrowerUser?.email) {
+        const internal = await storage.getProjectByIdInternal(projectId);
+        if (internal && internal.borrowerEmail && internal.borrowerEmail.toLowerCase().trim() === borrowerUser.email.toLowerCase().trim()) {
+          project = internal;
+        }
+      }
+    }
+    return project;
+  }
+
   // ==================== URL REWRITE: deals → projects ====================
   // The frontend uses "deals" terminology but the backend routes are registered as "projects"
   // This middleware transparently rewrites deal-based paths to project-based paths
@@ -102,6 +127,54 @@ export async function registerRoutes(
   // like /api/admin/deals/:id/project need to keep working as-is (they are already
   // registered as /api/admin/deals routes, not /api/admin/projects)
 
+  // ==================== BETA SIGNUP (always accessible) ====================
+  app.post('/api/subscribe', async (req: Request, res: Response) => {
+    try {
+      const parsed = insertBetaSignupSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: 'Valid email is required' });
+      }
+      const { email, name, company } = parsed.data;
+
+      const existing = await db.select().from(betaSignups).where(eq(betaSignups.email, email.toLowerCase())).limit(1);
+      if (existing.length > 0) {
+        return res.json({ success: true, message: "You're already on the list!" });
+      }
+
+      await db.insert(betaSignups).values({ email: email.toLowerCase(), name: name || null, company: company || null });
+
+      try {
+        const { getResendClient } = await import('./email');
+        const { client, fromEmail } = await getResendClient();
+        await client.emails.send({
+          from: fromEmail,
+          to: email.toLowerCase(),
+          subject: "Welcome to the Lendry.AI Beta Waitlist",
+          html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px;">
+              <h1 style="color: #0F1729; font-size: 24px; margin-bottom: 8px;">Welcome to Lendry.AI</h1>
+              <p style="color: #64748b; font-size: 15px; line-height: 1.6;">
+                ${name ? `Hi ${name},` : 'Hi there,'}<br/><br/>
+                Thanks for joining the Lendry.AI beta waitlist! We're building the future of loan origination — AI-powered underwriting, smart deal pipelines, and enterprise-grade compliance.
+              </p>
+              <p style="color: #64748b; font-size: 15px; line-height: 1.6;">
+                We'll send you an invite as soon as we're ready for you.
+              </p>
+              <p style="color: #94a3b8; font-size: 13px; margin-top: 32px;">— The Lendry.AI Team</p>
+            </div>
+          `,
+        });
+      } catch (emailErr) {
+        console.error('[Subscribe] Failed to send confirmation email:', emailErr);
+      }
+
+      return res.json({ success: true, message: "You're on the list!" });
+    } catch (err: any) {
+      console.error('[Subscribe] Error:', err);
+      return res.status(500).json({ error: 'Failed to subscribe' });
+    }
+  });
+
   // ==================== OBJECT STORAGE ROUTES ====================
   registerObjectStorageRoutes(app);
   const objectStorageService = new ObjectStorageService();
@@ -116,7 +189,7 @@ export async function registerRoutes(
       }
       
       const user = await storage.getUserById(req.user.id);
-      if (!user || !['admin', 'staff', 'super_admin', 'processor'].includes(user.role)) {
+      if (!user || !['super_admin', 'lender', 'processor', 'admin', 'staff'].includes(user.role)) {
         return res.status(403).json({ error: 'Admin access required' });
       }
       
@@ -163,7 +236,7 @@ export async function registerRoutes(
           return next();
         }
 
-        const hasTeamRole = userRoles.some(r => ['admin', 'staff', 'processor'].includes(r));
+        const hasTeamRole = userRoles.some(r => ['admin', 'staff', 'processor', 'lender'].includes(r));
         if (!hasTeamRole) {
           return res.status(403).json({ error: 'Admin access required' });
         }
@@ -195,17 +268,17 @@ export async function registerRoutes(
       }
       
       // Team members are exempt from onboarding requirement
-      if (['admin', 'staff', 'super_admin', 'processor'].includes(user.role)) {
+      if (['admin', 'staff', 'super_admin', 'lender', 'processor'].includes(user.role)) {
         return next();
       }
       
       // Borrowers don't need onboarding (they have onboardingCompleted=true by default)
-      if (user.userType === 'borrower') {
+      if (user.role === 'borrower') {
         return next();
       }
       
       // Brokers must complete onboarding
-      if (user.userType === 'broker' && !user.onboardingCompleted) {
+      if (user.role === 'broker' && !user.onboardingCompleted) {
         return res.status(403).json({ 
           error: 'Onboarding required',
           code: 'ONBOARDING_REQUIRED',
@@ -222,6 +295,10 @@ export async function registerRoutes(
 
   // Register auth routes (address autocomplete, registration, login, OAuth, password reset)
   registerAuthRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
+  setupPermissionsRoutes(app, { db, authenticateUser });
+  setupAuditRoutes(app, { db });
+  setupApiKeysRoutes(app, { db, authenticateUser });
+  setupWebhookRoutes(app, { db, authenticateUser });
 
   // Register unified Google connect routes (Gmail + Drive in one OAuth flow)
   registerGoogleConnectRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
@@ -249,7 +326,7 @@ export async function registerRoutes(
       });
       
       const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
-      const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
+      const resetUrl = `${baseUrl}/reset-password/${resetToken}`;
       
       await sendPasswordResetEmail(user.email, user.fullName || 'User', resetUrl);
       
@@ -263,13 +340,14 @@ export async function registerRoutes(
   // Reset password
   app.post('/api/auth/reset-password', async (req: Request, res: Response) => {
     try {
-      const { token, password } = req.body;
+      const { token, password, newPassword } = req.body;
+      const pwd = newPassword || password;
       
-      if (!token || !password) {
+      if (!token || !pwd) {
         return res.status(400).json({ error: 'Token and password are required' });
       }
       
-      if (password.length < 8) {
+      if (pwd.length < 8) {
         return res.status(400).json({ error: 'Password must be at least 8 characters' });
       }
       
@@ -279,7 +357,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Invalid or expired reset token' });
       }
       
-      const passwordHash = await hashPassword(password);
+      const passwordHash = await hashPassword(pwd);
       
       await storage.updateUser(user.id, {
         passwordHash,
@@ -300,7 +378,40 @@ export async function registerRoutes(
     try {
       console.log('\n🚀 Starting Apify scrape request...');
       
-      const loanData = api.pricing.submit.input.parse(req.body);
+      let loanData: any;
+      let extConfig: any = null;
+      let scraperUrl = 'https://www.b-diya.nqxpricer.com/69af4d475dd9d8d5dc27b54b';
+      let isExternalPricing = false;
+
+      const rawProgramId = req.body?.programId;
+      if (rawProgramId) {
+        const [program] = await db.select().from(loanPrograms).where(eq(loanPrograms.id, Number(rawProgramId)));
+        if (program?.pricingMode === 'external' && program?.externalPricingConfig) {
+          isExternalPricing = true;
+          extConfig = program.externalPricingConfig as any;
+          if (extConfig.scraperUrl) {
+            try {
+              const parsed = new URL(extConfig.scraperUrl);
+              if (parsed.protocol !== 'https:') throw new Error('Only HTTPS URLs allowed');
+              if (['localhost', '127.0.0.1', '0.0.0.0', '169.254.169.254'].includes(parsed.hostname)) {
+                throw new Error('Invalid host');
+              }
+              scraperUrl = extConfig.scraperUrl;
+            } catch (urlErr) {
+              console.warn('Invalid scraper URL in program config, using default:', urlErr);
+              extConfig = null;
+              isExternalPricing = false;
+            }
+          }
+          if (extConfig) console.log('Using external pricing config from program:', program.id, 'URL:', scraperUrl);
+        }
+      }
+
+      if (isExternalPricing) {
+        loanData = externalPricingFormSchema.parse(req.body);
+      } else {
+        loanData = api.pricing.submit.input.parse(req.body);
+      }
       
       console.log('Loan data:', JSON.stringify(loanData, null, 2));
 
@@ -309,12 +420,138 @@ export async function registerRoutes(
         requestData: loanData,
         status: 'pending'
       });
+
+      const configTextInputs = extConfig?.textInputs || [
+        { id: ':r0:', fieldKey: 'loanAmount', label: 'Loan Amount' },
+        { id: ':r1:', fieldKey: 'propertyValue', label: 'Property Value' },
+      ];
+      const configDropdowns = extConfig?.dropdowns || [
+        { label: 'LTV', fieldKey: 'ltv' },
+        { label: 'Loan Type', fieldKey: 'loanType' },
+        { label: 'Interest Only', fieldKey: 'interestOnly' },
+        { label: 'Loan Purpose', fieldKey: 'loanPurpose' },
+        { label: 'Property Type', fieldKey: 'propertyType' },
+        { label: 'Est. DSCR', fieldKey: 'dscr' },
+        { label: 'Stated FICO Score', fieldKey: 'ficoScore' },
+        { label: 'Prepayment Penalty', fieldKey: 'prepaymentPenalty' },
+        { label: 'TPO Premium', fieldKey: 'tpoPremium' },
+      ];
+
+      const normalizeKey = (k: string) => k.replace(/[-_]/g, '').toLowerCase();
+      const loanDataNormalized: Record<string, any> = {};
+      for (const [k, v] of Object.entries(loanData as any)) {
+        loanDataNormalized[normalizeKey(k)] = v;
+      }
+
+      const resolveFieldValue = (fieldKey: string, sourceType?: string, defaultValue?: string, formula?: string, options?: string[]) => {
+        if (sourceType === 'default' && defaultValue) return defaultValue;
+
+        const exactVal = (loanData as any)[fieldKey];
+        if (exactVal !== undefined && exactVal !== null && exactVal !== '') return String(exactVal);
+
+        const normalizedVal = loanDataNormalized[normalizeKey(fieldKey)];
+        if (normalizedVal !== undefined && normalizedVal !== null && normalizedVal !== '') return String(normalizedVal);
+
+        if (sourceType === 'calculated') {
+          if (!formula && normalizeKey(fieldKey) === 'ltv') {
+            const la = Number(loanDataNormalized['loanamount'] || 0);
+            const pv = Number(loanDataNormalized['estvaluepurchaseprice'] || loanDataNormalized['propertyvalue'] || loanDataNormalized['asIsvalue'] || loanDataNormalized['purchaseprice'] || 0);
+            if (la > 0 && pv > 0) {
+              const ltvVal = (la / pv) * 100;
+              if (options && options.length > 0) {
+                for (const opt of options) {
+                  const rangeMatch = opt.match(/([\d.]+)%?\s*[-–]\s*([\d.]+)%?/);
+                  if (rangeMatch) {
+                    const low = parseFloat(rangeMatch[1]);
+                    const high = parseFloat(rangeMatch[2]);
+                    if (ltvVal >= low && ltvVal <= high) return opt;
+                  }
+                  const lteMatch = opt.match(/[≤<]=?\s*([\d.]+)%?/);
+                  if (lteMatch && ltvVal <= parseFloat(lteMatch[1])) return opt;
+                }
+                return options[options.length - 1];
+              }
+              return String(Math.round(ltvVal)) + '%';
+            }
+          }
+        }
+        if (sourceType === 'calculated' && formula) {
+          try {
+            const evaluated = formula.replace(/\{([^}]+)\}/g, (_: string, varName: string) => {
+              const v = (loanData as any)[varName] ?? loanDataNormalized[normalizeKey(varName)] ?? 0;
+              return String(Number(v) || 0);
+            });
+            const result = Function('"use strict"; return (' + evaluated + ')')();
+            if (options && options.length > 0) {
+              const numResult = Number(result);
+              for (const opt of options) {
+                const rangeMatch = opt.match(/([\d.]+)%?\s*[-–]\s*([\d.]+)%?/);
+                if (rangeMatch) {
+                  const low = parseFloat(rangeMatch[1]);
+                  const high = parseFloat(rangeMatch[2]);
+                  if (numResult >= low && numResult <= high) return opt;
+                }
+                const lteMatch = opt.match(/[≤<]=?\s*([\d.]+)%?/);
+                if (lteMatch && numResult <= parseFloat(lteMatch[1])) return opt;
+                const gteMatch = opt.match(/[≥>]=?\s*([\d.]+)%?/);
+                if (gteMatch && numResult >= parseFloat(gteMatch[1])) return opt;
+              }
+              const closest = options.reduce((best, opt) => {
+                const nums = opt.match(/[\d.]+/g);
+                if (!nums) return best;
+                const optNum = parseFloat(nums[nums.length - 1]);
+                const bestNums = best.match(/[\d.]+/g);
+                const bestNum = bestNums ? parseFloat(bestNums[bestNums.length - 1]) : Infinity;
+                return Math.abs(optNum - numResult) < Math.abs(bestNum - numResult) ? opt : best;
+              }, options[0]);
+              return closest;
+            }
+            return String(result);
+          } catch (e) {
+            console.warn('Formula evaluation failed for', fieldKey, ':', e);
+          }
+        }
+
+        return '';
+      };
+
+      const dynamicTextInputs = configTextInputs.map((ti: any) => ({
+        id: ti.id,
+        value: resolveFieldValue(ti.fieldKey, ti.sourceType, ti.defaultValue, ti.formula),
+        label: ti.label,
+      }));
+      const dynamicDropdowns = configDropdowns.map((dd: any) => ({
+        label: dd.label,
+        fieldKey: dd.fieldKey,
+        value: resolveFieldValue(dd.fieldKey, dd.sourceType, dd.defaultValue, dd.formula, dd.options),
+      }));
+
+      const resolvedDropdownValues: Record<string, string> = {};
+      const labelToCamelCase = (label: string) => {
+        const words = label.replace(/[^a-zA-Z0-9]+/g, ' ').trim().split(/\s+/);
+        return words.map((w, i) => i === 0 ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('');
+      };
+      for (const dd of dynamicDropdowns) {
+        if (dd.fieldKey && dd.value) {
+          resolvedDropdownValues[dd.fieldKey] = dd.value;
+          const camelKey = labelToCamelCase(dd.label || dd.fieldKey);
+          if (camelKey && camelKey !== dd.fieldKey) {
+            resolvedDropdownValues[camelKey] = dd.value;
+          }
+        }
+      }
+
+      const scraperPayload = {
+        url: scraperUrl,
+        textInputs: dynamicTextInputs.map((ti: any) => ({ label: ti.label, value: ti.value })),
+        dropdowns: dynamicDropdowns.map((dd: any) => ({ label: dd.label, value: dd.value })),
+      };
+      console.log('Scraper payload:', JSON.stringify(scraperPayload, null, 2));
       
       // Run the Apify Puppeteer Scraper actor
-      // We construct the pageFunction exactly as in the reference code
       const run = await client.actor('apify/puppeteer-scraper').call({
         startUrls: [{
-          url: 'https://www.b-diya.nqxpricer.com/698e56b8d1a8ab83b327b498'
+          url: scraperUrl
         }],
         pageFunction: `async function pageFunction(context) {
           const { page, request, log } = context;
@@ -334,10 +571,7 @@ export async function registerRoutes(
             // STEP 1: Fill text inputs using page.type() for proper React event handling
             log.info('Step 1: Filling text inputs...');
             
-            const textInputs = [
-              { id: ':r0:', value: loanData.loanAmount.toString(), label: 'Loan Amount' },
-              { id: ':r1:', value: loanData.propertyValue.toString(), label: 'Property Value' }
-            ];
+            const textInputs = ${JSON.stringify(dynamicTextInputs)};
             
             const textResult = [];
             
@@ -390,17 +624,7 @@ export async function registerRoutes(
             // STEP 2: Fill each dropdown ONE BY ONE
             log.info('Step 2: Filling dropdowns...');
             
-            const dropdowns = [
-              { label: 'LTV', value: ${JSON.stringify(loanData.ltv)} },
-              { label: 'Loan Type', value: ${JSON.stringify(loanData.loanType)} },
-              { label: 'Interest Only', value: ${JSON.stringify(loanData.interestOnly)} },
-              { label: 'Loan Purpose', value: ${JSON.stringify(loanData.loanPurpose)} },
-              { label: 'Property Type', value: ${JSON.stringify(loanData.propertyType)} },
-              { label: 'Est. DSCR', value: ${JSON.stringify(loanData.dscr)} },
-              { label: 'Stated FICO Score', value: ${JSON.stringify(loanData.ficoScore)} },
-              { label: 'Prepayment Penalty', value: ${JSON.stringify(loanData.prepaymentPenalty)} },
-              { label: 'TPO Premium', value: ${JSON.stringify(loanData.tpoPremium)} }
-            ];
+            const dropdowns = ${JSON.stringify(dynamicDropdowns)};
             
             const dropdownResults = [];
             
@@ -854,28 +1078,33 @@ export async function registerRoutes(
           status: 'success'
         });
 
+        const enrichedLoanData = { ...result.loanData, ...resolvedDropdownValues };
+
         if (result.isIneligible) {
           res.json({
             success: false,
             isIneligible: true,
             message: 'Loan is ineligible',
-            loanData: result.loanData,
-            apifyRunId: run.id
+            loanData: enrichedLoanData,
+            apifyRunId: run.id,
+            scraperPayload,
           });
         } else if (result.success && result.interestRate) {
           let parsedRate = parseFloat(String(result.interestRate).replace('%', ''));
           res.json({
             success: true,
             interestRate: parsedRate,
-            loanData: result.loanData,
-            apifyRunId: run.id
+            loanData: enrichedLoanData,
+            apifyRunId: run.id,
+            scraperPayload,
           });
         } else {
           res.status(400).json({
             success: false,
             error: 'Could not extract interest rate from page',
             apifyRunId: run.id,
-            debug: result
+            debug: result,
+            scraperPayload,
           });
         }
       } else {
@@ -1068,6 +1297,407 @@ export async function registerRoutes(
     }
   });
 
+  const updateQuoteSchema = z.object({
+    customerFirstName: z.string().optional(),
+    customerLastName: z.string().optional(),
+    customerCompanyName: z.string().nullable().optional(),
+    propertyAddress: z.string().optional(),
+    interestRate: z.string().optional(),
+    pointsCharged: z.number().optional(),
+    loanData: z.record(z.any()).optional(),
+  });
+
+  app.patch('/api/quotes/:id', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const parsed = updateQuoteSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: 'Invalid input', details: parsed.error.flatten() });
+      }
+
+      const existing = await storage.getQuoteById(id, req.user!.id);
+      if (!existing) {
+        return res.status(404).json({ success: false, error: 'Quote not found' });
+      }
+
+      const updates: any = { ...parsed.data };
+
+      if (parsed.data.loanData && existing.loanData) {
+        updates.loanData = { ...(existing.loanData as Record<string, any>), ...parsed.data.loanData };
+      }
+
+      const updated = await storage.updateQuote(id, req.user!.id, updates);
+      res.json({ success: true, quote: updated });
+    } catch (error) {
+      console.error('Error updating quote:', error);
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+  // Download PDF for a saved quote
+  app.get('/api/quotes/:id/pdf', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const quote = await storage.getQuoteById(id, req.user!.id);
+      if (!quote) {
+        res.status(404).json({ success: false, error: 'Quote not found' });
+        return;
+      }
+
+      const { generateQuotePdf, DEFAULT_TEMPLATE_CONFIG } = await import('./pdf/quoteGenerator');
+      const { generateLoiPdf } = await import('./pdf/loiGenerator');
+      const templateId = req.query.templateId ? parseInt(req.query.templateId as string) : null;
+      let templateConfig = DEFAULT_TEMPLATE_CONFIG;
+
+      if (templateId) {
+        const template = await storage.getQuotePdfTemplateById(templateId);
+        if (template && (template.tenantId === null || template.tenantId === req.user!.tenantId)) {
+          templateConfig = template.config;
+        }
+      } else {
+        const defaultTemplate = await storage.getDefaultQuotePdfTemplate(req.user!.tenantId || undefined);
+        if (defaultTemplate) templateConfig = defaultTemplate.config;
+      }
+
+      const quoteDate = quote.createdAt ? new Date(quote.createdAt).toLocaleDateString('en-US') : new Date().toLocaleDateString('en-US');
+      const pdfData = {
+        quoteNumber: quote.loanNumber || String(quote.id),
+        quoteDate,
+        customerFirstName: quote.customerFirstName,
+        customerLastName: quote.customerLastName,
+        customerCompanyName: quote.customerCompanyName || undefined,
+        propertyAddress: quote.propertyAddress,
+        interestRate: quote.interestRate || undefined,
+        pointsCharged: quote.pointsCharged || undefined,
+        pointsAmount: quote.pointsAmount || undefined,
+        yspAmount: quote.yspAmount || undefined,
+        yspDollarAmount: quote.yspDollarAmount || undefined,
+        commission: quote.commission || undefined,
+        loanData: quote.loanData as Record<string, any> || {},
+      };
+
+      const pdfBytes = templateConfig.templateType === 'loi'
+        ? await generateLoiPdf(pdfData, templateConfig.loiDefaults)
+        : await generateQuotePdf(pdfData, templateConfig);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="Quote-${quote.id}-${quote.customerLastName || 'download'}.pdf"`);
+      res.send(Buffer.from(pdfBytes));
+    } catch (error) {
+      console.error('Error generating quote PDF:', error);
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'PDF generation failed' });
+    }
+  });
+
+  // Internal send-for-signature: generates PDF, creates document with pre-positioned fields, emails signing link
+  app.post('/api/quotes/:id/send-internal-signature', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { recipientEmail, recipientName, templateId, resend, existingDocumentId } = req.body;
+
+      const quote = await storage.getQuoteById(id, req.user!.id);
+      if (!quote) {
+        res.status(404).json({ success: false, error: 'Quote not found' });
+        return;
+      }
+
+      if (!recipientEmail) {
+        res.status(400).json({ success: false, error: 'Recipient email is required' });
+        return;
+      }
+
+      const borrowerName = recipientName || [quote.customerFirstName, quote.customerLastName].filter(Boolean).join(' ');
+      const senderUser = await storage.getUserById(req.user!.id);
+      const senderName = senderUser ? [senderUser.firstName, senderUser.lastName].filter(Boolean).join(' ') : 'Lendry.AI';
+
+      let document: any;
+      let pageCount: number;
+      let signingFields: { fieldType: string; pageNumber: number; x: number; y: number; width: number; height: number }[] = [];
+
+      if (resend && existingDocumentId) {
+        const existingDoc = await storage.getDocumentById(existingDocumentId);
+        if (!existingDoc || existingDoc.quoteId !== quote.id) {
+          res.status(404).json({ success: false, error: 'Original document not found for this quote' });
+          return;
+        }
+
+        document = await storage.createDocument({
+          name: existingDoc.name,
+          fileName: existingDoc.fileName,
+          fileData: existingDoc.fileData,
+          pageCount: existingDoc.pageCount,
+          status: 'sent',
+          vendor: 'local',
+          quoteId: quote.id,
+        }, req.user!.id);
+
+        pageCount = existingDoc.pageCount;
+
+        const existingFields = await storage.getFieldsByDocumentId(existingDocumentId);
+        if (existingFields.length > 0) {
+          signingFields = existingFields.map(f => ({
+            fieldType: f.fieldType,
+            pageNumber: f.pageNumber,
+            x: f.x,
+            y: f.y,
+            width: f.width,
+            height: f.height,
+          }));
+        }
+      } else {
+        const { generateQuotePdf, DEFAULT_TEMPLATE_CONFIG } = await import('./pdf/quoteGenerator');
+        const { generateLoiPdfWithFields } = await import('./pdf/loiGenerator');
+
+        let templateConfig = DEFAULT_TEMPLATE_CONFIG;
+        if (templateId) {
+          const template = await storage.getQuotePdfTemplateById(templateId);
+          if (template && (template.tenantId === null || template.tenantId === req.user!.tenantId)) {
+            templateConfig = template.config;
+          }
+        }
+
+        const quoteDate = quote.createdAt ? new Date(quote.createdAt).toLocaleDateString('en-US') : new Date().toLocaleDateString('en-US');
+        const pdfData = {
+          quoteNumber: quote.loanNumber || String(quote.id),
+          quoteDate,
+          customerFirstName: quote.customerFirstName,
+          customerLastName: quote.customerLastName,
+          customerCompanyName: quote.customerCompanyName || undefined,
+          propertyAddress: quote.propertyAddress,
+          interestRate: quote.interestRate || undefined,
+          pointsCharged: quote.pointsCharged || undefined,
+          pointsAmount: quote.pointsAmount || undefined,
+          yspAmount: quote.yspAmount || undefined,
+          yspDollarAmount: quote.yspDollarAmount || undefined,
+          commission: quote.commission || undefined,
+          loanData: quote.loanData as Record<string, any> || {},
+        };
+
+        const isLoi = templateConfig.templateType === 'loi';
+        let pdfBytes: Uint8Array;
+
+        if (isLoi) {
+          const result = await generateLoiPdfWithFields(pdfData, templateConfig.loiDefaults);
+          pdfBytes = result.pdfBytes;
+          signingFields = result.signingFields;
+        } else {
+          pdfBytes = new Uint8Array(await generateQuotePdf(pdfData, templateConfig));
+        }
+
+        const pdfBase64 = `data:application/pdf;base64,${Buffer.from(pdfBytes).toString('base64')}`;
+        const docName = `${quote.loanNumber || `Quote-${quote.id}`} - Term Sheet`;
+
+        const pdfDoc = await (await import('pdf-lib')).PDFDocument.load(pdfBytes);
+        pageCount = pdfDoc.getPageCount();
+
+        document = await storage.createDocument({
+          name: docName,
+          fileName: `${quote.loanNumber || `Quote-${quote.id}`}.pdf`,
+          fileData: pdfBase64,
+          pageCount,
+          status: 'sent',
+          vendor: 'local',
+          quoteId: quote.id,
+        }, req.user!.id);
+      }
+
+      const crypto = await import('crypto');
+      const token = crypto.randomBytes(32).toString('hex');
+      const tokenExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+      const signer = await storage.createSigner({
+        documentId: document.id,
+        name: borrowerName,
+        email: recipientEmail,
+        color: '#C9A84C',
+        signingOrder: 1,
+        status: 'sent',
+        token,
+        tokenExpiresAt,
+      });
+
+      if (signingFields.length > 0) {
+        for (const field of signingFields) {
+          await storage.createField({
+            documentId: document.id,
+            signerId: signer.id,
+            pageNumber: field.pageNumber,
+            fieldType: field.fieldType,
+            x: field.x,
+            y: field.y,
+            width: field.width,
+            height: field.height,
+            required: true,
+            label: field.fieldType === 'signature' ? 'Signature' : field.fieldType === 'date' ? 'Date' : field.fieldType,
+          });
+        }
+      } else {
+        await storage.createField({
+          documentId: document.id,
+          signerId: signer.id,
+          pageNumber: pageCount,
+          fieldType: 'signature',
+          x: 114,
+          y: 650,
+          width: 200,
+          height: 25,
+          required: true,
+          label: 'Signature',
+        });
+      }
+
+      await storage.updateDocument(document.id, { sentAt: new Date(), status: 'sent' });
+
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : (process.env.REPL_SLUG ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` : 'http://localhost:5000');
+      const signingLink = `${baseUrl}/sign/${token}`;
+
+      const { sendSigningInvitation } = await import('./email');
+      const emailResult = await sendSigningInvitation(recipientEmail, borrowerName, docName, senderName, signingLink);
+      if (!emailResult.success) {
+        console.error('Failed to send signing email:', emailResult.error);
+      }
+
+      await storage.createAuditLog({
+        documentId: document.id,
+        action: 'sent',
+        performedBy: senderName,
+        ipAddress: req.ip || 'unknown',
+      });
+
+      res.json({
+        success: true,
+        documentId: document.id,
+        signingLink,
+        message: `Term sheet sent to ${recipientEmail}`,
+      });
+    } catch (error) {
+      console.error('Error sending internal signature:', error);
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Failed to send for signature' });
+    }
+  });
+
+  // Generate PDF for unsaved pricing result
+  app.post('/api/pricing/pdf', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const { formData, result, templateId, pointsCharged, yspAmount } = req.body;
+      if (!formData || !result) {
+        res.status(400).json({ success: false, error: 'formData and result are required' });
+        return;
+      }
+
+      const { generateQuotePdf, DEFAULT_TEMPLATE_CONFIG } = await import('./pdf/quoteGenerator');
+      const { generateLoiPdf } = await import('./pdf/loiGenerator');
+      let templateConfig = DEFAULT_TEMPLATE_CONFIG;
+
+      if (templateId) {
+        const template = await storage.getQuotePdfTemplateById(parseInt(templateId));
+        if (template && (template.tenantId === null || template.tenantId === req.user!.tenantId)) {
+          templateConfig = template.config;
+        }
+      } else {
+        const defaultTemplate = await storage.getDefaultQuotePdfTemplate(req.user!.tenantId || undefined);
+        if (defaultTemplate) templateConfig = defaultTemplate.config;
+      }
+
+      const pdfData = {
+        quoteDate: new Date().toLocaleDateString('en-US'),
+        interestRate: result.interestRate != null
+          ? (typeof result.interestRate === 'number' ? `${result.interestRate.toFixed(3)}%` : String(result.interestRate))
+          : undefined,
+        pointsCharged: pointsCharged != null ? Number(pointsCharged) : undefined,
+        yspAmount: yspAmount != null ? Number(yspAmount) : undefined,
+        loanData: formData,
+      };
+
+      const pdfBytes = templateConfig.templateType === 'loi'
+        ? await generateLoiPdf(pdfData, templateConfig.loiDefaults)
+        : await generateQuotePdf(pdfData, templateConfig);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename="Quote-Estimate.pdf"');
+      res.send(Buffer.from(pdfBytes));
+    } catch (error) {
+      console.error('Error generating pricing PDF:', error);
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'PDF generation failed' });
+    }
+  });
+
+  // ==================== QUOTE PDF TEMPLATES ====================
+  app.get('/api/quote-pdf-templates', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const templates = await storage.getQuotePdfTemplates(req.user!.tenantId || undefined);
+      res.json(templates);
+    } catch (error) {
+      console.error('Error fetching quote PDF templates:', error);
+      res.status(500).json({ success: false, error: 'Failed to fetch templates' });
+    }
+  });
+
+  app.post('/api/quote-pdf-templates', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      if (req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
+        res.status(403).json({ success: false, error: 'Admin access required' });
+        return;
+      }
+      const data = { ...req.body, tenantId: req.user!.tenantId || null };
+      const template = await storage.createQuotePdfTemplate(data);
+      res.json(template);
+    } catch (error) {
+      console.error('Error creating quote PDF template:', error);
+      res.status(500).json({ success: false, error: 'Failed to create template' });
+    }
+  });
+
+  app.patch('/api/quote-pdf-templates/:id', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      if (req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
+        res.status(403).json({ success: false, error: 'Admin access required' });
+        return;
+      }
+      const id = parseInt(req.params.id);
+      const existing = await storage.getQuotePdfTemplateById(id);
+      if (!existing) {
+        res.status(404).json({ success: false, error: 'Template not found' });
+        return;
+      }
+      if (existing.tenantId && existing.tenantId !== (req.user!.tenantId || null)) {
+        res.status(403).json({ success: false, error: 'Access denied' });
+        return;
+      }
+      const template = await storage.updateQuotePdfTemplate(id, req.body);
+      res.json(template);
+    } catch (error) {
+      console.error('Error updating quote PDF template:', error);
+      res.status(500).json({ success: false, error: 'Failed to update template' });
+    }
+  });
+
+  app.delete('/api/quote-pdf-templates/:id', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      if (req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
+        res.status(403).json({ success: false, error: 'Admin access required' });
+        return;
+      }
+      const id = parseInt(req.params.id);
+      const existing = await storage.getQuotePdfTemplateById(id);
+      if (!existing) {
+        res.status(404).json({ success: false, error: 'Template not found' });
+        return;
+      }
+      if (existing.tenantId && existing.tenantId !== (req.user!.tenantId || null)) {
+        res.status(403).json({ success: false, error: 'Access denied' });
+        return;
+      }
+      await storage.deleteQuotePdfTemplate(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error deleting quote PDF template:', error);
+      res.status(500).json({ success: false, error: 'Failed to delete template' });
+    }
+  });
+
   // Accept a quote (borrower flow) — creates a project/deal on the admin dashboard
   app.post('/api/quotes/:id/accept', authenticateUser, async (req: AuthRequest, res) => {
     try {
@@ -1110,6 +1740,12 @@ export async function registerRoutes(
       const borrowerName = `${quote.customerFirstName || ''} ${quote.customerLastName || ''}`.trim() || user.fullName || user.email;
       const borrowerEmail = user.email || '';
 
+      let quoteTenantId: number | null = null;
+      if (quote.programId) {
+        const [prog] = await db.select({ createdBy: loanPrograms.createdBy }).from(loanPrograms).where(eq(loanPrograms.id, quote.programId)).limit(1);
+        if (prog?.createdBy) quoteTenantId = prog.createdBy;
+      }
+
       const { project, projectNumber: pn } = await db.transaction(async (tx) => {
         const [proj] = await tx.insert(projects).values({
           userId,
@@ -1133,6 +1769,13 @@ export async function registerRoutes(
           borrowerPortalToken: borrowerToken,
           borrowerPortalEnabled: true,
           quoteId: quoteId,
+          tenantId: quoteTenantId,
+          ysp: quote.yspAmount ?? null,
+          lenderOriginationPoints: quote.basePointsCharged ?? null,
+          brokerOriginationPoints: quote.brokerPointsCharged ?? null,
+          brokerName: quote.partnerName || null,
+          prepaymentPenalty: loanData?.prepaymentPenalty || null,
+          holdbackAmount: loanData?.holdbackAmount != null ? parseFloat(loanData.holdbackAmount) : null,
           notes: `Accepted from borrower quote #${quoteId}`,
           metadata: { applicationData: loanData },
         }).returning();
@@ -1949,6 +2592,78 @@ export async function registerRoutes(
     }
   });
 
+  // Get internal document statuses for quotes (bulk)
+  app.get('/api/internal-documents/bulk', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const quoteIdsParam = req.query.quoteIds as string;
+      if (!quoteIdsParam) {
+        res.json({ documents: [] });
+        return;
+      }
+      const quoteIds = quoteIdsParam.split(',').map(Number).filter(n => !isNaN(n));
+      if (quoteIds.length === 0) {
+        res.json({ documents: [] });
+        return;
+      }
+
+      const results: Array<{
+        quoteId: number;
+        documentId: number;
+        documentName: string;
+        status: string;
+        sentAt: string | null;
+        completedAt: string | null;
+        createdAt: string;
+        signerStatus: string | null;
+        signerEmail: string | null;
+        signerName: string | null;
+        hasProject: boolean;
+      }> = [];
+
+      for (const qId of quoteIds) {
+        const docs = await storage.getDocumentsByQuoteId(qId, req.user!.id);
+        if (docs.length > 0) {
+          const latestDoc = docs[0];
+          const signers = await storage.getSignersByDocumentId(latestDoc.id);
+          const firstSigner = signers[0] || null;
+
+          let projectLinked = false;
+          try {
+            const existingProjects = await db.select({ id: projects.id })
+              .from(projects)
+              .where(
+                or(
+                  eq(projects.agreementId, latestDoc.id),
+                  eq(projects.quoteId, qId)
+                )
+              )
+              .limit(1);
+            projectLinked = existingProjects.length > 0;
+          } catch (_) {}
+
+          results.push({
+            quoteId: qId,
+            documentId: latestDoc.id,
+            documentName: latestDoc.name,
+            status: latestDoc.status,
+            sentAt: latestDoc.sentAt?.toISOString() || null,
+            completedAt: latestDoc.completedAt?.toISOString() || null,
+            createdAt: latestDoc.createdAt?.toISOString() || '',
+            signerStatus: firstSigner?.status || null,
+            signerEmail: firstSigner?.email || null,
+            signerName: firstSigner?.name || null,
+            hasProject: projectLinked,
+          });
+        }
+      }
+
+      res.json({ documents: results });
+    } catch (error) {
+      console.error('Error fetching internal document statuses:', error);
+      res.status(500).json({ error: 'Failed to fetch document statuses' });
+    }
+  });
+
   // Get signing page data by token
   app.get('/api/sign/:token', async (req, res) => {
     try {
@@ -2026,6 +2741,11 @@ export async function registerRoutes(
         return;
       }
 
+      if (signer.tokenExpiresAt && new Date(signer.tokenExpiresAt) < new Date()) {
+        res.status(410).json({ success: false, error: 'Signing link has expired' });
+        return;
+      }
+
       if (signer.status === 'signed') {
         res.status(400).json({ success: false, error: 'Already signed' });
         return;
@@ -2037,9 +2757,16 @@ export async function registerRoutes(
         return;
       }
 
-      // Update field values
+      // Validate field ownership - only allow updating fields belonging to this signer's document
+      const signerFields = await storage.getFieldsBySignerId(signer.id);
+      const validFieldIds = new Set(signerFields.map(f => f.id));
+
       for (const [fieldIdStr, value] of Object.entries(fieldValues)) {
         const fieldId = parseInt(fieldIdStr);
+        if (!validFieldIds.has(fieldId)) {
+          res.status(403).json({ success: false, error: 'Invalid field access' });
+          return;
+        }
         await storage.updateField(fieldId, { value: value as string });
       }
 
@@ -2099,6 +2826,7 @@ export async function registerRoutes(
           // Get quote data if linked
           let loanData: Record<string, unknown> = {};
           let quoteProgramId: number | null = null;
+          let quoteFields: Record<string, any> = {};
           if (doc.quoteId) {
             const quote = await storage.getQuoteById(doc.quoteId, doc.userId!);
             if (quote) {
@@ -2110,13 +2838,29 @@ export async function registerRoutes(
                 propertyAddress: quote.propertyAddress,
               };
               quoteProgramId = quote.programId || null;
+              const qLoanData = (quote as any).loanData || {};
+              quoteFields = {
+                ysp: (quote as any).yspAmount ?? null,
+                lenderOriginationPoints: (quote as any).basePointsCharged ?? null,
+                brokerOriginationPoints: (quote as any).brokerPointsCharged ?? null,
+                brokerName: (quote as any).partnerName || null,
+                prepaymentPenalty: qLoanData?.prepaymentPenalty || null,
+                holdbackAmount: qLoanData?.holdbackAmount ?? null,
+              };
             }
           }
           
+          let quoteLoanNumber: string | undefined;
+          if (doc.quoteId) {
+            const quote = await storage.getQuoteById(doc.quoteId, doc.userId!);
+            if (quote?.loanNumber) quoteLoanNumber = quote.loanNumber;
+          }
+
           const project = await storage.createProject({
             userId: doc.userId!,
             projectName: `${borrowerSigner.name} - ${doc.name}`,
             projectNumber,
+            ...(quoteLoanNumber ? { loanNumber: quoteLoanNumber } : {}),
             loanAmount: loanData.loanAmount as number || null,
             interestRate: loanData.interestRate as number || null,
             loanTermMonths: loanData.loanTermMonths as number || null,
@@ -2132,8 +2876,26 @@ export async function registerRoutes(
             targetCloseDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000), // 60 days
             borrowerPortalToken: borrowerToken,
             borrowerPortalEnabled: true,
-            sourceDocumentId: doc.id,
+            agreementId: doc.id,
+            quoteId: doc.quoteId || undefined,
+            ...quoteFields,
           });
+
+          // Upload the signed document to the new project's documents section
+          try {
+            await storage.createDealDocument({
+              dealId: project.id,
+              documentName: doc.name,
+              documentCategory: 'closing_docs',
+              documentDescription: `Signed term sheet auto-uploaded from ${doc.name}`,
+              status: 'approved',
+              isRequired: true,
+              uploadedAt: new Date(),
+            });
+            console.log(`✓ Signed document attached to project ${project.id}`);
+          } catch (docErr) {
+            console.error('Error attaching signed document to project:', docErr);
+          }
           
           // Create stages/tasks/documents from program template (or legacy fallback)
           const { buildProjectPipelineFromProgram } = await import('./services/projectPipeline');
@@ -2802,15 +3564,34 @@ export async function registerRoutes(
       const userId = req.user!.id;
       const { status, archived } = req.query;
       
-      const projectsList = await storage.getProjects(
+      let projectsList = await storage.getProjects(
         userId,
         status as string | undefined,
         archived !== undefined ? archived === 'true' : undefined
       );
 
-      // Batch-fetch task stats for all projects to avoid N+1
+      const currentUser = await storage.getUserById(userId);
+      if (currentUser && currentUser.email && currentUser.role === 'borrower') {
+        const userEmail = currentUser.email.toLowerCase().trim();
+        let emailConditions: any[] = [
+          sql`LOWER(TRIM(${projects.borrowerEmail})) = ${userEmail}`
+        ];
+        if (status) emailConditions.push(eq(projects.status, status as string));
+        if (archived !== undefined) emailConditions.push(eq(projects.isArchived, archived === 'true'));
+        const emailMatched = await db.select().from(projects)
+          .where(and(...emailConditions))
+          .orderBy(desc(projects.lastUpdated));
+        const existingIds = new Set(projectsList.map(p => p.id));
+        for (const p of emailMatched) {
+          if (!existingIds.has(p.id)) {
+            projectsList.push(p);
+          }
+        }
+      }
+
       const projectIds = projectsList.map(p => p.id);
       const taskStatsMap = new Map<number, { completed: number; total: number }>();
+      const docStatsMap = new Map<number, { completed: number; total: number }>();
       if (projectIds.length > 0) {
         const allTasks = await db.select({
           projectId: projectTasks.projectId,
@@ -2823,13 +3604,32 @@ export async function registerRoutes(
           if (task.status === 'completed') existing.completed++;
           taskStatsMap.set(task.projectId, existing);
         }
+
+        const allDocs = await db.select({
+          dealId: dealDocuments.dealId,
+          status: dealDocuments.status,
+        }).from(dealDocuments).where(inArray(dealDocuments.dealId, projectIds));
+
+        for (const doc of allDocs) {
+          if (!doc.dealId) continue;
+          const existing = docStatsMap.get(doc.dealId) || { completed: 0, total: 0 };
+          existing.total++;
+          if (doc.status === 'approved' || doc.status === 'uploaded' || doc.status === 'waived' || doc.status === 'not_applicable') existing.completed++;
+          docStatsMap.set(doc.dealId, existing);
+        }
       }
 
-      const projectsWithStats = projectsList.map(project => ({
-        ...project,
-        completedTasks: taskStatsMap.get(project.id)?.completed || 0,
-        totalTasks: taskStatsMap.get(project.id)?.total || 0,
-      }));
+      const projectsWithStats = projectsList.map(project => {
+        const serialized: Record<string, any> = {};
+        for (const [k, v] of Object.entries(project)) {
+          serialized[k] = v instanceof Date ? v.toISOString() : v;
+        }
+        serialized.completedTasks = taskStatsMap.get(project.id)?.completed || 0;
+        serialized.totalTasks = taskStatsMap.get(project.id)?.total || 0;
+        serialized.completedDocs = docStatsMap.get(project.id)?.completed || 0;
+        serialized.totalDocs = docStatsMap.get(project.id)?.total || 0;
+        return serialized;
+      });
 
       res.json({ projects: projectsWithStats });
     } catch (error) {
@@ -2855,7 +3655,8 @@ export async function registerRoutes(
         borrowerEmail,
         borrowerPhone,
         targetCloseDate,
-        notes
+        notes,
+        programFieldData,
       } = req.body;
       
       if (!borrowerName || !borrowerEmail) {
@@ -2881,6 +3682,7 @@ export async function registerRoutes(
       const projectNumber = await storage.generateProjectNumber();
       const borrowerToken = uuidv4().replace(/-/g, '') + uuidv4().replace(/-/g, '');
       
+      const userTenantId = await getTenantId(req.user!);
       const project = await storage.createProject({
         userId,
         projectName,
@@ -2903,8 +3705,27 @@ export async function registerRoutes(
         borrowerPortalToken: borrowerToken,
         borrowerPortalEnabled: true,
         notes,
+        tenantId: userTenantId,
+        prepaymentPenalty: programFieldData?.prepaymentPenalty || req.body.prepaymentPenalty || null,
+        holdbackAmount: programFieldData?.holdbackAmount ? parseFloat(programFieldData.holdbackAmount) : (req.body.holdbackAmount ? parseFloat(req.body.holdbackAmount) : null),
+        metadata: programFieldData ? { applicationData: programFieldData } : undefined,
       });
       
+      // Upsert borrower profile
+      if (borrowerEmail) {
+        const [existingProfile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, borrowerEmail));
+        if (!existingProfile) {
+          const nameParts = (borrowerName || '').split(' ');
+          await db.insert(borrowerProfiles).values({
+            email: borrowerEmail,
+            firstName: nameParts[0] || null,
+            lastName: nameParts.slice(1).join(' ') || null,
+            phone: borrowerPhone || null,
+            streetAddress: propertyAddress || null,
+          });
+        }
+      }
+
       if (propertyAddress) {
         await db.insert(dealProperties).values({
           dealId: project.id,
@@ -2962,7 +3783,7 @@ export async function registerRoutes(
       const userId = req.user!.id;
       const projectId = parseInt(req.params.id);
       
-      const project = await storage.getProjectById(projectId, userId);
+      const project = await getProjectWithBorrowerAccess(projectId, userId, req.user!.role);
       if (!project) {
         return res.status(404).json({ error: 'Project not found' });
       }
@@ -2978,6 +3799,10 @@ export async function registerRoutes(
       const activity = await storage.getActivityByProjectId(projectId);
       const documents = await storage.getDocumentsByProjectId(projectId);
 
+      const dealDocs = await db.select().from(dealDocuments)
+        .where(eq(dealDocuments.dealId, projectId))
+        .orderBy(asc(dealDocuments.sortOrder));
+
       const processors = await db.select({
         id: dealProcessors.id,
         userId: dealProcessors.userId,
@@ -2992,23 +3817,161 @@ export async function registerRoutes(
       }).from(dealProcessors)
         .innerJoin(users, eq(dealProcessors.userId, users.id))
         .where(eq(dealProcessors.projectId, projectId));
-      
+
+      const formTemplateIds = [...new Set(tasks.filter(t => t.formTemplateId).map(t => t.formTemplateId!))];
+      let formTemplateMap = new Map<number, any>();
+      if (formTemplateIds.length > 0) {
+        const templates = await db.select().from(inquiryFormTemplates)
+          .where(inArray(inquiryFormTemplates.id, formTemplateIds));
+        formTemplateMap = new Map(templates.map(t => [t.id, t]));
+      }
+
+      const formTaskIds = tasks.filter(t => t.formTemplateId).map(t => t.id);
+      let formSubmissionMap = new Map<number, any>();
+      if (formTaskIds.length > 0) {
+        const submissions = await db.select().from(taskFormSubmissions)
+          .where(inArray(taskFormSubmissions.taskId, formTaskIds));
+        formSubmissionMap = new Map(submissions.map(s => [s.taskId, s]));
+      }
+
+      const enrichTask = (t: any) => ({
+        ...t,
+        formTemplate: t.formTemplateId ? formTemplateMap.get(t.formTemplateId) || null : null,
+        formSubmission: formSubmissionMap.get(t.id) || null,
+      });
+
       // Group tasks by stage
       const stagesWithTasks = stages.map(stage => ({
         ...stage,
-        tasks: tasks.filter(t => t.stageId === stage.id),
+        tasks: tasks.filter(t => t.stageId === stage.id).map(enrichTask),
       }));
+
+      // Include tasks with no stage assignment (stageId = NULL)
+      const stagelessTasks = tasks.filter(t => t.stageId === null || t.stageId === undefined).map(enrichTask);
       
       res.json({
         project: { ...project, programName },
         stages: stagesWithTasks,
+        tasks: stagelessTasks,
         activity,
         documents,
+        dealDocuments: dealDocs,
         processors,
       });
     } catch (error) {
       console.error('Get project error:', error);
       res.status(500).json({ error: 'Failed to get project' });
+    }
+  });
+
+  app.post('/api/projects/:projectId/tasks/:taskId/submit-form', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const tId = parseInt(req.params.taskId);
+      const userId = req.user!.id;
+
+      const project = await getProjectWithBorrowerAccess(projectId, userId, req.user!.role);
+      if (!project) return res.status(404).json({ error: 'Deal not found' });
+
+      const [task] = await db.select().from(projectTasks)
+        .where(and(eq(projectTasks.id, tId), eq(projectTasks.projectId, projectId)));
+      if (!task) return res.status(404).json({ error: 'Task not found' });
+      if (!task.formTemplateId) return res.status(400).json({ error: 'This task has no form attached' });
+      if (task.status === 'completed') return res.status(400).json({ error: 'This task is already completed' });
+
+      const [template] = await db.select().from(inquiryFormTemplates)
+        .where(eq(inquiryFormTemplates.id, task.formTemplateId));
+      if (!template) return res.status(404).json({ error: 'Form template not found' });
+
+      const { formData } = req.body;
+      if (!formData || typeof formData !== 'object') {
+        return res.status(400).json({ error: 'formData is required' });
+      }
+
+      const templateFields = template.fields as Array<{ fieldKey: string; label: string; required: boolean }>;
+      for (const field of templateFields) {
+        if (field.required && !formData[field.fieldKey]?.trim()) {
+          return res.status(400).json({ error: `${field.label} is required` });
+        }
+      }
+
+      const existingSub = await db.select().from(taskFormSubmissions)
+        .where(eq(taskFormSubmissions.taskId, tId))
+        .limit(1);
+
+      const submitterEmail = req.user!.email || project.borrowerEmail;
+
+      if (existingSub.length > 0) {
+        await db.update(taskFormSubmissions)
+          .set({ formData, status: 'submitted', submittedAt: new Date(), submittedByEmail: submitterEmail })
+          .where(eq(taskFormSubmissions.id, existingSub[0].id));
+      } else {
+        await db.insert(taskFormSubmissions).values({
+          taskId: tId,
+          projectId: projectId,
+          formTemplateId: task.formTemplateId,
+          submittedByEmail: submitterEmail,
+          formData,
+          status: 'submitted',
+          submittedAt: new Date(),
+        });
+      }
+
+      if (template.targetType === 'third_party' && template.targetRole) {
+        const existingThirdParty = await db.select().from(dealThirdParties)
+          .where(and(
+            eq(dealThirdParties.projectId, projectId),
+            eq(dealThirdParties.role, template.targetRole)
+          ))
+          .limit(1);
+
+        const thirdPartyData = {
+          name: formData.name || formData.contactName || 'Unknown',
+          email: formData.email || null,
+          phone: formData.phone || null,
+          company: formData.company || null,
+          notes: Object.entries(formData)
+            .filter(([k]) => !['name', 'contactName', 'email', 'phone', 'company'].includes(k))
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(', ') || null,
+          role: template.targetRole,
+          projectId: projectId,
+        };
+
+        if (existingThirdParty.length > 0) {
+          await db.update(dealThirdParties)
+            .set({ ...thirdPartyData, updatedAt: new Date() })
+            .where(eq(dealThirdParties.id, existingThirdParty[0].id));
+        } else {
+          await db.insert(dealThirdParties).values(thirdPartyData);
+        }
+      }
+
+      await db.update(projectTasks)
+        .set({ status: 'completed', completedAt: new Date(), completedBy: 'borrower', borrowerActionRequired: false })
+        .where(eq(projectTasks.id, tId));
+
+      try {
+        const adminUsers = await db.select({ id: users.id }).from(users)
+          .where(inArray(users.role, ['admin', 'super_admin', 'staff']));
+        for (const admin of adminUsers) {
+          await createNotification({
+            userId: admin.id,
+            type: 'document_uploaded',
+            title: `Form Submitted: ${template.name}`,
+            message: `${project.borrowerName || 'Borrower'} submitted "${template.name}" for ${project.projectName || 'a deal'}.`,
+            dealId: projectId,
+            link: `/admin/deals/${projectId}`,
+          });
+        }
+      } catch (notifErr) {
+        console.error('Authenticated form submission notification error:', notifErr);
+      }
+
+      res.json({ success: true, message: 'Form submitted successfully' });
+    } catch (error) {
+      console.error('Authenticated form submission error:', error);
+      res.status(500).json({ error: 'Failed to submit form' });
     }
   });
 
@@ -3023,11 +3986,17 @@ export async function registerRoutes(
         return res.status(404).json({ error: 'Project not found' });
       }
       
-      const allowedFields = [
+      const userRole = req.user!.role;
+      const isAdminUser = userRole === 'admin' || userRole === 'super_admin' || userRole === 'staff';
+      const baseFields = [
         'projectName', 'status', 'loanAmount', 'interestRate', 'loanTermMonths',
         'loanType', 'propertyAddress', 'propertyType', 'borrowerName',
-        'borrowerEmail', 'borrowerPhone', 'targetCloseDate', 'notes', 'internalNotes'
+        'borrowerEmail', 'borrowerPhone', 'targetCloseDate', 'notes', 'internalNotes',
+        'ltv', 'asIsValue', 'propertyState', 'appraisalStatus',
+        'brokerName', 'prepaymentPenalty', 'holdbackAmount'
       ];
+      const adminOnlyFields = ['ysp', 'lenderOriginationPoints', 'brokerOriginationPoints'];
+      const allowedFields = isAdminUser ? [...baseFields, ...adminOnlyFields] : baseFields;
       
       const updates: Record<string, unknown> = {};
       for (const field of allowedFields) {
@@ -3061,7 +4030,11 @@ export async function registerRoutes(
         );
       }
       
-      res.json({ project: updated });
+      const serialized: Record<string, any> = {};
+      for (const [k, v] of Object.entries(updated)) {
+        serialized[k] = v instanceof Date ? v.toISOString() : v;
+      }
+      res.json({ project: serialized });
     } catch (error) {
       console.error('Update project error:', error);
       res.status(500).json({ error: 'Failed to update project' });
@@ -3205,7 +4178,7 @@ export async function registerRoutes(
     }
   }
 
-  // Get borrower portal link
+  // Get borrower portal link (consolidated per-person link)
   app.get('/api/projects/:id/borrower-link', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const userId = req.user!.id;
@@ -3219,11 +4192,36 @@ export async function registerRoutes(
       if (!project.borrowerPortalEnabled) {
         return res.status(403).json({ error: 'Borrower portal is disabled for this project' });
       }
+
+      const borrowerEmail = project.borrowerEmail;
+      if (!borrowerEmail) {
+        return res.status(400).json({ error: 'No borrower email on this deal' });
+      }
+
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+      let user = await storage.getUserByEmail(borrowerEmail.toLowerCase().trim());
+      if (user && user.inviteToken) {
+        return res.json({ borrowerLink: `${baseUrl}/join/personal/${user.inviteToken}` });
+      }
+
+      const inviteToken = generateRandomToken();
+      if (!user) {
+        user = await storage.createUser({
+          email: borrowerEmail.toLowerCase().trim(),
+          fullName: project.borrowerName || null,
+          phone: project.borrowerPhone || null,
+          role: 'borrower',
+          userType: 'borrower',
+          isActive: true,
+          emailVerified: true,
+          inviteToken,
+          inviteStatus: 'none',
+        } as any);
+      } else {
+        await db.update(users).set({ inviteToken, inviteStatus: user.inviteStatus || 'none' }).where(eq(users.id, user.id));
+      }
       
-      const baseUrl = process.env.BASE_URL || `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
-      const borrowerLink = `${baseUrl}/portal/${project.borrowerPortalToken}`;
-      
-      res.json({ borrowerLink });
+      res.json({ borrowerLink: `${baseUrl}/join/personal/${inviteToken}` });
     } catch (error) {
       console.error('Get borrower link error:', error);
       res.status(500).json({ error: 'Failed to get borrower link' });
@@ -3259,7 +4257,7 @@ export async function registerRoutes(
       const projectId = parseInt(req.params.id);
       const { name, size, contentType, documentType, documentCategory } = req.body;
 
-      const project = await storage.getProjectById(projectId, userId);
+      const project = await getProjectWithBorrowerAccess(projectId, userId, req.user!.role);
       if (!project) {
         return res.status(404).json({ error: 'Project not found' });
       }
@@ -3324,7 +4322,7 @@ export async function registerRoutes(
       const projectId = parseInt(req.params.id);
       const { objectPath, fileName, fileSize, mimeType, documentType, documentCategory } = req.body;
 
-      const project = await storage.getProjectById(projectId, userId);
+      const project = await getProjectWithBorrowerAccess(projectId, userId, req.user!.role);
       if (!project) {
         return res.status(404).json({ error: 'Project not found' });
       }
@@ -3424,7 +4422,7 @@ export async function registerRoutes(
       const userId = req.user!.id;
       const projectId = parseInt(req.params.id);
 
-      const project = await storage.getProjectById(projectId, userId);
+      const project = await getProjectWithBorrowerAccess(projectId, userId, req.user!.role);
       if (!project) {
         return res.status(404).json({ error: 'Project not found' });
       }
@@ -3440,98 +4438,209 @@ export async function registerRoutes(
     }
   });
 
-  // Mark deal document upload complete (broker accessible)
   app.post('/api/projects/:id/deal-documents/:docId/upload-complete', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const userId = req.user!.id;
       const projectId = parseInt(req.params.id);
       const docId = parseInt(req.params.docId);
 
-      const project = await storage.getProjectById(projectId, userId);
+      const project = await getProjectWithBorrowerAccess(projectId, userId, req.user!.role);
       if (!project) return res.status(404).json({ error: 'Project not found' });
 
       const { objectPath, fileName, fileSize, mimeType } = req.body;
 
       if (!objectPath || objectPath.includes('..')) return res.status(400).json({ error: 'Object path is required' });
 
-      const existingFiles = await db.select().from(dealDocumentFiles)
-        .where(eq(dealDocumentFiles.documentId, docId));
-      const nextSortOrder = existingFiles.length;
+      const docCheck = await db.execute(
+        sql`SELECT id, document_name FROM deal_documents WHERE id = ${docId} AND deal_id = ${projectId}`
+      );
+      if (!(docCheck as any).rows?.length) {
+        return res.status(404).json({ error: 'Document not found for this deal' });
+      }
 
-      const [newFile] = await db.insert(dealDocumentFiles).values({
-        documentId: docId,
-        filePath: objectPath,
-        fileName: fileName || null,
-        fileSize: fileSize || null,
-        mimeType: mimeType || null,
-        uploadedAt: new Date(),
-        uploadedBy: userId,
-        sortOrder: nextSortOrder,
-      }).returning();
+      const existingFilesResult = await db.execute(
+        sql`SELECT COUNT(*)::int as cnt FROM deal_document_files WHERE document_id = ${docId}`
+      );
+      const nextSortOrder = (existingFilesResult as any).rows?.[0]?.cnt ?? 0;
 
-      const [updated] = await db.update(dealDocuments)
-        .set({
-          filePath: objectPath,
-          fileName: fileName,
-          fileSize: fileSize,
-          mimeType: mimeType,
-          status: 'uploaded',
-          uploadedAt: new Date(),
-          uploadedBy: userId,
-        })
-        .where(and(eq(dealDocuments.id, docId), eq(dealDocuments.dealId, projectId)))
-        .returning();
+      const safeFileName = fileName || null;
+      const safeFileSize = fileSize != null ? Number(fileSize) : null;
+      const safeMimeType = mimeType || null;
 
-      await db.insert(projectActivity).values({
-        projectId,
-        userId,
-        activityType: 'document_uploaded',
-        activityDescription: `Broker uploaded: ${updated?.documentName || fileName || 'Document'}`,
-        visibleToBorrower: true,
-      });
+      const insertResult = await db.execute(
+        sql`INSERT INTO deal_document_files (document_id, file_path, file_name, file_size, mime_type, uploaded_at, uploaded_by, sort_order)
+            VALUES (${docId}, ${objectPath}, ${safeFileName}, ${safeFileSize}, ${safeMimeType}, NOW(), ${userId}, ${nextSortOrder})
+            RETURNING *`
+      );
+      const newFile = (insertResult as any).rows?.[0] ?? null;
+
+      const updateResult = await db.execute(
+        sql`UPDATE deal_documents
+            SET status = 'uploaded', uploaded_at = NOW(), uploaded_by = ${userId},
+                file_path = ${objectPath}, file_name = ${safeFileName},
+                file_size = ${safeFileSize}, mime_type = ${safeMimeType}
+            WHERE id = ${docId} AND deal_id = ${projectId}
+            RETURNING *`
+      );
+      const updated = (updateResult as any).rows?.[0] ?? null;
+
+      const docLabel = updated?.document_name || fileName || 'Document';
+
+      await db.execute(
+        sql`INSERT INTO project_activity (project_id, user_id, activity_type, activity_description, visible_to_borrower)
+            VALUES (${projectId}, ${userId}, 'document_uploaded', ${`Document uploaded: ${docLabel}`}, true)`
+      );
 
       try {
-        await db.insert(dealMemoryEntries).values({
-          dealId: projectId,
-          entryType: 'document_received',
-          title: `${updated?.documentName || fileName || 'Document'} uploaded`,
-          description: updated?.documentCategory ? `Category: ${updated.documentCategory}` : undefined,
-          sourceType: 'user',
-          sourceUserId: userId,
-          metadata: { documentId: docId, category: updated?.documentCategory },
-        });
+        await db.execute(
+          sql`INSERT INTO deal_memory_entries (deal_id, entry_type, title, description, source_type, source_user_id, metadata)
+              VALUES (${projectId}, 'document_received', ${`${docLabel} uploaded`},
+                      ${updated?.document_category ? `Category: ${updated.document_category}` : null},
+                      'user', ${userId},
+                      ${JSON.stringify({ documentId: docId, category: updated?.document_category ?? null })}::jsonb)`
+        );
       } catch (e) { console.error('Memory entry error:', e); }
 
-      const brokerInfo = await db.select({ firstName: users.firstName, lastName: users.lastName }).from(users).where(eq(users.id, userId)).limit(1);
-      const brokerName = brokerInfo[0] ? `${brokerInfo[0].firstName || ''} ${brokerInfo[0].lastName || ''}`.trim() || 'A broker' : 'A broker';
-      const projForBrokerLabel = await db.select({ loanNumber: projects.loanNumber }).from(projects).where(eq(projects.id, projectId)).limit(1);
-      const brokerDealLabel = projForBrokerLabel[0]?.loanNumber || `DEAL-${projectId}`;
+      const userInfoResult = await db.execute(
+        sql`SELECT full_name FROM users WHERE id = ${userId} LIMIT 1`
+      );
+      const userRow = (userInfoResult as any).rows?.[0];
+      const uploaderName = userRow?.full_name || 'A user';
+      const projInfoResult = await db.execute(
+        sql`SELECT loan_number FROM projects WHERE id = ${projectId} LIMIT 1`
+      );
+      const projRow = (projInfoResult as any).rows?.[0];
+      const dealLabel = projRow?.loan_number || `DEAL-${projectId}`;
       notifyDealAdmins(
         projectId,
         'document_uploaded',
         'New Document Uploaded',
-        `${brokerName} uploaded "${updated?.documentName || fileName || 'a document'}" to ${brokerDealLabel}`,
+        `${uploaderName} uploaded "${updated?.document_name || fileName || 'a document'}" to ${dealLabel}`,
         userId
       ).catch(err => console.error('Notification error:', err));
+
+      maybeAutoTriggerPipeline(projectId, userId);
 
       try {
         const { isDriveIntegrationEnabled, syncDealDocumentToDrive } = await import('./services/googleDrive');
         const driveEnabled = await isDriveIntegrationEnabled();
         if (driveEnabled && updated && newFile) {
           syncDealDocumentToDrive(updated.id, newFile.id).catch((err: any) => {
-            console.error(`Drive sync failed for broker doc ${updated.id}:`, err.message);
+            console.error(`Drive sync failed for borrower doc ${updated.id}:`, err.message);
           });
         }
       } catch (driveErr: any) {
         console.error('Drive sync check error:', driveErr.message);
       }
 
-      maybeAutoTriggerPipeline(projectId, userId);
+      try {
+        const { onDocumentUploaded } = await import('./services/documentReviewOrchestrator');
+        onDocumentUploaded({
+          documentId: docId,
+          projectId,
+          uploaderType: 'borrower',
+        }).catch(err => {
+          console.error(`Auto doc review trigger failed for doc ${docId}:`, err.message);
+        });
+      } catch (reviewErr: any) {
+        console.error('Doc review orchestrator error:', reviewErr.message);
+      }
+
+      try {
+        const projResult = await db.execute(
+          sql`SELECT borrower_email, loan_number, property_address FROM projects WHERE id = ${projectId} LIMIT 1`
+        );
+        const proj = (projResult as any).rows?.[0];
+        const borrowerEmail = proj?.borrower_email?.toLowerCase();
+        if (borrowerEmail && objectPath) {
+          let [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, borrowerEmail));
+          if (!profile) {
+            const [inserted] = await db.insert(borrowerProfiles).values({ email: borrowerEmail }).returning();
+            profile = inserted;
+          }
+          const docName = safeFileName || updated?.document_name || 'Document';
+          const dealLabel = proj?.loan_number || proj?.property_address || `Deal #${projectId}`;
+          const existingVaultDoc = await db.select().from(borrowerDocuments)
+            .where(and(
+              eq(borrowerDocuments.borrowerProfileId, profile.id),
+              eq(borrowerDocuments.sourceDealId, projectId),
+              eq(borrowerDocuments.fileName, docName),
+              eq(borrowerDocuments.isActive, true)
+            ));
+          if (existingVaultDoc.length) {
+            await db.update(borrowerDocuments)
+              .set({
+                storagePath: objectPath,
+                fileType: safeMimeType,
+                fileSize: safeFileSize,
+                updatedAt: new Date(),
+              })
+              .where(eq(borrowerDocuments.id, existingVaultDoc[0].id));
+          } else {
+            await db.insert(borrowerDocuments).values({
+              borrowerProfileId: profile.id,
+              fileName: docName,
+              fileType: safeMimeType,
+              fileSize: safeFileSize,
+              storagePath: objectPath,
+              category: updated?.document_category || 'general',
+              documentClassification: 'standalone',
+              sourceDealId: projectId,
+              sourceDealName: dealLabel,
+            });
+          }
+        }
+      } catch (syncErr: any) {
+        console.error('Auto-sync to borrower vault error:', syncErr.message);
+      }
 
       res.json({ document: updated, file: newFile });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Deal doc upload error:', error);
       res.status(500).json({ error: 'Failed to complete upload' });
+    }
+  });
+
+  app.get('/api/projects/:id/deal-documents/:docId/download', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const projectId = parseInt(req.params.id);
+      const docId = parseInt(req.params.docId);
+
+      const project = await getProjectWithBorrowerAccess(projectId, userId, req.user!.role);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+
+      const [doc] = await db.select()
+        .from(dealDocuments)
+        .where(and(eq(dealDocuments.id, docId), eq(dealDocuments.dealId, projectId)))
+        .limit(1);
+
+      if (!doc || !doc.filePath) {
+        return res.status(404).json({ error: 'Document file not found' });
+      }
+
+      const objectFile = await objectStorageService.getObjectEntityFile(doc.filePath);
+
+      res.set('X-Frame-Options', 'SAMEORIGIN');
+      res.removeHeader('Content-Security-Policy');
+
+      const safeDocName = doc.fileName ? doc.fileName.replace(/[^\x20-\x7E]/g, '_').replace(/\\/g, '_').replace(/"/g, "'") : null;
+      if (req.query.download === 'true' && safeDocName) {
+        res.set('Content-Disposition', `attachment; filename="${safeDocName}"`);
+      } else {
+        res.set('Content-Disposition', `inline${safeDocName ? `; filename="${safeDocName}"` : ''}`);
+      }
+
+      if (doc.mimeType) {
+        res.set('Content-Type', doc.mimeType);
+      }
+
+      await objectStorageService.downloadObject(objectFile, res);
+    } catch (error) {
+      console.error('Borrower document download error:', error);
+      res.status(500).json({ error: 'Failed to download document' });
     }
   });
 
@@ -3772,8 +4881,410 @@ export async function registerRoutes(
   // ==================== BORROWER PORTAL ROUTES ====================
   registerPortalRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
 
+  // ==================== BORROWER PROFILE ROUTES ====================
+
+  // Get or create borrower profile by email (portal token auth)
+  app.get('/api/portal/:token/borrower-profile', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const [project] = await db.select().from(projects)
+        .where(or(eq(projects.borrowerPortalToken, token), eq(projects.brokerPortalToken, token)));
+      if (!project) return res.status(404).json({ error: 'Invalid portal token' });
+
+      const email = project.borrowerEmail;
+      if (!email) return res.status(404).json({ error: 'No borrower email on this deal' });
+
+      let [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
+      if (!profile) {
+        // Auto-create profile from deal info
+        const nameParts = (project.borrowerName || '').split(' ');
+        const [inserted] = await db.insert(borrowerProfiles).values({
+          email,
+          firstName: nameParts[0] || null,
+          lastName: nameParts.slice(1).join(' ') || null,
+          phone: project.borrowerPhone || null,
+          streetAddress: project.propertyAddress || null,
+        }).returning();
+        profile = inserted;
+      }
+
+      res.json({ profile });
+    } catch (error) {
+      console.error('Get borrower profile error:', error);
+      res.status(500).json({ error: 'Failed to load borrower profile' });
+    }
+  });
+
+  // Update borrower profile (portal token auth)
+  app.put('/api/portal/:token/borrower-profile', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const [project] = await db.select().from(projects)
+        .where(or(eq(projects.borrowerPortalToken, token), eq(projects.brokerPortalToken, token)));
+      if (!project) return res.status(404).json({ error: 'Invalid portal token' });
+
+      const email = project.borrowerEmail;
+      if (!email) return res.status(404).json({ error: 'No borrower email on this deal' });
+
+      const updates = req.body;
+      delete updates.id;
+      delete updates.email; // can't change email
+      delete updates.createdAt;
+      updates.updatedAt = new Date();
+
+      const [updated] = await db.update(borrowerProfiles)
+        .set(updates)
+        .where(eq(borrowerProfiles.email, email))
+        .returning();
+
+      res.json({ profile: updated });
+    } catch (error) {
+      console.error('Update borrower profile error:', error);
+      res.status(500).json({ error: 'Failed to update borrower profile' });
+    }
+  });
+
+  // Get borrower documents (portal token auth)
+  app.get('/api/portal/:token/borrower-documents', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const [project] = await db.select().from(projects)
+        .where(or(eq(projects.borrowerPortalToken, token), eq(projects.brokerPortalToken, token)));
+      if (!project) return res.status(404).json({ error: 'Invalid portal token' });
+
+      const email = project.borrowerEmail;
+      if (!email) return res.status(404).json({ error: 'No borrower email' });
+
+      const [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
+      if (!profile) return res.json({ documents: [] });
+
+      const docs = await db.select().from(borrowerDocuments)
+        .where(and(eq(borrowerDocuments.borrowerProfileId, profile.id), eq(borrowerDocuments.isActive, true)))
+        .orderBy(borrowerDocuments.uploadedAt);
+
+      res.json({ documents: docs });
+    } catch (error) {
+      console.error('Get borrower documents error:', error);
+      res.status(500).json({ error: 'Failed to load borrower documents' });
+    }
+  });
+
+  // Upload borrower document (portal token auth)
+  app.post('/api/portal/:token/borrower-documents', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const [project] = await db.select().from(projects)
+        .where(or(eq(projects.borrowerPortalToken, token), eq(projects.brokerPortalToken, token)));
+      if (!project) return res.status(404).json({ error: 'Invalid portal token' });
+
+      const email = project.borrowerEmail;
+      if (!email) return res.status(404).json({ error: 'No borrower email' });
+
+      let [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
+      if (!profile) {
+        const nameParts = (project.borrowerName || '').split(' ');
+        const [inserted] = await db.insert(borrowerProfiles).values({
+          email,
+          firstName: nameParts[0] || null,
+          lastName: nameParts.slice(1).join(' ') || null,
+        }).returning();
+        profile = inserted;
+      }
+
+      const { fileName, fileType, fileSize, storagePath, category, description, expirationDate } = req.body;
+      const docCategory = category || 'other';
+      const [doc] = await db.insert(borrowerDocuments).values({
+        borrowerProfileId: profile.id,
+        fileName,
+        fileType,
+        fileSize,
+        storagePath,
+        category: docCategory,
+        documentClassification: 'standalone',
+        description,
+        expirationDate,
+      }).returning();
+
+      res.json({ document: doc });
+    } catch (error) {
+      console.error('Upload borrower document error:', error);
+      res.status(500).json({ error: 'Failed to upload document' });
+    }
+  });
+
+  // Delete borrower document (soft delete)
+  app.delete('/api/portal/:token/borrower-documents/:docId', async (req: Request, res: Response) => {
+    try {
+      const { token, docId } = req.params;
+      const [project] = await db.select().from(projects)
+        .where(or(eq(projects.borrowerPortalToken, token), eq(projects.brokerPortalToken, token)));
+      if (!project) return res.status(404).json({ error: 'Invalid portal token' });
+
+      const email = project.borrowerEmail;
+      if (!email) return res.status(404).json({ error: 'No borrower email' });
+
+      const [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
+      if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
+      const [doc] = await db.select().from(borrowerDocuments)
+        .where(and(eq(borrowerDocuments.id, parseInt(docId)), eq(borrowerDocuments.borrowerProfileId, profile.id)));
+      if (!doc) return res.status(404).json({ error: 'Document not found' });
+
+      await db.update(borrowerDocuments)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(and(eq(borrowerDocuments.id, parseInt(docId)), eq(borrowerDocuments.borrowerProfileId, profile.id)));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Delete borrower document error:', error);
+      res.status(500).json({ error: 'Failed to delete document' });
+    }
+  });
+
+  app.patch('/api/portal/:token/borrower-documents/:docId/classification', async (req: Request, res: Response) => {
+    try {
+      const { token, docId } = req.params;
+      const [project] = await db.select().from(projects)
+        .where(or(eq(projects.borrowerPortalToken, token), eq(projects.brokerPortalToken, token)));
+      if (!project) return res.status(404).json({ error: 'Invalid portal token' });
+
+      const email = project.borrowerEmail;
+      if (!email) return res.status(404).json({ error: 'No borrower email' });
+
+      const [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
+      if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
+      const { documentClassification } = req.body;
+      if (!['profile', 'standalone'].includes(documentClassification)) {
+        return res.status(400).json({ error: 'Invalid classification' });
+      }
+
+      const [updated] = await db.update(borrowerDocuments)
+        .set({ documentClassification, updatedAt: new Date() })
+        .where(and(eq(borrowerDocuments.id, parseInt(docId)), eq(borrowerDocuments.borrowerProfileId, profile.id)))
+        .returning();
+
+      if (!updated) return res.status(404).json({ error: 'Document not found' });
+      res.json(updated);
+    } catch (error) {
+      console.error('Portal update document classification error:', error);
+      res.status(500).json({ error: 'Failed to update classification' });
+    }
+  });
+
+  // ==================== AUTHENTICATED BORROWER PROFILE & DOCUMENTS ====================
+
+  app.get('/api/borrower/profile', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      if (user.role !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
+
+      const email = user.email.toLowerCase();
+      let [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
+      if (!profile) {
+        const nameParts = (user.fullName || '').split(' ');
+        const [inserted] = await db.insert(borrowerProfiles).values({
+          email,
+          firstName: nameParts[0] || null,
+          lastName: nameParts.slice(1).join(' ') || null,
+          phone: (user as any).phone || null,
+        }).returning();
+        profile = inserted;
+      }
+
+      res.json(profile);
+    } catch (error) {
+      console.error('Get borrower profile error:', error);
+      res.status(500).json({ error: 'Failed to load borrower profile' });
+    }
+  });
+
+  app.put('/api/borrower/profile', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      if (user.role !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
+
+      const email = user.email.toLowerCase();
+      const updates = { ...req.body };
+      delete updates.id;
+      delete updates.email;
+      delete updates.createdAt;
+      updates.updatedAt = new Date();
+
+      let [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
+      if (!profile) {
+        const [inserted] = await db.insert(borrowerProfiles).values({
+          email,
+          ...updates,
+        }).returning();
+        profile = inserted;
+      } else {
+        const [updated] = await db.update(borrowerProfiles)
+          .set(updates)
+          .where(eq(borrowerProfiles.email, email))
+          .returning();
+        profile = updated;
+      }
+
+      res.json(profile);
+    } catch (error) {
+      console.error('Update borrower profile error:', error);
+      res.status(500).json({ error: 'Failed to update borrower profile' });
+    }
+  });
+
+  app.get('/api/borrower/documents', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      if (user.role !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
+
+      const email = user.email.toLowerCase();
+      const [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
+      if (!profile) return res.json([]);
+
+      const docs = await db.select().from(borrowerDocuments)
+        .where(and(eq(borrowerDocuments.borrowerProfileId, profile.id), eq(borrowerDocuments.isActive, true)))
+        .orderBy(borrowerDocuments.uploadedAt);
+
+      res.json(docs);
+    } catch (error) {
+      console.error('Get borrower documents error:', error);
+      res.status(500).json({ error: 'Failed to load documents' });
+    }
+  });
+
+  app.post('/api/borrower/documents', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      if (user.role !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
+
+      const email = user.email.toLowerCase();
+      let [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
+      if (!profile) {
+        const [inserted] = await db.insert(borrowerProfiles).values({ email }).returning();
+        profile = inserted;
+      }
+
+      const { fileName, fileType, fileSize, storagePath, category, description, expirationDate } = req.body;
+      const [doc] = await db.insert(borrowerDocuments).values({
+        borrowerProfileId: profile.id,
+        fileName: fileName || 'Untitled',
+        fileType: fileType || null,
+        fileSize: fileSize || null,
+        storagePath: storagePath || null,
+        category: category || 'general',
+        description: description || null,
+        expirationDate: expirationDate || null,
+      }).returning();
+
+      res.json(doc);
+    } catch (error) {
+      console.error('Create borrower document error:', error);
+      res.status(500).json({ error: 'Failed to create document' });
+    }
+  });
+
+  app.delete('/api/borrower/documents/:docId', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      if (user.role !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
+
+      const email = user.email.toLowerCase();
+      const [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
+      if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
+      const { docId } = req.params;
+      await db.update(borrowerDocuments)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(and(eq(borrowerDocuments.id, parseInt(docId)), eq(borrowerDocuments.borrowerProfileId, profile.id)));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Delete borrower document error:', error);
+      res.status(500).json({ error: 'Failed to delete document' });
+    }
+  });
+
+  app.patch('/api/borrower/documents/:docId/classification', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      if (user.role !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
+
+      const email = user.email.toLowerCase();
+      const [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
+      if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
+      const docId = parseInt(req.params.docId);
+      const { documentClassification } = req.body;
+      if (!['profile', 'standalone'].includes(documentClassification)) {
+        return res.status(400).json({ error: 'Invalid classification' });
+      }
+
+      const [updated] = await db.update(borrowerDocuments)
+        .set({ documentClassification, updatedAt: new Date() })
+        .where(and(eq(borrowerDocuments.id, docId), eq(borrowerDocuments.borrowerProfileId, profile.id)))
+        .returning();
+
+      if (!updated) return res.status(404).json({ error: 'Document not found' });
+      res.json(updated);
+    } catch (error) {
+      console.error('Update borrower document classification error:', error);
+      res.status(500).json({ error: 'Failed to update classification' });
+    }
+  });
+
+  // Admin: Get borrower profile for a deal
+  app.get('/api/admin/deals/:dealId/borrower-profile', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { dealId } = req.params;
+      const [project] = await db.select().from(projects).where(eq(projects.id, parseInt(dealId)));
+      if (!project) return res.status(404).json({ error: 'Deal not found' });
+
+      const email = project.borrowerEmail;
+      if (!email) return res.json({ profile: null });
+
+      const [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
+      if (!profile) return res.json({ profile: null });
+
+      const docs = await db.select().from(borrowerDocuments)
+        .where(and(eq(borrowerDocuments.borrowerProfileId, profile.id), eq(borrowerDocuments.isActive, true)))
+        .orderBy(borrowerDocuments.uploadedAt);
+
+      // Get all loans for this borrower
+      const loans = await db.select({
+        id: projects.id,
+        projectName: projects.projectName,
+        status: projects.status,
+        loanAmount: projects.loanAmount,
+        createdAt: projects.createdAt,
+      }).from(projects).where(eq(projects.borrowerEmail, email));
+
+      res.json({ profile, documents: docs, loans });
+    } catch (error) {
+      console.error('Admin get borrower profile error:', error);
+      res.status(500).json({ error: 'Failed to load borrower profile' });
+    }
+  });
+
+  // Auto-populate: Get borrower profile data for pre-filling new deal forms
+  app.get('/api/borrower-profile/lookup', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const email = req.query.email as string;
+      if (!email) return res.status(400).json({ error: 'Email required' });
+
+      const [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
+      if (!profile) return res.json({ profile: null });
+
+      res.json({ profile });
+    } catch (error) {
+      console.error('Borrower profile lookup error:', error);
+      res.status(500).json({ error: 'Failed to lookup borrower profile' });
+    }
+  });
+
   // ==================== MESSAGING ROUTES ====================
   registerMessagingRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
+  registerTeamChatRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
 
   // ==================== AI ASSISTANT ROUTES ====================
   registerAiAssistantRoutes(app);
@@ -3788,6 +5299,9 @@ export async function registerRoutes(
   // ==================== AI AGENT SYSTEM ROUTES ====================
   registerAgentRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
 
+  // ==================== AI DEBUGGER ROUTES ====================
+  registerDebuggerRoutes(app, { authenticateUser, requireSuperAdmin });
+
   // ==================== EMAIL INTEGRATION ROUTES ====================
   registerEmailRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
 
@@ -3798,6 +5312,8 @@ export async function registerRoutes(
   registerAdminProgramsRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
 
   // Note: Old messaging routes code has been moved to routes/messaging.ts
+
+  const isAdminRole = (role: string | undefined) => ['admin', 'super_admin', 'staff', 'lender', 'processor'].includes(role || '');
 
   // Get single thread with messages
   app.get('/api/messages/threads/:id', authenticateUser, async (req: AuthRequest, res: Response) => {
@@ -3825,15 +5341,25 @@ export async function registerRoutes(
 
       // Get sender names for messages
       const messagesWithSenders = await Promise.all(threadMessages.map(async (msg) => {
+        const serialized = {
+          ...msg,
+          createdAt: msg.createdAt instanceof Date ? msg.createdAt.toISOString() : msg.createdAt,
+          readAt: msg.readAt instanceof Date ? msg.readAt.toISOString() : msg.readAt,
+        };
         if (msg.senderId) {
           const sender = await db.select({ fullName: users.fullName, email: users.email })
             .from(users).where(eq(users.id, msg.senderId)).limit(1);
-          return { ...msg, senderName: sender[0]?.fullName || sender[0]?.email || 'Unknown' };
+          return { ...serialized, senderName: sender[0]?.fullName || sender[0]?.email || 'Unknown' };
         }
-        return { ...msg, senderName: 'System' };
+        return { ...serialized, senderName: 'System' };
       }));
 
-      res.json({ thread: thread[0], messages: messagesWithSenders });
+      const threadSerialized = {
+        ...thread[0],
+        createdAt: thread[0].createdAt instanceof Date ? thread[0].createdAt.toISOString() : thread[0].createdAt,
+        lastMessageAt: (thread[0] as any).lastMessageAt instanceof Date ? (thread[0] as any).lastMessageAt.toISOString() : (thread[0] as any).lastMessageAt,
+      };
+      res.json({ thread: threadSerialized, messages: messagesWithSenders });
     } catch (error) {
       console.error('Get thread error:', error);
       res.status(500).json({ error: 'Failed to get thread' });
@@ -3868,7 +5394,12 @@ export async function registerRoutes(
         )).limit(1);
 
       if (existing[0]) {
-        return res.json({ thread: existing[0] });
+        const existingSerialized = {
+          ...existing[0],
+          createdAt: existing[0].createdAt instanceof Date ? existing[0].createdAt.toISOString() : existing[0].createdAt,
+          lastMessageAt: (existing[0] as any).lastMessageAt instanceof Date ? (existing[0] as any).lastMessageAt.toISOString() : (existing[0] as any).lastMessageAt,
+        };
+        return res.json({ thread: existingSerialized });
       }
 
       // Create new thread
@@ -3886,7 +5417,12 @@ export async function registerRoutes(
         lastReadAt: new Date('1970-01-01')
       }).onConflictDoNothing();
 
-      res.json({ thread: newThread[0] });
+      const threadSerialized = {
+        ...newThread[0],
+        createdAt: newThread[0].createdAt instanceof Date ? newThread[0].createdAt.toISOString() : newThread[0].createdAt,
+        lastMessageAt: (newThread[0] as any).lastMessageAt instanceof Date ? (newThread[0] as any).lastMessageAt.toISOString() : (newThread[0] as any).lastMessageAt,
+      };
+      res.json({ thread: threadSerialized });
     } catch (error) {
       console.error('Create thread error:', error);
       res.status(500).json({ error: 'Failed to create thread' });
@@ -3970,7 +5506,12 @@ export async function registerRoutes(
         console.error('Message notification error:', notifErr);
       }
 
-      res.json({ message: newMessage[0] });
+      const msgSerialized = {
+        ...newMessage[0],
+        createdAt: newMessage[0].createdAt instanceof Date ? newMessage[0].createdAt.toISOString() : newMessage[0].createdAt,
+        readAt: newMessage[0].readAt instanceof Date ? newMessage[0].readAt.toISOString() : newMessage[0].readAt,
+      };
+      res.json({ message: msgSerialized });
     } catch (error) {
       console.error('Send message error:', error);
       res.status(500).json({ error: 'Failed to send message' });
@@ -4143,7 +5684,8 @@ export async function registerRoutes(
   // Admin Dashboard Stats
   app.get('/api/admin/dashboard', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
-      const stats = await storage.getAdminDashboardStats();
+      const tenantId = await getTenantId(req.user!);
+      const stats = await storage.getAdminDashboardStats(tenantId);
       const recentActivity = await storage.getRecentAdminActivity(10);
       
       res.json({ stats, recentActivity });
@@ -4251,7 +5793,7 @@ export async function registerRoutes(
         title: u.title,
         role: u.role,
         roles: u.roles || [u.role],
-        userType: u.userType,
+        userType: u.role,
         createdAt: u.createdAt,
         lastLoginAt: u.lastLoginAt,
         emailVerified: u.emailVerified,
@@ -4269,37 +5811,66 @@ export async function registerRoutes(
   // Admin - Create user manually
   app.post('/api/admin/users', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
-      const { email, password, fullName, companyName, phone, role, roles, title, userType } = req.body;
+      const { email, fullName, companyName, phone, role, roles, title, skipInviteEmail } = req.body;
       
-      if (!email || !password) {
-        return res.status(400).json({ error: 'Email and password are required' });
+      if (!email) {
+        return res.status(400).json({ error: 'Email is required' });
       }
       
       const existingUser = await storage.getUserByEmail(email);
       if (existingUser) {
         return res.status(400).json({ error: 'User with this email already exists' });
       }
-      
-      const bcrypt = await import('bcrypt');
-      const passwordHash = await bcrypt.hash(password, 10);
 
       const { getPrimaryRole } = await import('@shared/schema');
-      const userRoles: string[] = roles?.length ? roles : (role ? [role] : ['user']);
+      const userRoles: string[] = roles?.length ? roles : (role ? [role] : ['broker']);
       const primaryRole = getPrimaryRole(userRoles);
+
+      const inviteToken = generateRandomToken();
       
       const newUser = await storage.createUser({
         email,
-        passwordHash,
+        passwordHash: null,
         fullName: fullName || null,
         companyName: companyName || null,
         phone: phone || null,
         title: title || null,
         role: primaryRole,
         roles: userRoles,
-        userType: userType || 'broker',
+        userType: primaryRole,
         isActive: true,
         emailVerified: true,
+        inviteToken,
+        inviteStatus: 'sent',
+        inviteTokenSentAt: new Date(),
       });
+
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+      const inviteLink = `${baseUrl}/join/personal/${inviteToken}`;
+      let emailSent = false;
+
+      if (!skipInviteEmail) {
+        try {
+          const { getResendClient } = await import('./email');
+          const { client, fromEmail } = await getResendClient();
+          await client.emails.send({
+            from: fromEmail,
+            to: email,
+            subject: "You're invited to set up your account",
+            html: `
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px;">
+                <p>Hi ${fullName || email},</p>
+                <p>An account has been created for you. Click the link below to set up your password and get started:</p>
+                <p><a href="${inviteLink}" style="color: #C9A84C; text-decoration: underline;">${inviteLink}</a></p>
+                <p>If you have questions, reply to this email.</p>
+              </div>
+            `,
+          });
+          emailSent = true;
+        } catch (emailErr) {
+          console.error('Failed to send invite email on user creation:', emailErr);
+        }
+      }
       
       res.json({ 
         user: {
@@ -4313,11 +5884,256 @@ export async function registerRoutes(
           createdAt: newUser.createdAt,
           isActive: newUser.isActive,
           emailVerified: newUser.emailVerified,
-        }
+        },
+        emailSent,
+        inviteLink,
       });
     } catch (error) {
       console.error('Admin create user error:', error);
       res.status(500).json({ error: 'Failed to create user' });
+    }
+  });
+
+  // Admin - Get user details with linked deals
+  app.get('/api/admin/users/:id/details', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = parseInt(req.params.id);
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
+      const userDeals = await db.select({
+        id: projects.id,
+        dealName: projects.projectName,
+        loanAmount: projects.loanAmount,
+        propertyAddress: projects.propertyAddress,
+        status: projects.status,
+        currentStage: projects.currentStage,
+        createdAt: projects.createdAt,
+      }).from(projects).where(
+        user.role === 'borrower'
+          ? eq(projects.borrowerEmail, user.email)
+          : eq(projects.userId, user.id)
+      );
+
+      const programs = await db.select({
+        id: loanPrograms.id,
+        name: loanPrograms.name,
+      }).from(loanPrograms).where(eq(loanPrograms.isActive, true));
+
+      res.json({
+        user: {
+          id: user.id,
+          email: user.email,
+          fullName: user.fullName,
+          companyName: user.companyName,
+          phone: user.phone,
+          role: user.role,
+          userType: user.role,
+          isActive: user.isActive,
+          createdAt: user.createdAt,
+          lastLoginAt: user.lastLoginAt,
+          inviteToken: user.inviteToken,
+          inviteStatus: user.inviteStatus,
+          inviteTokenSentAt: user.inviteTokenSentAt,
+          brokerSettings: user.brokerSettings,
+          onboardingCompleted: user.onboardingCompleted,
+        },
+        deals: userDeals,
+        programs,
+      });
+    } catch (error) {
+      console.error('Admin get user details error:', error);
+      res.status(500).json({ error: 'Failed to load user details' });
+    }
+  });
+
+  // Admin - Send personal invite link
+  app.post('/api/admin/users/:id/send-invite', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = parseInt(req.params.id);
+      const { method, subject, body, message } = req.body; // method: 'email'|'sms'|'generate'; subject/body for email, message for sms
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
+      let token = user.inviteToken;
+      if (!token) {
+        token = generateRandomToken();
+      }
+
+      await db.update(users).set({
+        inviteToken: token,
+        inviteTokenSentAt: method === 'generate' ? user.inviteTokenSentAt : new Date(),
+        inviteStatus: method === 'generate' ? (user.inviteStatus || 'none') : 'sent',
+      }).where(eq(users.id, userId));
+
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+      const inviteLink = `${baseUrl}/join/personal/${token}`;
+
+      if (method === 'generate') {
+        return res.json({ success: true, inviteLink, inviteToken: token, inviteStatus: user.inviteStatus || 'none' });
+      }
+
+      if (method === 'sms' && user.phone) {
+        const smsText = message || `You've been invited to access your portal. Get started here: ${inviteLink}`;
+        try {
+          const { sendSms } = await import('./smsService');
+          await sendSms(user.phone, smsText);
+        } catch (smsErr) {
+          console.error('SMS send failed:', smsErr);
+          return res.status(500).json({ error: 'Failed to send SMS' });
+        }
+      } else {
+        const emailSubject = subject || "You're invited to access your portal";
+        const emailBody = body || `Hi ${user.fullName || user.email},\n\nYou've been invited to access your portal. Click the link below to get started:\n\n${inviteLink}\n\nIf you have questions, reply to this email.`;
+        const htmlBody = emailBody.replace(/\n/g, '<br/>');
+        try {
+          const { getResendClient } = await import('./email');
+          const { client, fromEmail } = await getResendClient();
+          await client.emails.send({
+            from: fromEmail,
+            to: user.email,
+            subject: emailSubject,
+            html: `
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px;">
+                ${htmlBody}
+              </div>
+            `,
+          });
+        } catch (emailErr) {
+          console.error('Email send failed:', emailErr);
+          return res.status(500).json({ error: 'Failed to send invite email' });
+        }
+      }
+
+      res.json({ success: true, inviteLink, inviteStatus: 'sent' });
+    } catch (error) {
+      console.error('Admin send invite error:', error);
+      res.status(500).json({ error: 'Failed to send invite' });
+    }
+  });
+
+  // Admin - Update broker settings
+  app.patch('/api/admin/users/:id/broker-settings', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = parseInt(req.params.id);
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      if (user.role !== 'broker') return res.status(400).json({ error: 'User is not a broker' });
+
+      const { brokerSettings } = req.body;
+      await db.update(users).set({ brokerSettings }).where(eq(users.id, userId));
+
+      res.json({ success: true, brokerSettings });
+    } catch (error) {
+      console.error('Admin update broker settings error:', error);
+      res.status(500).json({ error: 'Failed to update broker settings' });
+    }
+  });
+
+  app.post('/api/admin/users/:id/reset-password', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = parseInt(req.params.id);
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
+      const resetToken = generateRandomToken();
+      const resetExpires = new Date(Date.now() + 3600000);
+
+      await db.update(users).set({
+        passwordResetToken: resetToken,
+        passwordResetExpires: resetExpires,
+      }).where(eq(users.id, userId));
+
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+      const resetUrl = `${baseUrl}/reset-password/${resetToken}`;
+
+      await sendPasswordResetEmail(user.email, user.fullName || 'User', resetUrl);
+
+      await storage.createAdminActivity({
+        userId: req.user!.id,
+        actionType: 'password_reset_sent',
+        actionDescription: `Admin triggered password reset for ${user.email}`,
+        metadata: { targetUserId: userId }
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Admin reset password error:', error);
+      res.status(500).json({ error: 'Failed to send password reset email' });
+    }
+  });
+
+  // Public - Personal invite link resolution
+  app.get('/api/join/personal/:token/info', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const [user] = await db.select().from(users).where(eq(users.inviteToken, token));
+      if (!user) return res.status(404).json({ error: 'Invalid invite link' });
+
+      if (user.inviteStatus === 'sent') {
+        await db.update(users).set({ inviteStatus: 'opened' }).where(eq(users.id, user.id));
+      }
+
+      const userDeals = await db.select({
+        id: projects.id,
+        dealName: projects.projectName,
+        status: projects.status,
+      }).from(projects).where(
+        user.role === 'borrower'
+          ? eq(projects.borrowerEmail, user.email)
+          : eq(projects.userId, user.id)
+      );
+
+      res.json({
+        email: user.email,
+        fullName: user.fullName,
+        userType: user.role,
+        hasPassword: !!user.passwordHash,
+        onboardingCompleted: user.onboardingCompleted,
+        dealCount: userDeals.length,
+      });
+    } catch (error) {
+      console.error('Personal invite info error:', error);
+      res.status(500).json({ error: 'Failed to load invite info' });
+    }
+  });
+
+  // Public - Complete personal invite registration
+  app.post('/api/join/personal/:token/register', async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      const { password, fullName, phone, companyName } = req.body;
+      const [user] = await db.select().from(users).where(eq(users.inviteToken, token));
+      if (!user) return res.status(404).json({ error: 'Invalid invite link' });
+
+      if (user.passwordHash) {
+        return res.status(400).json({ error: 'Account already set up. Please log in instead.' });
+      }
+
+      if (!password || password.length < 8) {
+        return res.status(400).json({ error: 'Password must be at least 8 characters' });
+      }
+
+      const bcrypt = await import('bcrypt');
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      await db.update(users).set({
+        passwordHash,
+        fullName: fullName || user.fullName,
+        phone: phone || user.phone,
+        companyName: companyName || user.companyName,
+        inviteStatus: 'joined',
+        emailVerified: true,
+        onboardingCompleted: true,
+      }).where(eq(users.id, user.id));
+
+      const authToken = generateToken(user.id, user.email, user.tokenVersion ?? 0);
+      setAuthCookie(res, authToken);
+
+      res.json({ success: true, userType: user.role });
+    } catch (error) {
+      console.error('Personal invite register error:', error);
+      res.status(500).json({ error: 'Failed to complete registration' });
     }
   });
 
@@ -4330,7 +6146,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'First name, last name, and email are required' });
       }
       
-      const validRoles = ['processor', 'admin'];
+      const validRoles = ['processor', 'lender', 'admin'];
       const assignedRole = validRoles.includes(role) ? role : 'processor';
       
       const existingUser = await storage.getUserByEmail(email.toLowerCase().trim());
@@ -4355,7 +6171,7 @@ export async function registerRoutes(
         title: null,
         role: primaryRole,
         roles: userRoles,
-        userType: 'broker',
+        userType: primaryRole,
         isActive: true,
         emailVerified: false,
         inviteToken,
@@ -4539,7 +6355,7 @@ export async function registerRoutes(
   app.patch('/api/admin/users/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const userId = parseInt(req.params.id);
-      const { role, roles: rolesInput, isActive, title, fullName, phone, companyName } = req.body;
+      const { role, roles: rolesInput, isActive, title, fullName, phone, companyName, email } = req.body;
       
       const { getPrimaryRole } = await import('@shared/schema');
       const updates: Record<string, any> = {};
@@ -4547,7 +6363,7 @@ export async function registerRoutes(
       if (rolesInput !== undefined && Array.isArray(rolesInput)) {
         updates.roles = rolesInput;
         updates.role = getPrimaryRole(rolesInput);
-      } else if (role !== undefined && ['user', 'admin', 'staff', 'super_admin', 'processor'].includes(role)) {
+      } else if (role !== undefined && ['super_admin', 'lender', 'processor', 'broker', 'borrower', 'admin', 'staff', 'user'].includes(role)) {
         updates.role = role;
         updates.roles = [role];
       }
@@ -4566,6 +6382,9 @@ export async function registerRoutes(
       if (companyName !== undefined) {
         updates.companyName = companyName || null;
       }
+      if (email !== undefined && typeof email === 'string' && email.includes('@')) {
+        updates.email = email.trim().toLowerCase();
+      }
       
       const updated = await storage.updateUser(userId, updates);
       
@@ -4573,12 +6392,16 @@ export async function registerRoutes(
         return res.status(404).json({ error: 'User not found' });
       }
       
-      await storage.createAdminActivity({
-        userId: req.user!.id,
-        actionType: 'user_updated',
-        actionDescription: `Updated user ${updated.email}: ${JSON.stringify(updates)}`,
-        metadata: { targetUserId: userId, updates }
-      });
+      try {
+        await storage.createAdminActivity({
+          userId: req.user!.id,
+          actionType: 'user_updated',
+          actionDescription: `Updated user ${updated.email}: ${JSON.stringify(updates)}`,
+          metadata: { targetUserId: userId, updates }
+        });
+      } catch (activityErr) {
+        console.warn('Admin activity log failed (non-fatal):', activityErr);
+      }
       
       res.json({ 
         user: {
@@ -4590,8 +6413,11 @@ export async function registerRoutes(
           isActive: updated.isActive
         }
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Admin update user error:', error);
+      if (error?.constraint || error?.code === '23505') {
+        return res.status(409).json({ error: 'A user with this email already exists' });
+      }
       res.status(500).json({ error: 'Failed to update user' });
     }
   });
@@ -4838,7 +6664,8 @@ export async function registerRoutes(
   // Admin - Pipeline grouped by program (for Kanban + pipeline summary views)
   app.get('/api/admin/pipeline', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
-      const allProjects = await storage.getAllProjects({ status: 'active' });
+      const tenantId = await getTenantId(req.user!);
+      const allProjects = await storage.getAllProjects({ status: 'active', tenantId });
 
       const projectsWithStages = await Promise.all(allProjects.map(async (p) => {
         const stages = await storage.getStagesByProjectId(p.id);
@@ -4937,20 +6764,131 @@ export async function registerRoutes(
       await storage.createProjectActivity({
         projectId,
         activityType: 'stage_change',
-        description: `Project moved to stage: ${targetStage.stageName}`,
-        performedBy: req.user!.id,
+        activityDescription: `Project moved to stage: ${targetStage.stageName}`,
+        userId: req.user!.id,
       });
 
+      const moverDisplayName = req.user!.fullName || req.user!.email || 'Admin';
       try {
         await db.insert(dealMemoryEntries).values({
           dealId: projectId,
           entryType: 'stage_change',
-          title: `Moved to stage: ${targetStage.stageName}`,
+          title: `Moved to "${targetStage.stageName}" by ${moverDisplayName}`,
           sourceType: 'admin',
           sourceUserId: req.user!.id,
           metadata: { stageKey: targetStageKey, stageName: targetStage.stageName },
         });
       } catch (e) { console.error('Memory entry error:', e); }
+
+      // Notify assigned processors and borrower about stage change
+      try {
+        const moverName = moverDisplayName;
+        const [stageProject] = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
+        const dealLabel = stageProject?.loanNumber || `DEAL-${projectId}`;
+
+        // Notify processors assigned to this deal
+        const stageProcessors = await db.select({ userId: dealProcessors.userId }).from(dealProcessors)
+          .where(eq(dealProcessors.dealId, projectId));
+        for (const proc of stageProcessors) {
+          if (proc.userId !== req.user!.id) {
+            await createNotification({
+              userId: proc.userId,
+              type: 'stage_change',
+              title: `Deal Moved: ${targetStage.stageName}`,
+              message: `${moverName} moved ${dealLabel} to stage "${targetStage.stageName}"`,
+              dealId: projectId,
+              link: `/admin/deals/${projectId}`,
+            });
+          }
+        }
+
+        // Notify borrower
+        if (stageProject?.borrowerEmail) {
+          const [borrower] = await db.select({ id: users.id }).from(users).where(eq(users.email, stageProject.borrowerEmail));
+          if (borrower) {
+            await createNotification({
+              userId: borrower.id,
+              type: 'stage_change',
+              title: `Loan Update: ${targetStage.stageName}`,
+              message: `Your loan ${dealLabel} has moved to the "${targetStage.stageName}" stage.`,
+              dealId: projectId,
+              link: stageProject.borrowerPortalToken ? `/portal/${stageProject.borrowerPortalToken}` : undefined,
+            });
+          }
+        }
+      } catch (notifErr) {
+        console.error('Failed to send stage change notifications:', notifErr);
+      }
+
+      try {
+        const formTasks = await db.select().from(projectTasks)
+          .where(and(
+            eq(projectTasks.projectId, projectId),
+            eq(projectTasks.stageId, targetStage.id),
+          ));
+        const borrowerFormTasks = formTasks.filter(t =>
+          t.formTemplateId &&
+          t.status !== 'completed' &&
+          (t.visibleToBorrower !== false || t.assignedTo === 'borrower' || t.assignedTo === 'user')
+        );
+
+        if (borrowerFormTasks.length > 0) {
+          const [stageProj] = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
+          if (stageProj?.borrowerEmail) {
+            const templateIds = [...new Set(borrowerFormTasks.map(t => t.formTemplateId!))];
+            const templates = await db.select().from(inquiryFormTemplates)
+              .where(inArray(inquiryFormTemplates.id, templateIds));
+            const tplMap = new Map(templates.map(t => [t.id, t]));
+
+            const formNames = borrowerFormTasks
+              .map(t => tplMap.get(t.formTemplateId!)?.name || t.taskTitle)
+              .join(', ');
+
+            const portalUrl = stageProj.borrowerPortalToken
+              ? `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : ''}/portal/${stageProj.borrowerPortalToken}`
+              : null;
+
+            const [borrowerUser] = await db.select({ id: users.id }).from(users)
+              .where(eq(users.email, stageProj.borrowerEmail));
+            if (borrowerUser) {
+              await createNotification({
+                userId: borrowerUser.id,
+                type: 'task_assigned',
+                title: 'Action Required: Form to Complete',
+                message: `Please complete the following: ${formNames} for ${stageProj.projectName || `DEAL-${projectId}`}.`,
+                dealId: projectId,
+                link: portalUrl || `/portal`,
+              });
+            }
+
+            try {
+              const { Resend } = await import('resend');
+              const resend = new Resend(process.env.RESEND_API_KEY);
+              if (process.env.RESEND_API_KEY) {
+                await resend.emails.send({
+                  from: process.env.RESEND_FROM_EMAIL || 'notifications@resend.dev',
+                  to: stageProj.borrowerEmail,
+                  subject: `Action Required: Please provide information for ${stageProj.projectName || 'your loan'}`,
+                  html: `
+                    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+                      <h2>Action Required</h2>
+                      <p>Hello ${stageProj.borrowerName || 'there'},</p>
+                      <p>We need you to complete the following form(s) for your loan <strong>${stageProj.projectName || `DEAL-${projectId}`}</strong>:</p>
+                      <ul>${borrowerFormTasks.map(t => `<li>${tplMap.get(t.formTemplateId!)?.name || t.taskTitle}</li>`).join('')}</ul>
+                      ${portalUrl ? `<p><a href="${portalUrl}" style="display:inline-block;padding:10px 20px;background:#0F1729;color:#fff;border-radius:6px;text-decoration:none;">Open Your Portal</a></p>` : ''}
+                      <p>Thank you,<br/>The Lendry.AI Team</p>
+                    </div>
+                  `,
+                });
+              }
+            } catch (emailErr) {
+              console.error('Form task email notification error:', emailErr);
+            }
+          }
+        }
+      } catch (formNotifErr) {
+        console.error('Form task notification error:', formNotifErr);
+      }
 
       res.json({ success: true, currentStage: targetStageKey });
     } catch (error) {
@@ -4969,7 +6907,8 @@ export async function registerRoutes(
       const limit = Math.min(parseInt(req.query.limit as string) || 200, 500);
       const offset = parseInt(req.query.offset as string) || 0;
 
-      const projectsList = await storage.getAllProjects({ status, stage, userId });
+      const tenantId = await getTenantId(req.user!);
+      const projectsList = await storage.getAllProjects({ status, stage, userId, tenantId });
 
       // Batch-fetch all unique owner IDs to avoid N+1 queries
       const ownerIds = [...new Set(projectsList.map(p => p.userId).filter((id): id is number => id !== null && id !== undefined))];
@@ -4996,6 +6935,36 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Admin projects error:', error);
       res.status(500).json({ error: 'Failed to load projects' });
+    }
+  });
+
+  app.get('/api/admin/portal-preview-deals', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const tenantId = await getTenantId(req.user!);
+      const deals = await db.select({
+        id: projects.id,
+        dealName: projects.projectName,
+        propertyAddress: projects.propertyAddress,
+        loanAmount: projects.loanAmount,
+        status: projects.status,
+        loanNumber: projects.loanNumber,
+        borrowerPortalToken: projects.borrowerPortalToken,
+        borrowerName: projects.borrowerName,
+      })
+        .from(projects)
+        .where(
+          and(
+            eq(projects.tenantId, tenantId),
+            isNotNull(projects.borrowerPortalToken),
+          )
+        )
+        .orderBy(desc(projects.createdAt))
+        .limit(50);
+
+      res.json({ deals });
+    } catch (error) {
+      console.error('Portal preview deals error:', error);
+      res.status(500).json({ error: 'Failed to load deals for preview' });
     }
   });
 
@@ -5057,16 +7026,60 @@ export async function registerRoutes(
   app.patch('/api/admin/projects/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const projectId = parseInt(req.params.id);
-      const { targetCloseDate } = req.body;
 
       if (!projectId) {
         return res.status(400).json({ error: 'Project ID is required' });
       }
 
-      const updateData: Record<string, any> = {};
+      const userRole = req.user!.role;
+      const isAdminUser = ['admin', 'super_admin', 'staff', 'lender', 'processor'].includes(userRole || '');
 
-      if (targetCloseDate !== undefined) {
-        updateData.targetCloseDate = targetCloseDate ? new Date(targetCloseDate) : null;
+      const baseFields: Record<string, (v: any) => any> = {
+        loanAmount: (v) => v !== null && v !== '' ? Number(v) : null,
+        interestRate: (v) => v !== null && v !== '' ? Number(v) : null,
+        loanTermMonths: (v) => v !== null && v !== '' ? Number(v) : null,
+        loanType: (v) => v || null,
+        status: (v) => v || null,
+        targetCloseDate: (v) => v ? new Date(v) : null,
+        borrowerName: (v) => v || null,
+        borrowerEmail: (v) => v || null,
+        borrowerPhone: (v) => v || null,
+        programId: (v) => v !== null && v !== '' ? Number(v) : null,
+        propertyAddress: (v) => v || null,
+        propertyType: (v) => v || null,
+        currentStage: (v) => v || null,
+        brokerName: (v) => v || null,
+        prepaymentPenalty: (v) => v || null,
+        holdbackAmount: (v) => v !== null && v !== '' ? Number(v) : null,
+      };
+
+      const adminOnlyFields: Record<string, (v: any) => any> = {
+        ysp: (v) => v !== null && v !== '' ? Number(v) : null,
+        lenderOriginationPoints: (v) => v !== null && v !== '' ? Number(v) : null,
+        brokerOriginationPoints: (v) => v !== null && v !== '' ? Number(v) : null,
+      };
+
+      const allowedFields = isAdminUser ? { ...baseFields, ...adminOnlyFields } : baseFields;
+
+      const updateData: Record<string, any> = {};
+      for (const [field, transform] of Object.entries(allowedFields)) {
+        if (req.body[field] !== undefined) {
+          updateData[field] = transform(req.body[field]);
+        }
+      }
+
+      const incomingAppData = req.body.applicationData;
+      if (incomingAppData && typeof incomingAppData === 'object') {
+        const [existing] = await db.select({ metadata: projects.metadata })
+          .from(projects)
+          .where(eq(projects.id, projectId))
+          .limit(1);
+        const existingMeta = (existing?.metadata as Record<string, any>) || {};
+        const existingAppData = existingMeta.applicationData || {};
+        updateData.metadata = {
+          ...existingMeta,
+          applicationData: { ...existingAppData, ...incomingAppData },
+        };
       }
 
       if (Object.keys(updateData).length === 0) {
@@ -5082,7 +7095,11 @@ export async function registerRoutes(
         return res.status(404).json({ error: 'Project not found' });
       }
 
-      res.json({ project: updated });
+      const serialized: Record<string, any> = {};
+      for (const [k, v] of Object.entries(updated)) {
+        serialized[k] = v instanceof Date ? v.toISOString() : v;
+      }
+      res.json({ project: serialized });
     } catch (error) {
       console.error('Admin project update error:', error);
       res.status(500).json({ error: 'Failed to update project' });
@@ -5337,7 +7354,7 @@ export async function registerRoutes(
     try {
       const projectId = parseInt(req.params.projectId);
       const taskId = parseInt(req.params.taskId);
-      const { status, assignedTo } = req.body;
+      const { status, assignedTo, taskTitle, taskName, taskDescription, priority, dueDate, stageId, visibleToBorrower, borrowerActionRequired } = req.body;
       
       const task = await storage.getTaskById(taskId);
       if (!task || task.projectId !== projectId) {
@@ -5356,7 +7373,19 @@ export async function registerRoutes(
       }
       if (assignedTo !== undefined) {
         updates.assignedTo = assignedTo || null;
+        if (assignedTo === 'borrower') {
+          updates.visibleToBorrower = true;
+          updates.borrowerActionRequired = true;
+        }
       }
+      const resolvedTitle = taskTitle || taskName;
+      if (resolvedTitle !== undefined) updates.taskTitle = resolvedTitle;
+      if (taskDescription !== undefined) updates.taskDescription = taskDescription;
+      if (priority !== undefined) updates.priority = priority;
+      if (dueDate !== undefined) updates.dueDate = dueDate ? new Date(dueDate) : null;
+      if (stageId !== undefined) updates.stageId = stageId ? parseInt(stageId) : null;
+      if (visibleToBorrower !== undefined) updates.visibleToBorrower = visibleToBorrower;
+      if (borrowerActionRequired !== undefined) updates.borrowerActionRequired = borrowerActionRequired;
       
       const updatedTask = await storage.updateTask(taskId, updates);
       
@@ -5547,7 +7576,8 @@ export async function registerRoutes(
   // Admin - System settings
   app.get('/api/admin/settings', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
-      const settings = await storage.getAllSettings();
+      const tenantId = await getTenantId(req.user!);
+      const settings = await storage.getAllSettings(tenantId);
       res.json({ settings });
     } catch (error) {
       console.error('Admin settings error:', error);
@@ -5568,15 +7598,9 @@ export async function registerRoutes(
       if (!value) {
         return res.status(400).json({ error: 'Value is required' });
       }
-      
-      const setting = await storage.upsertSetting(key, value, description || null, req.user!.id);
-      
-      await storage.createAdminActivity({
-        userId: req.user!.id,
-        actionType: 'setting_updated',
-        actionDescription: `Updated setting: ${key}`,
-        metadata: { key, value }
-      });
+
+      const tenantId = await getTenantId(req.user!);
+      const setting = await storage.upsertSetting(key, value, description || null, req.user!.id, tenantId);
       
       res.json({ setting });
     } catch (error) {
@@ -5588,7 +7612,8 @@ export async function registerRoutes(
   app.delete('/api/admin/settings/:key', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const { key } = req.params;
-      await storage.deleteSetting(key);
+      const tenantId = await getTenantId(req.user!);
+      await storage.deleteSetting(key, tenantId);
       res.json({ success: true });
     } catch (error) {
       console.error('Admin delete setting error:', error);
@@ -5963,6 +7988,15 @@ export async function registerRoutes(
         }
       }
 
+      const docCountRows = await db.select({
+        dealId: dealDocuments.dealId,
+        total: sql<number>`count(*)::int`,
+        completed: sql<number>`count(*) filter (where ${dealDocuments.status} in ('uploaded', 'approved', 'ai_reviewed'))::int`,
+      })
+        .from(dealDocuments)
+        .groupBy(dealDocuments.dealId);
+      const docCountMap = new Map(docCountRows.map(r => [r.dealId, { total: r.total, completed: r.completed }]));
+
       // Transform projects to deal format for frontend compatibility
       const deals = allProjects.map(p => {
         const nameParts = (p.borrowerName || '').split(' ');
@@ -5992,14 +8026,16 @@ export async function registerRoutes(
           projectStatus: p.status || 'active',
           currentStage: p.currentStage,
           progressPercentage: p.progressPercentage || 0,
-          createdAt: p.createdAt,
-          targetCloseDate: p.targetCloseDate,
+          createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : p.createdAt,
+          targetCloseDate: p.targetCloseDate instanceof Date ? p.targetCloseDate.toISOString() : p.targetCloseDate,
           userName: p.userName,
           userEmail: p.userEmail,
           quoteId: p.quoteId,
           googleDriveFolderId: p.googleDriveFolderId || null,
           googleDriveFolderUrl: p.googleDriveFolderUrl || null,
           driveSyncStatus: p.driveSyncStatus || 'NOT_ENABLED',
+          totalDocuments: docCountMap.get(p.id)?.total || 0,
+          completedDocuments: docCountMap.get(p.id)?.completed || 0,
         };
       });
       
@@ -6237,6 +8273,7 @@ export async function registerRoutes(
         ? new Date(targetCloseDate) 
         : new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
       
+      const adminTenantId = await getTenantId(req.user!);
       const project = await storage.createProject({
         userId: req.user!.id,
         projectName: `${borrowerName} - ${propertyAddress}`,
@@ -6260,6 +8297,7 @@ export async function registerRoutes(
         borrowerPortalEnabled: true,
         quoteId: deal.id,
         notes: null,
+        tenantId: adminTenantId,
       });
       
       const { buildProjectPipelineFromProgram } = await import('./services/projectPipeline');
@@ -6312,6 +8350,15 @@ export async function registerRoutes(
         brokerPortalToken: projects.brokerPortalToken,
         brokerPortalEnabled: projects.brokerPortalEnabled,
         metadata: projects.metadata,
+        ysp: projects.ysp,
+        lenderOriginationPoints: projects.lenderOriginationPoints,
+        brokerOriginationPoints: projects.brokerOriginationPoints,
+        brokerName: projects.brokerName,
+        prepaymentPenalty: projects.prepaymentPenalty,
+        holdbackAmount: projects.holdbackAmount,
+        googleDriveFolderId: projects.googleDriveFolderId,
+        loanNumber: projects.loanNumber,
+        googleDriveFolderUrl: projects.googleDriveFolderUrl,
         userName: users.fullName,
         userEmail: users.email,
       })
@@ -6347,12 +8394,14 @@ export async function registerRoutes(
       }
       
       let programName: string | null = null;
+      let quoteFormFields: any[] = [];
       if (project.programId) {
-        const [prog] = await db.select({ name: loanPrograms.name })
+        const [prog] = await db.select({ name: loanPrograms.name, quoteFormFields: loanPrograms.quoteFormFields })
           .from(loanPrograms)
           .where(eq(loanPrograms.id, project.programId))
           .limit(1);
         programName = prog?.name || null;
+        quoteFormFields = (prog?.quoteFormFields as any[]) || [];
       }
 
       // Determine current workflow step key from projectStages
@@ -6407,6 +8456,7 @@ export async function registerRoutes(
         id: project.id,
         projectId: project.id,
         projectNumber: project.projectNumber,
+        dealNumber: project.projectNumber,
         userId: project.userId,
         customerFirstName: firstName,
         customerLastName: lastName,
@@ -6426,8 +8476,8 @@ export async function registerRoutes(
         projectStatus: project.status || 'active',
         currentStage: project.currentStage,
         progressPercentage: project.progressPercentage || 0,
-        createdAt: project.createdAt,
-        targetCloseDate: project.targetCloseDate,
+        createdAt: project.createdAt instanceof Date ? project.createdAt.toISOString() : project.createdAt,
+        targetCloseDate: project.targetCloseDate instanceof Date ? project.targetCloseDate.toISOString() : project.targetCloseDate,
         userName: project.userName,
         userEmail: project.userEmail,
         quoteId: project.quoteId,
@@ -6437,6 +8487,18 @@ export async function registerRoutes(
         brokerPortalEnabled: project.brokerPortalEnabled,
         programId: project.programId,
         programName,
+        quoteFormFields,
+        ysp: project.ysp,
+        lenderOriginationPoints: project.lenderOriginationPoints,
+        brokerOriginationPoints: project.brokerOriginationPoints,
+        brokerName: project.brokerName,
+        prepaymentPenalty: project.prepaymentPenalty,
+        holdbackAmount: project.holdbackAmount,
+        loanAmount: project.loanAmount,
+        loanTermMonths: project.loanTermMonths,
+        loanNumber: project.loanNumber,
+        googleDriveFolderId: project.googleDriveFolderId,
+        googleDriveFolderUrl: project.googleDriveFolderUrl,
       };
       
       const docs = await db.select()
@@ -6459,7 +8521,33 @@ export async function registerRoutes(
         if (newProp) props = [newProp];
       }
       
-      res.json({ deal, documents: docs, project, properties: props });
+      const allDealStages = await db.select()
+        .from(projectStages)
+        .where(eq(projectStages.projectId, projectId))
+        .orderBy(asc(projectStages.stageOrder));
+
+      let dealStages = allDealStages.filter(s => s.status !== 'skipped');
+      if (project.programId) {
+        const seenKeys = new Map<string, typeof dealStages[0]>();
+        const filtered: typeof dealStages = [];
+        for (const s of dealStages) {
+          const key = s.stageKey || `_id_${s.id}`;
+          const existing = seenKeys.get(key);
+          if (existing) {
+            if (s.programStepId && !existing.programStepId) {
+              const idx = filtered.indexOf(existing);
+              if (idx !== -1) filtered[idx] = s;
+              seenKeys.set(key, s);
+            }
+          } else {
+            seenKeys.set(key, s);
+            filtered.push(s);
+          }
+        }
+        dealStages = filtered;
+      }
+
+      res.json({ deal, documents: docs, project, properties: props, stages: dealStages });
     } catch (error) {
       console.error('Admin get deal error:', error);
       res.status(500).json({ error: 'Failed to load deal' });
@@ -6637,8 +8725,8 @@ export async function registerRoutes(
     try {
       const userId = req.user!.id;
       const projectId = parseInt(req.params.id);
-      const viewerRole = req.user!.role === 'super_admin' || req.user!.role === 'admin' ? 'admin' : 
-                         req.user!.userType === 'borrower' ? 'borrower' : 'broker';
+      const viewerRole = ['super_admin', 'lender', 'admin', 'staff', 'processor'].includes(req.user!.role) ? 'admin' : 
+                         req.user!.role === 'borrower' ? 'borrower' : 'broker';
 
       const project = await storage.getProjectById(projectId, userId);
       if (!project) return res.status(404).json({ error: 'Deal not found' });
@@ -6665,6 +8753,8 @@ export async function registerRoutes(
       const visibleDocs = docsWithFiles.filter(doc => {
         const vis = doc.visibility || 'all';
         if (vis === 'all') return true;
+        if (viewerRole === 'admin') return true;
+        if (vis === 'internal') return false;
         return vis === viewerRole;
       });
 
@@ -6818,7 +8908,25 @@ export async function registerRoutes(
         });
       }
 
+      const taskIds = visibleTasks.filter(t => t.formTemplateId).map(t => t.id);
+      let formSubmissions: any[] = [];
+      if (taskIds.length > 0) {
+        formSubmissions = await db.select().from(taskFormSubmissions)
+          .where(inArray(taskFormSubmissions.taskId, taskIds));
+      }
+      const submissionMap = new Map(formSubmissions.map(s => [s.taskId, s]));
+
+      let formTemplateMap = new Map<number, any>();
+      const templateIds = [...new Set(visibleTasks.filter(t => t.formTemplateId).map(t => t.formTemplateId!))];
+      if (templateIds.length > 0) {
+        const templates = await db.select().from(inquiryFormTemplates)
+          .where(inArray(inquiryFormTemplates.id, templateIds));
+        formTemplateMap = new Map(templates.map(t => [t.id, t]));
+      }
+
       for (const task of visibleTasks) {
+        const submission = submissionMap.get(task.id);
+        const formTemplate = task.formTemplateId ? formTemplateMap.get(task.formTemplateId) : null;
         checklistItems.push({
           id: `task-${task.id}`,
           type: 'task' as const,
@@ -6837,6 +8945,9 @@ export async function registerRoutes(
           completedAt: task.completedAt,
           completedBy: task.completedBy,
           createdAt: task.createdAt,
+          formTemplateId: task.formTemplateId || null,
+          formTemplate: formTemplate || null,
+          formSubmission: submission || null,
         });
       }
 
@@ -6856,6 +8967,119 @@ export async function registerRoutes(
     } catch (error) {
       console.error('Portal checklist error:', error);
       res.status(500).json({ error: 'Failed to load checklist' });
+    }
+  });
+
+  app.post('/api/portal/:token/tasks/:taskId/submit-form', async (req: Request, res: Response) => {
+    try {
+      const { token, taskId } = req.params;
+      const project = await storage.getProjectByToken(token);
+      if (!project) return res.status(404).json({ error: 'Deal not found' });
+      if (!project.borrowerPortalEnabled) return res.status(403).json({ error: 'Portal disabled' });
+
+      const tId = parseInt(taskId);
+      const [task] = await db.select().from(projectTasks)
+        .where(and(eq(projectTasks.id, tId), eq(projectTasks.projectId, project.id)));
+      if (!task) return res.status(404).json({ error: 'Task not found' });
+      if (!task.formTemplateId) return res.status(400).json({ error: 'This task has no form attached' });
+
+      const taskAssignee = (task.assignedTo || '').toLowerCase();
+      const isBorrowerTask = task.visibleToBorrower !== false &&
+        (taskAssignee === '' || taskAssignee === 'borrower' || taskAssignee === 'user' || taskAssignee === 'all');
+      if (!isBorrowerTask) return res.status(403).json({ error: 'This task is not assigned to borrower' });
+      if (task.status === 'completed') return res.status(400).json({ error: 'This task is already completed' });
+
+      const [template] = await db.select().from(inquiryFormTemplates)
+        .where(eq(inquiryFormTemplates.id, task.formTemplateId));
+      if (!template) return res.status(404).json({ error: 'Form template not found' });
+
+      const { formData } = req.body;
+      if (!formData || typeof formData !== 'object') {
+        return res.status(400).json({ error: 'formData is required' });
+      }
+
+      const templateFields = template.fields as Array<{ fieldKey: string; label: string; required: boolean }>;
+      for (const field of templateFields) {
+        if (field.required && !formData[field.fieldKey]?.trim()) {
+          return res.status(400).json({ error: `${field.label} is required` });
+        }
+      }
+
+      const existingSub = await db.select().from(taskFormSubmissions)
+        .where(eq(taskFormSubmissions.taskId, tId))
+        .limit(1);
+
+      if (existingSub.length > 0) {
+        await db.update(taskFormSubmissions)
+          .set({ formData, status: 'submitted', submittedAt: new Date(), submittedByEmail: project.borrowerEmail })
+          .where(eq(taskFormSubmissions.id, existingSub[0].id));
+      } else {
+        await db.insert(taskFormSubmissions).values({
+          taskId: tId,
+          projectId: project.id,
+          formTemplateId: task.formTemplateId,
+          submittedByEmail: project.borrowerEmail,
+          formData,
+          status: 'submitted',
+          submittedAt: new Date(),
+        });
+      }
+
+      if (template.targetType === 'third_party' && template.targetRole) {
+        const existingThirdParty = await db.select().from(dealThirdParties)
+          .where(and(
+            eq(dealThirdParties.projectId, project.id),
+            eq(dealThirdParties.role, template.targetRole)
+          ))
+          .limit(1);
+
+        const thirdPartyData = {
+          name: formData.name || formData.contactName || 'Unknown',
+          email: formData.email || null,
+          phone: formData.phone || null,
+          company: formData.company || null,
+          notes: Object.entries(formData)
+            .filter(([k]) => !['name', 'contactName', 'email', 'phone', 'company'].includes(k))
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(', ') || null,
+          role: template.targetRole,
+          projectId: project.id,
+        };
+
+        if (existingThirdParty.length > 0) {
+          await db.update(dealThirdParties)
+            .set({ ...thirdPartyData, updatedAt: new Date() })
+            .where(eq(dealThirdParties.id, existingThirdParty[0].id));
+        } else {
+          await db.insert(dealThirdParties).values(thirdPartyData);
+        }
+      }
+
+      await db.update(projectTasks)
+        .set({ status: 'completed', completedAt: new Date(), completedBy: 'borrower', borrowerActionRequired: false })
+        .where(eq(projectTasks.id, tId));
+
+      try {
+        const adminUsers = await db.select({ id: users.id }).from(users)
+          .where(inArray(users.role, ['admin', 'super_admin', 'staff']));
+        for (const admin of adminUsers) {
+          await createNotification({
+            userId: admin.id,
+            type: 'document_uploaded',
+            title: `Form Submitted: ${template.name}`,
+            message: `${project.borrowerName || 'Borrower'} submitted "${template.name}" for ${project.projectName || 'a deal'}.`,
+            dealId: project.id,
+            link: `/admin/deals/${project.id}`,
+          });
+        }
+      } catch (notifErr) {
+        console.error('Form submission notification error:', notifErr);
+      }
+
+      res.json({ success: true, message: 'Form submitted successfully' });
+    } catch (error) {
+      console.error('Portal form submission error:', error);
+      res.status(500).json({ error: 'Failed to submit form' });
     }
   });
 
@@ -6913,7 +9137,25 @@ export async function registerRoutes(
         });
       }
 
+      const adminTaskIds = tasks.filter(t => t.formTemplateId).map(t => t.id);
+      let adminFormSubmissions: any[] = [];
+      if (adminTaskIds.length > 0) {
+        adminFormSubmissions = await db.select().from(taskFormSubmissions)
+          .where(inArray(taskFormSubmissions.taskId, adminTaskIds));
+      }
+      const adminSubMap = new Map(adminFormSubmissions.map(s => [s.taskId, s]));
+
+      let adminTemplateMap = new Map<number, any>();
+      const adminTemplateIds = [...new Set(tasks.filter(t => t.formTemplateId).map(t => t.formTemplateId!))];
+      if (adminTemplateIds.length > 0) {
+        const tpls = await db.select().from(inquiryFormTemplates)
+          .where(inArray(inquiryFormTemplates.id, adminTemplateIds));
+        adminTemplateMap = new Map(tpls.map(t => [t.id, t]));
+      }
+
       for (const task of tasks) {
+        const sub = adminSubMap.get(task.id);
+        const tpl = task.formTemplateId ? adminTemplateMap.get(task.formTemplateId) : null;
         checklistItems.push({
           id: `task-${task.id}`,
           type: 'task' as const,
@@ -6932,6 +9174,9 @@ export async function registerRoutes(
           completedAt: task.completedAt,
           completedBy: task.completedBy,
           createdAt: task.createdAt,
+          formTemplateId: task.formTemplateId || null,
+          formTemplate: tpl || null,
+          formSubmission: sub || null,
         });
       }
 
@@ -6959,10 +9204,24 @@ export async function registerRoutes(
     try {
       const dealId = parseInt(req.params.dealId);
       
-      const documents = await db.select()
+      const docs = await db.select()
         .from(dealDocuments)
         .where(eq(dealDocuments.dealId, dealId))
         .orderBy(dealDocuments.sortOrder);
+
+      const docIds = docs.map(d => d.id);
+      const allFiles = docIds.length > 0
+        ? await db.select()
+            .from(dealDocumentFiles)
+            .where(inArray(dealDocumentFiles.documentId, docIds))
+            .orderBy(dealDocumentFiles.sortOrder, dealDocumentFiles.createdAt)
+        : [];
+
+      const documents = docs.map(doc => ({
+        ...doc,
+        files: allFiles.filter(f => f.documentId === doc.id),
+        fileCount: allFiles.filter(f => f.documentId === doc.id).length,
+      }));
       
       res.json({ documents });
     } catch (error) {
@@ -7018,10 +9277,11 @@ export async function registerRoutes(
         }
 
         try {
+          const reviewerDisplayName = req.user!.fullName || req.user!.email || 'Admin';
           await db.insert(dealMemoryEntries).values({
             dealId,
             entryType: status === 'approved' ? 'document_approved' : 'document_rejected',
-            title: `${updated.documentName || updated.documentCategory || 'Document'} ${actionText}`,
+            title: `${updated.documentName || updated.documentCategory || 'Document'} ${actionText} by ${reviewerDisplayName}`,
             description: reviewNotes || undefined,
             sourceType: 'admin',
             sourceUserId: req.user!.id,
@@ -7029,12 +9289,57 @@ export async function registerRoutes(
           });
         } catch (e) { console.error('Memory entry error:', e); }
 
+        // Send in-app notifications for document approval/rejection
+        try {
+          const [dealProject] = await db.select().from(projects).where(eq(projects.id, dealId)).limit(1);
+          if (dealProject) {
+            const reviewerName = req.user!.fullName || req.user!.email || 'Admin';
+            const docName = updated.documentName || 'Document';
+            const dealLabel = dealProject.loanNumber || `DEAL-${dealId}`;
+
+            // Notify borrower
+            if (dealProject.borrowerEmail) {
+              const [borrower] = await db.select({ id: users.id }).from(users).where(eq(users.email, dealProject.borrowerEmail));
+              if (borrower) {
+                await createNotification({
+                  userId: borrower.id,
+                  type: status === 'approved' ? 'document_approved' : 'document_rejected',
+                  title: status === 'approved' ? `Document Approved: ${docName}` : `Document Rejected: ${docName}`,
+                  message: status === 'approved'
+                    ? `Your document "${docName}" for ${dealLabel} has been approved by ${reviewerName}.`
+                    : `Your document "${docName}" for ${dealLabel} was rejected by ${reviewerName}.${reviewNotes ? ` Reason: ${reviewNotes}` : ' Please re-upload a corrected version.'}`,
+                  dealId,
+                  link: `/portal/${dealProject.borrowerPortalToken}`,
+                });
+              }
+            }
+
+            // Notify assigned processors
+            const processors = await db.select({ userId: dealProcessors.userId }).from(dealProcessors)
+              .where(eq(dealProcessors.dealId, dealId));
+            for (const proc of processors) {
+              if (proc.userId !== req.user!.id) {
+                await createNotification({
+                  userId: proc.userId,
+                  type: status === 'approved' ? 'document_approved' : 'document_rejected',
+                  title: `${docName} ${actionText} by ${reviewerName}`,
+                  message: `Document "${docName}" for ${dealLabel} has been ${actionText}${reviewNotes ? `: ${reviewNotes}` : ''}`,
+                  dealId,
+                  link: `/admin/deals/${dealId}`,
+                });
+              }
+            }
+          }
+        } catch (notifErr) {
+          console.error('Failed to send doc approval/rejection notifications:', notifErr);
+        }
+
         try {
           const [project] = await db.select({ id: projects.id })
             .from(projects)
             .where(eq(projects.quoteId, dealId))
             .limit(1);
-          
+
           if (project) {
             await db.insert(loanUpdates).values({
               projectId: project.id,
@@ -7112,13 +9417,9 @@ export async function registerRoutes(
         }
       }
       
-      if (status === 'approved' || status === 'waived' || status === 'not_applicable') {
-        try {
-          await updateProjectProgress(dealId, req.user!.id);
-        } catch (progressErr) {
-          console.error('Failed to check stage auto-advance after doc approval:', progressErr);
-        }
-      }
+      // Note: Removed auto-advance (updateProjectProgress) on document approval
+      // to prevent deals from changing order in the pipeline.
+      // Stage advancement should be done explicitly via drag-and-drop or manual action.
 
       res.json({ document: updated });
     } catch (error) {
@@ -7305,25 +9606,78 @@ export async function registerRoutes(
         );
       }
       
-      // Google Drive sync for the new file (non-blocking)
-      try {
-        const { isDriveIntegrationEnabled, syncDealDocumentToDrive } = await import('./services/googleDrive');
-        const driveEnabled = await isDriveIntegrationEnabled();
-        if (driveEnabled && updated && newFile) {
-          syncDealDocumentToDrive(updated.id, newFile.id).catch((err: any) => {
-            console.error(`Drive sync failed for deal doc ${updated.id}:`, err.message);
-          });
-        }
-      } catch (driveErr: any) {
-        console.error('Drive sync check error:', driveErr.message);
-      }
-
       maybeAutoTriggerPipeline(dealId, req.user!.id);
       
       res.json({ document: updated, file: newFile });
     } catch (error) {
       console.error('Admin upload complete error:', error);
       res.status(500).json({ error: 'Failed to update document record' });
+    }
+  });
+
+  app.post('/api/admin/deals/:dealId/documents/:docId/review', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      const docId = parseInt(req.params.docId);
+      const [doc] = await db.select().from(dealDocuments).where(and(eq(dealDocuments.id, docId), eq(dealDocuments.dealId, dealId)));
+      if (!doc) return res.status(404).json({ error: 'Document not found' });
+      if (!doc.filePath && !doc.fileName) return res.status(400).json({ error: 'No file uploaded for this document' });
+
+      const { onDocumentUploaded } = await import('./services/documentReviewOrchestrator');
+      await db.update(dealDocuments).set({ aiReviewStatus: 'reviewing' }).where(eq(dealDocuments.id, docId));
+
+      onDocumentUploaded({
+        documentId: docId,
+        projectId: dealId,
+        fileName: doc.fileName || 'document',
+        filePath: doc.filePath || '',
+      }).catch((err: any) => {
+        console.error(`Manual review failed for doc ${docId}:`, err.message);
+      });
+
+      res.json({ success: true, message: 'AI review triggered' });
+    } catch (error) {
+      console.error('Manual document review error:', error);
+      res.status(500).json({ error: 'Failed to trigger review' });
+    }
+  });
+
+  app.post('/api/admin/deals/:dealId/documents/review-all', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      const docs = await db.select().from(dealDocuments)
+        .where(and(
+          eq(dealDocuments.dealId, dealId),
+          inArray(dealDocuments.status, ['uploaded']),
+          or(
+            inArray(dealDocuments.aiReviewStatus, ['not_reviewed', 'pending']),
+            isNull(dealDocuments.aiReviewStatus),
+          ),
+        ));
+
+      if (docs.length === 0) return res.json({ reviewed: 0, message: 'No documents to review' });
+
+      const { onDocumentUploaded } = await import('./services/documentReviewOrchestrator');
+      let triggered = 0;
+
+      for (const doc of docs) {
+        if (!doc.filePath && !doc.fileName) continue;
+        await db.update(dealDocuments).set({ aiReviewStatus: 'reviewing' }).where(eq(dealDocuments.id, doc.id));
+        onDocumentUploaded({
+          documentId: doc.id,
+          projectId: dealId,
+          fileName: doc.fileName || 'document',
+          filePath: doc.filePath || '',
+        }).catch((err: any) => {
+          console.error(`Batch review failed for doc ${doc.id}:`, err.message);
+        });
+        triggered++;
+      }
+
+      res.json({ reviewed: triggered, message: `Triggered AI review for ${triggered} documents` });
+    } catch (error) {
+      console.error('Batch document review error:', error);
+      res.status(500).json({ error: 'Failed to trigger batch review' });
     }
   });
 
@@ -7344,9 +9698,18 @@ export async function registerRoutes(
       // Get the file and stream it
       const objectFile = await objectStorageService.getObjectEntityFile(doc.filePath);
       
-      // Set content disposition for download
-      if (req.query.download === 'true' && doc.fileName) {
-        res.set('Content-Disposition', `attachment; filename="${doc.fileName}"`);
+      res.set('X-Frame-Options', 'SAMEORIGIN');
+      res.removeHeader('Content-Security-Policy');
+
+      const safeDocName = doc.fileName ? doc.fileName.replace(/[^\x20-\x7E]/g, '_').replace(/\\/g, '_').replace(/"/g, "'") : null;
+      if (req.query.download === 'true' && safeDocName) {
+        res.set('Content-Disposition', `attachment; filename="${safeDocName}"`);
+      } else {
+        res.set('Content-Disposition', `inline${safeDocName ? `; filename="${safeDocName}"` : ''}`);
+      }
+
+      if (doc.mimeType) {
+        res.set('Content-Type', doc.mimeType);
       }
       
       await objectStorageService.downloadObject(objectFile, res);
@@ -7365,8 +9728,16 @@ export async function registerRoutes(
         return res.status(404).json({ error: 'File not found' });
       }
       const objectFile = await objectStorageService.getObjectEntityFile(file.filePath);
-      if (req.query.download === 'true' && file.fileName) {
-        res.set('Content-Disposition', `attachment; filename="${file.fileName}"`);
+      res.set('X-Frame-Options', 'SAMEORIGIN');
+      res.removeHeader('Content-Security-Policy');
+      const safeFileName = file.fileName ? file.fileName.replace(/[^\x20-\x7E]/g, '_').replace(/\\/g, '_').replace(/"/g, "'") : null;
+      if (req.query.download === 'true' && safeFileName) {
+        res.set('Content-Disposition', `attachment; filename="${safeFileName}"`);
+      } else {
+        res.set('Content-Disposition', `inline${safeFileName ? `; filename="${safeFileName}"` : ''}`);
+      }
+      if (file.mimeType) {
+        res.set('Content-Type', file.mimeType);
       }
       await objectStorageService.downloadObject(objectFile, res);
     } catch (error) {
@@ -7416,6 +9787,28 @@ export async function registerRoutes(
     }
   });
 
+
+  app.delete('/api/admin/deals/:dealId/documents/:docId', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      const docId = parseInt(req.params.docId);
+
+      const [doc] = await db.select().from(dealDocuments)
+        .where(and(eq(dealDocuments.id, docId), eq(dealDocuments.dealId, dealId)))
+        .limit(1);
+      if (!doc) {
+        return res.status(404).json({ error: 'Document not found' });
+      }
+
+      await db.delete(dealDocumentFiles).where(eq(dealDocumentFiles.documentId, docId));
+      await db.delete(dealDocuments).where(eq(dealDocuments.id, docId));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Delete deal document error:', error);
+      res.status(500).json({ error: 'Failed to delete document' });
+    }
+  });
 
   // Override/action on a specific AI review finding
   app.patch('/api/admin/reviews/:reviewId/findings/:findingIndex/override', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
@@ -7750,7 +10143,7 @@ export async function registerRoutes(
         await db.insert(dealMemoryEntries).values({
           dealId,
           entryType: 'stage_change',
-          title: `Stage changed to: ${targetStage.stageName}`,
+          title: `Stage changed to "${targetStage.stageName}" by ${(req as any).user?.fullName || (req as any).user?.email || 'Admin'}`,
           description: previousStageKey ? `From "${previousStageKey}" to "${targetStage.stageName}"` : undefined,
           sourceType: 'admin',
           sourceUserId: (req as any).user?.id || null,
@@ -7905,6 +10298,8 @@ export async function registerRoutes(
                 documentCategory: doc.documentCategory,
                 documentDescription: doc.documentDescription,
                 isRequired: doc.isRequired,
+                assignedTo: doc.assignedTo || 'borrower',
+                visibility: doc.visibility || 'all',
                 sortOrder: doc.sortOrder || index,
                 status: 'pending' as const,
               }));
@@ -7988,6 +10383,8 @@ export async function registerRoutes(
               documentCategory: template.documentCategory,
               documentDescription: template.documentDescription,
               isRequired: template.isRequired,
+              assignedTo: template.assignedTo || 'borrower',
+              visibility: template.visibility || 'all',
               sortOrder: template.sortOrder,
               status: 'pending',
             })
@@ -8012,7 +10409,7 @@ export async function registerRoutes(
     try {
       const dealId = parseInt(req.params.dealId);
       
-      const tasks = await db.select({
+      const dtasks = await db.select({
         id: dealTasks.id,
         dealId: dealTasks.dealId,
         taskName: dealTasks.taskName,
@@ -8030,8 +10427,52 @@ export async function registerRoutes(
         .leftJoin(users, eq(dealTasks.assignedTo, users.id))
         .where(eq(dealTasks.dealId, dealId))
         .orderBy(dealTasks.createdAt);
+
+      const ptasksRaw = await db.select().from(projectTasks)
+        .where(eq(projectTasks.projectId, dealId))
+        .orderBy(asc(projectTasks.createdAt));
+
+      const seenTemplateIds = new Set<number>();
+      const ptasks = ptasksRaw.filter(t => {
+        if (t.status === 'not_applicable') return false;
+        if (t.programTaskTemplateId) {
+          if (seenTemplateIds.has(t.programTaskTemplateId)) return false;
+          seenTemplateIds.add(t.programTaskTemplateId);
+        }
+        return true;
+      });
+
+      const mappedProjectTasks = ptasks.map(t => ({
+        id: t.id,
+        dealId: t.projectId,
+        taskName: t.taskTitle,
+        taskTitle: t.taskTitle,
+        taskDescription: t.taskDescription,
+        status: t.status,
+        priority: t.priority,
+        assignedTo: t.assignedTo,
+        assigneeName: null,
+        assigneeEmail: null,
+        dueDate: t.dueDate,
+        completedAt: t.completedAt,
+        createdAt: t.createdAt,
+        stageId: t.stageId,
+        taskType: t.taskType,
+        formTemplateId: t.formTemplateId,
+        borrowerActionRequired: t.borrowerActionRequired,
+        programTaskTemplateId: t.programTaskTemplateId,
+        _assignedToBorrower: t.assignedTo === 'borrower',
+        _source: 'projectTasks',
+      }));
+
+      const allTasks = [...dtasks.map(t => ({ ...t, formTemplateId: null, borrowerActionRequired: false, _source: 'dealTasks', _type: 'deal_task' })), ...mappedProjectTasks.map(t => ({ ...t, _type: 'project_task' }))];
+      allTasks.sort((a, b) => {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return aTime - bTime;
+      });
       
-      res.json({ tasks });
+      res.json({ tasks: allTasks });
     } catch (error) {
       console.error('Admin get deal tasks error:', error);
       res.status(500).json({ error: 'Failed to load tasks' });
@@ -8042,36 +10483,120 @@ export async function registerRoutes(
   app.post('/api/admin/deals/:dealId/tasks', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const dealId = parseInt(req.params.dealId);
-      const { taskName, taskDescription, priority, assignedTo, dueDate } = req.body;
-      
-      const [task] = await db.insert(dealTasks)
-        .values({
-          dealId,
-          taskName,
-          taskDescription,
-          priority: priority || 'medium',
-          assignedTo: assignedTo ? parseInt(assignedTo) : null,
-          dueDate: dueDate ? new Date(dueDate) : null,
-          createdBy: req.user!.id,
-        })
-        .returning();
-      
-      res.json({ task });
+      const { taskName, taskDescription, priority, assignedTo, dueDate, formTemplateId, stageId } = req.body;
+
+      const isBorrowerAssigned = assignedTo === "borrower";
+
+      if (formTemplateId || isBorrowerAssigned) {
+        const taskAssignedTo = isBorrowerAssigned ? 'borrower' : (assignedTo || 'borrower');
+        const [ptask] = await db.insert(projectTasks)
+          .values({
+            projectId: dealId,
+            stageId: stageId ? parseInt(stageId) : null,
+            taskTitle: taskName,
+            taskDescription,
+            taskType: 'general',
+            priority: priority || 'medium',
+            assignedTo: taskAssignedTo,
+            visibleToBorrower: true,
+            borrowerActionRequired: isBorrowerAssigned,
+            status: 'pending',
+            dueDate: dueDate ? new Date(dueDate) : null,
+            formTemplateId: formTemplateId ? parseInt(formTemplateId) : null,
+          })
+          .returning();
+
+        res.json({ task: { ...ptask, taskName: ptask.taskTitle, formTemplateId: ptask.formTemplateId, _type: 'project_task', _assignedToBorrower: taskAssignedTo === 'borrower' } });
+      } else {
+        const [task] = await db.insert(dealTasks)
+          .values({
+            dealId,
+            taskName,
+            taskDescription,
+            priority: priority || 'medium',
+            assignedTo: assignedTo ? parseInt(assignedTo) : null,
+            dueDate: dueDate ? new Date(dueDate) : null,
+            createdBy: req.user!.id,
+          })
+          .returning();
+
+        if (assignedTo) {
+          const assigneeId = parseInt(assignedTo);
+          if (!isNaN(assigneeId) && assigneeId !== req.user!.id) {
+            try {
+              const assignerName = req.user!.fullName || req.user!.email || 'Someone';
+              const taskProj = await db.select({ loanNumber: projects.loanNumber }).from(projects).where(eq(projects.id, dealId)).limit(1);
+              const dealLabel = taskProj[0]?.loanNumber || `DEAL-${dealId}`;
+              await createNotification({
+                userId: assigneeId,
+                type: 'task_assigned',
+                title: 'New Task Assigned',
+                message: `${assignerName} assigned you "${taskName}" on ${dealLabel}`,
+                dealId,
+                link: `/admin/deals/${dealId}`,
+              });
+            } catch (notifErr) {
+              console.error('Failed to send task creation notification:', notifErr);
+            }
+          }
+        }
+
+        res.json({ task: { ...task, _type: 'deal_task' } });
+      }
     } catch (error) {
       console.error('Admin create deal task error:', error);
       res.status(500).json({ error: 'Failed to create task' });
     }
   });
 
-  // Admin - Update deal task
+  // Admin - Update deal task (supports both deal_tasks and project_tasks via _type field)
   app.patch('/api/admin/deals/:dealId/tasks/:taskId', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const dealId = parseInt(req.params.dealId);
       const taskId = parseInt(req.params.taskId);
-      const { status, taskName, taskDescription, priority, assignedTo, dueDate } = req.body;
+      const { status, taskName, taskDescription, priority, assignedTo, dueDate, stageId, _type } = req.body;
       
-      // Get current task status to detect completion
-      const [existingTask] = await db.select().from(dealTasks).where(eq(dealTasks.id, taskId)).limit(1);
+      if (_type === 'project_task') {
+        const [existingPt] = await db.select().from(projectTasks).where(and(eq(projectTasks.id, taskId), eq(projectTasks.projectId, dealId))).limit(1);
+        if (!existingPt) {
+          return res.status(404).json({ error: 'Task not found in this deal' });
+        }
+
+        const ptUpdates: Record<string, unknown> = {};
+        if (status !== undefined) ptUpdates.status = status;
+        const resolvedTitle = taskName;
+        if (resolvedTitle !== undefined) ptUpdates.taskTitle = resolvedTitle;
+        if (taskDescription !== undefined) ptUpdates.taskDescription = taskDescription;
+        if (priority !== undefined) ptUpdates.priority = priority;
+        if (assignedTo !== undefined) {
+          ptUpdates.assignedTo = assignedTo || null;
+          if (assignedTo === 'borrower') {
+            ptUpdates.visibleToBorrower = true;
+            ptUpdates.borrowerActionRequired = true;
+          } else {
+            ptUpdates.borrowerActionRequired = false;
+          }
+        }
+        if (dueDate !== undefined) ptUpdates.dueDate = dueDate ? new Date(dueDate) : null;
+        if (stageId !== undefined) ptUpdates.stageId = stageId ? parseInt(stageId) : null;
+        if (status === 'completed') {
+          ptUpdates.completedAt = new Date();
+          ptUpdates.completedBy = req.user!.fullName || req.user!.email;
+        }
+        if (status === 'pending') {
+          ptUpdates.completedAt = null;
+          ptUpdates.completedBy = null;
+        }
+        
+        const updatedPt = await storage.updateTask(taskId, ptUpdates);
+        return res.json({ task: { ...updatedPt, taskName: updatedPt?.taskTitle, _type: 'project_task' } });
+      }
+
+      // Get current task status to detect completion (with dealId ownership check)
+      const [existingTask] = await db.select().from(dealTasks).where(and(eq(dealTasks.id, taskId), eq(dealTasks.dealId, dealId))).limit(1);
+      if (!existingTask) {
+        return res.status(404).json({ error: 'Task not found in this deal' });
+      }
       const wasCompleted = existingTask?.status === 'completed';
       
       const updateData: Record<string, unknown> = {};
@@ -8148,7 +10673,7 @@ export async function registerRoutes(
   app.post('/api/admin/deals/:dealId/documents', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const dealId = parseInt(req.params.dealId);
-      const { documentName, documentCategory, documentDescription, isRequired, stageId } = req.body;
+      const { documentName, documentCategory, documentDescription, isRequired, stageId, visibility } = req.body;
 
       let validatedStageId: number | undefined;
       if (stageId) {
@@ -8174,6 +10699,7 @@ export async function registerRoutes(
           documentCategory: documentCategory || 'other',
           documentDescription,
           isRequired: isRequired !== false,
+          visibility: visibility || 'all',
           sortOrder: maxOrder + 1,
           ...(validatedStageId ? { stageId: validatedStageId } : {}),
         })
@@ -8196,7 +10722,7 @@ export async function registerRoutes(
         role: users.role,
       })
         .from(users)
-        .where(inArray(users.role, ['admin', 'staff', 'super_admin']));
+        .where(inArray(users.role, ['admin', 'staff', 'super_admin', 'processor']));
       
       res.json({ teamMembers });
     } catch (error) {
@@ -8212,7 +10738,14 @@ export async function registerRoutes(
     try {
       const search = req.query.search as string | undefined;
       
-      let partnersList = await db.select().from(partners).orderBy(desc(partners.createdAt));
+      const tenantId = await getTenantId(req.user!);
+      const partnerConditions = [];
+      if (tenantId != null) {
+        partnerConditions.push(eq(partners.tenantId, tenantId));
+      }
+      let partnersList = partnerConditions.length > 0
+        ? await db.select().from(partners).where(and(...partnerConditions)).orderBy(desc(partners.createdAt))
+        : await db.select().from(partners).orderBy(desc(partners.createdAt));
       
       if (search) {
         const searchLower = search.toLowerCase();
@@ -8521,6 +11054,51 @@ export async function registerRoutes(
     }
   });
   
+  // Get all distinct task templates across all programs for the current tenant
+  app.get('/api/admin/programs/all-task-templates', authenticateUser, requireAdmin, requirePermission('programs.view'), async (req: AuthRequest, res: Response) => {
+    try {
+      const user = await storage.getUserById(req.user!.id);
+      const isSuperAdmin = user?.role === 'super_admin';
+
+      let scopeFilter;
+      if (!isSuperAdmin) {
+        const userTenantId = req.user!.tenantId;
+        if (userTenantId) {
+          scopeFilter = or(
+            eq(loanPrograms.tenantId, userTenantId),
+            eq(loanPrograms.createdBy, req.user!.id)
+          );
+        } else {
+          scopeFilter = eq(loanPrograms.createdBy, req.user!.id);
+        }
+      }
+
+      const allTasks = await db.select({
+        taskName: programTaskTemplates.taskName,
+        taskCategory: programTaskTemplates.taskCategory,
+        priority: programTaskTemplates.priority,
+        assignToRole: programTaskTemplates.assignToRole,
+        formTemplateId: programTaskTemplates.formTemplateId,
+      })
+        .from(programTaskTemplates)
+        .innerJoin(loanPrograms, eq(programTaskTemplates.programId, loanPrograms.id))
+        .where(scopeFilter);
+
+      const seen = new Set<string>();
+      const unique = allTasks.filter((t) => {
+        const key = t.taskName.toLowerCase().trim();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      res.json(unique);
+    } catch (error) {
+      console.error('Get all task templates error:', error);
+      res.status(500).json({ error: 'Failed to load task templates' });
+    }
+  });
+
   // Get single program with documents and tasks
   app.get('/api/admin/programs/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
@@ -8594,6 +11172,8 @@ export async function registerRoutes(
         // Points configuration
         basePoints, basePointsMin, basePointsMax,
         brokerPointsEnabled, brokerPointsMax, brokerPointsStep,
+        // Pricing mode & external config
+        pricingMode, externalPricingConfig,
       } = req.body;
 
       if (!name || !loanType) {
@@ -8630,6 +11210,9 @@ export async function registerRoutes(
           brokerPointsEnabled: brokerPointsEnabled !== false,
           brokerPointsMax: brokerPointsMax != null ? parseFloat(brokerPointsMax) : 2,
           brokerPointsStep: brokerPointsStep != null ? parseFloat(brokerPointsStep) : 0.125,
+          // Pricing mode & external config
+          pricingMode: pricingMode || 'none',
+          externalPricingConfig: externalPricingConfig || null,
         }).returning();
 
         const stepIndexToId = new Map<number, number>();
@@ -8723,6 +11306,8 @@ export async function registerRoutes(
         // Points configuration
         basePoints, basePointsMin, basePointsMax,
         brokerPointsEnabled, brokerPointsMax, brokerPointsStep,
+        // Pricing mode & external config
+        pricingMode, externalPricingConfig,
       } = req.body;
 
       const updateData: any = { updatedAt: new Date() };
@@ -8754,6 +11339,8 @@ export async function registerRoutes(
       if (brokerPointsEnabled !== undefined) updateData.brokerPointsEnabled = brokerPointsEnabled !== false;
       if (brokerPointsMax !== undefined) updateData.brokerPointsMax = parseFloat(brokerPointsMax) || 2;
       if (brokerPointsStep !== undefined) updateData.brokerPointsStep = parseFloat(brokerPointsStep) || 0.125;
+      if (pricingMode !== undefined) updateData.pricingMode = pricingMode;
+      if (externalPricingConfig !== undefined) updateData.externalPricingConfig = externalPricingConfig;
       
       await db.transaction(async (tx) => {
         await tx.update(loanPrograms)
@@ -9654,6 +12241,293 @@ export async function registerRoutes(
     }
   });
 
+  function normalizeExtractedRule(r: any): any {
+    const getField = (...keys: string[]) => {
+      for (const k of keys) {
+        if (r[k] !== undefined && r[k] !== null && r[k] !== '') return r[k];
+      }
+      for (const key of Object.keys(r)) {
+        const lower = key.toLowerCase().replace(/[\s_-]/g, '');
+        for (const k of keys) {
+          if (lower === k.toLowerCase().replace(/[\s_-]/g, '')) return r[key];
+        }
+      }
+      return undefined;
+    };
+    return {
+      ruleTitle: getField('ruleTitle', 'rule_title', 'RULE_TITLE', 'RULE TITLE', 'rule_text', 'RULE_TEXT', 'RULE TEXT', 'ruleText', 'title', 'rule', 'name') || 'Untitled rule',
+      category: getField('category', 'CATEGORY', 'rule_category') || 'General',
+      subcategory: getField('subcategory', 'SUBCATEGORY', 'sub_category') || '',
+      ruleDescription: getField('ruleDescription', 'rule_description', 'RULE_DESCRIPTION', 'description', 'condition', 'CONDITION', 'details') || '',
+      confidence: getField('confidence', 'CONFIDENCE', 'priority', 'PRIORITY') || 'high',
+      sourceSection: getField('sourceSection', 'source_section', 'SOURCE_SECTION', 'SOURCE SECTION', 'section') || '',
+      sourcePage: getField('sourcePage', 'source_page', 'SOURCE_PAGE', 'SOURCE PAGE(S)', 'SOURCE_PAGE(S)', 'page') || '',
+      ruleType: getField('ruleType', 'rule_type', 'RULE_TYPE', 'type') || '',
+      ruleId: getField('ruleId', 'rule_id', 'RULE_ID', 'RULE ID', 'id') || '',
+      clarificationNeeded: getField('clarificationNeeded', 'clarification_needed', 'CLARIFICATION_NEEDED') || false,
+      exception: getField('exception', 'EXCEPTION', 'exceptions') || '',
+    };
+  }
+
+  function findRulesArray(parsed: any): any[] | null {
+    if (parsed.rules && Array.isArray(parsed.rules)) return parsed.rules;
+    for (const key of Object.keys(parsed)) {
+      if (Array.isArray(parsed[key]) && parsed[key].length > 0) {
+        const first = parsed[key][0];
+        if (typeof first === 'object' && first !== null) return parsed[key];
+      }
+    }
+    return null;
+  }
+
+  async function extractTextFromBuffer(buffer: Buffer, fileName: string): Promise<string> {
+    if (fileName?.toLowerCase().endsWith('.pdf')) {
+      const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+      const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+      const textParts: string[] = [];
+      for (let i = 1; i <= doc.numPages; i++) {
+        const page = await doc.getPage(i);
+        const content = await page.getTextContent();
+        const items = content.items as any[];
+        if (items.length === 0) continue;
+
+        const lines: string[] = [];
+        let currentLine = '';
+        let lastY: number | null = null;
+        let lastEndX: number | null = null;
+
+        for (const item of items) {
+          if (!item.str && item.str !== '') continue;
+          const y = item.transform ? item.transform[5] : null;
+          const x = item.transform ? item.transform[4] : null;
+          const fontSize = item.transform ? Math.abs(item.transform[3]) : 12;
+
+          const lineThreshold = Math.max(fontSize * 0.5, 3);
+
+          if (lastY !== null && y !== null && Math.abs(y - lastY) > lineThreshold) {
+            lines.push(currentLine.trimEnd());
+            currentLine = item.str;
+          } else if (lastEndX !== null && x !== null && (x - lastEndX) > 5) {
+            currentLine += ' ' + item.str;
+          } else {
+            currentLine += item.str;
+          }
+          lastY = y;
+          lastEndX = x !== null && item.width ? x + item.width : null;
+        }
+        if (currentLine) lines.push(currentLine.trimEnd());
+        const pageText = lines.filter(l => l.trim()).join('\n');
+        if (pageText.trim()) {
+          textParts.push(`--- Page ${i} ---\n${pageText}`);
+        }
+      }
+      return textParts.join('\n\n');
+    } else if (fileName?.toLowerCase().match(/\.xlsx?$/)) {
+      const XLSX = await import('xlsx');
+      const workbook = XLSX.read(buffer, { type: 'buffer' });
+      const sheets: string[] = [];
+      for (const sheetName of workbook.SheetNames) {
+        const sheet = workbook.Sheets[sheetName];
+        sheets.push(`--- Sheet: ${sheetName} ---\n${XLSX.utils.sheet_to_csv(sheet)}`);
+      }
+      return sheets.join('\n\n');
+    } else {
+      return buffer.toString('utf-8');
+    }
+  }
+
+  function splitTextIntoChunks(text: string, maxChunkChars: number = 30000): string[] {
+    const pages = text.split(/(?=--- Page \d+ ---)/);
+    if (pages.length <= 1) {
+      if (text.length <= maxChunkChars) return [text];
+      const chunks: string[] = [];
+      for (let i = 0; i < text.length; i += maxChunkChars) {
+        chunks.push(text.slice(i, i + maxChunkChars));
+      }
+      return chunks;
+    }
+
+    const chunks: string[] = [];
+    let currentChunk = '';
+    for (const page of pages) {
+      if (!page.trim()) continue;
+      if (currentChunk.length + page.length > maxChunkChars && currentChunk.length > 0) {
+        chunks.push(currentChunk.trim());
+        currentChunk = page;
+      } else {
+        currentChunk += (currentChunk ? '\n\n' : '') + page;
+      }
+    }
+    if (currentChunk.trim()) chunks.push(currentChunk.trim());
+    return chunks;
+  }
+
+  const activeExtractionHashes = new Map<string, number>();
+
+  async function extractRulesFromChunks(
+    fullText: string,
+    systemPrompt: string,
+    settings: { model: string; maxTokens: number; temperature: number; timeout: number },
+    sessionId: string
+  ): Promise<any[]> {
+    const crypto = await import('crypto');
+    const contentHash = crypto.createHash('md5').update(fullText.slice(0, 5000)).digest('hex');
+    const now = Date.now();
+    const lastRun = activeExtractionHashes.get(contentHash);
+    if (lastRun && now - lastRun < 120_000) {
+      console.log(`[CreditPolicy] Duplicate extraction blocked (same content hash ${contentHash}, ${Math.round((now - lastRun) / 1000)}s ago)`);
+      throw new Error('DUPLICATE_EXTRACTION');
+    }
+    activeExtractionHashes.set(contentHash, now);
+    for (const [hash, ts] of activeExtractionHashes) {
+      if (now - ts > 300_000) activeExtractionHashes.delete(hash);
+    }
+    const CHUNK_THRESHOLD = 25000;
+
+    if (fullText.length <= CHUNK_THRESHOLD) {
+      const rules = await extractRulesFromSingleChunk(fullText, systemPrompt, settings, sessionId, 1, 1);
+      OrchestrationTracer.emit({
+        eventType: 'credit_extraction_progress',
+        agentName: 'creditPolicyExtractor',
+        agentIndex: 0,
+        timestamp: new Date().toISOString(),
+        sessionId,
+        metadata: { chunksCompleted: 1, totalChunks: 1, rulesFoundSoFar: rules.length },
+        rules: rules.map((r: any, idx: number) => ({
+          id: `rule_${idx}`, rule: r.ruleTitle, category: r.category,
+          confidence: r.confidence === 'high' || r.confidence === 'Critical' || r.confidence === '100%' ? 0.95 : r.confidence === 'medium' || r.confidence === 'High' ? 0.75 : 0.5,
+          reasoning: r.ruleDescription, sourceSection: r.sourceSection, ruleType: r.ruleType, clarificationNeeded: r.clarificationNeeded,
+        })),
+      });
+      return rules;
+    }
+
+    const chunks = splitTextIntoChunks(fullText, 25000);
+    console.log(`[CreditPolicy] Document ${fullText.length} chars split into ${chunks.length} chunks: ${chunks.map(c => c.length).join(', ')} chars`);
+
+    const allRules: any[] = [];
+    let chunksCompleted = 0;
+    const CONCURRENCY = 3;
+
+    const emitProgress = () => {
+      const partialRules = allRules.map((r: any, idx: number) => ({
+        id: `rule_${idx}`, rule: r.ruleTitle, category: r.category,
+        confidence: r.confidence === 'high' || r.confidence === 'Critical' || r.confidence === '100%' ? 0.95 : r.confidence === 'medium' || r.confidence === 'High' ? 0.75 : 0.5,
+        reasoning: r.ruleDescription, sourceSection: r.sourceSection, ruleType: r.ruleType, clarificationNeeded: r.clarificationNeeded,
+      }));
+      OrchestrationTracer.emit({
+        eventType: 'credit_extraction_progress',
+        agentName: 'creditPolicyExtractor',
+        agentIndex: 0,
+        timestamp: new Date().toISOString(),
+        sessionId,
+        metadata: { chunksCompleted, totalChunks: chunks.length, rulesFoundSoFar: allRules.length },
+        rules: partialRules,
+      });
+    };
+
+    for (let batchStart = 0; batchStart < chunks.length; batchStart += CONCURRENCY) {
+      const batch = chunks.slice(batchStart, batchStart + CONCURRENCY);
+      const batchPromises = batch.map((chunk, idx) => {
+        const chunkIdx = batchStart + idx;
+        return extractRulesFromSingleChunk(chunk, systemPrompt, settings, sessionId, chunkIdx + 1, chunks.length)
+          .then(rules => {
+            allRules.push(...rules);
+            chunksCompleted++;
+            emitProgress();
+            return rules;
+          });
+      });
+      await Promise.all(batchPromises);
+    }
+
+    const deduplicated = deduplicateRules(allRules);
+    console.log(`[CreditPolicy] Total rules: ${allRules.length}, after dedup: ${deduplicated.length}`);
+    return deduplicated;
+  }
+
+  async function extractRulesFromSingleChunk(
+    chunkText: string,
+    systemPrompt: string,
+    settings: { model: string; maxTokens: number; temperature: number; timeout: number },
+    sessionId: string,
+    chunkNum: number,
+    totalChunks: number
+  ): Promise<any[]> {
+    try {
+      const OpenAI = (await import('openai')).default;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const chunkContext = totalChunks > 1 
+        ? `This is section ${chunkNum} of ${totalChunks} from a larger document. ` 
+        : '';
+
+      const aiPromise = openai.chat.completions.create({
+        model: settings.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          {
+            role: 'user',
+            content: `${chunkContext}Extract ALL rules from the following credit policy document section. Be exhaustive — extract every constraint, requirement, prohibition, permission, calculation, threshold, and conditional statement. Do not summarize or skip anything. Return your response as a JSON object with a "rules" array.\n\n${chunkText}`
+          }
+        ],
+        response_format: { type: 'json_object' },
+        max_completion_tokens: settings.maxTokens,
+        temperature: settings.temperature,
+      });
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Chunk ${chunkNum}/${totalChunks} timed out after ${settings.timeout}s`)), settings.timeout * 1000)
+      );
+
+      const response = await Promise.race([aiPromise, timeoutPromise]);
+
+      const finishReason = response.choices[0]?.finish_reason;
+      const usage = response.usage;
+      console.log(`[CreditPolicy] Chunk ${chunkNum}/${totalChunks}: finish_reason=${finishReason}, tokens=${JSON.stringify(usage)}`);
+
+      if (finishReason === 'length') {
+        console.warn(`[CreditPolicy] WARNING: Chunk ${chunkNum} hit token limit — some rules may be missing`);
+      }
+
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        console.warn(`[CreditPolicy] Chunk ${chunkNum}/${totalChunks}: empty response`);
+        return [];
+      }
+
+      const parsed = JSON.parse(content);
+      const rulesArray = findRulesArray(parsed);
+      if (!rulesArray) {
+        console.warn(`[CreditPolicy] Chunk ${chunkNum}/${totalChunks}: no rules array found in response`);
+        return [];
+      }
+
+      const normalized = rulesArray.map((r: any) => normalizeExtractedRule(r));
+      console.log(`[CreditPolicy] Chunk ${chunkNum}/${totalChunks}: extracted ${normalized.length} rules`);
+      return normalized;
+    } catch (error: any) {
+      console.error(`[CreditPolicy] Chunk ${chunkNum}/${totalChunks} failed:`, error?.message || error);
+      return [];
+    }
+  }
+
+  function deduplicateRules(rules: any[]): any[] {
+    const seen = new Map<string, any>();
+    for (const rule of rules) {
+      const titleNorm = (rule.ruleTitle || '').toLowerCase().trim().replace(/\s+/g, ' ');
+      const descNorm = (rule.ruleDescription || '').toLowerCase().trim().replace(/\s+/g, ' ');
+      const key = `${titleNorm}|||${descNorm}`;
+      if (!seen.has(key)) {
+        seen.set(key, rule);
+      }
+    }
+    return Array.from(seen.values());
+  }
+
   app.post('/api/admin/programs/:programId/extract-rules', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const programId = parseInt(req.params.programId);
@@ -9663,116 +12537,93 @@ export async function registerRoutes(
       }
 
       const buffer = Buffer.from(fileContent, 'base64');
-      let textContent = '';
-
-      if (fileName?.toLowerCase().endsWith('.pdf')) {
-        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
-        const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
-        const textParts: string[] = [];
-        for (let i = 1; i <= doc.numPages; i++) {
-          const page = await doc.getPage(i);
-          const content = await page.getTextContent();
-          const pageText = content.items.map((item: any) => item.str).join(' ');
-          textParts.push(pageText);
-        }
-        textContent = textParts.join('\n\n');
-      } else if (fileName?.toLowerCase().match(/\.xlsx?$/)) {
-        const XLSX = await import('xlsx');
-        const workbook = XLSX.read(buffer, { type: 'buffer' });
-        const sheets: string[] = [];
-        for (const sheetName of workbook.SheetNames) {
-          const sheet = workbook.Sheets[sheetName];
-          sheets.push(`--- Sheet: ${sheetName} ---\n${XLSX.utils.sheet_to_csv(sheet)}`);
-        }
-        textContent = sheets.join('\n\n');
-      } else {
-        textContent = buffer.toString('utf-8');
-      }
+      const textContent = await extractTextFromBuffer(buffer, fileName);
 
       if (!textContent || textContent.trim().length < 20) {
         return res.status(400).json({ error: 'Could not extract meaningful text from this file.' });
       }
 
-      const truncatedText = textContent.slice(0, 50000);
+      const cpSettings = await getActiveCreditExtractionSettings();
+      const truncatedText = textContent.slice(0, cpSettings.documentLimit);
 
-      const OpenAI = (await import('openai')).default;
-      const openai = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      const pSessionId = OrchestrationTracer.startSession();
+      OrchestrationTracer.emit({
+        eventType: 'agent_start',
+        agentName: 'creditPolicyExtractor',
+        agentIndex: 0,
+        timestamp: new Date().toISOString(),
+        sessionId: pSessionId,
+        input: { fileName, textLength: truncatedText.length, programId },
       });
 
-      const response = await openai.chat.completions.create({
-        model: 'gpt-5-mini',
-        messages: [
-          {
-            role: 'system',
-            content: `You are an expert at analyzing loan credit policy documents and extracting specific, actionable review rules from them.
+      const pSystemPrompt = await getActiveCreditExtractionPrompt();
 
-Given a credit policy document, extract individual rules that can be used to evaluate loan documents. Each rule should be specific and testable.
-
-Group the rules by the document type they apply to. Common document types include:
-- Credit Report
-- Bank Statements
-- Tax Returns
-- Appraisal
-- Title Report
-- Insurance
-- Entity Documents
-- Income Verification
-- Property Inspection
-- Environmental Report
-- Purchase Contract
-- General / All Documents
-
-For each rule, provide:
-- documentType: which document type this rule applies to
-- ruleTitle: a short, clear title
-- ruleDescription: detailed description of what to check
-- category: a category like "Credit", "Income", "Property", "Compliance", "LTV", "DSCR", "Eligibility", etc.
-- confidence: "high" if the rule is clearly stated in the document, "medium" if it's implied or partially stated, "low" if you're uncertain about this rule's accuracy or interpretation
-
-Respond ONLY with valid JSON in this format:
-{
-  "rules": [
-    {
-      "documentType": "Credit Report",
-      "ruleTitle": "Minimum credit score",
-      "ruleDescription": "Borrower must have a minimum FICO score of 680. If below 680, the loan is ineligible.",
-      "category": "Credit",
-      "confidence": "high"
-    }
-  ]
-}`
-          },
-          {
-            role: 'user',
-            content: `Extract all review rules from the following credit policy document:\n\n${truncatedText}`
-          }
-        ],
-        response_format: { type: 'json_object' },
-        max_completion_tokens: 8192,
+      OrchestrationTracer.emit({
+        eventType: 'agent_processing',
+        agentName: 'creditPolicyExtractor',
+        agentIndex: 0,
+        timestamp: new Date().toISOString(),
+        sessionId: pSessionId,
+        prompt: pSystemPrompt,
+        metadata: { model: cpSettings.model, temperature: cpSettings.temperature },
       });
 
-      const content = response.choices[0]?.message?.content;
-      if (!content) {
-        return res.status(500).json({ error: 'AI returned empty response' });
+      const pStartTime = Date.now();
+
+      const normalizedRules = await extractRulesFromChunks(
+        truncatedText,
+        pSystemPrompt,
+        { model: cpSettings.model, maxTokens: cpSettings.maxTokens, temperature: cpSettings.temperature, timeout: cpSettings.timeout },
+        pSessionId
+      );
+
+      if (normalizedRules.length === 0) {
+        OrchestrationTracer.emit({ eventType: 'agent_error', agentName: 'creditPolicyExtractor', agentIndex: 0, timestamp: new Date().toISOString(), sessionId: pSessionId, error: 'No rules extracted from any chunk', duration: Date.now() - pStartTime });
+        OrchestrationTracer.endSession(pSessionId);
+        return res.status(500).json({ error: 'AI could not extract any rules from the document' });
       }
 
-      let parsed: { rules: any[] };
-      try {
-        parsed = JSON.parse(content);
-      } catch {
-        return res.status(500).json({ error: 'AI returned invalid response format' });
-      }
+      const pCategories = new Set<string>();
+      const pAllCreditRules = normalizedRules.map((r: any, idx: number) => {
+        pCategories.add(r.category);
+        return {
+          id: `rule_${idx}`,
+          rule: r.ruleTitle,
+          category: r.category,
+          confidence: r.confidence === 'high' || r.confidence === 'Critical' || r.confidence === '100%' ? 0.95 : r.confidence === 'medium' || r.confidence === 'High' ? 0.75 : 0.5,
+          reasoning: r.ruleDescription,
+          documentType: '',
+          sourceSection: r.sourceSection,
+          ruleType: r.ruleType,
+          clarificationNeeded: r.clarificationNeeded,
+        };
+      });
 
-      if (!parsed.rules || !Array.isArray(parsed.rules)) {
-        return res.status(500).json({ error: 'AI did not return rules in expected format' });
-      }
+      OrchestrationTracer.emit({
+        eventType: 'credit_rule_extracted',
+        agentName: 'creditPolicyExtractor',
+        agentIndex: 0,
+        timestamp: new Date().toISOString(),
+        sessionId: pSessionId,
+        rules: pAllCreditRules,
+        progress: { current: normalizedRules.length, total: normalizedRules.length, percentage: 100 },
+      });
 
-      res.json({ rules: parsed.rules, programId });
+      OrchestrationTracer.emit({ eventType: 'agent_complete', agentName: 'creditPolicyExtractor', agentIndex: 0, timestamp: new Date().toISOString(), sessionId: pSessionId, output: { rulesExtracted: normalizedRules.length, programId, categories: Array.from(pCategories) }, duration: Date.now() - pStartTime });
+      cacheReplayContext(pSessionId, truncatedText, fileName);
+      OrchestrationTracer.endSession(pSessionId);
+
+      res.json({ rules: normalizedRules, programId });
     } catch (error: any) {
+      if (error.message === 'DUPLICATE_EXTRACTION') {
+        return res.status(409).json({ error: 'This document is already being extracted. Please wait for the current extraction to finish.' });
+      }
       console.error('Extract rules error:', error);
-      res.status(500).json({ error: 'Failed to extract rules from document' });
+      if (error.message?.includes('timed out')) {
+        return res.status(504).json({ error: 'AI analysis timed out. Please try again with a smaller document.' });
+      }
+      const apiMsg = error?.error?.message || error?.message || '';
+      res.status(500).json({ error: apiMsg || 'Failed to extract rules from document' });
     }
   });
 
@@ -9902,7 +12753,13 @@ Respond ONLY with valid JSON in this format:
       if (user?.role !== 'super_admin' && existingPolicy.createdBy !== req.user!.id) {
         return res.status(403).json({ error: 'Not authorized to delete this credit policy' });
       }
-      await db.update(loanPrograms).set({ creditPolicyId: null }).where(eq(loanPrograms.creditPolicyId, id));
+      const linkedPrograms = await db.select({ id: loanPrograms.id, name: loanPrograms.name })
+        .from(loanPrograms)
+        .where(eq(loanPrograms.creditPolicyId, id));
+      if (linkedPrograms.length > 0) {
+        const names = linkedPrograms.map(p => p.name).join(', ');
+        return res.status(409).json({ error: `Cannot delete: policy is in use by ${names}` });
+      }
       await storage.deleteCreditPolicy(id);
       res.json({ success: true });
     } catch (error: any) {
@@ -9911,124 +12768,124 @@ Respond ONLY with valid JSON in this format:
     }
   });
 
+  app.get('/api/admin/credit-policies/extraction-status', authenticateUser, requireAdmin, (_req: AuthRequest, res: Response) => {
+    return res.json({ extracting: false });
+  });
+
   app.post('/api/admin/credit-policies/extract-rules', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
-      const { fileContent, fileName } = req.body;
+      const { fileContent, fileName, customPrompt } = req.body;
       if (!fileContent) {
         return res.status(400).json({ error: 'fileContent is required (base64 encoded)' });
       }
 
       const buffer = Buffer.from(fileContent, 'base64');
-      let textContent = '';
-
-      if (fileName?.toLowerCase().endsWith('.pdf')) {
-        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
-        const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
-        const textParts: string[] = [];
-        for (let i = 1; i <= doc.numPages; i++) {
-          const page = await doc.getPage(i);
-          const content = await page.getTextContent();
-          const pageText = content.items.map((item: any) => item.str).join(' ');
-          textParts.push(pageText);
-        }
-        textContent = textParts.join('\n\n');
-      } else if (fileName?.toLowerCase().match(/\.xlsx?$/)) {
-        const XLSX = await import('xlsx');
-        const workbook = XLSX.read(buffer, { type: 'buffer' });
-        const sheets: string[] = [];
-        for (const sheetName of workbook.SheetNames) {
-          const sheet = workbook.Sheets[sheetName];
-          sheets.push(`--- Sheet: ${sheetName} ---\n${XLSX.utils.sheet_to_csv(sheet)}`);
-        }
-        textContent = sheets.join('\n\n');
-      } else {
-        textContent = buffer.toString('utf-8');
-      }
+      const textContent = await extractTextFromBuffer(buffer, fileName);
 
       if (!textContent || textContent.trim().length < 20) {
         return res.status(400).json({ error: 'Could not extract meaningful text from this file.' });
       }
 
-      const truncatedText = textContent.slice(0, 50000);
+      const cpSettings2 = await getActiveCreditExtractionSettings();
+      const truncatedText = textContent.slice(0, cpSettings2.documentLimit);
 
-      const OpenAI = (await import('openai')).default;
-      const openai = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      const sessionId = OrchestrationTracer.startSession();
+
+      OrchestrationTracer.emit({
+        eventType: 'agent_start',
+        agentName: 'creditPolicyExtractor',
+        agentIndex: 0,
+        timestamp: new Date().toISOString(),
+        sessionId,
+        input: { fileName, textLength: truncatedText.length },
       });
 
-      const response = await openai.chat.completions.create({
-        model: 'gpt-5-mini',
-        messages: [
-          {
-            role: 'system',
-            content: `You are an expert at analyzing loan credit policy documents and extracting specific, actionable review rules from them.
+      const systemPrompt = (customPrompt && typeof customPrompt === 'string' && customPrompt.trim()) 
+        ? customPrompt 
+        : await getActiveCreditExtractionPrompt();
 
-Given a credit policy document, extract individual rules that can be used to evaluate loan documents. Each rule should be specific and testable.
-
-Group the rules by the document type they apply to. Common document types include:
-- Credit Report
-- Bank Statements
-- Tax Returns
-- Appraisal
-- Title Report
-- Insurance
-- Entity Documents
-- Income Verification
-- Property Inspection
-- Environmental Report
-- Purchase Contract
-- General / All Documents
-
-For each rule, provide:
-- documentType: which document type this rule applies to
-- ruleTitle: a short, clear title
-- ruleDescription: detailed description of what to check
-- category: a category like "Credit", "Income", "Property", "Compliance", "LTV", "DSCR", "Eligibility", etc.
-- confidence: "high" if the rule is clearly stated in the document, "medium" if it's implied or partially stated, "low" if you're uncertain about this rule's accuracy or interpretation
-
-Respond ONLY with valid JSON in this format:
-{
-  "rules": [
-    {
-      "documentType": "Credit Report",
-      "ruleTitle": "Minimum credit score",
-      "ruleDescription": "Borrower must have a minimum FICO score of 680. If below 680, the loan is ineligible.",
-      "category": "Credit",
-      "confidence": "high"
-    }
-  ]
-}`
-          },
-          {
-            role: 'user',
-            content: `Extract all review rules from the following credit policy document:\n\n${truncatedText}`
-          }
-        ],
-        response_format: { type: 'json_object' },
-        max_completion_tokens: 8192,
+      OrchestrationTracer.emit({
+        eventType: 'agent_processing',
+        agentName: 'creditPolicyExtractor',
+        agentIndex: 0,
+        timestamp: new Date().toISOString(),
+        sessionId,
+        prompt: systemPrompt,
+        metadata: { model: cpSettings2.model, temperature: cpSettings2.temperature },
       });
 
-      const content = response.choices[0]?.message?.content;
-      if (!content) {
-        return res.status(500).json({ error: 'AI returned empty response' });
+      const startTime = Date.now();
+
+      const normalizedRules = await extractRulesFromChunks(
+        truncatedText,
+        systemPrompt,
+        { model: cpSettings2.model, maxTokens: cpSettings2.maxTokens, temperature: cpSettings2.temperature, timeout: cpSettings2.timeout },
+        sessionId
+      );
+
+      if (normalizedRules.length === 0) {
+        OrchestrationTracer.emit({
+          eventType: 'agent_error',
+          agentName: 'creditPolicyExtractor',
+          agentIndex: 0,
+          timestamp: new Date().toISOString(),
+          sessionId,
+          error: 'No rules extracted from any chunk',
+          duration: Date.now() - startTime,
+        });
+        OrchestrationTracer.endSession(sessionId);
+        return res.status(500).json({ error: 'AI could not extract any rules from the document' });
       }
 
-      let parsed: { rules: any[] };
-      try {
-        parsed = JSON.parse(content);
-      } catch {
-        return res.status(500).json({ error: 'AI returned invalid response format' });
-      }
+      const categories = new Set<string>();
+      const allCreditRules = normalizedRules.map((r: any, idx: number) => {
+        categories.add(r.category);
+        return {
+          id: `rule_${idx}`,
+          rule: r.ruleTitle,
+          category: r.category,
+          confidence: r.confidence === 'high' || r.confidence === 'Critical' || r.confidence === '100%' ? 0.95 : r.confidence === 'medium' || r.confidence === 'High' ? 0.75 : 0.5,
+          reasoning: r.ruleDescription,
+          documentType: '',
+          sourceSection: r.sourceSection,
+          ruleType: r.ruleType,
+          clarificationNeeded: r.clarificationNeeded,
+        };
+      });
 
-      if (!parsed.rules || !Array.isArray(parsed.rules)) {
-        return res.status(500).json({ error: 'AI did not return rules in expected format' });
-      }
+      OrchestrationTracer.emit({
+        eventType: 'credit_rule_extracted',
+        agentName: 'creditPolicyExtractor',
+        agentIndex: 0,
+        timestamp: new Date().toISOString(),
+        sessionId,
+        rules: allCreditRules,
+        progress: { current: normalizedRules.length, total: normalizedRules.length, percentage: 100 },
+      });
 
-      res.json({ rules: parsed.rules });
+      OrchestrationTracer.emit({
+        eventType: 'agent_complete',
+        agentName: 'creditPolicyExtractor',
+        agentIndex: 0,
+        timestamp: new Date().toISOString(),
+        sessionId,
+        output: { rulesExtracted: normalizedRules.length, categories: Array.from(categories) },
+        duration: Date.now() - startTime,
+      });
+      cacheReplayContext(sessionId, truncatedText, fileName);
+      OrchestrationTracer.endSession(sessionId);
+
+      res.json({ rules: normalizedRules });
     } catch (error: any) {
+      if (error.message === 'DUPLICATE_EXTRACTION') {
+        return res.status(409).json({ error: 'This document is already being extracted. Please wait for the current extraction to finish.' });
+      }
       console.error('Extract rules error:', error);
-      res.status(500).json({ error: 'Failed to extract rules from document' });
+      if (error.message?.includes('timed out')) {
+        return res.status(504).json({ error: 'AI analysis timed out. Please try again with a smaller document.' });
+      }
+      const apiMsg = error?.error?.message || error?.message || '';
+      res.status(500).json({ error: apiMsg || 'Failed to extract rules from document' });
     }
   });
 
@@ -10050,17 +12907,39 @@ Respond ONLY with valid JSON in this format:
         ? `\n\nThe policy already has these rules extracted:\n${existingRules.map((r: any, i: number) => `${i + 1}. [${r.documentType}] ${r.ruleTitle}: ${r.ruleDescription}`).join('\n')}`
         : '';
 
-      const systemPrompt = `You are a credit policy specialist helping a lender define their loan credit policy rules. Your job is to have a natural conversation to understand the nuances of their lending guidelines and extract specific, actionable rules.
+      const systemPrompt = `You are a credit policy specialist helping a lender define their loan credit policy rules. Your job is to have a natural conversation to understand the nuances of their lending guidelines and extract specific, actionable rules with exhaustive accuracy.
 
-Ask clarifying questions to understand details like:
-- Minimum credit scores, DSCR ratios, LTV limits
-- Property type restrictions and eligibility criteria
-- Documentation requirements and verification standards
-- Income and asset requirements
-- Reserve requirements
-- Any special conditions or exceptions
+## Definition of a "Rule"
 
-When the user provides information that can be turned into specific rules, extract them.
+A rule is any explicit constraint, requirement, prohibition, permission, calculation, or conditional statement that governs lending decisions or borrower/property eligibility.
+
+What IS a Rule:
+- Eligibility Requirements, Disqualification Rules, Numerical Constraints, Conditional Logic, Calculation Methods, Threshold Rules, Permission/Prohibition Statements, Option/Alternative Statements, Documentation/Process Requirements, Qualification Requirements, Exception Rules, Cross-Reference Rules, Status/Applicability Rules
+
+What is NOT a Rule:
+- Generic descriptions, explanatory text, examples for illustration only (unless showing a required calculation), historical context, contact information
+
+## Categories to Probe
+
+Ask clarifying questions to cover ALL of these areas:
+1. Eligibility & Property Type — eligible/ineligible property types, restrictions
+2. Financial Constraints — loan size min/max, LTV, LTC, DSCR, interest rates
+3. Loan Purpose & Payment Type — purchase, refinance, cash-out, P&I, I/O, ARM variants
+4. Prepayment & Partial Release — penalty options, release structure
+5. Subordination & Loan Position — trust deed position, assumability
+6. Property & Location Requirements — condition, GLA, amenities, accessibility
+7. Location/State-Specific — prohibited states, licensing requirements
+8. Lease & Occupancy — lease terms, vacancy, STVR, corporate leases
+9. Insurance Requirements — hazard, rent loss, liability, carrier ratings
+10. Title Insurance — policy requirements, endorsements, exceptions
+11. Flood Insurance — FEMA zones, coverage, waivers
+12. Escrow Holdbacks — tax, insurance escrow requirements
+13. Property Management — self-management vs. dedicated, experience requirements
+14. Ground Lease — case-by-case rules
+15. Borrower & Guarantor Requirements — entity structure, guaranty, background, credit, liquidity
+16. Deleted/Not Applicable Sections
+
+When the user provides information that can be turned into specific rules, extract them. For each rule, classify it with a ruleType and flag if clarification is needed for subjective language.
 
 IMPORTANT: Your response must ALWAYS be valid JSON in this exact format:
 {
@@ -10070,14 +12949,20 @@ IMPORTANT: Your response must ALWAYS be valid JSON in this exact format:
       "documentType": "Credit Report",
       "ruleTitle": "Short rule title",
       "ruleDescription": "Detailed description of what to check",
-      "category": "Credit"
+      "category": "Credit",
+      "confidence": "high",
+      "sourceSection": "Section mentioned by user or inferred",
+      "ruleType": "numerical_constraint",
+      "clarificationNeeded": false
     }
   ]
 }
 
 Common document types: Credit Report, Bank Statements, Tax Returns, Appraisal, Title Report, Insurance, Entity Documents, Income Verification, Property Inspection, Environmental Report, Purchase Contract, General / All Documents.
 
-Common categories: Credit, Income, Property, Compliance, LTV, DSCR, Eligibility, Reserves, Documentation, Insurance.
+Common categories: Eligibility, Credit, Income, Property, Compliance, LTV, DSCR, Financial, Insurance, Title, Flood, Escrow, Management, Borrower, Guarantor, Documentation, Reserves, Location.
+
+Valid ruleType values: eligibility, disqualification, numerical_constraint, conditional, calculation, threshold, permission, prohibition, documentation, qualification, exception, cross_reference, status.
 
 If the user's message doesn't contain enough detail to extract rules yet, return an empty newRules array and ask follow-up questions.
 If the user provides specific criteria, extract as many rules as you can from their message.${existingRulesContext}`;
@@ -10099,11 +12984,13 @@ If the user provides specific criteria, extract as many rules as you can from th
         ...sanitizedMessages,
       ];
 
+      const chatSettings = await getActiveCreditExtractionSettings();
       const response = await openai.chat.completions.create({
-        model: 'gpt-5-mini',
+        model: chatSettings.model,
         messages: chatMessages,
         response_format: { type: 'json_object' },
-        max_completion_tokens: 8192,
+        max_completion_tokens: chatSettings.maxTokens,
+        temperature: chatSettings.temperature,
       });
 
       const content = response.choices[0]?.message?.content;
@@ -10280,7 +13167,7 @@ If the user provides specific criteria, extract as many rules as you can from th
         phone: users.phone,
         role: users.role,
         roles: users.roles,
-        userType: users.userType,
+        userType: users.role,
       })
         .from(users)
         .where(
@@ -10704,17 +13591,125 @@ If the user provides specific criteria, extract as many rules as you can from th
     }
   });
   
+  // Get program quote form fields (for deal creation and detail pages)
+  app.get('/api/programs/:id/quote-fields', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const [program] = await db.select({
+        quoteFormFields: loanPrograms.quoteFormFields,
+        termOptions: loanPrograms.termOptions,
+      }).from(loanPrograms).where(eq(loanPrograms.id, parseInt(id)));
+
+      if (!program) {
+        return res.status(404).json({ error: 'Program not found' });
+      }
+
+      res.json({
+        quoteFormFields: program.quoteFormFields || [],
+        termOptions: program.termOptions || null,
+      });
+    } catch (error) {
+      console.error('Get program quote fields error:', error);
+      res.status(500).json({ error: 'Failed to load program quote fields' });
+    }
+  });
+
   // Get programs with active rulesets (for quote page)
   app.get('/api/programs-with-pricing', authenticateUser, async (req: AuthRequest, res: Response) => {
     try {
       const user = await storage.getUserById(req.user!.id);
       const isSuperAdmin = user?.role === 'super_admin';
+      const isBorrower = user?.role === 'borrower';
+
+      let tenantIds: number[] = [];
+      let createdByIds: number[] = [];
+      const isBroker = user?.role === 'broker';
+
+      if (!isSuperAdmin) {
+        const resolvedTenantId = await getTenantId({ id: user!.id, role: user!.role, invitedBy: user!.invitedBy ?? undefined });
+
+        if (isBorrower) {
+          const collectedTenantIds = new Set<number>();
+          const collectedCreatedByIds = new Set<number>();
+
+          if (resolvedTenantId != null && resolvedTenantId !== user!.id) {
+            collectedTenantIds.add(resolvedTenantId);
+            collectedCreatedByIds.add(resolvedTenantId);
+          }
+
+          const associatedProjects = await db.select({ tenantId: projects.tenantId, userId: projects.userId })
+            .from(projects)
+            .where(
+              sql`LOWER(${projects.borrowerEmail}) = LOWER(${user!.email})`
+            );
+          for (const p of associatedProjects) {
+            if (p.tenantId != null) {
+              collectedTenantIds.add(p.tenantId);
+              collectedCreatedByIds.add(p.tenantId);
+            }
+            if (p.userId != null) {
+              collectedCreatedByIds.add(p.userId);
+            }
+          }
+
+          if (collectedTenantIds.size > 0) {
+            tenantIds = [...collectedTenantIds];
+          }
+          if (collectedCreatedByIds.size > 0) {
+            createdByIds = [...collectedCreatedByIds];
+          }
+        } else if (isBroker) {
+          const collectedTenantIds = new Set<number>();
+          const collectedCreatedByIds = new Set<number>();
+
+          if (resolvedTenantId != null && resolvedTenantId !== user!.id) {
+            collectedTenantIds.add(resolvedTenantId);
+            collectedCreatedByIds.add(resolvedTenantId);
+          }
+
+          const associatedProjects = await db.select({ tenantId: projects.tenantId, userId: projects.userId })
+            .from(projects)
+            .where(eq(projects.userId, user!.id));
+          for (const p of associatedProjects) {
+            if (p.tenantId != null) {
+              collectedTenantIds.add(p.tenantId);
+              collectedCreatedByIds.add(p.tenantId);
+            }
+          }
+
+          if (collectedTenantIds.size > 0) {
+            tenantIds = [...collectedTenantIds];
+          }
+          if (collectedCreatedByIds.size > 0) {
+            createdByIds = [...collectedCreatedByIds];
+          }
+        } else if (resolvedTenantId != null) {
+          tenantIds = [resolvedTenantId];
+          const createdBySet = new Set<number>([resolvedTenantId]);
+          createdBySet.add(user!.id);
+          createdByIds = [...createdBySet];
+        }
+      }
+
+      let programFilter;
+      if (isSuperAdmin) {
+        programFilter = eq(loanPrograms.isActive, true);
+      } else if (tenantIds.length > 0 || createdByIds.length > 0) {
+        const conditions = [];
+        if (tenantIds.length > 0) {
+          conditions.push(inArray(loanPrograms.tenantId, tenantIds));
+        }
+        if (createdByIds.length > 0) {
+          conditions.push(and(isNull(loanPrograms.tenantId), inArray(loanPrograms.createdBy, createdByIds)));
+        }
+        programFilter = and(eq(loanPrograms.isActive, true), or(...conditions));
+      } else {
+        programFilter = and(eq(loanPrograms.isActive, true), eq(loanPrograms.createdBy, req.user!.id));
+      }
+
       const programs = await db.select()
         .from(loanPrograms)
-        .where(isSuperAdmin 
-          ? eq(loanPrograms.isActive, true)
-          : and(eq(loanPrograms.isActive, true), eq(loanPrograms.createdBy, req.user!.id))
-        )
+        .where(programFilter)
         .orderBy(loanPrograms.sortOrder);
       
       // Check which have active rulesets
@@ -10738,6 +13733,264 @@ If the user provides specific criteria, extract as many rules as you can from th
     } catch (error) {
       console.error('Get programs with pricing error:', error);
       res.status(500).json({ error: 'Failed to get programs' });
+    }
+  });
+
+  // ==================== SCAN EXTERNAL PRICING FIELDS ====================
+
+  app.post('/api/admin/programs/scan-pricing-fields', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { url } = req.body;
+      if (!url || typeof url !== 'string') {
+        return res.status(400).json({ error: 'URL is required' });
+      }
+
+      try {
+        const parsed = new URL(url);
+        if (parsed.protocol !== 'https:') return res.status(400).json({ error: 'Only HTTPS URLs are allowed' });
+        if (['localhost', '127.0.0.1', '0.0.0.0', '169.254.169.254'].includes(parsed.hostname)) {
+          return res.status(400).json({ error: 'Invalid host' });
+        }
+      } catch {
+        return res.status(400).json({ error: 'Invalid URL format' });
+      }
+
+      if (!APIFY_TOKEN) {
+        return res.status(500).json({ error: 'Apify is not configured' });
+      }
+
+      console.log(`\n🔍 Scanning pricing page fields: ${url}`);
+
+      const run = await client.actor('apify/puppeteer-scraper').call({
+        startUrls: [{ url }],
+        pageFunction: `async function pageFunction(context) {
+          const { page, log } = context;
+          const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+          try {
+            log.info('Waiting for page to render...');
+            await wait(5000);
+
+            // Try to wait for form elements
+            try {
+              await page.waitForSelector('input, [role="combobox"]', { timeout: 15000 });
+            } catch (e) {
+              log.info('Timeout waiting for form elements, proceeding anyway...');
+            }
+
+            await wait(2000);
+
+            // Step 1: Find ALL inputs and classify them
+            log.info('Step 1: Finding and classifying all inputs...');
+            const allFields = await page.evaluate(() => {
+              function findLabel(el) {
+                const ariaLabel = el.getAttribute('aria-label');
+                if (ariaLabel && ariaLabel.trim()) return ariaLabel.trim();
+
+                if (el.placeholder && el.placeholder.trim()) return el.placeholder.trim();
+
+                if (el.id) {
+                  const linkedLabel = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
+                  if (linkedLabel && linkedLabel.textContent.trim()) return linkedLabel.textContent.trim();
+                }
+
+                const labelledBy = el.getAttribute('aria-labelledby');
+                if (labelledBy) {
+                  const refEl = document.getElementById(labelledBy);
+                  if (refEl && refEl.textContent.trim()) return refEl.textContent.trim();
+                }
+
+                const parent = el.closest('.MuiFormControl-root, .MuiTextField-root, [class*="form-group"], [class*="field"], [class*="input-wrapper"]');
+                if (parent) {
+                  const parentLabel = parent.querySelector('label, .MuiInputLabel-root, .MuiFormLabel-root');
+                  if (parentLabel && parentLabel.textContent.trim()) return parentLabel.textContent.trim();
+                }
+
+                let prev = el.closest('div');
+                while (prev) {
+                  const lbl = prev.querySelector('label, .MuiInputLabel-root, .MuiFormLabel-root');
+                  if (lbl && lbl.textContent.trim()) return lbl.textContent.trim();
+                  prev = prev.parentElement ? prev.parentElement.closest('div') : null;
+                  if (prev === document.body) break;
+                }
+
+                if (el.name && el.name.trim()) return el.name.trim();
+
+                return '';
+              }
+
+              const textTypes = ['text', 'number', 'tel', 'search', 'email', 'url', ''];
+              const inputs = Array.from(document.querySelectorAll('input'));
+              const textInputs = [];
+              const potentialDropdowns = [];
+
+              for (const inp of inputs) {
+                const t = (inp.type || '').toLowerCase();
+                if (!textTypes.includes(t)) continue;
+                if (inp.offsetParent === null) continue;
+
+                const id = inp.id || '';
+                const placeholder = inp.placeholder || '';
+                const label = findLabel(inp);
+                const name = inp.name || '';
+
+                if (!id && !placeholder && !name && !label) continue;
+
+                const hasPlaceholder = placeholder.length > 0;
+                const isCombobox = !!inp.closest('[role="combobox"]') || inp.getAttribute('role') === 'combobox' || inp.getAttribute('aria-haspopup') === 'listbox';
+
+                if (isCombobox || hasPlaceholder) {
+                  potentialDropdowns.push({ placeholder, label, id, inputId: id });
+                } else {
+                  textInputs.push({ id, placeholder, label, name });
+                }
+              }
+
+              const nativeSelects = [];
+              const selects = Array.from(document.querySelectorAll('select'));
+              for (const sel of selects) {
+                const label = findLabel(sel);
+                const options = Array.from(sel.querySelectorAll('option')).map(o => o.textContent.trim()).filter(t => t.length > 0);
+                nativeSelects.push({ placeholder: label, label, id: sel.id || '', inputId: sel.id || '', nativeOptions: options });
+              }
+
+              return { textInputs, potentialDropdowns, nativeSelects };
+            });
+
+            log.info('Found ' + allFields.textInputs.length + ' text inputs, ' + allFields.potentialDropdowns.length + ' potential dropdowns, ' + allFields.nativeSelects.length + ' native selects');
+            const textInputs = allFields.textInputs;
+            const dropdownInputs = [...allFields.potentialDropdowns, ...allFields.nativeSelects];
+
+            // Step 2: For each potential dropdown, click to open and read options
+            log.info('Step 2: Reading dropdown options...');
+            const dropdowns = [];
+
+            for (let i = 0; i < dropdownInputs.length; i++) {
+              const dd = dropdownInputs[i];
+              log.info('Opening dropdown: ' + dd.label + ' (id: ' + dd.id + ')');
+
+              // If native <select> already has options from DOM, use those directly
+              if (dd.nativeOptions && dd.nativeOptions.length > 0) {
+                log.info(dd.label + ': using native select options (' + dd.nativeOptions.length + ')');
+                dropdowns.push({ label: dd.label || dd.placeholder, options: dd.nativeOptions });
+                continue;
+              }
+
+              try {
+                // Click the combobox to open it
+                let clicked = false;
+                if (dd.id) {
+                  try {
+                    await page.click('[id="' + dd.id + '"]');
+                    clicked = true;
+                  } catch (e) {
+                    log.info('Could not click by id, trying input...');
+                  }
+                }
+                if (!clicked && dd.inputId) {
+                  try {
+                    await page.click('[id="' + dd.inputId + '"]');
+                    clicked = true;
+                  } catch (e) {
+                    log.info('Could not click by inputId either');
+                  }
+                }
+                if (!clicked) {
+                  // Try clicking by placeholder
+                  try {
+                    await page.click('input[placeholder="' + dd.placeholder + '"]');
+                    clicked = true;
+                  } catch (e) {
+                    log.info('Could not click by placeholder');
+                  }
+                }
+
+                if (!clicked) {
+                  log.info('Skipping dropdown: ' + dd.label + ' (could not click)');
+                  dropdowns.push({ label: dd.label || dd.placeholder, options: [] });
+                  continue;
+                }
+
+                // Wait for options to appear
+                try {
+                  await page.waitForSelector('[role="option"], .MuiMenuItem-root, ul[role="listbox"] li', { timeout: 3000 });
+                } catch (e) {
+                  log.info('Timeout waiting for options for ' + dd.label);
+                }
+
+                await wait(500);
+
+                // Read options
+                const options = await page.evaluate(() => {
+                  let opts = Array.from(document.querySelectorAll('[role="option"]'));
+                  if (opts.length === 0) opts = Array.from(document.querySelectorAll('.MuiMenuItem-root'));
+                  if (opts.length === 0) opts = Array.from(document.querySelectorAll('ul[role="listbox"] li'));
+                  return opts.map(o => o.textContent.trim()).filter(t => t.length > 0);
+                });
+
+                log.info(dd.label + ': found ' + options.length + ' options: ' + JSON.stringify(options));
+
+                dropdowns.push({
+                  label: dd.label || dd.placeholder,
+                  options: options,
+                });
+
+                // Close the dropdown
+                await page.keyboard.press('Escape');
+                await wait(500);
+
+                // Make sure listbox is gone before next
+                try {
+                  await page.waitForFunction(() => {
+                    return document.querySelector('[role="listbox"]') === null;
+                  }, { timeout: 2000 });
+                } catch (e) {
+                  await page.keyboard.press('Escape');
+                  await wait(300);
+                }
+
+              } catch (err) {
+                log.info('Error reading dropdown ' + dd.label + ': ' + err.message);
+                dropdowns.push({ label: dd.label || dd.placeholder, options: [] });
+              }
+            }
+
+            return {
+              success: true,
+              textInputs: textInputs,
+              dropdowns: dropdowns,
+            };
+
+          } catch (error) {
+            log.error('Error scanning page: ' + error.message);
+            return { success: false, error: error.message };
+          }
+        }`,
+        proxyConfiguration: { useApifyProxy: true },
+        maxRequestsPerCrawl: 1,
+        maxConcurrency: 1,
+      });
+
+      console.log(`✅ Apify scan run started: ${run.id}`);
+      await client.run(run.id).waitForFinish();
+      const { items } = await client.dataset(run.defaultDatasetId).listItems();
+
+      if (items && items.length > 0 && items[0].success) {
+        const result = items[0];
+        console.log(`📊 Scan results: ${result.textInputs?.length} text inputs, ${result.dropdowns?.length} dropdowns`);
+        res.json({
+          success: true,
+          textInputs: result.textInputs || [],
+          dropdowns: result.dropdowns || [],
+        });
+      } else {
+        const errorMsg = items?.[0]?.error || 'No results from scanner';
+        console.error('Scan failed:', errorMsg);
+        res.status(500).json({ success: false, error: errorMsg });
+      }
+    } catch (error) {
+      console.error('Scan pricing fields error:', error);
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to scan pricing page' });
     }
   });
 
@@ -10933,7 +14186,7 @@ If the user provides specific criteria, extract as many rules as you can from th
         .from(onboardingDocuments)
         .where(and(
           eq(onboardingDocuments.isActive, true),
-          sql`(${onboardingDocuments.targetUserType} = ${user.userType} OR ${onboardingDocuments.targetUserType} = 'all')`
+          sql`(${onboardingDocuments.targetUserType} = ${user.role} OR ${onboardingDocuments.targetUserType} = 'all')`
         ))
         .orderBy(onboardingDocuments.sortOrder);
       
@@ -10966,7 +14219,7 @@ If the user provides specific criteria, extract as many rules as you can from th
       res.json({
         user: {
           id: user.id,
-          userType: user.userType,
+          userType: user.role,
           onboardingCompleted: user.onboardingCompleted,
           partnershipAgreementSignedAt: user.partnershipAgreementSignedAt,
           trainingCompletedAt: user.trainingCompletedAt
@@ -10974,7 +14227,7 @@ If the user provides specific criteria, extract as many rules as you can from th
         documents: documentsWithProgress,
         agreementSigned,
         trainingCompleted,
-        canProceed: user.userType === 'borrower' || (agreementSigned && trainingCompleted)
+        canProceed: user.role === 'borrower' || (agreementSigned && trainingCompleted)
       });
     } catch (error) {
       console.error('Get onboarding status error:', error);
@@ -11064,7 +14317,7 @@ If the user provides specific criteria, extract as many rules as you can from th
         .where(and(
           eq(onboardingDocuments.isActive, true),
           eq(onboardingDocuments.isRequired, true),
-          sql`(${onboardingDocuments.targetUserType} = ${user.userType} OR ${onboardingDocuments.targetUserType} = 'all')`
+          sql`(${onboardingDocuments.targetUserType} = ${user.role} OR ${onboardingDocuments.targetUserType} = 'all')`
         ));
       
       const progress = await db.select()
@@ -11276,7 +14529,7 @@ If the user provides specific criteria, extract as many rules as you can from th
         id: users.id,
         email: users.email,
         fullName: users.fullName,
-        userType: users.userType,
+        userType: users.role,
         onboardingCompleted: users.onboardingCompleted,
         partnershipAgreementSignedAt: users.partnershipAgreementSignedAt,
         trainingCompletedAt: users.trainingCompletedAt,
@@ -14425,6 +17678,49 @@ If the user provides specific criteria, extract as many rules as you can from th
     }
   });
 
+  app.get('/api/esign/envelopes/bulk', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const quoteIdsParam = req.query.quoteIds as string;
+      if (!quoteIdsParam) {
+        return res.json({ envelopes: [] });
+      }
+      const quoteIds = quoteIdsParam.split(',').map(Number).filter(n => !isNaN(n));
+      if (quoteIds.length === 0) {
+        return res.json({ envelopes: [] });
+      }
+
+      const allEnvelopes = await db.select().from(esignEnvelopes)
+        .where(inArray(esignEnvelopes.quoteId, quoteIds))
+        .orderBy(esignEnvelopes.createdAt);
+
+      const eventsByEnvelope = new Map<number, any[]>();
+      if (allEnvelopes.length > 0) {
+        const envIds = allEnvelopes.map(e => e.id);
+        const events = await db.select().from(esignEvents)
+          .where(inArray(esignEvents.envelopeId, envIds))
+          .orderBy(esignEvents.createdAt);
+        for (const evt of events) {
+          if (!eventsByEnvelope.has(evt.envelopeId)) eventsByEnvelope.set(evt.envelopeId, []);
+          eventsByEnvelope.get(evt.envelopeId)!.push(evt);
+        }
+      }
+
+      const projectIds = allEnvelopes.filter(e => e.projectId).map(e => e.projectId!);
+      const projectSet = new Set(projectIds);
+
+      const envelopesWithMeta = allEnvelopes.map(env => ({
+        ...env,
+        events: eventsByEnvelope.get(env.id) || [],
+        hasProject: env.projectId != null && projectSet.has(env.projectId),
+      }));
+
+      res.json({ envelopes: envelopesWithMeta });
+    } catch (error: any) {
+      console.error('Bulk envelopes error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Get envelopes for a quote
   app.get('/api/esign/envelopes/quote/:quoteId', authenticateUser, async (req: AuthRequest, res: Response) => {
     try {
@@ -14521,10 +17817,12 @@ If the user provides specific criteria, extract as many rules as you can from th
         if (quoteUser?.phone) borrowerPhone = quoteUser.phone;
       }
 
+      const envelopeTenantId = await getTenantId(req.user!);
       const project = await storage.createProject({
         userId: quote.userId || envelope.createdBy!,
         projectName: `${borrowerName} — ${quote.propertyAddress || envelope.documentName || 'New Loan'}`,
         projectNumber,
+        ...(quote.loanNumber ? { loanNumber: quote.loanNumber } : {}),
         loanAmount: loanAmount || null,
         interestRate: !isNaN(rateNum) ? rateNum : null,
         loanTermMonths: loanData?.loanTermMonths ? parseInt(loanData.loanTermMonths) : (loanData?.loanTerm ? parseInt(String(loanData.loanTerm)) : null),
@@ -14543,6 +17841,13 @@ If the user provides specific criteria, extract as many rules as you can from th
         borrowerPortalToken: borrowerToken,
         borrowerPortalEnabled: true,
         quoteId: quote.id,
+        tenantId: envelopeTenantId,
+        ysp: quote.yspAmount ?? null,
+        lenderOriginationPoints: quote.basePointsCharged ?? null,
+        brokerOriginationPoints: quote.brokerPointsCharged ?? null,
+        brokerName: quote.partnerName || null,
+        prepaymentPenalty: loanData?.prepaymentPenalty || null,
+        holdbackAmount: loanData?.holdbackAmount ?? null,
         notes: `Manually created from signed envelope #${envelope.id} (Quote #${quote.id})`,
         metadata: {
           pandadocEnvelopeId: envelope.id,
@@ -14747,6 +18052,7 @@ If the user provides specific criteria, extract as many rules as you can from th
                     userId: quote.userId || envelope.createdBy!,
                     projectName: `${borrowerName} — ${quote.propertyAddress || envelope.documentName || 'New Loan'}`,
                     projectNumber,
+                    ...(quote.loanNumber ? { loanNumber: quote.loanNumber } : {}),
                     loanAmount: loanAmount || null,
                     interestRate: !isNaN(rateNum) ? rateNum : null,
                     loanTermMonths: loanData?.loanTermMonths ? parseInt(loanData.loanTermMonths) : (loanData?.loanTerm ? parseInt(String(loanData.loanTerm)) : null),
@@ -14765,6 +18071,12 @@ If the user provides specific criteria, extract as many rules as you can from th
                     borrowerPortalToken: borrowerToken,
                     borrowerPortalEnabled: true,
                     quoteId: quote.id,
+                    ysp: quote.yspAmount ?? null,
+                    lenderOriginationPoints: quote.basePointsCharged ?? null,
+                    brokerOriginationPoints: quote.brokerPointsCharged ?? null,
+                    brokerName: quote.partnerName || null,
+                    prepaymentPenalty: loanData?.prepaymentPenalty || null,
+                    holdbackAmount: loanData?.holdbackAmount ?? null,
                     notes: `Auto-created from signed PandaDoc term sheet (Quote #${quote.id})`,
                     metadata: {
                       pandadocEnvelopeId: envelope.id,
@@ -15893,7 +19205,7 @@ Return JSON only:
           fullName: `${firstName} ${lastName}`,
           phone: phone || null,
           userType: 'borrower',
-          role: 'user',
+          role: 'borrower',
         });
       }
 
@@ -15907,6 +19219,7 @@ Return JSON only:
         currentStage: 1,
         programId: program.id,
         propertyAddress,
+        tenantId: program.createdBy,
       }).returning();
 
       await db.insert(activities).values({
@@ -16459,17 +19772,36 @@ Return JSON only:
         return res.status(404).json({ error: 'Project not found' });
       }
 
-      const token = uuidv4();
-      const updated = await db.update(projects)
-        .set({ borrowerPortalToken: token, lastUpdated: new Date() })
-        .where(eq(projects.id, projectId))
-        .returning();
-
-      if (!updated[0]) {
-        return res.status(500).json({ error: 'Failed to generate link' });
+      const borrowerEmail = project.borrowerEmail;
+      if (!borrowerEmail) {
+        return res.status(400).json({ error: 'Deal has no borrower email set' });
       }
 
-      res.json({ token, url: `${req.protocol}://${req.get('host')}/portal/${token}` });
+      let user = await storage.getUserByEmail(borrowerEmail.toLowerCase().trim());
+      if (user && user.inviteToken) {
+        const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+        return res.json({ token: user.inviteToken, url: `${baseUrl}/join/personal/${user.inviteToken}` });
+      }
+
+      const inviteToken = generateRandomToken();
+      if (!user) {
+        user = await storage.createUser({
+          email: borrowerEmail.toLowerCase().trim(),
+          fullName: project.borrowerName || null,
+          phone: project.borrowerPhone || null,
+          role: 'borrower',
+          userType: 'borrower',
+          isActive: true,
+          emailVerified: true,
+          inviteToken,
+          inviteStatus: 'none',
+        } as any);
+      } else {
+        await db.update(users).set({ inviteToken, inviteStatus: user.inviteStatus || 'none' }).where(eq(users.id, user.id));
+      }
+
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+      res.json({ token: inviteToken, url: `${baseUrl}/join/personal/${inviteToken}` });
     } catch (error) {
       console.error('Generate borrower link error:', error);
       res.status(500).json({ error: 'Failed to generate borrower link' });
@@ -16488,17 +19820,23 @@ Return JSON only:
         return res.status(404).json({ error: 'Project not found' });
       }
 
-      const token = uuidv4();
-      const updated = await db.update(projects)
-        .set({ brokerPortalToken: token, lastUpdated: new Date() })
-        .where(eq(projects.id, projectId))
-        .returning();
+      const brokerId = project.userId;
+      let user = brokerId ? await storage.getUserById(brokerId) : null;
 
-      if (!updated[0]) {
-        return res.status(500).json({ error: 'Failed to generate link' });
+      if (user && user.inviteToken) {
+        const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+        return res.json({ token: user.inviteToken, url: `${baseUrl}/join/personal/${user.inviteToken}` });
       }
 
-      res.json({ token, url: `${req.protocol}://${req.get('host')}/broker-portal/${token}` });
+      if (!user) {
+        return res.status(400).json({ error: 'Deal has no broker assigned' });
+      }
+
+      const inviteToken = generateRandomToken();
+      await db.update(users).set({ inviteToken, inviteStatus: user.inviteStatus || 'none' }).where(eq(users.id, user.id));
+
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+      res.json({ token: inviteToken, url: `${baseUrl}/join/personal/${inviteToken}` });
     } catch (error) {
       console.error('Generate broker link error:', error);
       res.status(500).json({ error: 'Failed to generate broker link' });
@@ -16554,11 +19892,11 @@ Return JSON only:
 
       const totalBrokers = await db.select({ count: sql<number>`count(*)` })
         .from(users)
-        .where(eq(users.userType, 'broker'));
+        .where(eq(users.role, 'broker'));
 
       const totalBorrowers = await db.select({ count: sql<number>`count(*)` })
         .from(users)
-        .where(eq(users.userType, 'borrower'));
+        .where(eq(users.role, 'borrower'));
 
       const totalDeals = await db.select({ count: sql<number>`count(*)` })
         .from(projects);
@@ -16579,43 +19917,36 @@ Return JSON only:
         .where(eq(users.role, 'admin'));
 
       const lenderAccounts = await Promise.all(lenderAdmins.map(async (admin) => {
-        // Count team members from same company
         const teamCount = await db.select({ count: sql<number>`count(*)` })
           .from(users)
-          .where(
-            and(
-              eq(users.companyName, admin.companyName!),
-              or(
-                eq(users.role, 'admin'),
-                eq(users.role, 'staff'),
-                eq(users.role, 'processor')
-              )
-            )
-          );
+          .where(eq(users.invitedBy, admin.id));
 
-        // Count active deals for this lender
         const dealsCount = await db.select({ count: sql<number>`count(*)` })
           .from(projects)
           .where(
             and(
-              eq(projects.userId, admin.id),
+              eq(projects.tenantId, admin.id),
               eq(projects.status, 'active')
             )
           );
 
-        // Sum loan volume for this lender
         const volume = await db.select({ sum: sql<number>`COALESCE(sum(loan_amount), 0)` })
           .from(projects)
-          .where(eq(projects.userId, admin.id));
+          .where(eq(projects.tenantId, admin.id));
+
+        const programCount = await db.select({ count: sql<number>`count(*)` })
+          .from(loanPrograms)
+          .where(eq(loanPrograms.createdBy, admin.id));
 
         return {
           id: admin.id,
           companyName: admin.companyName || 'N/A',
           adminName: admin.adminName || 'N/A',
           adminEmail: admin.adminEmail,
-          teamMembersCount: teamCount[0]?.count || 0,
+          teamMembersCount: Number(teamCount[0]?.count || 0) + 1,
           activeDealsCount: dealsCount[0]?.count || 0,
           totalLoanVolume: volume[0]?.sum || 0,
+          programCount: programCount[0]?.count || 0,
           isActive: admin.isActive,
           createdAt: admin.createdAt?.toISOString() || new Date().toISOString(),
         };
@@ -16627,7 +19958,7 @@ Return JSON only:
         email: users.email,
         fullName: users.fullName,
         role: users.role,
-        userType: users.userType,
+        userType: users.role,
         companyName: users.companyName,
         createdAt: users.createdAt,
       })
@@ -16722,6 +20053,195 @@ Return JSON only:
     } catch (error) {
       console.error('Super admin settings error:', error);
       res.status(500).json({ error: 'Failed to update settings' });
+    }
+  });
+
+  // Super Admin - Get tenant detail
+  app.get('/api/super-admin/tenants/:tenantId', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const tenantId = parseInt(req.params.tenantId);
+      const [tenant] = await db.select().from(users).where(eq(users.id, tenantId)).limit(1);
+      if (!tenant || tenant.role !== 'admin') {
+        return res.status(404).json({ error: 'Tenant not found' });
+      }
+
+      const teamMembers = await db.select({
+        id: users.id,
+        email: users.email,
+        fullName: users.fullName,
+        role: users.role,
+        userType: users.role,
+        isActive: users.isActive,
+        createdAt: users.createdAt,
+        lastLoginAt: users.lastLoginAt,
+        inviteStatus: users.inviteStatus,
+      }).from(users).where(eq(users.invitedBy, tenantId));
+
+      const tenantDeals = await db.select().from(projects)
+        .where(eq(projects.tenantId, tenantId))
+        .orderBy(desc(projects.lastUpdated));
+
+      const tenantPrograms = await db.select().from(loanPrograms)
+        .where(eq(loanPrograms.createdBy, tenantId))
+        .orderBy(desc(loanPrograms.createdAt));
+
+      const tenantSettings = await db.select().from(systemSettings)
+        .where(eq(systemSettings.tenantId, tenantId));
+
+      const dealStats = {
+        total: tenantDeals.length,
+        active: tenantDeals.filter(d => d.status === 'active').length,
+        funded: tenantDeals.filter(d => d.status === 'funded').length,
+        closed: tenantDeals.filter(d => d.status === 'closed' || d.status === 'completed').length,
+        totalVolume: tenantDeals.reduce((sum, d) => sum + (d.loanAmount || 0), 0),
+      };
+
+      res.json({
+        tenant: {
+          id: tenant.id,
+          email: tenant.email,
+          fullName: tenant.fullName,
+          companyName: tenant.companyName,
+          phone: tenant.phone,
+          isActive: tenant.isActive,
+          createdAt: tenant.createdAt,
+          lastLoginAt: tenant.lastLoginAt,
+          onboardingCompleted: tenant.onboardingCompleted,
+        },
+        teamMembers: [
+          { id: tenant.id, email: tenant.email, fullName: tenant.fullName, role: tenant.role, userType: tenant.role, isActive: tenant.isActive, createdAt: tenant.createdAt, lastLoginAt: tenant.lastLoginAt, inviteStatus: 'owner' },
+          ...teamMembers,
+        ],
+        deals: tenantDeals.map(d => ({
+          id: d.id,
+          projectName: d.projectName,
+          loanNumber: d.loanNumber,
+          borrowerName: d.borrowerName,
+          borrowerEmail: d.borrowerEmail,
+          loanAmount: d.loanAmount,
+          status: d.status,
+          currentStage: d.currentStage,
+          createdAt: d.createdAt,
+          lastUpdated: d.lastUpdated,
+        })),
+        programs: tenantPrograms.map(p => ({
+          id: p.id,
+          name: p.name,
+          loanType: p.loanType,
+          isActive: p.isActive,
+          createdAt: p.createdAt,
+        })),
+        settings: tenantSettings,
+        dealStats,
+      });
+    } catch (error) {
+      console.error('Super admin tenant detail error:', error);
+      res.status(500).json({ error: 'Failed to load tenant details' });
+    }
+  });
+
+  // Super Admin - Update tenant account
+  app.patch('/api/super-admin/tenants/:tenantId', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const tenantId = parseInt(req.params.tenantId);
+      const { isActive } = req.body;
+
+      const [tenant] = await db.select().from(users).where(eq(users.id, tenantId)).limit(1);
+      if (!tenant || tenant.role !== 'admin') {
+        return res.status(404).json({ error: 'Tenant not found' });
+      }
+
+      const updates: any = {};
+      if (isActive !== undefined) updates.isActive = isActive;
+
+      const [updated] = await db.update(users)
+        .set(updates)
+        .where(eq(users.id, tenantId))
+        .returning();
+
+      res.json({ tenant: { id: updated.id, email: updated.email, fullName: updated.fullName, companyName: updated.companyName, isActive: updated.isActive } });
+    } catch (error) {
+      console.error('Super admin update tenant error:', error);
+      res.status(500).json({ error: 'Failed to update tenant' });
+    }
+  });
+
+  // Super Admin - Manage a tenant's user
+  app.patch('/api/super-admin/tenants/:tenantId/users/:userId', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const tenantId = parseInt(req.params.tenantId);
+      const userId = parseInt(req.params.userId);
+      const { isActive, role } = req.body;
+
+      const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      if (user.id !== tenantId && user.invitedBy !== tenantId) {
+        return res.status(403).json({ error: 'User does not belong to this tenant' });
+      }
+
+      const updates: any = {};
+      if (isActive !== undefined) updates.isActive = isActive;
+      if (role !== undefined) updates.role = role;
+
+      const [updated] = await db.update(users)
+        .set(updates)
+        .where(eq(users.id, userId))
+        .returning();
+
+      res.json({ user: { id: updated.id, email: updated.email, fullName: updated.fullName, role: updated.role, isActive: updated.isActive } });
+    } catch (error) {
+      console.error('Super admin manage tenant user error:', error);
+      res.status(500).json({ error: 'Failed to update user' });
+    }
+  });
+
+  // Super Admin - Reset a tenant user's password
+  app.post('/api/super-admin/tenants/:tenantId/reset-password', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const tenantId = parseInt(req.params.tenantId);
+      const { userId, newPassword } = req.body;
+
+      const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      if (user.id !== tenantId && user.invitedBy !== tenantId) {
+        return res.status(403).json({ error: 'User does not belong to this tenant' });
+      }
+
+      const bcrypt = await import('bcrypt');
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await db.update(users)
+        .set({ passwordHash: hashedPassword })
+        .where(eq(users.id, userId));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Super admin reset password error:', error);
+      res.status(500).json({ error: 'Failed to reset password' });
+    }
+  });
+
+  app.get('/api/super-admin/beta-signups', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const signups = await db.select().from(betaSignups).orderBy(desc(betaSignups.createdAt));
+      res.json({ signups });
+    } catch (error) {
+      console.error('Beta signups fetch error:', error);
+      res.status(500).json({ error: 'Failed to fetch beta signups' });
+    }
+  });
+
+  app.delete('/api/super-admin/beta-signups/:id', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const signupId = parseInt(req.params.id);
+      await db.delete(betaSignups).where(eq(betaSignups.id, signupId));
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Delete beta signup error:', error);
+      res.status(500).json({ error: 'Failed to delete signup' });
     }
   });
 
@@ -17110,6 +20630,9 @@ Return JSON only:
     link?: string;
   }) {
     try {
+      const enabled = await isNotificationEnabled(data.type);
+      if (!enabled) return null;
+
       const result = await db.insert(notifications).values({
         userId: data.userId,
         type: data.type,
@@ -17301,16 +20824,32 @@ Return JSON only:
         return res.status(404).json({ error: 'Deal not found' });
       }
 
-      const { v4: uuidv4Gen } = await import('uuid');
-      const token = uuidv4Gen();
-      const tokenField = portalType === 'borrower' ? 'borrowerPortalToken' : 'brokerPortalToken';
-      await db.update(projects)
-        .set({ [tokenField]: token, lastUpdated: new Date() })
-        .where(eq(projects.id, dealId));
+      let user = await storage.getUserByEmail(email.toLowerCase().trim());
+      let inviteToken: string;
 
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
-      const portalPath = portalType === 'borrower' ? 'portal' : 'broker-portal';
-      const portalUrl = `${baseUrl}/${portalPath}/${token}`;
+      if (user && user.inviteToken) {
+        inviteToken = user.inviteToken;
+      } else {
+        inviteToken = generateRandomToken();
+        if (!user) {
+          user = await storage.createUser({
+            email: email.toLowerCase().trim(),
+            fullName: portalType === 'borrower' ? (project.borrowerName || null) : (project.brokerName || null),
+            phone: portalType === 'borrower' ? (project.borrowerPhone || null) : null,
+            role: portalType,
+            userType: portalType,
+            isActive: true,
+            emailVerified: true,
+            inviteToken,
+            inviteStatus: 'none',
+          } as any);
+        } else {
+          await db.update(users).set({ inviteToken, inviteStatus: user.inviteStatus || 'none' }).where(eq(users.id, user.id));
+        }
+      }
+
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+      const portalUrl = `${baseUrl}/join/personal/${inviteToken}`;
       const portalLabel = portalType === 'borrower' ? 'Borrower Portal' : 'Broker Portal';
 
       const brandingSettings = await storage.getAllSettings();
@@ -17322,25 +20861,25 @@ Return JSON only:
         await client.emails.send({
           from: fromEmail || `${companyName} <info@lendry.ai>`,
           to: email,
-          subject: `[TEST] ${portalLabel} Preview - ${project.loanNumber || `DEAL-${dealId}`}`,
+          subject: `${portalLabel} Access - ${project.loanNumber || `DEAL-${dealId}`}`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-              <h2 style="color: #1e40af;">Test ${portalLabel} Link</h2>
-              <p>This is a test email from ${companyName} to preview the ${portalLabel.toLowerCase()} experience.</p>
+              <h2 style="color: #C9A84C;">Your ${portalLabel} Access</h2>
+              <p>You've been invited to access the ${portalLabel.toLowerCase()} from ${companyName}.</p>
               <p><strong>Deal:</strong> ${project.loanNumber || `DEAL-${dealId}`}</p>
               <p><strong>Property:</strong> ${project.propertyAddress || 'N/A'}</p>
               <div style="margin: 24px 0;">
-                <a href="${portalUrl}" style="background-color: #1e40af; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
-                  Open ${portalLabel}
+                <a href="${portalUrl}" style="background-color: #C9A84C; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                  Open Your Portal
                 </a>
               </div>
               <p style="color: #6b7280; font-size: 14px;">Or copy this link: <a href="${portalUrl}">${portalUrl}</a></p>
               <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
-              <p style="color: #9ca3af; font-size: 12px;">This is a test email. The link above provides access to the ${portalLabel.toLowerCase()} for this deal.</p>
+              <p style="color: #9ca3af; font-size: 12px;">This link provides access to your portal for this deal and all associated loans.</p>
             </div>
           `,
         });
-        res.json({ success: true, portalUrl, message: `Test ${portalLabel.toLowerCase()} link sent to ${email}` });
+        res.json({ success: true, portalUrl, message: `${portalLabel} link sent to ${email}` });
       } catch (emailError: any) {
         console.error('Failed to send test email:', emailError);
         res.json({ success: true, portalUrl, emailFailed: true, message: `Link generated but email failed to send. You can copy the link directly.` });
@@ -17520,6 +21059,92 @@ Return JSON only:
     } catch (error) {
       console.error('Error running batch review:', error);
       res.status(500).json({ error: 'Failed to run batch review' });
+    }
+  });
+
+  app.get('/api/projects/:dealId/review-mode', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      const [project] = await db.select({
+        aiReviewMode: projects.aiReviewMode,
+        aiReviewIntervalMinutes: projects.aiReviewIntervalMinutes,
+        aiReviewScheduledTime: projects.aiReviewScheduledTime,
+        aiReviewScheduledDays: projects.aiReviewScheduledDays,
+        aiReviewTimezone: projects.aiReviewTimezone,
+        aiCommunicationFrequencyMinutes: projects.aiCommunicationFrequencyMinutes,
+        aiCommAutoSend: projects.aiCommAutoSend,
+        aiCommSendDeadline: projects.aiCommSendDeadline,
+      }).from(projects).where(eq(projects.id, dealId));
+      if (!project) return res.status(404).json({ error: 'Deal not found' });
+
+      res.json({
+        dealReviewMode: project.aiReviewMode || 'manual',
+        dealIntervalMinutes: project.aiReviewIntervalMinutes || null,
+        scheduledTime: project.aiReviewScheduledTime || null,
+        scheduledDays: project.aiReviewScheduledDays || null,
+        timezone: project.aiReviewTimezone || null,
+        communicationFrequencyMinutes: project.aiCommunicationFrequencyMinutes || null,
+        commAutoSend: project.aiCommAutoSend || false,
+        commSendDeadline: project.aiCommSendDeadline || null,
+      });
+    } catch (error) {
+      console.error('Error getting deal review mode:', error);
+      res.status(500).json({ error: 'Failed to get review mode' });
+    }
+  });
+
+  app.put('/api/projects/:dealId/review-mode', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const dealId = parseInt(req.params.dealId);
+      const { aiReviewMode, intervalMinutes, scheduledTime, scheduledDays, timezone, communicationFrequencyMinutes, commAutoSend, commSendDeadline } = req.body;
+      if (aiReviewMode && !['automatic', 'timed', 'manual'].includes(aiReviewMode)) {
+        return res.status(400).json({ error: 'Invalid review mode' });
+      }
+      if (aiReviewMode === 'timed') {
+        if (scheduledTime && !/^\d{2}:\d{2}$/.test(scheduledTime)) {
+          return res.status(400).json({ error: 'Invalid scheduled time format (expected HH:MM)' });
+        }
+        if (scheduledDays && (!Array.isArray(scheduledDays) || scheduledDays.some((d: string) => !['mon','tue','wed','thu','fri','sat','sun'].includes(d)))) {
+          return res.status(400).json({ error: 'Invalid scheduled days' });
+        }
+      }
+      const updateData: Record<string, any> = {
+        aiReviewMode: aiReviewMode || 'manual',
+      };
+      if (commAutoSend !== undefined) {
+        updateData.aiCommAutoSend = !!commAutoSend;
+      }
+      if (commSendDeadline !== undefined) {
+        if (commSendDeadline && !/^\d{2}:\d{2}$/.test(commSendDeadline)) {
+          return res.status(400).json({ error: 'Invalid send deadline format (expected HH:MM)' });
+        }
+        updateData.aiCommSendDeadline = commSendDeadline || null;
+      }
+      if (aiReviewMode === 'automatic') {
+        updateData.aiReviewIntervalMinutes = intervalMinutes != null ? parseInt(intervalMinutes) : null;
+        updateData.aiCommunicationFrequencyMinutes = communicationFrequencyMinutes != null ? parseInt(communicationFrequencyMinutes) : null;
+        updateData.aiReviewScheduledTime = null;
+        updateData.aiReviewScheduledDays = null;
+      } else if (aiReviewMode === 'timed') {
+        updateData.aiReviewScheduledTime = scheduledTime || null;
+        updateData.aiReviewScheduledDays = scheduledDays || null;
+        updateData.aiReviewTimezone = timezone || null;
+        updateData.aiReviewIntervalMinutes = null;
+        updateData.aiCommunicationFrequencyMinutes = communicationFrequencyMinutes != null ? parseInt(communicationFrequencyMinutes) : null;
+      } else {
+        updateData.aiReviewIntervalMinutes = null;
+        updateData.aiReviewScheduledTime = null;
+        updateData.aiReviewScheduledDays = null;
+        updateData.aiReviewTimezone = null;
+        updateData.aiCommunicationFrequencyMinutes = null;
+        updateData.aiCommAutoSend = false;
+        updateData.aiCommSendDeadline = null;
+      }
+      await db.update(projects).set(updateData).where(eq(projects.id, dealId));
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error updating deal review mode:', error);
+      res.status(500).json({ error: 'Failed to update review mode' });
     }
   });
 
