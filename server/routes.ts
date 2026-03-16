@@ -12318,7 +12318,7 @@ export async function registerRoutes(
           { role: 'system', content: pSystemPrompt },
           {
             role: 'user',
-            content: `Extract ALL review rules from the following credit policy document. Be exhaustive — scan every section, extract every constraint, requirement, prohibition, permission, calculation, and conditional statement. Do not skip any section.\n\n${truncatedText}`
+            content: `Extract ALL review rules from the following credit policy document. Be exhaustive — scan every section, extract every constraint, requirement, prohibition, permission, calculation, and conditional statement. Do not skip any section. Return your response as a JSON object with a "rules" array.\n\n${truncatedText}`
           }
         ],
         response_format: { type: 'json_object' },
@@ -12599,7 +12599,7 @@ export async function registerRoutes(
           { role: 'system', content: systemPrompt },
           {
             role: 'user',
-            content: `Extract ALL review rules from the following credit policy document. Be exhaustive — scan every section, extract every constraint, requirement, prohibition, permission, calculation, and conditional statement. Do not skip any section.\n\n${truncatedText}`
+            content: `Extract ALL review rules from the following credit policy document. Be exhaustive — scan every section, extract every constraint, requirement, prohibition, permission, calculation, and conditional statement. Do not skip any section. Return your response as a JSON object with a "rules" array.\n\n${truncatedText}`
           }
         ],
         response_format: { type: 'json_object' },

@@ -153,7 +153,7 @@ export function registerDebuggerRoutes(app: any, deps: { authenticateUser: any; 
           { role: 'system', content: customPrompt },
           {
             role: 'user',
-            content: `Extract ALL review rules from the following credit policy document. Be exhaustive — scan every section, extract every constraint, requirement, prohibition, permission, calculation, and conditional statement. Do not skip any section.\n\n${cached.documentText}`
+            content: `Extract ALL review rules from the following credit policy document. Be exhaustive — scan every section, extract every constraint, requirement, prohibition, permission, calculation, and conditional statement. Do not skip any section. Return your response as a JSON object with a "rules" array.\n\n${cached.documentText}`
           }
         ],
         response_format: { type: 'json_object' },
