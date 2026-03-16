@@ -12504,17 +12504,11 @@ export async function registerRoutes(
   function deduplicateRules(rules: any[]): any[] {
     const seen = new Map<string, any>();
     for (const rule of rules) {
-      const titleNorm = (rule.ruleTitle || '').toLowerCase().trim();
-      const catNorm = (rule.category || '').toLowerCase().trim();
-      const descStart = (rule.ruleDescription || '').toLowerCase().trim().slice(0, 80);
-      const key = `${titleNorm}|${catNorm}|${descStart}`;
+      const titleNorm = (rule.ruleTitle || '').toLowerCase().trim().replace(/\s+/g, ' ');
+      const descNorm = (rule.ruleDescription || '').toLowerCase().trim().replace(/\s+/g, ' ');
+      const key = `${titleNorm}|||${descNorm}`;
       if (!seen.has(key)) {
         seen.set(key, rule);
-      } else {
-        const existing = seen.get(key);
-        if ((rule.ruleDescription || '').length > (existing.ruleDescription || '').length) {
-          seen.set(key, rule);
-        }
       }
     }
     return Array.from(seen.values());

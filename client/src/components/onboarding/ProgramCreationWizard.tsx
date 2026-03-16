@@ -1369,6 +1369,11 @@ function CreditPolicyStep({
       } catch {}
     };
 
+    await new Promise<void>((resolve) => {
+      ws.onopen = () => resolve();
+      setTimeout(resolve, 2000);
+    });
+
     try {
       const reader = new FileReader();
       const base64 = await new Promise<string>((resolve, reject) => {

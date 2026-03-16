@@ -88,10 +88,13 @@ export default function AdminCreditPolicies() {
 
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractProgress, setExtractProgress] = useState(0);
+  const [chunkProgress, setChunkProgress] = useState<{ chunksCompleted: number; totalChunks: number; rulesFoundSoFar: number } | null>(null);
+  const [liveRules, setLiveRules] = useState<any[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [editingRuleIds, setEditingRuleIds] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -99,6 +102,7 @@ export default function AdminCreditPolicies() {
     return () => {
       if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
       if (progressTimeoutRef.current) clearTimeout(progressTimeoutRef.current);
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
     };
   }, []);
 
@@ -208,7 +212,36 @@ export default function AdminCreditPolicies() {
     setIsExtracting(true);
     setSourceFileName(file.name);
     setEditingRuleIds(new Set());
+    setChunkProgress(null);
+    setLiveRules([]);
     startProgressSimulation();
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/orchestration`);
+    wsRef.current = ws;
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.eventType === 'credit_extraction_progress' && msg.metadata) {
+          const pct = Math.round((msg.metadata.chunksCompleted / msg.metadata.totalChunks) * 100);
+          setExtractProgress(Math.min(pct, 95));
+          setChunkProgress({
+            chunksCompleted: msg.metadata.chunksCompleted,
+            totalChunks: msg.metadata.totalChunks,
+            rulesFoundSoFar: msg.metadata.rulesFoundSoFar,
+          });
+          if (msg.rules && Array.isArray(msg.rules)) {
+            setLiveRules(msg.rules);
+          }
+        }
+      } catch {}
+    };
+
+    await new Promise<void>((resolve) => {
+      ws.onopen = () => resolve();
+      setTimeout(resolve, 2000);
+    });
+
     try {
       const reader = new FileReader();
       const base64 = await new Promise<string>((resolve, reject) => {
@@ -233,6 +266,8 @@ export default function AdminCreditPolicies() {
       toast({ title: "Failed to extract rules", description: error.message, variant: "destructive" });
     } finally {
       setIsExtracting(false);
+      setChunkProgress(null);
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
     }
   }
 
@@ -383,15 +418,45 @@ export default function AdminCreditPolicies() {
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-8 gap-4">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                <p className="text-sm text-muted-foreground" data-testid="text-extracting-rules">
-                  AI is extracting rules from your document...
+                <p className="text-sm font-medium" data-testid="text-extracting-rules">
+                  {chunkProgress
+                    ? `Processing chunk ${chunkProgress.chunksCompleted} of ${chunkProgress.totalChunks}`
+                    : 'AI is extracting rules from your document...'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {chunkProgress
+                    ? `${chunkProgress.rulesFoundSoFar} rules found so far`
+                    : 'This may take 60–90 seconds for large documents'}
                 </p>
                 <div className="w-full max-w-xs space-y-1">
                   <Progress value={extractProgress} className="h-2" />
                   <p className="text-xs text-muted-foreground text-center" data-testid="text-extract-progress">
-                    {extractProgress}% complete
+                    {chunkProgress
+                      ? `${Math.round((chunkProgress.chunksCompleted / chunkProgress.totalChunks) * 100)}%`
+                      : `${extractProgress}%`} complete
                   </p>
                 </div>
+                {liveRules.length > 0 && (
+                  <div className="w-full border rounded-lg max-h-40 overflow-y-auto mt-2">
+                    <div className="px-3 py-1.5 border-b bg-muted/30 flex items-center justify-between">
+                      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Live Extraction</span>
+                      <span className="text-[11px] text-muted-foreground">{liveRules.length} rules</span>
+                    </div>
+                    <div className="divide-y">
+                      {liveRules.slice(-8).map((rule: any, idx: number) => (
+                        <div key={rule.id || idx} className="px-3 py-1 text-[12px]">
+                          <span className="font-medium">{rule.rule || rule.ruleTitle}</span>
+                          {rule.category && <span className="ml-2 text-muted-foreground">({rule.category})</span>}
+                        </div>
+                      ))}
+                      {liveRules.length > 8 && (
+                        <div className="px-3 py-1 text-[11px] text-muted-foreground text-center">
+                          + {liveRules.length - 8} more rules
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ) : !sourceFileName ? (
