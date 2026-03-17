@@ -9247,7 +9247,7 @@ export async function registerRoutes(
       const docId = parseInt(req.params.docId);
       const { status, reviewNotes } = req.body;
       
-      const validStatuses = ['pending', 'uploaded', 'ai_reviewed', 'approved', 'rejected', 'not_applicable'];
+      const validStatuses = ['pending', 'uploaded', 'ai_reviewed', 'approved', 'rejected', 'not_applicable', 'conditional', 'at_risk', 'denied'];
       if (status && !validStatuses.includes(status)) {
         return res.status(400).json({ error: 'Invalid status' });
       }
@@ -9256,7 +9256,8 @@ export async function registerRoutes(
       if (status) updateData.status = status;
       if (reviewNotes !== undefined) updateData.reviewNotes = reviewNotes;
       
-      if (status === 'approved' || status === 'rejected') {
+      const decisionStatuses = ['approved', 'rejected', 'conditional', 'at_risk', 'denied'];
+      if (decisionStatuses.includes(status)) {
         updateData.reviewedAt = new Date();
         updateData.reviewedBy = req.user!.id;
       }
@@ -9270,9 +9271,8 @@ export async function registerRoutes(
         return res.status(404).json({ error: 'Document not found' });
       }
       
-      // Log activity, digest, and deal memory when document is approved or rejected
-      if (status === 'approved' || status === 'rejected') {
-        const actionText = status === 'approved' ? 'approved' : 'rejected';
+      if (decisionStatuses.includes(status)) {
+        const actionText = status === 'at_risk' ? 'marked at risk' : status;
 
         try {
           await storage.createProjectActivity({

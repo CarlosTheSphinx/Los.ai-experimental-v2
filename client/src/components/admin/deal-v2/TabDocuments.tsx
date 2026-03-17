@@ -27,8 +27,14 @@ function statusDisplay(status: string, aiReviewStatus?: string, driveStatus?: st
   if (s === "approved" || s === "accepted") {
     return { dot: "bg-emerald-500", label: "Approved", step: 4 };
   }
-  if (s === "rejected") {
-    return { dot: "bg-red-500", label: "Rejected", step: 4 };
+  if (s === "rejected" || s === "denied") {
+    return { dot: "bg-red-500", label: s === "denied" ? "Denied" : "Rejected", step: 4 };
+  }
+  if (s === "conditional") {
+    return { dot: "bg-amber-500", label: "Conditional", step: 4 };
+  }
+  if (s === "at_risk") {
+    return { dot: "bg-orange-500", label: "At Risk", step: 4 };
   }
   if (ai === "approved") {
     return { dot: "bg-blue-500", label: "AI Approved", step: 3 };

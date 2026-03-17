@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +29,7 @@ import {
   User,
   Calendar,
   Sparkles,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -109,7 +110,7 @@ export function FindingsReviewModal({
   const [selectedDecision, setSelectedDecision] = useState<string>(finding?.lenderDecision || "");
   const [decisionNotes, setDecisionNotes] = useState(finding?.lenderDecisionNotes || "");
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
-    new Set(["health", "policy", "risk", "actions"])
+    new Set(["health", "policy", "risk", "actions", "documents"])
   );
 
   useEffect(() => {
@@ -129,6 +130,19 @@ export function FindingsReviewModal({
   const overallStatus = report.overall_status || finding?.overallStatus || "pending";
   const summaryForLO = report.summary_for_loan_officer || "";
 
+  const { data: docsData } = useQuery<{ documents: any[] }>({
+    queryKey: ["/api/admin/deals", projectId, "documents"],
+    queryFn: async () => {
+      try {
+        const res = await fetch(`/api/admin/deals/${projectId}/documents`, { credentials: "include" });
+        if (!res.ok) return { documents: [] };
+        return res.json();
+      } catch { return { documents: [] }; }
+    },
+    enabled: open && !!projectId,
+  });
+  const uploadedDocs = (docsData?.documents || docsData || []).filter((d: any) => d.id);
+
   const decisionMutation = useMutation({
     mutationFn: async ({ decision, notes }: { decision: string; notes: string }) => {
       return apiRequest("PATCH", `/api/projects/${projectId}/findings/${finding.id}/decision`, { decision, notes });
@@ -139,6 +153,23 @@ export function FindingsReviewModal({
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error?.message || "Failed to save decision", variant: "destructive" });
+    },
+  });
+
+  const docDecisionMutation = useMutation({
+    mutationFn: async ({ docId, status, reviewNotes }: { docId: number; status: string; reviewNotes?: string }) => {
+      return apiRequest("PATCH", `/api/admin/deals/${projectId}/documents/${docId}`, { status, reviewNotes });
+    },
+    onSuccess: (_, variables) => {
+      const label = variables.status === "at_risk" ? "at risk" : variables.status;
+      toast({ title: "Document Updated", description: `Document marked as ${label}` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/deals", projectId, "documents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/deals", String(projectId), "documents"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals/${projectId}/documents`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/deals/${projectId}/documents`] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update document status", variant: "destructive" });
     },
   });
 
@@ -203,6 +234,60 @@ export function FindingsReviewModal({
               <div className="p-4 rounded-lg border bg-blue-50/30 border-blue-200">
                 <p className="text-sm font-semibold text-blue-900 mb-2">Executive Summary</p>
                 <p className="text-sm text-blue-800 whitespace-pre-line leading-relaxed">{summaryForLO}</p>
+              </div>
+            )}
+
+            {uploadedDocs.length > 0 && (
+              <div>
+                <SectionHeader id="documents" title="Document Decisions" icon={<FileText className="h-4 w-4 text-primary" />} count={uploadedDocs.length} />
+                {expandedSections.has("documents") && (
+                  <div className="mt-2 space-y-2">
+                    {uploadedDocs.map((doc: any) => {
+                      const currentStatus = doc.status?.toLowerCase();
+                      const docDecisionStatuses = ["approved", "conditional", "denied", "at_risk"];
+                      const hasDecision = docDecisionStatuses.includes(currentStatus);
+                      return (
+                        <div key={doc.id} className="flex items-center gap-3 p-3 rounded-lg border bg-white" data-testid={`doc-decision-${doc.id}`}>
+                          <FileText className="h-4 w-4 text-slate-500 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{doc.documentName || doc.documentCategory || "Document"}</p>
+                            {doc.documentCategory && doc.documentName && (
+                              <p className="text-xs text-muted-foreground capitalize">{doc.documentCategory.replace(/_/g, " ")}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            {[
+                              { value: "approved", label: "Approve", icon: CheckCircle2, color: "text-emerald-700 border-emerald-300 hover:bg-emerald-50", active: "bg-emerald-100 text-emerald-800 border-emerald-400" },
+                              { value: "conditional", label: "Conditional", icon: AlertTriangle, color: "text-amber-700 border-amber-300 hover:bg-amber-50", active: "bg-amber-100 text-amber-800 border-amber-400" },
+                              { value: "denied", label: "Deny", icon: XCircle, color: "text-red-700 border-red-300 hover:bg-red-50", active: "bg-red-100 text-red-800 border-red-400" },
+                              { value: "at_risk", label: "At Risk", icon: AlertCircle, color: "text-orange-700 border-orange-300 hover:bg-orange-50", active: "bg-orange-100 text-orange-800 border-orange-400" },
+                            ].map(opt => {
+                              const Icon = opt.icon;
+                              const isActive = currentStatus === opt.value;
+                              return (
+                                <Button
+                                  key={opt.value}
+                                  size="sm"
+                                  variant="outline"
+                                  className={cn(
+                                    "h-7 px-2 text-xs gap-1",
+                                    isActive ? opt.active : opt.color
+                                  )}
+                                  disabled={docDecisionMutation.isPending}
+                                  onClick={() => docDecisionMutation.mutate({ docId: doc.id, status: opt.value })}
+                                  data-testid={`doc-${doc.id}-${opt.value}`}
+                                >
+                                  <Icon className="h-3 w-3" />
+                                  {opt.label}
+                                </Button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
