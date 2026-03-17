@@ -25,7 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/ui/phase1/empty-state";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { FindingsReviewModal } from "@/components/admin/FindingsReviewModal";
@@ -636,7 +636,7 @@ export default function TabAIInsights({
                     <div className="flex items-center gap-2">
                       <Shield className="h-4 w-4 text-amber-600" />
                       <span className="text-[15px] font-medium">
-                        AI Analysis — {new Date(finding.createdAt).toLocaleDateString()}
+                        AI Analysis — {formatDate(finding.createdAt)}
                       </span>
                       <Badge variant="outline" className={cn("text-[11px] border", decisionStyle.bg)}>
                         {decisionStyle.label}

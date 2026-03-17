@@ -38,7 +38,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, formatDate } from "@/lib/utils";
 import { getMessageFileMeta, getAttachmentDownloadUrl } from "@/lib/messagesApi";
 import { formatPhoneNumber } from "@/lib/validation";
 import { LoanChecklist } from "@/components/LoanChecklist";
@@ -1206,7 +1206,7 @@ export default function BorrowerPortal({ token: propToken, isPreview }: Borrower
                           From: {doc.sourceDealName}
                         </span>
                       )}
-                      <span>{new Date(doc.uploadedAt).toLocaleDateString()}</span>
+                      <span>{formatDate(doc.uploadedAt)}</span>
                       {doc.fileSize && <span>{(doc.fileSize / 1024).toFixed(0)} KB</span>}
                     </div>
                   </div>

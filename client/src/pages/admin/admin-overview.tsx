@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { formatTime } from '@/lib/utils';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -378,8 +379,8 @@ export default function AdminOverview() {
                     <p className="text-[15px] text-muted-foreground">
                       {task.borrowerName && <>Borrower: {task.borrowerName}</>}
                       {task.programName && <> · {task.programName}</>}
-                      {task.dueDate && <> · Due {new Date(task.dueDate).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</>}
-                      {isCompleted && task.completedAt && <> · Completed {new Date(task.completedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</>}
+                      {task.dueDate && <> · Due {formatTime(task.dueDate)}</>}
+                      {isCompleted && task.completedAt && <> · Completed {formatTime(task.completedAt)}</>}
                     </p>
                   </div>
                   <div className="flex items-center gap-3 flex-shrink-0">

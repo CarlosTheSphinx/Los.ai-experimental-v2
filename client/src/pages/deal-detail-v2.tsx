@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { formatDate } from "@/lib/utils";
 import { useRoute, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -279,7 +280,7 @@ function DealStrip({
         <KpiCard
           icon={Calendar}
           label="Target Close"
-          value={deal.targetCloseDate ? new Date(deal.targetCloseDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+          value={formatDate(deal.targetCloseDate)}
         />
       </div>
 

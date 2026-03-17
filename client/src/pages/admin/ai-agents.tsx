@@ -60,7 +60,7 @@ import {
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { cn } from "@/lib/utils";
+import { cn, formatTimestamp } from "@/lib/utils";
 
 interface AgentConfiguration {
   id: number;
@@ -2092,7 +2092,7 @@ export default function AIAgentsPage() {
                             <SelectContent>
                               {cpSessions.sessions.map((s: any) => (
                                 <SelectItem key={s.sessionId} value={s.sessionId}>
-                                  {s.fileName || "Untitled"} ({Math.round(s.textLength / 1000)}K chars) — {new Date(s.cachedAt).toLocaleString()}
+                                  {s.fileName || "Untitled"} ({Math.round(s.textLength / 1000)}K chars) — {formatTimestamp(s.cachedAt)}
                                 </SelectItem>
                               ))}
                             </SelectContent>

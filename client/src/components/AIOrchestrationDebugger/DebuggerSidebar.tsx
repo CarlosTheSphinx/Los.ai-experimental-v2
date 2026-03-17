@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { formatTime } from '@/lib/utils';
 import { useOrchestrationEvents } from '@/hooks/useOrchestrationEvents';
 import { AgentTracePanel } from './AgentTracePanel';
 import { RealTimeOutput } from './RealTimeOutput';
@@ -474,7 +475,7 @@ function CreditPolicyTab({
             >
               {cachedSessions.map(s => (
                 <option key={s.sessionId} value={s.sessionId}>
-                  {s.fileName || 'Untitled'} ({Math.round(s.textLength / 1000)}K chars) — {new Date(s.cachedAt).toLocaleTimeString()}
+                  {s.fileName || 'Untitled'} ({Math.round(s.textLength / 1000)}K chars) — {formatTime(s.cachedAt)}
                 </option>
               ))}
             </select>

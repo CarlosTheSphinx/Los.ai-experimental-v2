@@ -43,6 +43,8 @@ The application is built with a modern web stack: React 18 with TypeScript for t
 -   **Broker Portal**: Upgraded authenticated broker experience with Lendry.AI design system. Sidebar nav: New Quote, Quotes, My Loans, My Commissions, Contacts, Inbox, Resources, Settings. Dedicated broker Settings page at `/settings` with Profile, Security (password change), and Notifications tabs. Backend endpoints: `PATCH /api/auth/profile` for profile updates, `POST /api/auth/change-password` (with audit logging and token rotation).
 -   **Per-Person Invite Links**: Consolidated portal link system using `users.inviteToken` as a permanent per-person code. Single entry point at `/join/personal/:token` handles account setup, login redirect, and authenticated auto-redirect. Legacy `/broker-portal/:token` and `/portal/:token` routes resolve via API to the user's personal link. Deal-level link generation (`generate-borrower-link`, `generate-broker-link`) looks up or creates users and returns consolidated URLs. Portal-enabled flags enforced on legacy resolution. Borrower email-based deal matching (case-insensitive) in `/api/projects` ensures borrowers see all their deals.
 
+**Date Formatting Utilities** (`client/src/lib/utils.ts`): All date formatting across the frontend uses centralized safe utilities: `formatDate()`, `formatDateTime()`, `formatTime()`, `formatTimestamp()`, `formatDateFull()`. These return a fallback string (`'—'` by default) for null, undefined, or invalid date values, preventing "Invalid Date" from ever being displayed. Any local `formatDate` functions in individual files also include `isNaN(d.getTime())` guards.
+
 ## External Dependencies
 
 -   **Apify**: Web scraping for external pricing providers.

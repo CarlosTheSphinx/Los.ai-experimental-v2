@@ -31,7 +31,7 @@ import {
   Sparkles,
   FileText,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatTimestamp } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -217,7 +217,7 @@ export function FindingsReviewModal({
               <div>
                 <DialogTitle className="text-lg font-bold">AI Findings Report</DialogTitle>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Analysis completed {finding.createdAt ? new Date(finding.createdAt).toLocaleString() : ""}
+                  Analysis completed {formatTimestamp(finding.createdAt, "")}
                 </p>
               </div>
             </div>

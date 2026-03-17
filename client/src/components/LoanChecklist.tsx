@@ -127,7 +127,9 @@ interface LoanChecklistProps {
 function formatDateTime(dateStr: string | null | undefined): string {
   if (!dateStr) return "";
   try {
-    return new Date(dateStr).toLocaleDateString("en-US", {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
