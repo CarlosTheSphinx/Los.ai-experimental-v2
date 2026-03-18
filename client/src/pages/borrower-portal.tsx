@@ -600,12 +600,6 @@ export default function BorrowerPortal({ token: propToken, isPreview }: Borrower
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount);
   };
 
-  const formatDate = (dateStr: string | null | undefined) => {
-    if (!dateStr) return '—';
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return '—';
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
 
   return (
     <div className={`flex min-h-screen ${isPreview ? '' : 'bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950'}`} data-testid="borrower-portal">
@@ -1423,7 +1417,7 @@ export default function BorrowerPortal({ token: propToken, isPreview }: Borrower
                             { label: "Name", value: [p.firstName, p.lastName].filter(Boolean).join(' ') },
                             { label: "Email", value: p.email },
                             { label: "Phone", value: p.phone },
-                            { label: "Date of Birth", value: p.dateOfBirth },
+                            { label: "Date of Birth", value: formatDate(p.dateOfBirth) },
                           ]},
                           { title: "Address", fields: [
                             { label: "Street", value: p.streetAddress },
@@ -1435,7 +1429,7 @@ export default function BorrowerPortal({ token: propToken, isPreview }: Borrower
                             { label: "SSN (last 4)", value: p.ssnLast4 ? `••••${p.ssnLast4}` : null },
                             { label: "ID Type", value: p.idType },
                             { label: "ID Number", value: p.idNumber },
-                            { label: "ID Expiration", value: p.idExpirationDate },
+                            { label: "ID Expiration", value: formatDate(p.idExpirationDate) },
                           ]},
                           { title: "Employment", fields: [
                             { label: "Employer", value: p.employerName },
