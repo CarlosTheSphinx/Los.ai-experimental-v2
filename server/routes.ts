@@ -6742,6 +6742,35 @@ export async function registerRoutes(
     }
   });
 
+  // Admin - Get all programs with their workflow stages (for stage filter dropdown)
+  app.get('/api/admin/program-stages', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const allPrograms = await db.select({ id: loanPrograms.id, name: loanPrograms.name })
+        .from(loanPrograms)
+        .where(eq(loanPrograms.isActive, true))
+        .orderBy(asc(loanPrograms.name));
+
+      const result = await Promise.all(allPrograms.map(async (prog) => {
+        const steps = await db.select({
+          stepOrder: programWorkflowSteps.stepOrder,
+          stepName: workflowStepDefinitions.name,
+          stepKey: workflowStepDefinitions.key,
+        })
+        .from(programWorkflowSteps)
+        .innerJoin(workflowStepDefinitions, eq(programWorkflowSteps.stepDefinitionId, workflowStepDefinitions.id))
+        .where(eq(programWorkflowSteps.programId, prog.id))
+        .orderBy(asc(programWorkflowSteps.stepOrder));
+
+        return { programId: prog.id, programName: prog.name, steps };
+      }));
+
+      res.json(result.filter(p => p.steps.length > 0));
+    } catch (error) {
+      console.error('Admin get program stages error:', error);
+      res.status(500).json({ error: 'Failed to load program stages' });
+    }
+  });
+
   // Admin - Move project to a different stage (for Kanban drag-and-drop)
   app.patch('/api/admin/projects/:id/move-stage', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {

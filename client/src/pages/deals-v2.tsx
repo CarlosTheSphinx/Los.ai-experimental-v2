@@ -428,19 +428,19 @@ export default function DealsV2() {
     return Array.from(names).sort();
   }, [deals]);
 
-  const { data: pipelineData } = useQuery<{ programs: Array<{ programId: number; programName: string; steps: Array<{ stepName: string; stepKey: string }> }> }>({
-    queryKey: ["/api/admin/pipeline"],
+  const { data: allProgramStages } = useQuery<Array<{ programId: number; programName: string; steps: Array<{ stepName: string; stepKey: string }> }>>({
+    queryKey: ["/api/admin/program-stages"],
   });
 
   const programStages = useMemo(() => {
-    return (pipelineData?.programs || []).map((prog) => ({
+    return (allProgramStages || []).map((prog) => ({
       programName: prog.programName,
       steps: (prog.steps || []).map((step) => ({
         key: step.stepKey,
         label: step.stepName,
       })),
-    })).filter((p) => p.steps.length > 0);
-  }, [pipelineData]);
+    }));
+  }, [allProgramStages]);
 
   // Compute summary metrics
   const metrics = useMemo(() => {
