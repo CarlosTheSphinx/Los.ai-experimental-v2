@@ -4359,11 +4359,12 @@ export async function registerRoutes(
         visibleToBorrower: true,
       });
 
+      const uploaderDisplayName = req.user!.fullName || req.user!.email || 'Unknown user';
       await storage.createProjectActivity({
         projectId,
         userId,
         activityType: 'document_uploaded',
-        activityDescription: `Document uploaded: ${fileName || 'New document'}`,
+        activityDescription: `"${fileName || 'New document'}" uploaded by ${uploaderDisplayName}`,
         visibleToBorrower: true,
       });
 
@@ -4501,10 +4502,11 @@ export async function registerRoutes(
       const updated = (updateResult as any).rows?.[0] ?? null;
 
       const docLabel = updated?.document_name || fileName || 'Document';
+      const uploaderActorName = req.user!.fullName || req.user!.email || 'Unknown user';
 
       await db.execute(
         sql`INSERT INTO project_activity (project_id, user_id, activity_type, activity_description, visible_to_borrower)
-            VALUES (${projectId}, ${userId}, 'document_uploaded', ${`Document uploaded: ${docLabel}`}, true)`
+            VALUES (${projectId}, ${userId}, 'document_uploaded', ${`"${docLabel}" uploaded by ${uploaderActorName}`}, true)`
       );
 
       try {
@@ -8575,8 +8577,22 @@ export async function registerRoutes(
         dealStages = filtered;
       }
 
-      const rawActivity = await db.select()
+      const rawActivity = await db.select({
+        id: projectActivity.id,
+        projectId: projectActivity.projectId,
+        userId: projectActivity.userId,
+        activityType: projectActivity.activityType,
+        activityDescription: projectActivity.activityDescription,
+        oldValue: projectActivity.oldValue,
+        newValue: projectActivity.newValue,
+        metadata: projectActivity.metadata,
+        visibleToBorrower: projectActivity.visibleToBorrower,
+        isInternal: projectActivity.isInternal,
+        createdAt: projectActivity.createdAt,
+        actorName: sql<string | null>`COALESCE(${users.fullName}, ${users.email})`,
+      })
         .from(projectActivity)
+        .leftJoin(users, eq(projectActivity.userId, users.id))
         .where(eq(projectActivity.projectId, projectId))
         .orderBy(desc(projectActivity.createdAt));
 
@@ -9323,11 +9339,12 @@ export async function registerRoutes(
         const actionText = status === 'at_risk' ? 'marked at risk' : status;
 
         try {
+          const reviewerActorName = req.user!.fullName || req.user!.email || 'Admin';
           await storage.createProjectActivity({
             projectId: dealId,
             userId: req.user!.id,
             activityType: `document_${status}`,
-            activityDescription: `Document "${updated.documentName}" ${actionText}${reviewNotes ? ` — ${reviewNotes}` : ''}`,
+            activityDescription: `"${updated.documentName}" ${actionText} by ${reviewerActorName}${reviewNotes ? ` — ${reviewNotes}` : ''}`,
             visibleToBorrower: true,
           });
         } catch (activityError) {

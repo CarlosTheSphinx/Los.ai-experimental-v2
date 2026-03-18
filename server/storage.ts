@@ -675,15 +675,30 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async getActivityByProjectId(projectId: number, visibleToBorrower?: boolean): Promise<ProjectActivity[]> {
+  async getActivityByProjectId(projectId: number, visibleToBorrower?: boolean): Promise<(ProjectActivity & { actorName?: string | null })[]> {
     let conditions = [eq(projectActivity.projectId, projectId)];
     if (visibleToBorrower !== undefined) {
       conditions.push(eq(projectActivity.visibleToBorrower, visibleToBorrower));
     }
-    return await db.select().from(projectActivity)
+    const rows = await db.select({
+      id: projectActivity.id,
+      projectId: projectActivity.projectId,
+      userId: projectActivity.userId,
+      activityType: projectActivity.activityType,
+      activityDescription: projectActivity.activityDescription,
+      oldValue: projectActivity.oldValue,
+      newValue: projectActivity.newValue,
+      metadata: projectActivity.metadata,
+      visibleToBorrower: projectActivity.visibleToBorrower,
+      isInternal: projectActivity.isInternal,
+      createdAt: projectActivity.createdAt,
+      actorName: sql<string | null>`COALESCE(${users.fullName}, ${users.email})`,
+    }).from(projectActivity)
+      .leftJoin(users, eq(projectActivity.userId, users.id))
       .where(and(...conditions))
       .orderBy(desc(projectActivity.createdAt))
       .limit(100);
+    return rows;
   }
 
   // Project documents methods

@@ -396,19 +396,29 @@ export default function TabComms({
             </div>
           ) : (
             <div className="space-y-0 max-h-[280px] overflow-y-auto">
-              {activityEntries.slice(0, 15).map((entry, idx) => (
-                <div key={entry.id || idx} className="flex items-start gap-3 py-3 border-b last:border-0">
-                  <div className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 ${getActivityDotColor(entry.activityType)}`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[16px] font-semibold text-foreground leading-snug">
-                      {entry.activityDescription || entry.description}
-                    </p>
-                    <p className="text-[14px] text-muted-foreground mt-0.5">
-                      {formatDateTime(entry.createdAt)}
-                    </p>
+              {activityEntries.slice(0, 15).map((entry, idx) => {
+                const description = entry.activityDescription || entry.description || '';
+                const actorName: string | null | undefined = entry.actorName;
+                const descriptionHasActor = actorName && description.includes(actorName);
+                return (
+                  <div key={entry.id || idx} className="flex items-start gap-3 py-3 border-b last:border-0">
+                    <div className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 ${getActivityDotColor(entry.activityType)}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[16px] font-semibold text-foreground leading-snug">
+                        {description}
+                      </p>
+                      {actorName && !descriptionHasActor && (
+                        <p className="text-[13px] text-muted-foreground mt-0.5">
+                          by {actorName}
+                        </p>
+                      )}
+                      <p className="text-[13px] text-muted-foreground mt-0.5">
+                        {formatDateTime(entry.createdAt)}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
