@@ -655,6 +655,8 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
           borrowerPortalToken: projects.borrowerPortalToken,
           borrowerPortalEnabled: projects.borrowerPortalEnabled,
           programId: projects.programId,
+          loanNumber: projects.loanNumber,
+          projectNumber: projects.projectNumber,
         }).from(projects)
           .where(and(
             eq(projects.borrowerEmail, project.borrowerEmail),
@@ -679,6 +681,8 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
             currentStage: deal.currentStage,
             portalToken: deal.borrowerPortalToken,
             programName,
+            loanNumber: deal.loanNumber,
+            projectNumber: deal.projectNumber,
             isCurrent: deal.borrowerPortalToken === token,
           };
         }));
@@ -694,6 +698,8 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
           currentStage: project.currentStage,
           portalToken: token,
           programName: null,
+          loanNumber: project.loanNumber,
+          projectNumber: project.projectNumber,
           isCurrent: true,
         }];
       }
