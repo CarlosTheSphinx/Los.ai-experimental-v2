@@ -578,7 +578,7 @@ export function ProgramCreationWizard({
     }
 
     setEditDataLoaded(true);
-  }, [editProgram?.id, editProgramData, editDataLoaded]);
+  }, [editProgram?.id, editProgramData]);
 
   const [editRulesLoaded, setEditRulesLoaded] = useState(false);
   useEffect(() => {
@@ -595,7 +595,7 @@ export function ProgramCreationWizard({
       setReviewRules([]);
     }
     setEditRulesLoaded(true);
-  }, [editProgram?.id, editReviewRulesData, editRulesLoaded]);
+  }, [editProgram?.id, editReviewRulesData]);
 
   // Fetch credit policies
   const { data: creditPoliciesData } = useQuery<{ policies: any[] }>({
