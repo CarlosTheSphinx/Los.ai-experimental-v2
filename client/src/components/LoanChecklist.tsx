@@ -177,25 +177,25 @@ function getStatusIcon(status: string, type: "document" | "task") {
   if (type === "document") {
     switch (status) {
       case "approved":
-        return <CheckCircle2 className="h-5 w-5 text-success shrink-0" />;
+        return <CheckCircle2 className="h-5 w-5 text-success fill-current shrink-0" />;
       case "ai_reviewed":
-        return <CheckSquare className="h-5 w-5 text-violet-600 dark:text-violet-400 shrink-0" />;
+        return <CheckSquare className="h-5 w-5 text-violet-600 dark:text-violet-400 fill-current shrink-0" />;
       case "uploaded":
       case "submitted":
-        return <Clock className="h-5 w-5 text-info shrink-0" />;
+        return <Clock className="h-5 w-5 text-amber-500 fill-current shrink-0" />;
       case "rejected":
-        return <AlertCircle className="h-5 w-5 text-destructive shrink-0" />;
+        return <AlertCircle className="h-5 w-5 text-destructive fill-current shrink-0" />;
       default:
         return <Circle className="h-5 w-5 text-muted-foreground shrink-0" />;
     }
   } else {
     switch (status) {
       case "completed":
-        return <CheckCircle2 className="h-5 w-5 text-success shrink-0" />;
+        return <CheckCircle2 className="h-5 w-5 text-success fill-current shrink-0" />;
       case "in_progress":
-        return <Clock className="h-5 w-5 text-info shrink-0" />;
+        return <Clock className="h-5 w-5 text-amber-500 fill-current shrink-0" />;
       case "blocked":
-        return <AlertCircle className="h-5 w-5 text-destructive shrink-0" />;
+        return <AlertCircle className="h-5 w-5 text-destructive fill-current shrink-0" />;
       default:
         return <Circle className="h-5 w-5 text-muted-foreground shrink-0" />;
     }
