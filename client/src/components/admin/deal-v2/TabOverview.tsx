@@ -463,7 +463,9 @@ export default function TabOverview({
 
     if (hasProgram) {
       const programPropertyFields = getFieldsByGroup('property_details');
+      const excludePropertyKeys = new Set(['propertyAddress', 'propertyState', 'propertyZip', 'dscr', 'address', 'city', 'state', 'cityState']);
       programPropertyFields
+        .filter(f => !excludePropertyKeys.has(f.fieldKey))
         .forEach(f => {
           let val = getFieldValue(f.fieldKey);
           if (val === null && f.fieldKey === 'propertyType') val = primaryProp?.propertyType || deal.propertyType;
@@ -623,7 +625,7 @@ export default function TabOverview({
     };
     if (hasProgram) {
       const programPropertyFields = getFieldsByGroup('property_details');
-      const baseKeys = new Set(['address', 'city', 'state', 'cityState', 'propertyType', 'units', 'monthlyRent', 'annualTaxes', 'annualInsurance', 'estimatedValue', 'grossMonthlyRent', 'propertyUnits', 'propertyValue']);
+      const baseKeys = new Set(['address', 'city', 'state', 'cityState', 'propertyAddress', 'propertyState', 'propertyZip', 'dscr', 'propertyType', 'units', 'monthlyRent', 'annualTaxes', 'annualInsurance', 'estimatedValue', 'grossMonthlyRent', 'propertyUnits', 'propertyValue']);
       programPropertyFields
         .filter(f => !baseKeys.has(f.fieldKey))
         .forEach(f => {
@@ -811,7 +813,7 @@ export default function TabOverview({
                     </>
                   ) : (() => {
                     const programPropertyFields = getFieldsByGroup('property_details');
-                    const baseKeys = new Set(['address', 'city', 'state', 'cityState']);
+                    const baseKeys = new Set(['address', 'city', 'state', 'cityState', 'propertyAddress', 'propertyState', 'propertyZip', 'dscr']);
                     return programPropertyFields
                       .filter(f => !baseKeys.has(f.fieldKey))
                       .map(f => {
