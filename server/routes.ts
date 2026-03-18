@@ -9348,8 +9348,8 @@ export async function registerRoutes(
                   type: status === 'approved' ? 'document_approved' : 'document_rejected',
                   title: status === 'approved' ? `Document Approved: ${docName}` : `Document Rejected: ${docName}`,
                   message: status === 'approved'
-                    ? `Your document "${docName}" for ${dealLabel} has been approved by ${reviewerName}.`
-                    : `Your document "${docName}" for ${dealLabel} was rejected by ${reviewerName}.${reviewNotes ? ` Reason: ${reviewNotes}` : ' Please re-upload a corrected version.'}`,
+                    ? `Your document "${docName}" for ${dealLabel} has been approved.`
+                    : `Your document "${docName}" for ${dealLabel} was rejected.${reviewNotes ? ` Reason: ${reviewNotes}` : ' Please re-upload a corrected version.'}`,
                   dealId,
                   link: `/portal/${dealProject.borrowerPortalToken}`,
                 });
