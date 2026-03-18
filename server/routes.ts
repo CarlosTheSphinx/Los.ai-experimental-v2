@@ -3619,6 +3619,17 @@ export async function registerRoutes(
         }
       }
 
+      const programIdsSet = new Set(projectsList.map(p => p.programId).filter((id): id is number => id != null));
+      const programNameMap = new Map<number, string>();
+      if (programIdsSet.size > 0) {
+        const programs = await db.select({ id: loanPrograms.id, name: loanPrograms.name })
+          .from(loanPrograms)
+          .where(inArray(loanPrograms.id, Array.from(programIdsSet)));
+        for (const prog of programs) {
+          programNameMap.set(prog.id, prog.name);
+        }
+      }
+
       const projectsWithStats = projectsList.map(project => {
         const serialized: Record<string, any> = {};
         for (const [k, v] of Object.entries(project)) {
@@ -3628,6 +3639,11 @@ export async function registerRoutes(
         serialized.totalTasks = taskStatsMap.get(project.id)?.total || 0;
         serialized.completedDocs = docStatsMap.get(project.id)?.completed || 0;
         serialized.totalDocs = docStatsMap.get(project.id)?.total || 0;
+        if (project.programId != null) {
+          serialized.programName = programNameMap.get(project.programId) || null;
+        } else {
+          serialized.programName = null;
+        }
         return serialized;
       });
 
