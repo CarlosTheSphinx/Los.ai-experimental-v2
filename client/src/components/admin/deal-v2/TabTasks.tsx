@@ -176,7 +176,14 @@ export default function TabTasks({
     if (task.assignedTo) {
       const assignedId = typeof task.assignedTo === "string" ? parseInt(task.assignedTo) : task.assignedTo;
       const member = teamMembers.find((m) => m.id === assignedId);
-      if (member) return member.fullName || member.email;
+      if (member) {
+        const roleLabel = member.role === 'super_admin' ? 'Admin'
+          : member.role === 'lender' ? 'Lender'
+          : member.role === 'processor' ? 'Processor'
+          : member.role === 'broker' ? 'Broker'
+          : member.role || '';
+        return `${member.fullName || member.email}${roleLabel ? ` (${roleLabel})` : ''}`;
+      }
       return `User #${task.assignedTo}`;
     }
     return null;
@@ -382,11 +389,18 @@ export default function TabTasks({
                           : `${deal.customerEmail} (Borrower)`}
                       </SelectItem>
                     )}
-                    {teamMembers.map((member) => (
-                      <SelectItem key={member.id} value={String(member.id)}>
-                        {member.fullName || member.email}
-                      </SelectItem>
-                    ))}
+                    {teamMembers.map((member) => {
+                      const roleLabel = member.role === 'super_admin' ? 'Admin'
+                        : member.role === 'lender' ? 'Lender'
+                        : member.role === 'processor' ? 'Processor'
+                        : member.role === 'broker' ? 'Broker'
+                        : member.role || '';
+                      return (
+                        <SelectItem key={member.id} value={String(member.id)}>
+                          {member.fullName || member.email}{roleLabel ? ` (${roleLabel})` : ''}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
