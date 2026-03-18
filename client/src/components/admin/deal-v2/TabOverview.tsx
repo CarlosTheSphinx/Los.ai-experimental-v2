@@ -432,16 +432,11 @@ export default function TabOverview({
   ];
 
   const buildPropertyFields = (): { label: string; value: string; key: string; tooltip?: string }[] => {
-    const baseFields: { label: string; value: string; key: string; tooltip?: string }[] = [
-      { key: 'address', label: "Address", value: primaryProp?.address || deal.propertyAddress || "—" },
-      { key: 'cityState', label: "City / State", value: primaryProp ? [primaryProp.city, primaryProp.state].filter(Boolean).join(", ") || "—" : "—" },
-    ];
+    const baseFields: { label: string; value: string; key: string; tooltip?: string }[] = [];
 
     if (hasProgram) {
       const programPropertyFields = getFieldsByGroup('property_details');
-      const baseKeys = new Set(['address', 'city', 'state', 'cityState']);
       programPropertyFields
-        .filter(f => !baseKeys.has(f.fieldKey))
         .forEach(f => {
           let val = getFieldValue(f.fieldKey);
           if (val === null && f.fieldKey === 'propertyType') val = primaryProp?.propertyType || deal.propertyType;
