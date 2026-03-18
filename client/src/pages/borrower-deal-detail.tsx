@@ -237,7 +237,6 @@ export default function BorrowerDealDetail() {
   const dealId = params?.id;
   const { toast } = useToast();
   const [uploadingDocId, setUploadingDocId] = useState<number | null>(null);
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["overview", "checklist"]));
   const [expandedDocs, setExpandedDocs] = useState<Set<number>>(new Set());
   const [previewDoc, setPreviewDoc] = useState<{ name: string; filePath: string; mimeType?: string; docId: number } | null>(null);
 
@@ -451,14 +450,6 @@ export default function BorrowerDealDetail() {
   const borrowerTasks = allTasks.filter((t: any) => t.borrowerActionRequired || t.assignedTo === 'borrower');
   const pendingDocs = documents.filter((d: any) => d.status === 'pending' || d.status === 'rejected');
 
-  const toggle = (section: string) => {
-    setExpandedSections(prev => {
-      const next = new Set(prev);
-      if (next.has(section)) next.delete(section);
-      else next.add(section);
-      return next;
-    });
-  };
 
   return (
     <div className="max-w-5xl mx-auto py-6 px-4 space-y-5">
@@ -498,19 +489,13 @@ export default function BorrowerDealDetail() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="overflow-hidden" data-testid="card-loan-overview">
-          <button
-            className="w-full flex items-center justify-between px-5 py-3 hover:bg-muted/30 transition-colors"
-            onClick={() => toggle("overview")}
-            data-testid="toggle-overview"
-          >
+          <div className="w-full flex items-center justify-between px-5 py-3" data-testid="header-overview">
             <CardTitle className="text-[18px] flex items-center gap-2">
               <DollarSign className="h-4 w-4 text-muted-foreground" />
               Loan Overview
             </CardTitle>
-            {expandedSections.has("overview") ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-          </button>
-          {expandedSections.has("overview") && (
-            <CardContent className="pt-0 pb-5">
+          </div>
+          <CardContent className="pt-0 pb-5">
               <div className="border-t mb-4" />
               <div className="space-y-5">
                 <div>
@@ -542,15 +527,10 @@ export default function BorrowerDealDetail() {
                 </div>
               </div>
             </CardContent>
-          )}
         </Card>
 
         <Card className="overflow-hidden" data-testid="card-borrower-checklist">
-          <button
-            className="w-full flex items-center justify-between px-5 py-3 hover:bg-muted/30 transition-colors"
-            onClick={() => toggle("checklist")}
-            data-testid="toggle-checklist"
-          >
+          <div className="w-full flex items-center justify-between px-5 py-3" data-testid="header-checklist">
             <CardTitle className="text-[18px] flex items-center gap-2">
               <ClipboardList className="h-4 w-4 text-muted-foreground" />
               Borrower Checklist
@@ -562,11 +542,9 @@ export default function BorrowerDealDetail() {
             </CardTitle>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">{completedItems}/{totalItems}</span>
-              {expandedSections.has("checklist") ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
             </div>
-          </button>
-          {expandedSections.has("checklist") && (
-            <CardContent className="pt-0 pb-4">
+          </div>
+          <CardContent className="pt-0 pb-4">
               <div className="border-t mb-3" />
 
               {borrowerTasks.length > 0 && (
@@ -715,7 +693,6 @@ export default function BorrowerDealDetail() {
                 <p className="text-sm text-muted-foreground py-4 text-center">No checklist items yet.</p>
               )}
             </CardContent>
-          )}
         </Card>
       </div>
 
