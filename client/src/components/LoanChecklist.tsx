@@ -16,6 +16,8 @@ import {
   ClipboardEdit,
   Send,
   HelpCircle,
+  Eye,
+  Download,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +33,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface DocFile {
   id: number;
+  filePath: string | null;
   fileName: string | null;
   fileSize: number | null;
   mimeType: string | null;
@@ -582,6 +585,12 @@ function FormTaskInline({
   );
 }
 
+function getFileUrl(filePath: string): string {
+  if (filePath.startsWith('/objects/uploads/')) return filePath;
+  const id = filePath.replace(/^\/?(objects\/)?uploads\//, '');
+  return `/objects/uploads/${id}`;
+}
+
 function ChecklistItemRow({
   item,
   mode,
@@ -602,6 +611,10 @@ function ChecklistItemRow({
   const hasForm = !isDocument && item.formTemplateId && item.formTemplate;
   const isFormTask = hasForm && mode === "borrower" && portalToken;
   const isAdminViewForm = hasForm && mode === "admin";
+  const multiFiles = item.files && item.files.length > 0 ? item.files.filter(f => f.filePath) : [];
+  const showSingleFileActions = isDocument && mode === "borrower" && !!item.filePath && multiFiles.length === 0;
+  const showMultiFileActions = isDocument && mode === "borrower" && multiFiles.length > 0;
+  const [filesExpanded, setFilesExpanded] = useState(false);
 
   return (
     <div
@@ -681,6 +694,22 @@ function ChecklistItemRow({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {getStatusBadge(item.status, item.type)}
+          {showSingleFileActions && item.filePath && (
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="sm" asChild data-testid={`button-view-doc-${item.id}`}>
+                <a href={getFileUrl(item.filePath)} target="_blank" rel="noopener noreferrer">
+                  <Eye className="h-4 w-4 mr-1" />
+                  View
+                </a>
+              </Button>
+              <Button variant="ghost" size="sm" asChild data-testid={`button-download-doc-${item.id}`}>
+                <a href={getFileUrl(item.filePath)} download={item.fileName || true}>
+                  <Download className="h-4 w-4 mr-1" />
+                  Download
+                </a>
+              </Button>
+            </div>
+          )}
           {showUploadButton && onUploadDoc && (
             <Button
               variant="outline"
@@ -719,6 +748,41 @@ function ChecklistItemRow({
           )}
         </div>
       </div>
+      {showMultiFileActions && (
+        <div className="mt-2 ml-7" data-testid={`multi-files-${item.id}`}>
+          <button
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => setFilesExpanded(prev => !prev)}
+            data-testid={`button-toggle-files-${item.id}`}
+          >
+            {filesExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            {multiFiles.length} attached {multiFiles.length === 1 ? "file" : "files"}
+          </button>
+          {filesExpanded && (
+            <div className="mt-1 space-y-1">
+              {multiFiles.map((f) => (
+                <div key={f.id} className="flex items-center justify-between gap-2 text-xs text-muted-foreground pl-4">
+                  <span className="truncate">{f.fileName || `File ${f.id}`}</span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" asChild data-testid={`button-view-file-${f.id}`}>
+                      <a href={getFileUrl(f.filePath!)} target="_blank" rel="noopener noreferrer">
+                        <Eye className="h-3 w-3 mr-1" />
+                        View
+                      </a>
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" asChild data-testid={`button-download-file-${f.id}`}>
+                      <a href={getFileUrl(f.filePath!)} download={f.fileName || true}>
+                        <Download className="h-3 w-3 mr-1" />
+                        Download
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {isFormTask && portalToken && item.status !== "completed" && (
         <FormTaskInline item={item} portalToken={portalToken} />
       )}
