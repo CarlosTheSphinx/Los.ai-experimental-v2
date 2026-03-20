@@ -5168,7 +5168,7 @@ export async function registerRoutes(
   app.get('/api/borrower/documents', authenticateUser, async (req: AuthRequest, res: Response) => {
     try {
       const user = req.user!;
-      if (user.role !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
+      if (user.role !== 'borrower' && user.role !== 'super_admin' && user.role !== 'admin') return res.status(403).json({ error: 'Borrower access only' });
 
       const email = user.email.toLowerCase();
       const [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
@@ -5188,7 +5188,7 @@ export async function registerRoutes(
   app.post('/api/borrower/documents', authenticateUser, async (req: AuthRequest, res: Response) => {
     try {
       const user = req.user!;
-      if (user.role !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
+      if (user.role !== 'borrower' && user.role !== 'super_admin' && user.role !== 'admin') return res.status(403).json({ error: 'Borrower access only' });
 
       const email = user.email.toLowerCase();
       let [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
@@ -5219,7 +5219,7 @@ export async function registerRoutes(
   app.delete('/api/borrower/documents/:docId', authenticateUser, async (req: AuthRequest, res: Response) => {
     try {
       const user = req.user!;
-      if (user.role !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
+      if (user.role !== 'borrower' && user.role !== 'super_admin' && user.role !== 'admin') return res.status(403).json({ error: 'Borrower access only' });
 
       const email = user.email.toLowerCase();
       const [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
@@ -5240,7 +5240,7 @@ export async function registerRoutes(
   app.patch('/api/borrower/documents/:docId/classification', authenticateUser, async (req: AuthRequest, res: Response) => {
     try {
       const user = req.user!;
-      if (user.role !== 'borrower') return res.status(403).json({ error: 'Borrower access only' });
+      if (user.role !== 'borrower' && user.role !== 'super_admin' && user.role !== 'admin') return res.status(403).json({ error: 'Borrower access only' });
 
       const email = user.email.toLowerCase();
       const [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
