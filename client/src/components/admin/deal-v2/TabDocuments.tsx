@@ -788,8 +788,9 @@ function DocumentRow({
       invalidateDocQueries();
       toast({ title: "Pushed to Google Drive" });
     },
-    onError: () => {
-      toast({ title: "Failed to push to Drive", variant: "destructive" });
+    onError: (err: any) => {
+      const msg = err?.message || "Failed to push to Drive";
+      toast({ title: msg, variant: "destructive" });
     },
   });
 

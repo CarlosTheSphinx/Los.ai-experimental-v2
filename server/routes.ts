@@ -4705,12 +4705,43 @@ export async function registerRoutes(
   app.post('/api/admin/deals/:dealId/documents/:docId/drive/retry', authenticateUser, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const docId = parseInt(req.params.docId);
-      const { syncDealDocumentToDrive } = await import('./services/googleDrive');
+      const dealId = parseInt(req.params.dealId);
+
+      const { getParentFolderId, getAdminWithDriveTokens, syncDealDocumentToDrive } = await import('./services/googleDrive');
+      const parentFolderId = await getParentFolderId();
+      if (!parentFolderId) {
+        return res.status(400).json({ error: 'Google Drive integration is not configured. Please set the parent folder ID in Admin Settings > Integrations.' });
+      }
+      const adminWithDrive = await getAdminWithDriveTokens();
+      if (!adminWithDrive) {
+        return res.status(400).json({ error: 'No admin has connected Google Drive yet. Please connect via Admin Settings > Integrations.' });
+      }
+
+      const [doc] = await db.select().from(dealDocuments).where(
+        and(eq(dealDocuments.id, docId), eq(dealDocuments.dealId, dealId))
+      ).limit(1);
+      if (!doc) {
+        return res.status(404).json({ error: 'Document not found for this deal' });
+      }
+
+      const hasDirectFile = !!doc.filePath;
+      const fileRows = await db.select({ id: dealDocumentFiles.id }).from(dealDocumentFiles).where(eq(dealDocumentFiles.documentId, docId));
+      if (!hasDirectFile && fileRows.length === 0) {
+        return res.status(400).json({ error: 'No files to push — this document has no uploaded files yet.' });
+      }
+
       await syncDealDocumentToDrive(docId);
       res.json({ success: true });
     } catch (error: any) {
       console.error('Drive deal doc retry error:', error);
-      res.status(500).json({ error: error.message || 'Failed to upload to Drive' });
+      const msg = error.message || 'Failed to upload to Drive';
+      if (msg.includes('GOOGLE_DRIVE_NOT_CONNECTED')) {
+        return res.status(400).json({ error: 'No admin has connected Google Drive. Please connect via Admin Settings > Integrations.' });
+      }
+      if (msg.includes('Object not found') || msg.includes('not found')) {
+        return res.status(400).json({ error: 'The uploaded file could not be found in storage. The borrower may need to re-upload it.' });
+      }
+      res.status(500).json({ error: msg });
     }
   });
 
@@ -4994,7 +5025,12 @@ export async function registerRoutes(
         .where(and(eq(borrowerDocuments.borrowerProfileId, profile.id), eq(borrowerDocuments.isActive, true)))
         .orderBy(borrowerDocuments.uploadedAt);
 
-      res.json({ documents: docs });
+      const serialized = docs.map(d => ({
+        ...d,
+        uploadedAt: d.uploadedAt ? d.uploadedAt.toISOString() : null,
+        updatedAt: d.updatedAt ? d.updatedAt.toISOString() : null,
+      }));
+      res.json({ documents: serialized });
     } catch (error) {
       console.error('Get borrower documents error:', error);
       res.status(500).json({ error: 'Failed to load borrower documents' });
