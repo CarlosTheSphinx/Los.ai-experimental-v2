@@ -5178,7 +5178,12 @@ export async function registerRoutes(
         .where(and(eq(borrowerDocuments.borrowerProfileId, profile.id), eq(borrowerDocuments.isActive, true)))
         .orderBy(borrowerDocuments.uploadedAt);
 
-      res.json(docs);
+      const serialized = docs.map(d => ({
+        ...d,
+        uploadedAt: d.uploadedAt ? d.uploadedAt.toISOString() : new Date().toISOString(),
+        updatedAt: d.updatedAt ? d.updatedAt.toISOString() : null,
+      }));
+      res.json(serialized);
     } catch (error) {
       console.error('Get borrower documents error:', error);
       res.status(500).json({ error: 'Failed to load documents' });
@@ -5198,6 +5203,7 @@ export async function registerRoutes(
       }
 
       const { fileName, fileType, fileSize, storagePath, category, description, expirationDate } = req.body;
+      const now = new Date();
       const [doc] = await db.insert(borrowerDocuments).values({
         borrowerProfileId: profile.id,
         fileName: fileName || 'Untitled',
@@ -5207,9 +5213,12 @@ export async function registerRoutes(
         category: category || 'general',
         description: description || null,
         expirationDate: expirationDate || null,
+        uploadedAt: now,
+        updatedAt: now,
       }).returning();
 
-      res.json(doc);
+      const serialized = { ...doc, uploadedAt: doc.uploadedAt?.toISOString() || now.toISOString(), updatedAt: doc.updatedAt?.toISOString() || now.toISOString() };
+      res.json(serialized);
     } catch (error) {
       console.error('Create borrower document error:', error);
       res.status(500).json({ error: 'Failed to create document' });
