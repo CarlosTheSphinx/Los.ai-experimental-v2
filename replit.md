@@ -39,7 +39,7 @@ The application is built using a modern web stack: React 18 with TypeScript for 
 -   **Smart Form Tasks**: Reusable inquiry form templates linked to program tasks for borrower data submission.
 -   **Admin Task Management (TabTasks)**: Unified task view in deal detail, supporting creation and editing of both deal and project tasks.
 -   **Borrower Portal**: Redesigned portal with a "My Loans" dashboard, read-only deal details, document upload/replace, and borrower-visible tasks. Includes a persistent document vault and profile management.
--   **Broker Portal**: Upgraded authenticated experience with dedicated navigation for quotes, loans, commissions, contacts, and settings.
+-   **Broker Portal**: Unified authenticated experience with dedicated navigation for quotes, loans, commissions, contacts, and settings. Broker deal detail mirrors the borrower portal layout (stage progress bar, loan overview, document checklist with upload, inline form tasks) with added commission summary card showing broker points and YSP. Legacy token-based `/broker-portal/:token` links redirect to the logged-in app. Brokers see deals matched by their email (`brokerEmail` on projects) with tenant-scoped access control.
 -   **Per-Person Invite Links**: Consolidated portal link system using `users.inviteToken` for account setup and access.
 
 ## External Dependencies

@@ -98,12 +98,18 @@ export async function registerRoutes(
 
   async function getProjectWithBorrowerAccess(projectId: number, userId: number, userRole: string): Promise<any> {
     let project = await storage.getProjectById(projectId, userId);
-    if (!project && userRole === 'borrower') {
-      const borrowerUser = await storage.getUserById(userId);
-      if (borrowerUser?.email) {
+    if (!project && (userRole === 'borrower' || userRole === 'broker')) {
+      const portalUser = await storage.getUserById(userId);
+      if (portalUser?.email) {
         const internal = await storage.getProjectByIdInternal(projectId);
-        if (internal && internal.borrowerEmail && internal.borrowerEmail.toLowerCase().trim() === borrowerUser.email.toLowerCase().trim()) {
-          project = internal;
+        if (internal) {
+          const emailLower = portalUser.email.toLowerCase().trim();
+          const tenantMatch = !internal.tenantId || !portalUser.tenantId || internal.tenantId === portalUser.tenantId;
+          if (tenantMatch && userRole === 'borrower' && internal.borrowerEmail && internal.borrowerEmail.toLowerCase().trim() === emailLower) {
+            project = internal;
+          } else if (tenantMatch && userRole === 'broker' && internal.brokerEmail && internal.brokerEmail.toLowerCase().trim() === emailLower) {
+            project = internal;
+          }
         }
       }
     }
@@ -3583,11 +3589,15 @@ export async function registerRoutes(
       );
 
       const currentUser = await storage.getUserById(userId);
-      if (currentUser && currentUser.email && currentUser.role === 'borrower') {
+      if (currentUser && currentUser.email && (currentUser.role === 'borrower' || currentUser.role === 'broker')) {
         const userEmail = currentUser.email.toLowerCase().trim();
+        const emailColumn = currentUser.role === 'broker' ? projects.brokerEmail : projects.borrowerEmail;
         let emailConditions: any[] = [
-          sql`LOWER(TRIM(${projects.borrowerEmail})) = ${userEmail}`
+          sql`LOWER(TRIM(${emailColumn})) = ${userEmail}`
         ];
+        if (currentUser.tenantId) {
+          emailConditions.push(eq(projects.tenantId, currentUser.tenantId));
+        }
         if (status) emailConditions.push(eq(projects.status, status as string));
         if (archived !== undefined) emailConditions.push(eq(projects.isArchived, archived === 'true'));
         const emailMatched = await db.select().from(projects)
