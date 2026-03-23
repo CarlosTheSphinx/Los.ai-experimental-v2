@@ -386,7 +386,6 @@ router.get("/api/commercial/deals/:id", async (req: Request, res: Response) => {
     const role = getUserRole(req);
 
     const whereConditions = [eq(intakeDeals.id, dealId)];
-    if (tenantId) whereConditions.push(eq(intakeDeals.tenantId, tenantId));
     if (role === "broker" && userId) whereConditions.push(eq(intakeDeals.brokerId, userId));
 
     const [dealResult] = await db.select({
@@ -606,7 +605,6 @@ router.post("/api/commercial/deals/:id/update-status", async (req: Request, res:
     const { status, notes } = req.body;
 
     const whereConditions = [eq(intakeDeals.id, dealId)];
-    if (tenantId) whereConditions.push(eq(intakeDeals.tenantId, tenantId));
     const [deal] = await db.select().from(intakeDeals).where(and(...whereConditions));
     if (!deal) return res.status(404).json({ error: "Deal not found" });
 
@@ -695,7 +693,6 @@ router.post("/api/commercial/deals/:id/transfer", async (req: Request, res: Resp
     const tenantId = getTenantId(req);
 
     const whereConditions = [eq(intakeDeals.id, dealId)];
-    if (tenantId) whereConditions.push(eq(intakeDeals.tenantId, tenantId));
     const [deal] = await db.select().from(intakeDeals).where(and(...whereConditions));
     if (!deal) return res.status(404).json({ error: "Deal not found" });
 
@@ -748,9 +745,7 @@ router.post("/api/commercial/deals/:id/reanalyze", async (req: Request, res: Res
     const dealId = safeParseId(req.params.id);
     if (!dealId) return res.status(400).json({ error: "Invalid deal ID" });
     const tenantId = getTenantId(req);
-    const whereConditions = [eq(intakeDeals.id, dealId)];
-    if (tenantId) whereConditions.push(eq(intakeDeals.tenantId, tenantId));
-    const [deal] = await db.select().from(intakeDeals).where(and(...whereConditions));
+    const [deal] = await db.select().from(intakeDeals).where(eq(intakeDeals.id, dealId));
     if (!deal) return res.status(404).json({ error: "Deal not found" });
 
     runIntakeAiPipeline(dealId).catch(err => {
@@ -767,12 +762,7 @@ router.post("/api/commercial/deals/:id/reanalyze", async (req: Request, res: Res
 
 router.get("/api/commercial/portfolio-summary", async (req: Request, res: Response) => {
   try {
-    const tenantId = getTenantId(req);
-    const conditions = [];
-    if (tenantId) conditions.push(eq(intakeDeals.tenantId, tenantId));
-
-    const allDeals = await db.select().from(intakeDeals)
-      .where(conditions.length ? and(...conditions) : undefined);
+    const allDeals = await db.select().from(intakeDeals);
 
     const intake = {
       draft: allDeals.filter(d => d.status === "draft").length,

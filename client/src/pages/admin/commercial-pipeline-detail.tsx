@@ -217,136 +217,156 @@ export default function CommercialPipelineDetailPage() {
       </Card>
 
       {/* AI Analysis */}
-      {analysis && (
-        <Card className="bg-[#1a2038] border-slate-700/50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm text-slate-300 flex items-center gap-2">
-              <BarChart3 size={16} /> AI Analysis
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => reanalyzeMut.mutate()}
-                disabled={reanalyzeMut.isPending}
-                className="ml-auto text-xs text-slate-400"
-                data-testid="reanalyze-button"
-              >
-                <RefreshCw size={12} className={`mr-1 ${reanalyzeMut.isPending ? "animate-spin" : ""}`} /> Re-analyze
-              </Button>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {feedback && (
-              <>
-                <VerdictDisplay
-                  verdict={analysis.overallVerdict || feedback.overall_verdict}
-                  confidence={analysis.confidenceScore || feedback.confidence_score}
-                  breakdown={feedback.confidence_breakdown}
-                />
+      <Card className="bg-[#1a2038] border-slate-700/50">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm text-slate-300 flex items-center gap-2">
+            <BarChart3 size={16} /> AI Analysis
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => reanalyzeMut.mutate()}
+              disabled={reanalyzeMut.isPending}
+              className="ml-auto text-xs text-slate-400"
+              data-testid="reanalyze-button"
+            >
+              <RefreshCw size={12} className={`mr-1 ${reanalyzeMut.isPending ? "animate-spin" : ""}`} />
+              {analysis ? "Re-analyze" : "Run AI Analysis"}
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {feedback && (
+            <>
+              <VerdictDisplay
+                verdict={analysis.overallVerdict || feedback.overall_verdict}
+                confidence={analysis.confidenceScore || feedback.confidence_score}
+                breakdown={feedback.confidence_breakdown}
+              />
 
-                {/* Key Flaws */}
-                {feedback.key_flaws?.length > 0 && (
-                  <div>
-                    <button
-                      onClick={() => setShowFlaws(!showFlaws)}
-                      className="flex items-center gap-2 text-sm font-medium text-slate-300 mb-2 w-full"
-                      data-testid="toggle-flaws"
-                    >
-                      <AlertTriangle size={14} className="text-amber-400" />
-                      Key Flaws ({feedback.key_flaws.length})
-                      {showFlaws ? <ChevronUp size={14} className="ml-auto" /> : <ChevronDown size={14} className="ml-auto" />}
-                    </button>
-                    {showFlaws && (
-                      <div className="space-y-2">
-                        {feedback.key_flaws.map((flaw: any, i: number) => (
-                          <div key={i} className="rounded-lg bg-[#0f1629] p-3 border border-slate-700/50" data-testid={`flaw-${i}`}>
-                            <div className="flex items-center gap-2 mb-1">
-                              <Badge className={`text-[10px] ${
-                                flaw.severity === "critical" ? "bg-red-500/20 text-red-400" :
-                                flaw.severity === "high" ? "bg-amber-500/20 text-amber-400" :
-                                "bg-slate-500/20 text-slate-400"
-                              }`}>{flaw.severity}</Badge>
-                              <span className="text-sm font-medium text-white">{flaw.flaw}</span>
-                            </div>
-                            <p className="text-xs text-slate-400 mt-1">{flaw.detail}</p>
-                            {flaw.remediation && (
-                              <p className="text-xs text-blue-400 mt-1">→ {flaw.remediation}</p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Strengths */}
-                {feedback.strengths?.length > 0 && (
-                  <div>
-                    <button
-                      onClick={() => setShowStrengths(!showStrengths)}
-                      className="flex items-center gap-2 text-sm font-medium text-slate-300 mb-2 w-full"
-                      data-testid="toggle-strengths"
-                    >
-                      <CheckCircle2 size={14} className="text-emerald-400" />
-                      Strengths ({feedback.strengths.length})
-                      {showStrengths ? <ChevronUp size={14} className="ml-auto" /> : <ChevronDown size={14} className="ml-auto" />}
-                    </button>
-                    {showStrengths && (
-                      <div className="space-y-2">
-                        {feedback.strengths.map((s: any, i: number) => (
-                          <div key={i} className="rounded-lg bg-[#0f1629] p-3 border border-emerald-500/20" data-testid={`strength-${i}`}>
-                            <span className="text-sm text-emerald-400">{s.strength}</span>
-                            <p className="text-xs text-slate-400 mt-1">{s.detail}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Fund Recommendations */}
-                {feedback.fund_recommendations?.length > 0 && (
-                  <div>
-                    <p className="text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
-                      <Building2 size={14} /> Fund Recommendations
-                    </p>
+              {/* Key Flaws */}
+              {feedback.key_flaws?.length > 0 && (
+                <div>
+                  <button
+                    onClick={() => setShowFlaws(!showFlaws)}
+                    className="flex items-center gap-2 text-sm font-medium text-slate-300 mb-2 w-full"
+                    data-testid="toggle-flaws"
+                  >
+                    <AlertTriangle size={14} className="text-amber-400" />
+                    Key Flaws ({feedback.key_flaws.length})
+                    {showFlaws ? <ChevronUp size={14} className="ml-auto" /> : <ChevronDown size={14} className="ml-auto" />}
+                  </button>
+                  {showFlaws && (
                     <div className="space-y-2">
-                      {feedback.fund_recommendations.map((fr: any, i: number) => (
-                        <div key={i} className="rounded-lg bg-[#0f1629] p-3 border border-slate-700/50 flex items-center gap-3" data-testid={`fund-rec-${i}`}>
-                          <div className="flex-1">
-                            <p className="text-sm text-white">{fr.fund_name}</p>
-                            <p className="text-xs text-slate-400 mt-1">{fr.recommendation}</p>
+                      {feedback.key_flaws.map((flaw: any, i: number) => (
+                        <div key={i} className="rounded-lg bg-[#0f1629] p-3 border border-slate-700/50" data-testid={`flaw-${i}`}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge className={`text-[10px] ${
+                              flaw.severity === "critical" ? "bg-red-500/20 text-red-400" :
+                              flaw.severity === "high" ? "bg-amber-500/20 text-amber-400" :
+                              "bg-slate-500/20 text-slate-400"
+                            }`}>{flaw.severity}</Badge>
+                            <span className="text-sm font-medium text-white">{flaw.flaw}</span>
                           </div>
-                          <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">
-                            {fr.match_score}% match
-                          </Badge>
+                          <p className="text-xs text-slate-400 mt-1">{flaw.detail}</p>
+                          {flaw.remediation && (
+                            <p className="text-xs text-blue-400 mt-1">→ {flaw.remediation}</p>
+                          )}
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
+              )}
 
-                {/* Next Steps */}
-                {feedback.next_steps?.length > 0 && (
-                  <div>
-                    <p className="text-sm font-medium text-slate-300 mb-2">Next Steps</p>
-                    <ul className="space-y-1">
-                      {feedback.next_steps.map((step: string, i: number) => (
-                        <li key={i} className="text-xs text-slate-400 flex items-start gap-2">
-                          <span className="text-blue-400 mt-0.5">•</span> {step}
-                        </li>
+              {/* Strengths */}
+              {feedback.strengths?.length > 0 && (
+                <div>
+                  <button
+                    onClick={() => setShowStrengths(!showStrengths)}
+                    className="flex items-center gap-2 text-sm font-medium text-slate-300 mb-2 w-full"
+                    data-testid="toggle-strengths"
+                  >
+                    <CheckCircle2 size={14} className="text-emerald-400" />
+                    Strengths ({feedback.strengths.length})
+                    {showStrengths ? <ChevronUp size={14} className="ml-auto" /> : <ChevronDown size={14} className="ml-auto" />}
+                  </button>
+                  {showStrengths && (
+                    <div className="space-y-2">
+                      {feedback.strengths.map((s: any, i: number) => (
+                        <div key={i} className="rounded-lg bg-[#0f1629] p-3 border border-emerald-500/20" data-testid={`strength-${i}`}>
+                          <span className="text-sm text-emerald-400">{s.strength}</span>
+                          <p className="text-xs text-slate-400 mt-1">{s.detail}</p>
+                        </div>
                       ))}
-                    </ul>
-                  </div>
-                )}
-              </>
-            )}
+                    </div>
+                  )}
+                </div>
+              )}
 
-            {!feedback && (
-              <p className="text-sm text-slate-400">AI analysis is processing or not yet available.</p>
-            )}
-          </CardContent>
-        </Card>
-      )}
+              {/* Fund Recommendations */}
+              {feedback.fund_recommendations?.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
+                    <Building2 size={14} /> Fund Recommendations
+                  </p>
+                  <div className="space-y-2">
+                    {feedback.fund_recommendations.map((fr: any, i: number) => (
+                      <div key={i} className="rounded-lg bg-[#0f1629] p-3 border border-slate-700/50 flex items-center gap-3" data-testid={`fund-rec-${i}`}>
+                        <div className="flex-1">
+                          <p className="text-sm text-white">{fr.fund_name}</p>
+                          <p className="text-xs text-slate-400 mt-1">{fr.recommendation}</p>
+                        </div>
+                        <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">
+                          {fr.match_score}% match
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Next Steps */}
+              {feedback.next_steps?.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-slate-300 mb-2">Next Steps</p>
+                  <ul className="space-y-1">
+                    {feedback.next_steps.map((step: string, i: number) => (
+                      <li key={i} className="text-xs text-slate-400 flex items-start gap-2">
+                        <span className="text-blue-400 mt-0.5">•</span> {step}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          )}
+
+          {!feedback && !reanalyzeMut.isPending && (
+            <div className="text-center py-6">
+              <BarChart3 size={32} className="mx-auto text-slate-600 mb-3" />
+              <p className="text-sm text-slate-400 mb-3">No AI analysis available yet for this deal.</p>
+              <Button
+                onClick={() => reanalyzeMut.mutate()}
+                className="bg-blue-600 hover:bg-blue-700"
+                data-testid="run-ai-analysis-button"
+              >
+                <Shield size={14} className="mr-2" /> Run AI Analysis
+              </Button>
+              <p className="text-xs text-slate-500 mt-2">
+                The 3-agent pipeline will validate the deal, match it against funds, and generate a recommendation.
+              </p>
+            </div>
+          )}
+
+          {!feedback && reanalyzeMut.isPending && (
+            <div className="text-center py-6">
+              <RefreshCw size={24} className="mx-auto text-blue-400 animate-spin mb-3" />
+              <p className="text-sm text-slate-400">AI analysis is running...</p>
+              <p className="text-xs text-slate-500 mt-1">This may take a moment. The page will refresh automatically.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Documents */}
       {deal.documents?.length > 0 && (
