@@ -300,7 +300,7 @@ function BrokerPortalContent({ token }: { token: string }) {
   const totalRequiredDocs = documents.filter((d) => d.isRequired).length;
 
   return (
-    <div className="flex min-h-screen bg-gray-50" data-testid="broker-portal">
+    <div className="flex flex-col md:flex-row min-h-screen bg-gray-50" data-testid="broker-portal">
       <PortalSidebar
         portalType="broker"
         activeView={activeView}
@@ -308,7 +308,7 @@ function BrokerPortalContent({ token }: { token: string }) {
         dealName={deal.dealName}
       />
 
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto">
+      <main className="flex-1 p-3 sm:p-4 md:p-8 overflow-y-auto">
         {activeView === "dashboard" && (
           <>
             <div className="mb-6">
@@ -516,7 +516,7 @@ function BrokerPortalContent({ token }: { token: string }) {
                 {sortByActionPriority(documents, (d: any) => docActionPriority(d.status)).map((doc) => (
                   <Card key={doc.id} data-testid={`doc-card-${doc.id}`}>
                     <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                         <div className="flex items-start gap-3 flex-1 min-w-0">
                           {getDocumentStatusIcon(doc.status)}
                           <div className="min-w-0 flex-1">
@@ -554,7 +554,7 @@ function BrokerPortalContent({ token }: { token: string }) {
                             )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 self-end sm:self-auto flex-shrink-0">
                           <Badge
                             variant={doc.status === "approved" ? "default" : doc.status === "pending" || doc.status === "uploaded" ? "secondary" : doc.status === "rejected" ? "destructive" : "outline"}
                             className="text-xs"

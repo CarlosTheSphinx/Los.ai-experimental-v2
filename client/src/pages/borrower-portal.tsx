@@ -45,6 +45,7 @@ import { formatPhoneNumber } from "@/lib/validation";
 import { LoanChecklist } from "@/components/LoanChecklist";
 import { PortalOnboarding, hasCompletedOnboarding } from "@/components/portal/PortalOnboarding";
 import { PortalSidebar, type PortalView } from "@/components/portal/PortalSidebar";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface Task {
   id: number;
@@ -219,6 +220,7 @@ export default function BorrowerPortal({ token: propToken, isPreview }: Borrower
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const [uploadingDocId, setUploadingDocId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
@@ -617,7 +619,7 @@ export default function BorrowerPortal({ token: propToken, isPreview }: Borrower
   };
 
   return (
-    <div className={`flex min-h-screen ${isPreview ? '' : 'bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950'}`} data-testid="borrower-portal">
+    <div className={`flex flex-col md:flex-row min-h-screen ${isPreview ? '' : 'bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950'}`} data-testid="borrower-portal">
       {!isPreview && (
         <PortalSidebar
           portalType="borrower"
@@ -915,8 +917,8 @@ export default function BorrowerPortal({ token: propToken, isPreview }: Borrower
                 <p className="text-sm text-muted-foreground font-ui">Messages about your loans</p>
               </div>
 
-              <div className="flex flex-1 border rounded-lg overflow-hidden bg-background min-h-0">
-                <div className="w-[280px] md:w-[320px] border-r flex flex-col shrink-0">
+              <div className="flex flex-col md:flex-row flex-1 border rounded-lg overflow-hidden bg-background min-h-0">
+                <div className={`${isMobile && (selectedThreadId || composing) ? 'hidden' : 'flex'} w-full md:w-[320px] border-r flex-col shrink-0`}>
                   <div className="px-3 py-2 border-b bg-muted/30 flex items-center justify-between">
                     <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Conversations</span>
                     <Button
@@ -983,11 +985,16 @@ export default function BorrowerPortal({ token: propToken, isPreview }: Borrower
                   </ScrollArea>
                 </div>
 
-                <div className="flex-1 flex flex-col min-w-0">
+                <div className={`${isMobile && !selectedThreadId && !composing ? 'hidden' : 'flex'} flex-1 flex-col min-w-0`}>
                   {composing ? (
                     <div className="flex-1 flex flex-col p-4">
                       <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-sm font-semibold">New Conversation</h3>
+                        {isMobile && (
+                          <Button variant="ghost" size="sm" className="mr-2" onClick={() => setComposing(false)} data-testid="button-back-compose">
+                            <ArrowLeft className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        <h3 className="text-sm font-semibold flex-1">New Conversation</h3>
                         <Button variant="ghost" size="sm" onClick={() => setComposing(false)} data-testid="button-cancel-compose">
                           <X className="h-3.5 w-3.5" />
                         </Button>
@@ -1056,6 +1063,11 @@ export default function BorrowerPortal({ token: propToken, isPreview }: Borrower
                   ) : (
                     <>
                       <div className="px-4 py-2.5 border-b bg-muted/30 flex items-center gap-2">
+                        {isMobile && (
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={() => setSelectedThreadId(null)} data-testid="button-back-thread">
+                            <ArrowLeft className="h-4 w-4" />
+                          </Button>
+                        )}
                         <div className="min-w-0">
                           <div className="text-sm font-semibold truncate">
                             {threadDetail?.thread?.subject || threads.find(t => t.id === selectedThreadId)?.dealName || 'Conversation'}

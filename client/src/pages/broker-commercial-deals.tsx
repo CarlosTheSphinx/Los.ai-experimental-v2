@@ -45,15 +45,15 @@ function DealsList() {
   });
 
   return (
-    <div className="p-6 space-y-6" data-testid="broker-commercial-deals">
-      <div className="flex items-center justify-between">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6" data-testid="broker-commercial-deals">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-white" data-testid="page-title">Commercial Deals</h1>
+          <h1 className="text-xl sm:text-2xl font-semibold text-white" data-testid="page-title">Commercial Deals</h1>
           <p className="text-sm text-slate-400 mt-1">Submit and track your commercial real estate deals</p>
         </div>
         <Button
           size="sm"
-          className="bg-blue-600 hover:bg-blue-700"
+          className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
           onClick={() => navigate("/commercial-deals/new")}
           data-testid="new-deal-button"
         >
@@ -283,7 +283,7 @@ function DealForm() {
   const update = (field: string, value: any) => setForm(f => ({ ...f, [field]: value }));
 
   return (
-    <div className="p-6 space-y-6 max-w-3xl" data-testid="deal-form-page">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-3xl" data-testid="deal-form-page">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" onClick={() => navigate("/commercial-deals")} className="text-slate-400" data-testid="back-button">
           <ArrowLeft size={16} className="mr-1" /> Back
@@ -310,7 +310,7 @@ function DealForm() {
                     <Label className="text-xs text-slate-400">Deal Name *</Label>
                     <Input value={form.dealName} onChange={e => update("dealName", e.target.value)} className="bg-[#0f1629] border-slate-700 text-white text-sm" data-testid="deal-name" />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <Label className="text-xs text-slate-400">Loan Amount ($) *</Label>
                       <Input type="number" value={form.loanAmount} onChange={e => update("loanAmount", e.target.value)} className="bg-[#0f1629] border-slate-700 text-white text-sm" data-testid="loan-amount" />
@@ -333,7 +333,7 @@ function DealForm() {
           <Card key={sectionName} className="bg-[#1a2038] border-slate-700/50">
             <CardHeader className="pb-3"><CardTitle className="text-sm text-slate-300">{sectionName}</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {sectionFields.map(field => (
                   <DynamicField
                     key={field.id}
@@ -401,7 +401,7 @@ function DealForm() {
         </CardContent>
       </Card>
 
-      <div className="flex items-center gap-3 pb-6">
+      <div className="flex flex-wrap items-center gap-3 pb-6">
         <Button
           variant="outline"
           onClick={() => createMut.mutate(false)}
@@ -449,7 +449,7 @@ function DealDetail() {
   if (!deal) return <div className="p-6"><p className="text-slate-400">Deal not found</p></div>;
 
   return (
-    <div className="p-6 space-y-6 max-w-3xl" data-testid="broker-deal-detail">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-3xl" data-testid="broker-deal-detail">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" onClick={() => navigate("/commercial-deals")} className="text-slate-400" data-testid="back-button">
           <ArrowLeft size={16} className="mr-1" /> Back
