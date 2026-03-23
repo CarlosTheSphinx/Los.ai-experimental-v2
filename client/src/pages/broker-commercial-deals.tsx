@@ -96,7 +96,10 @@ function DealsList() {
                       {deal.propertyState && <span className="flex items-center gap-1"><MapPin size={12} />{deal.propertyState}</span>}
                     </div>
                     <p className="text-xs text-slate-500 mt-2">
-                      {deal.status === "draft" ? "Last saved" : "Submitted"}: {new Date(deal.submittedAt || deal.updatedAt || deal.createdAt).toLocaleDateString()}
+                      {deal.status === "draft" ? "Last saved" : "Submitted"}: {(() => {
+                        const d = new Date(deal.submittedAt || deal.updatedAt || deal.createdAt);
+                        return isNaN(d.getTime()) ? "N/A" : d.toLocaleDateString();
+                      })()}
                     </p>
                   </div>
                   <Button variant="ghost" size="sm" className="text-slate-400" data-testid={`view-deal-${deal.id}`}>
