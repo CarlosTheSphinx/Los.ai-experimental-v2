@@ -292,6 +292,7 @@ function MainRoutes() {
 
           {/* Broker Commercial Deals */}
           <Route path="/commercial-deals/new" component={() => <ProtectedRoute component={BrokerDealForm} />} />
+          <Route path="/commercial-deals/:id/edit" component={() => <ProtectedRoute component={BrokerDealForm} />} />
           <Route path="/commercial-deals/:id" component={() => <ProtectedRoute component={BrokerDealDetail} />} />
           <Route path="/commercial-deals" component={() => <ProtectedRoute component={BrokerCommercialDeals} />} />
 

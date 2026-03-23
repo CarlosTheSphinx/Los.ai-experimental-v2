@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Building2, DollarSign, MapPin, Clock, Eye, Send, ArrowLeft,
   FileText, Upload, CheckCircle2, AlertTriangle, TrendingUp, RefreshCw,
-  ArrowRight, Save, Download,
+  ArrowRight, Save, Download, Pencil,
 } from "lucide-react";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 
@@ -80,7 +80,7 @@ function DealsList() {
             <Card
               key={deal.id}
               className="bg-[#1a2038] border-slate-700/50 hover:border-slate-600 transition-colors cursor-pointer"
-              onClick={() => navigate(`/commercial-deals/${deal.id}`)}
+              onClick={() => navigate(deal.status === "draft" ? `/commercial-deals/${deal.id}/edit` : `/commercial-deals/${deal.id}`)}
               data-testid={`deal-card-${deal.id}`}
             >
               <CardContent className="p-4">
@@ -203,10 +203,28 @@ function DynamicField({ field, value, onChange, onAddressSelect }: { field: Form
   );
 }
 
-function DealForm() {
+function DealForm({ editDealId }: { editDealId?: number } = {}) {
   const [, navigate] = useLocation();
+  const location = useLocation()[0];
   const { toast } = useToast();
-  const [form, setForm] = useState<Record<string, any>>({
+
+  const urlEditId = editDealId || (() => {
+    const match = location.match(/\/commercial-deals\/(\d+)\/edit/);
+    return match ? parseInt(match[1]) : undefined;
+  })();
+  const isEditing = !!urlEditId;
+
+  const { data: existingDeal, isLoading: loadingDeal } = useQuery<any>({
+    queryKey: ["/api/commercial/deals", urlEditId],
+    queryFn: async () => {
+      const res = await fetch(`/api/commercial/deals/${urlEditId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load deal");
+      return res.json();
+    },
+    enabled: isEditing,
+  });
+
+  const emptyForm: Record<string, any> = {
     dealName: "",
     loanAmount: "",
     assetType: "",
@@ -221,7 +239,30 @@ function DealForm() {
     borrowerEntityType: "",
     borrowerCreditScore: "",
     hasGuarantor: false,
-  });
+  };
+
+  const [form, setForm] = useState<Record<string, any>>(emptyForm);
+  const [formLoaded, setFormLoaded] = useState(false);
+
+  if (isEditing && existingDeal && !formLoaded) {
+    setForm({
+      dealName: existingDeal.dealName || "",
+      loanAmount: existingDeal.loanAmount?.toString() || "",
+      assetType: existingDeal.assetType || "",
+      propertyAddress: existingDeal.propertyAddress || "",
+      propertyCity: existingDeal.propertyCity || "",
+      propertyState: existingDeal.propertyState || "",
+      propertyZip: existingDeal.propertyZip || "",
+      propertyValue: existingDeal.propertyValue?.toString() || "",
+      noiAnnual: existingDeal.noiAnnual?.toString() || "",
+      occupancyPct: existingDeal.occupancyPct?.toString() || "",
+      borrowerName: existingDeal.borrowerName || "",
+      borrowerEntityType: existingDeal.borrowerEntityType || "",
+      borrowerCreditScore: existingDeal.borrowerCreditScore?.toString() || "",
+      hasGuarantor: existingDeal.hasGuarantor || false,
+    });
+    setFormLoaded(true);
+  }
 
   const { data: formConfig = [] } = useQuery<FormFieldConfig[]>({
     queryKey: ["/api/commercial/form-config"],
@@ -253,9 +294,12 @@ function DealForm() {
     enabled: true,
   });
 
+  const existingDocTypes = new Set(
+    (existingDeal?.documents || []).filter((d: any) => d.isCurrent).map((d: any) => d.documentType)
+  );
   const [uploadedDocs, setUploadedDocs] = useState<Record<string, { file: File; name: string }>>({});
 
-  const createMut = useMutation({
+  const saveMut = useMutation({
     mutationFn: async (submit: boolean) => {
       const body: any = {
         dealName: form.dealName,
@@ -274,8 +318,14 @@ function DealForm() {
         hasGuarantor: form.hasGuarantor,
       };
 
-      const res = await apiRequest("POST", "/api/commercial/deals", body);
-      const deal = await res.json();
+      let deal: any;
+      if (isEditing && urlEditId) {
+        const res = await apiRequest("PATCH", `/api/commercial/deals/${urlEditId}`, body);
+        deal = await res.json();
+      } else {
+        const res = await apiRequest("POST", "/api/commercial/deals", body);
+        deal = await res.json();
+      }
 
       for (const [docType, { name }] of Object.entries(uploadedDocs)) {
         await apiRequest("POST", `/api/commercial/deals/${deal.id}/documents`, {
@@ -292,7 +342,7 @@ function DealForm() {
 
       return deal;
     },
-    onSuccess: (deal, submit) => {
+    onSuccess: (_deal, submit) => {
       queryClient.invalidateQueries({ queryKey: ["/api/commercial/deals"] });
       toast({ title: submit ? "Deal submitted for review" : "Draft saved" });
       navigate("/commercial-deals");
@@ -310,13 +360,18 @@ function DealForm() {
 
   const update = (field: string, value: any) => setForm(f => ({ ...f, [field]: value }));
 
+  if (isEditing && loadingDeal) {
+    return <div className="flex justify-center py-12"><RefreshCw size={20} className="animate-spin text-slate-400" /></div>;
+  }
+
   return (
     <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-3xl" data-testid="deal-form-page">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" onClick={() => navigate("/commercial-deals")} className="text-slate-400" data-testid="back-button">
           <ArrowLeft size={16} className="mr-1" /> Back
         </Button>
-        <h1 className="text-xl font-semibold text-white">Submit New Deal</h1>
+        <h1 className="text-xl font-semibold text-white">{isEditing ? "Edit Draft Deal" : "Submit New Deal"}</h1>
+        {isEditing && <Badge className="text-xs bg-slate-500/20 text-slate-400 border-slate-500/30">Draft</Badge>}
       </div>
 
       {(() => {
@@ -405,16 +460,20 @@ function DealForm() {
             const template = requiredDocs.templates?.[docType];
             return (
               <div key={docType} className="flex items-center gap-3 p-3 rounded bg-[#0f1629] border border-slate-700/50" data-testid={`doc-req-${docType.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}>
-                {uploadedDocs[docType] ? (
+                {(uploadedDocs[docType] || existingDocTypes.has(docType)) ? (
                   <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
                 ) : (
                   <FileText size={16} className="text-slate-500 shrink-0" />
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-white">{docType}</p>
-                  {uploadedDocs[docType] && (
+                  {uploadedDocs[docType] ? (
                     <p className="text-xs text-slate-500">{uploadedDocs[docType].name}</p>
-                  )}
+                  ) : existingDocTypes.has(docType) ? (
+                    <p className="text-xs text-slate-500">
+                      {(existingDeal?.documents || []).find((d: any) => d.documentType === docType && d.isCurrent)?.fileName || "Uploaded"}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex items-center gap-2">
                   {template && (
@@ -453,12 +512,12 @@ function DealForm() {
       <div className="flex flex-wrap items-center gap-3 pb-6">
         <Button
           variant="outline"
-          onClick={() => createMut.mutate(false)}
-          disabled={createMut.isPending}
+          onClick={() => saveMut.mutate(false)}
+          disabled={saveMut.isPending}
           className="border-slate-700 text-slate-300"
           data-testid="save-draft-button"
         >
-          <Save size={14} className="mr-1" /> Save as Draft
+          <Save size={14} className="mr-1" /> {isEditing ? "Update Draft" : "Save as Draft"}
         </Button>
         <div className="flex-1" />
         <Button
@@ -469,8 +528,8 @@ function DealForm() {
           Cancel
         </Button>
         <Button
-          onClick={() => createMut.mutate(true)}
-          disabled={createMut.isPending || !form.dealName || !form.loanAmount || !form.assetType}
+          onClick={() => saveMut.mutate(true)}
+          disabled={saveMut.isPending || !form.dealName || !form.loanAmount || !form.assetType}
           className="bg-blue-600 hover:bg-blue-700"
           data-testid="submit-deal-button"
         >
@@ -505,6 +564,11 @@ function DealDetail() {
         </Button>
         <h1 className="text-xl font-semibold text-white">{deal.dealName || `Deal #${deal.id}`}</h1>
         {statusBadge(deal.status)}
+        {deal.status === "draft" && (
+          <Button size="sm" className="bg-blue-600 hover:bg-blue-700 ml-auto" onClick={() => navigate(`/commercial-deals/${deal.id}/edit`)} data-testid="edit-draft-button">
+            <Pencil size={14} className="mr-1" /> Edit Draft
+          </Button>
+        )}
       </div>
 
       <Card className="bg-[#1a2038] border-slate-700/50">
