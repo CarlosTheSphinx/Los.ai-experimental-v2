@@ -16,7 +16,7 @@ import {
   Settings, GripVertical, Save, RotateCcw, Eye, EyeOff,
   CheckCircle2, AlertCircle, ChevronDown, ChevronRight,
   FileCheck, Plus, Pencil, Trash2, X, Brain, FileText, Bot,
-  RefreshCw, Sparkles, Upload, Download,
+  RefreshCw, Sparkles, Upload, Download, Volume2, Mic,
 } from "lucide-react";
 
 interface FormField {
@@ -1023,6 +1023,29 @@ export default function CommercialFormConfigPage() {
                   </Card>
                 );
               })}
+
+              <Card className="bg-[#1a2038] border-amber-500/30" data-testid="deal-story-config-card">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center gap-2">
+                    <Volume2 size={16} className="text-amber-400" />
+                    <CardTitle className="text-sm text-slate-300">Deal Story</CardTitle>
+                    <Badge className="text-[9px] bg-amber-500/20 text-amber-400">Built-in</Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-start gap-3 p-3 rounded bg-[#0f1629] border border-slate-700/30">
+                    <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                      <Mic size={16} className="text-amber-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-300">Voice-recorded deal narrative</p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Brokers and borrowers can record an audio story about their deal using the microphone. The recording is automatically transcribed and submitted with the deal for your review.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
               <Card className="bg-[#1a2038] border-dashed border-slate-700/50">
                 <CardContent className="p-4">

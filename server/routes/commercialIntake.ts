@@ -15,7 +15,27 @@ import { z } from "zod";
 import { runIntakeAiPipeline } from "../agents/intakeAgents";
 import { ObjectStorageService } from "../replit_integrations/object_storage/objectStorage";
 
+import OpenAI from "openai";
+
+const OPENAI_API_KEY = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+const openai = OPENAI_API_KEY
+  ? new OpenAI({
+      apiKey: OPENAI_API_KEY,
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    })
+  : null;
+
 const objectStorageService = new ObjectStorageService();
+
+const audioUpload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp3', 'audio/x-m4a', 'video/webm'];
+    cb(null, allowed.includes(file.mimetype) || file.originalname.match(/\.(webm|mp3|mp4|m4a|wav|ogg)$/i) !== null);
+  },
+  limits: { fileSize: 25 * 1024 * 1024 }
+});
+
 const templateUpload = multer({
   storage: multer.memoryStorage(),
   fileFilter: (_req, file, cb) => {
@@ -902,6 +922,51 @@ router.post("/api/commercial/form-config", async (req: Request, res: Response) =
 
     res.json(row);
   } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/api/commercial/deals/:id/transcribe-story", audioUpload.single("audio"), async (req: Request, res: Response) => {
+  try {
+    const dealId = parseInt(req.params.id);
+    if (isNaN(dealId)) return res.status(400).json({ error: "Invalid deal ID" });
+
+    const user = (req as any).user;
+    if (!user) return res.status(401).json({ error: "Not authenticated" });
+
+    const [deal] = await db.select().from(intakeDeals).where(eq(intakeDeals.id, dealId));
+    if (!deal) return res.status(404).json({ error: "Deal not found" });
+
+    const isAdmin = ["super_admin", "lender", "processor"].includes(user.role);
+    const isBrokerOwner = user.role === "broker" && deal.brokerEmail === user.email;
+    if (!isAdmin && !isBrokerOwner) {
+      return res.status(403).json({ error: "Not authorized to modify this deal" });
+    }
+
+    const file = (req as any).file;
+    if (!file) return res.status(400).json({ error: "No audio file provided" });
+
+    if (!openai) return res.status(500).json({ error: "OpenAI not configured" });
+
+    const audioFile = new File([file.buffer], file.originalname || "recording.webm", {
+      type: file.mimetype,
+    });
+
+    const transcription = await openai.audio.transcriptions.create({
+      file: audioFile,
+      model: "whisper-1",
+      language: "en",
+    });
+
+    const transcript = transcription.text;
+
+    const result = await db.update(intakeDeals)
+      .set({ dealStoryTranscript: transcript, updatedAt: new Date() })
+      .where(eq(intakeDeals.id, dealId));
+
+    res.json({ transcript });
+  } catch (error: any) {
+    console.error("[Story Transcription Error]", error);
     res.status(500).json({ error: error.message });
   }
 });

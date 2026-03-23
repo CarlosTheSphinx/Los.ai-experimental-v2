@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Building2, DollarSign, MapPin, TrendingUp, User, FileText,
   AlertTriangle, CheckCircle2, XCircle, Clock, Send, RefreshCw,
-  ChevronDown, ChevronUp, ArrowRight, Shield, BarChart3,
+  ChevronDown, ChevronUp, ArrowRight, Shield, BarChart3, Volume2,
 } from "lucide-react";
 
 function VerdictDisplay({ verdict, confidence, breakdown }: { verdict: string; confidence: number; breakdown?: { fund_fit: number; deal_health: number } }) {
@@ -231,6 +231,23 @@ export default function CommercialPipelineDetailPage() {
           </div>
         </CardContent>
       </Card>
+
+      {deal.dealStoryTranscript && (
+        <Card className="bg-[#1a2038] border-slate-700/50" data-testid="deal-story-section">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm text-slate-300 flex items-center gap-2">
+              <Volume2 size={16} className="text-amber-400" /> Deal Story
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="p-3 rounded bg-[#0f1629] border border-slate-700/30">
+              <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap" data-testid="deal-story-text">
+                {deal.dealStoryTranscript}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* AI Analysis */}
       <Card className="bg-[#1a2038] border-slate-700/50">

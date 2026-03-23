@@ -157,6 +157,7 @@ async function agent1ValidateAndStructure(deal: any, documents: any[], sessionId
       borrower_entity_type: deal.borrowerEntityType, borrower_credit_score: deal.borrowerCreditScore,
       has_guarantor: deal.hasGuarantor,
     },
+    deal_story: deal.dealStoryTranscript || null,
     documents: documents.filter(d => d.isCurrent).map(d => ({ type: d.documentType, file_name: d.fileName, version: d.version })),
   });
 

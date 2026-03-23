@@ -4091,6 +4091,8 @@ export const intakeDeals = pgTable("intake_deals", {
   borrowerCreditScore: integer("borrower_credit_score"),
   hasGuarantor: boolean("has_guarantor").default(false),
   status: varchar("status", { length: 50 }).default("draft").notNull(),
+  dealStoryAudioUrl: text("deal_story_audio_url"),
+  dealStoryTranscript: text("deal_story_transcript"),
   dealFormJson: jsonb("deal_form_json"),
   linkedProjectId: integer("linked_project_id").references(() => projects.id, { onDelete: "set null" }),
   submittedAt: timestamp("submitted_at"),

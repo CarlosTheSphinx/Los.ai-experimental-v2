@@ -17,6 +17,7 @@ import {
   ArrowRight, Save, Download, Pencil, X,
 } from "lucide-react";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
+import DealStoryRecorder from "@/components/DealStoryRecorder";
 
 function tryParseDate(value: unknown): Date | null {
   if (value == null) return null;
@@ -250,10 +251,12 @@ function DealForm({ editDealId }: { editDealId?: number } = {}) {
     borrowerEntityType: "",
     borrowerCreditScore: "",
     hasGuarantor: false,
+    dealStoryTranscript: "",
   };
 
   const [form, setForm] = useState<Record<string, any>>(emptyForm);
   const [formLoaded, setFormLoaded] = useState(false);
+  const [savedDealId, setSavedDealId] = useState<number | undefined>(undefined);
 
   if (isEditing && existingDeal && !formLoaded) {
     setForm({
@@ -271,7 +274,9 @@ function DealForm({ editDealId }: { editDealId?: number } = {}) {
       borrowerEntityType: existingDeal.borrowerEntityType || "",
       borrowerCreditScore: existingDeal.borrowerCreditScore?.toString() || "",
       hasGuarantor: existingDeal.hasGuarantor || false,
+      dealStoryTranscript: existingDeal.dealStoryTranscript || "",
     });
+    setSavedDealId(existingDeal.id);
     setFormLoaded(true);
   }
 
@@ -329,6 +334,7 @@ function DealForm({ editDealId }: { editDealId?: number } = {}) {
         borrowerEntityType: form.borrowerEntityType || null,
         borrowerCreditScore: form.borrowerCreditScore ? parseInt(form.borrowerCreditScore) : null,
         hasGuarantor: form.hasGuarantor,
+        dealStoryTranscript: form.dealStoryTranscript || null,
       };
 
       let deal: any;
@@ -339,6 +345,8 @@ function DealForm({ editDealId }: { editDealId?: number } = {}) {
         const res = await apiRequest("POST", "/api/commercial/deals", body);
         deal = await res.json();
       }
+
+      setSavedDealId(deal.id);
 
       for (const [docType, files] of Object.entries(uploadedDocs)) {
         for (const { name } of files) {
@@ -477,6 +485,13 @@ function DealForm({ editDealId }: { editDealId?: number } = {}) {
           </Card>
         ));
       })()}
+
+      <DealStoryRecorder
+        dealId={savedDealId || urlEditId}
+        transcript={form.dealStoryTranscript || ""}
+        onTranscriptChange={(t) => update("dealStoryTranscript", t)}
+        disabled={saveMut.isPending}
+      />
 
       <Card className="bg-[#1a2038] border-slate-700/50">
         <CardHeader className="pb-3">
