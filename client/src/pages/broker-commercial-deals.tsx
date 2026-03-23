@@ -18,6 +18,17 @@ import {
 } from "lucide-react";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 
+function tryParseDate(value: unknown): Date | null {
+  if (value == null) return null;
+  const d = new Date(value as string | number);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function formatDealDate(deal: { submittedAt?: unknown; updatedAt?: unknown; createdAt?: unknown }): string {
+  const d = tryParseDate(deal.submittedAt) ?? tryParseDate(deal.updatedAt) ?? tryParseDate(deal.createdAt);
+  return d ? d.toLocaleDateString() : "N/A";
+}
+
 const ASSET_TYPES = ["Multifamily","Office","Retail","Industrial","Hotel","Land","Development","Mixed Use","Self Storage","Mobile Home Park","Healthcare","Student Housing"];
 const ENTITY_TYPES = ["Individual","LLC","Corporation","Partnership","Trust"];
 const US_STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
@@ -95,11 +106,8 @@ function DealsList() {
                       {deal.assetType && <span className="flex items-center gap-1"><Building2 size={12} />{deal.assetType}</span>}
                       {deal.propertyState && <span className="flex items-center gap-1"><MapPin size={12} />{deal.propertyState}</span>}
                     </div>
-                    <p className="text-xs text-slate-500 mt-2">
-                      {deal.status === "draft" ? "Last saved" : "Submitted"}: {(() => {
-                        const d = new Date(deal.submittedAt || deal.updatedAt || deal.createdAt);
-                        return isNaN(d.getTime()) ? "N/A" : d.toLocaleDateString();
-                      })()}
+                    <p className="text-xs text-slate-500 mt-2" data-testid={`deal-date-${deal.id}`}>
+                      {deal.status === "draft" ? "Last saved" : "Submitted"}: {formatDealDate(deal)}
                     </p>
                   </div>
                   <Button variant="ghost" size="sm" className="text-slate-400" data-testid={`view-deal-${deal.id}`}>
