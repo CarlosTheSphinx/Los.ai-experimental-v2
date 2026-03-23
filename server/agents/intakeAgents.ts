@@ -54,9 +54,96 @@ const DEFAULT_PROMPTS = {
   feedbackGenerator: INTAKE_AGENT_PROMPTS.FEEDBACK_GENERATOR,
 };
 
+const JSON_FORMAT_SUFFIX = {
+  validator: `\n\nCRITICAL: You MUST respond with ONLY a valid JSON object using EXACTLY these field names:
+{
+  "validation_status": "valid" | "invalid",
+  "validation_errors": [{"field": "...", "error": "...", "severity": "critical|high|medium|low"}],
+  "structured_deal": {
+    "basic_info": { "deal_name": "...", "loan_amount": 0, "asset_type": "...", "property_address": "...", "property_city": "...", "property_state": "...", "property_zip": "..." },
+    "borrower_info": { "name": "...", "entity_type": "...", "credit_score": 0, "has_guarantor": false },
+    "metrics": { "property_value": 0, "ltv_pct": 0, "noi_annual": 0, "dscr": 0, "occupancy_pct": 0 },
+    "documents_submitted": ["doc_type1"],
+    "documents_missing": ["doc_type2"]
+  }
+}`,
+  fundMatcher: `\n\nCRITICAL: You MUST respond with ONLY a valid JSON object using EXACTLY these field names:
+{
+  "eligible_funds": [{ "fund_id": 0, "fund_name": "...", "match_score": 0, "match_reason": "..." }],
+  "total_funds_checked": 0,
+  "deal_health": {
+    "borrower_risk_score": 0, "borrower_risk_detail": "...",
+    "property_risk_score": 0, "property_risk_detail": "...",
+    "loan_structure_risk_score": 0, "loan_structure_risk_detail": "...",
+    "documentation_risk_score": 0, "documentation_risk_detail": "..."
+  }
+}`,
+  feedbackGenerator: `\n\nCRITICAL: You MUST respond with ONLY a valid JSON object using EXACTLY these field names:
+{
+  "overall_verdict": "pass" | "conditional" | "fail",
+  "confidence_score": 0,
+  "confidence_breakdown": { "fund_fit": 0, "deal_health": 0 },
+  "key_flaws": [{ "flaw": "...", "severity": "critical|high|medium|low", "detail": "...", "remediation": "..." }],
+  "strengths": [{ "strength": "...", "detail": "..." }],
+  "fund_recommendations": [{ "fund_name": "...", "match_score": 0, "recommendation": "..." }],
+  "next_steps": ["..."]
+}`,
+};
+
+function normalizeAgent1Result(result: any): any {
+  if (!result || typeof result !== "object") return result;
+  return {
+    ...result,
+    validation_status: result.validation_status || result.validationStatus || result.status || "valid",
+    validation_errors: result.validation_errors || result.validationErrors || result.errors || [],
+    structured_deal: result.structured_deal || result.structuredDeal || result.deal || result,
+  };
+}
+
+function normalizeAgent2Result(result: any): any {
+  if (!result || typeof result !== "object") return result;
+  return {
+    ...result,
+    eligible_funds: result.eligible_funds || result.eligibleFunds || result.matched_funds || result.matchedFunds || [],
+    total_funds_checked: result.total_funds_checked || result.totalFundsChecked || 0,
+    deal_health: result.deal_health || result.dealHealth || result.risk_assessment || result.riskAssessment || {
+      borrower_risk_score: 50, borrower_risk_detail: "Not assessed",
+      property_risk_score: 50, property_risk_detail: "Not assessed",
+      loan_structure_risk_score: 50, loan_structure_risk_detail: "Not assessed",
+      documentation_risk_score: 50, documentation_risk_detail: "Not assessed",
+    },
+  };
+}
+
+function normalizeVerdict(v: string): string {
+  if (!v) return "conditional";
+  const lower = v.toLowerCase().trim();
+  if (["pass", "approved", "accept", "strong"].includes(lower)) return "pass";
+  if (["fail", "reject", "denied", "decline"].includes(lower)) return "fail";
+  return "conditional";
+}
+
+function normalizeAgent3Result(result: any): any {
+  if (!result || typeof result !== "object") return result;
+  const rawVerdict = result.overall_verdict || result.overallVerdict || result.verdict || "conditional";
+  const verdict = normalizeVerdict(rawVerdict);
+  const confidence = result.confidence_score ?? result.confidenceScore ?? result.confidence ?? 50;
+  return {
+    ...result,
+    overall_verdict: verdict,
+    confidence_score: typeof confidence === "number" ? confidence : parseInt(confidence) || 50,
+    confidence_breakdown: result.confidence_breakdown || result.confidenceBreakdown || { fund_fit: 50, deal_health: 50 },
+    key_flaws: result.key_flaws || result.keyFlaws || result.flaws || result.issues || result.concerns || [],
+    strengths: result.strengths || result.positives || result.strong_points || [],
+    fund_recommendations: result.fund_recommendations || result.fundRecommendations || result.recommendations || [],
+    next_steps: result.next_steps || result.nextSteps || result.action_items || result.actionItems || [],
+  };
+}
+
 async function agent1ValidateAndStructure(deal: any, documents: any[], sessionId?: string): Promise<any> {
   const config = await getAgentConfig("intake_validator");
-  const systemPrompt = config?.systemPrompt || DEFAULT_PROMPTS.validator;
+  const basePrompt = config?.systemPrompt || DEFAULT_PROMPTS.validator;
+  const systemPrompt = basePrompt + JSON_FORMAT_SUFFIX.validator;
   const model = config?.modelName || "gpt-4o-mini";
   const temperature = config?.temperature ?? 0.3;
 
@@ -90,7 +177,7 @@ async function agent1ValidateAndStructure(deal: any, documents: any[], sessionId
         },
       };
     }
-    return result;
+    return normalizeAgent1Result(result);
   };
 
   if (sessionId && OrchestrationTracer.hasSubscribers()) {
@@ -101,7 +188,8 @@ async function agent1ValidateAndStructure(deal: any, documents: any[], sessionId
 
 async function agent2MatchFunds(structuredDeal: any, activeFunds: any[], sessionId?: string): Promise<any> {
   const config = await getAgentConfig("intake_fund_matcher");
-  const systemPrompt = config?.systemPrompt || DEFAULT_PROMPTS.fundMatcher;
+  const basePrompt = config?.systemPrompt || DEFAULT_PROMPTS.fundMatcher;
+  const systemPrompt = basePrompt + JSON_FORMAT_SUFFIX.fundMatcher;
   const model = config?.modelName || "gpt-4o-mini";
   const temperature = config?.temperature ?? 0.3;
 
@@ -149,7 +237,7 @@ async function agent2MatchFunds(structuredDeal: any, activeFunds: any[], session
         },
       };
     }
-    return result;
+    return normalizeAgent2Result(result);
   };
 
   if (sessionId && OrchestrationTracer.hasSubscribers()) {
@@ -160,7 +248,8 @@ async function agent2MatchFunds(structuredDeal: any, activeFunds: any[], session
 
 async function agent3GenerateFeedback(matchingReport: any, structuredDeal: any, sessionId?: string): Promise<any> {
   const config = await getAgentConfig("intake_feedback_generator");
-  const systemPrompt = config?.systemPrompt || DEFAULT_PROMPTS.feedbackGenerator;
+  const basePrompt = config?.systemPrompt || DEFAULT_PROMPTS.feedbackGenerator;
+  const systemPrompt = basePrompt + JSON_FORMAT_SUFFIX.feedbackGenerator;
   const model = config?.modelName || "gpt-4o-mini";
   const temperature = config?.temperature ?? 0.3;
 
@@ -184,7 +273,7 @@ async function agent3GenerateFeedback(matchingReport: any, structuredDeal: any, 
         next_steps: eligibleFunds.length > 0 ? ["Review AI analysis", "Consider sending to matched funds"] : ["No fund matches found — review deal parameters"],
       };
     }
-    return result;
+    return normalizeAgent3Result(result);
   };
 
   if (sessionId && OrchestrationTracer.hasSubscribers()) {

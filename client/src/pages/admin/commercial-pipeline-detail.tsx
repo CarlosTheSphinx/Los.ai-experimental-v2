@@ -139,7 +139,23 @@ export default function CommercialPipelineDetailPage() {
   }
 
   const analysis = deal.analysis;
-  const feedback = analysis?.agent3Feedback as any;
+  const rawFeedback = analysis?.agent3Feedback as any;
+  const normalizeVerdict = (v: string) => {
+    if (!v) return "conditional";
+    const l = v.toLowerCase().trim();
+    if (["pass", "approved", "accept", "strong"].includes(l)) return "pass";
+    if (["fail", "reject", "denied", "decline"].includes(l)) return "fail";
+    return "conditional";
+  };
+  const feedback = rawFeedback ? {
+    overall_verdict: normalizeVerdict(rawFeedback.overall_verdict || rawFeedback.overallVerdict || rawFeedback.verdict || analysis?.overallVerdict),
+    confidence_score: rawFeedback.confidence_score ?? rawFeedback.confidenceScore ?? rawFeedback.confidence ?? analysis?.confidenceScore ?? 50,
+    confidence_breakdown: rawFeedback.confidence_breakdown || rawFeedback.confidenceBreakdown,
+    key_flaws: rawFeedback.key_flaws || rawFeedback.keyFlaws || rawFeedback.flaws || rawFeedback.issues || [],
+    strengths: rawFeedback.strengths || rawFeedback.positives || [],
+    fund_recommendations: rawFeedback.fund_recommendations || rawFeedback.fundRecommendations || rawFeedback.recommendations || [],
+    next_steps: rawFeedback.next_steps || rawFeedback.nextSteps || rawFeedback.action_items || [],
+  } : null;
   const matching = analysis?.agent2Matching as any;
 
   return (
@@ -238,8 +254,8 @@ export default function CommercialPipelineDetailPage() {
           {feedback && (
             <>
               <VerdictDisplay
-                verdict={analysis.overallVerdict || feedback.overall_verdict}
-                confidence={analysis.confidenceScore || feedback.confidence_score}
+                verdict={analysis.overallVerdict || feedback.overall_verdict || "conditional"}
+                confidence={analysis.confidenceScore ?? feedback.confidence_score ?? 50}
                 breakdown={feedback.confidence_breakdown}
               />
 
