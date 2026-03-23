@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Building2, DollarSign, MapPin, Clock, Eye, Send, ArrowLeft,
   FileText, Upload, CheckCircle2, AlertTriangle, TrendingUp, RefreshCw,
-  ArrowRight, Save, Download, Pencil,
+  ArrowRight, Save, Download, Pencil, X,
 } from "lucide-react";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 
@@ -294,10 +294,12 @@ function DealForm({ editDealId }: { editDealId?: number } = {}) {
     enabled: true,
   });
 
-  const existingDocTypes = new Set(
-    (existingDeal?.documents || []).filter((d: any) => d.isCurrent).map((d: any) => d.documentType)
-  );
-  const [uploadedDocs, setUploadedDocs] = useState<Record<string, { file: File; name: string }>>({});
+  const existingDocsByType: Record<string, any[]> = {};
+  for (const d of (existingDeal?.documents || []).filter((d: any) => d.isCurrent)) {
+    if (!existingDocsByType[d.documentType]) existingDocsByType[d.documentType] = [];
+    existingDocsByType[d.documentType].push(d);
+  }
+  const [uploadedDocs, setUploadedDocs] = useState<Record<string, Array<{ file: File; name: string }>>>({});
 
   const saveMut = useMutation({
     mutationFn: async (submit: boolean) => {
@@ -327,13 +329,15 @@ function DealForm({ editDealId }: { editDealId?: number } = {}) {
         deal = await res.json();
       }
 
-      for (const [docType, { name }] of Object.entries(uploadedDocs)) {
-        await apiRequest("POST", `/api/commercial/deals/${deal.id}/documents`, {
-          documentType: docType,
-          fileName: name,
-          fileSize: 0,
-          mimeType: "application/pdf",
-        });
+      for (const [docType, files] of Object.entries(uploadedDocs)) {
+        for (const { name } of files) {
+          await apiRequest("POST", `/api/commercial/deals/${deal.id}/documents`, {
+            documentType: docType,
+            fileName: name,
+            fileSize: 0,
+            mimeType: "application/pdf",
+          });
+        }
       }
 
       if (submit) {
@@ -352,10 +356,25 @@ function DealForm({ editDealId }: { editDealId?: number } = {}) {
     },
   });
 
-  const handleFileSelect = (docType: string, file: File | null) => {
-    if (file) {
-      setUploadedDocs(prev => ({ ...prev, [docType]: { file, name: file.name } }));
-    }
+  const handleFileSelect = (docType: string, files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const newFiles = Array.from(files).map(f => ({ file: f, name: f.name }));
+    setUploadedDocs(prev => ({
+      ...prev,
+      [docType]: [...(prev[docType] || []), ...newFiles],
+    }));
+  };
+
+  const removeUploadedFile = (docType: string, index: number) => {
+    setUploadedDocs(prev => {
+      const updated = [...(prev[docType] || [])];
+      updated.splice(index, 1);
+      if (updated.length === 0) {
+        const { [docType]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [docType]: updated };
+    });
   };
 
   const update = (field: string, value: any) => setForm(f => ({ ...f, [field]: value }));
@@ -458,51 +477,70 @@ function DealForm({ editDealId }: { editDealId?: number } = {}) {
         <CardContent className="space-y-2">
           {requiredDocs.requiredDocuments.map((docType: string) => {
             const template = requiredDocs.templates?.[docType];
+            const newFiles = uploadedDocs[docType] || [];
+            const existingFiles = existingDocsByType[docType] || [];
+            const hasFiles = newFiles.length > 0 || existingFiles.length > 0;
             return (
-              <div key={docType} className="flex items-center gap-3 p-3 rounded bg-[#0f1629] border border-slate-700/50" data-testid={`doc-req-${docType.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}>
-                {(uploadedDocs[docType] || existingDocTypes.has(docType)) ? (
-                  <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
-                ) : (
-                  <FileText size={16} className="text-slate-500 shrink-0" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-white">{docType}</p>
-                  {uploadedDocs[docType] ? (
-                    <p className="text-xs text-slate-500">{uploadedDocs[docType].name}</p>
-                  ) : existingDocTypes.has(docType) ? (
-                    <p className="text-xs text-slate-500">
-                      {(existingDeal?.documents || []).find((d: any) => d.documentType === docType && d.isCurrent)?.fileName || "Uploaded"}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="flex items-center gap-2">
-                  {template && (
-                    <a
-                      href={`/api/commercial/document-rules/${template.ruleId}/template/${encodeURIComponent(docType)}/download`}
-                      className="text-xs px-3 py-1.5 rounded border bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20 transition-colors flex items-center gap-1"
-                      data-testid={`template-${docType.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}
-                      download
-                    >
-                      <Download size={12} />
-                      Template
-                    </a>
+              <div key={docType} className="p-3 rounded bg-[#0f1629] border border-slate-700/50" data-testid={`doc-req-${docType.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}>
+                <div className="flex items-center gap-3">
+                  {hasFiles ? (
+                    <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+                  ) : (
+                    <FileText size={16} className="text-slate-500 shrink-0" />
                   )}
-                  <label className="cursor-pointer">
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.png"
-                      onChange={e => handleFileSelect(docType, e.target.files?.[0] || null)}
-                    />
-                    <span className={`text-xs px-3 py-1.5 rounded border transition-colors ${
-                      uploadedDocs[docType]
-                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                        : "bg-blue-500/10 text-blue-400 border-blue-500/30 hover:bg-blue-500/20"
-                    }`}>
-                      {uploadedDocs[docType] ? "Replace" : "Upload"}
-                    </span>
-                  </label>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-white">{docType}</p>
+                    {hasFiles && (
+                      <p className="text-[10px] text-slate-500">{existingFiles.length + newFiles.length} file{(existingFiles.length + newFiles.length) !== 1 ? "s" : ""}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {template && (
+                      <a
+                        href={`/api/commercial/document-rules/${template.ruleId}/template/${encodeURIComponent(docType)}/download`}
+                        className="text-xs px-3 py-1.5 rounded border bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20 transition-colors flex items-center gap-1"
+                        data-testid={`template-${docType.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}
+                        download
+                      >
+                        <Download size={12} />
+                        Template
+                      </a>
+                    )}
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        className="hidden"
+                        multiple
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.png"
+                        onChange={e => { handleFileSelect(docType, e.target.files); e.target.value = ""; }}
+                      />
+                      <span className="text-xs px-3 py-1.5 rounded border transition-colors bg-blue-500/10 text-blue-400 border-blue-500/30 hover:bg-blue-500/20 flex items-center gap-1" data-testid={`upload-${docType.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}>
+                        <Upload size={12} />
+                        {hasFiles ? "Add More" : "Upload"}
+                      </span>
+                    </label>
+                  </div>
                 </div>
+                {(existingFiles.length > 0 || newFiles.length > 0) && (
+                  <div className="mt-2 ml-7 space-y-1">
+                    {existingFiles.map((doc: any) => (
+                      <div key={doc.id} className="flex items-center gap-2 text-xs text-slate-400 py-0.5">
+                        <CheckCircle2 size={10} className="text-emerald-500 shrink-0" />
+                        <span className="truncate flex-1">{doc.fileName}</span>
+                        <span className="text-slate-600 shrink-0">v{doc.version}</span>
+                      </div>
+                    ))}
+                    {newFiles.map((f, i) => (
+                      <div key={`new-${i}`} className="flex items-center gap-2 text-xs text-blue-400 py-0.5">
+                        <Plus size={10} className="text-blue-400 shrink-0" />
+                        <span className="truncate flex-1">{f.name}</span>
+                        <button type="button" onClick={() => removeUploadedFile(docType, i)} className="text-slate-500 hover:text-red-400 shrink-0" data-testid={`remove-file-${docType.toLowerCase().replace(/[^a-z0-9]/g, "-")}-${i}`}>
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}
