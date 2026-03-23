@@ -341,8 +341,6 @@ router.get("/api/commercial/deals", async (req: Request, res: Response) => {
 
     if (role === "broker") {
       if (userId) conditions.push(eq(intakeDeals.brokerId, userId));
-    } else {
-      if (tenantId) conditions.push(eq(intakeDeals.tenantId, tenantId));
     }
 
     if (status && typeof status === "string") {
@@ -443,10 +441,18 @@ router.post("/api/commercial/deals", async (req: Request, res: Response) => {
     const tenantId = getTenantId(req);
     const role = getUserRole(req);
 
+    let dealTenantId = tenantId;
+    if (role === "broker") {
+      const adminUser = await db.select({ id: users.id }).from(users)
+        .where(inArray(users.role, ["super_admin", "lender"]))
+        .limit(1);
+      dealTenantId = adminUser.length > 0 ? adminUser[0].id : tenantId;
+    }
+
     const data: any = {
       ...req.body,
       brokerId: role === "broker" ? userId : req.body.brokerId,
-      tenantId: role === "broker" ? (req as any).user?.tenantId || tenantId : tenantId,
+      tenantId: dealTenantId,
       status: "draft",
     };
 
