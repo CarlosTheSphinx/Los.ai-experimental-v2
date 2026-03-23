@@ -98,7 +98,6 @@ function NavIcon({ icon: IconComponent, isActive }: { icon: any; isActive: boole
 }
 
 const brokerNavItems: NavItem[] = [
-  { href: "/", label: "New Quote", icon: Sparkles, shortcut: undefined },
   { href: "/quotes", label: "Quotes", icon: FileText, shortcut: undefined },
   { href: "/deals", label: "My Loans", icon: FolderKanban, shortcut: undefined },
   { href: "/commercial-deals", label: "Commercial Deals", icon: Building2, shortcut: undefined },
