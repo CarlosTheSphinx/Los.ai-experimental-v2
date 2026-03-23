@@ -3,6 +3,7 @@ import { funds, intakeDeals, intakeAiAnalysis, intakeDealStatusHistory, intakeDe
 import { eq, and, desc } from "drizzle-orm";
 import { OrchestrationTracer } from "../services/orchestrationTracing";
 import OpenAI from "openai";
+import { INTAKE_AGENT_PROMPTS } from "./intakePrompts";
 
 const OPENAI_API_KEY = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
 
@@ -48,68 +49,9 @@ async function callOpenAI(systemPrompt: string, userMessage: string, model: stri
 }
 
 const DEFAULT_PROMPTS = {
-  validator: `You are a Commercial Real Estate Deal Validator AI Agent. Your job is to:
-1. Parse and validate all deal fields from a commercial real estate submission
-2. Validate data types (amounts must be positive numbers, percentages 0-100, dates valid, state codes 2-letter)
-3. Calculate key metrics:
-   - LTV = (loan_amount / property_value) * 100
-   - DSCR = NOI / (loan_amount * 0.07) (approximate annual debt service at 7%)
-4. Flag missing or invalid data
-5. Produce a clean structured deal JSON
-
-Return a JSON object with:
-{
-  "validation_status": "valid" | "invalid",
-  "validation_errors": [{"field": "...", "error": "..."}],
-  "structured_deal": {
-    "basic_info": { "deal_name", "loan_amount", "asset_type", "property_address", "property_city", "property_state", "property_zip" },
-    "borrower_info": { "name", "entity_type", "credit_score", "has_guarantor" },
-    "metrics": { "property_value", "ltv_pct", "noi_annual", "dscr", "occupancy_pct" },
-    "documents_submitted": ["doc_type1", ...],
-    "documents_missing": []
-  }
-}`,
-  fundMatcher: `You are a Commercial Real Estate Fund Matcher & Risk Analyzer AI Agent. Your job is to:
-1. Compare a validated deal against available fund criteria
-2. For each fund, check: LTV in range, LTC in range (if applicable), loan amount in range, state/geography eligible, asset type eligible
-3. Score each eligible fund 0-100 based on how well the deal fits
-4. Assess deal health across 4 risk categories (each scored 0-100, lower is better/less risky):
-   - Borrower risk: Based on credit score, entity type, financial strength
-   - Property risk: Based on metrics, occupancy, NOI, market
-   - Loan structure risk: Based on LTV, DSCR, amortization
-   - Documentation risk: Based on completeness of documents
-
-Return a JSON object with:
-{
-  "eligible_funds": [{ "fund_id": N, "fund_name": "...", "match_score": 0-100, "match_reason": "..." }],
-  "total_funds_checked": N,
-  "deal_health": {
-    "borrower_risk_score": 0-100, "borrower_risk_detail": "...",
-    "property_risk_score": 0-100, "property_risk_detail": "...",
-    "loan_structure_risk_score": 0-100, "loan_structure_risk_detail": "...",
-    "documentation_risk_score": 0-100, "documentation_risk_detail": "..."
-  }
-}`,
-  feedbackGenerator: `You are a Commercial Real Estate Deal Feedback Generator AI Agent. Your job is to:
-1. Analyze the fund matching report and deal health assessment
-2. Identify key flaws with severity (critical, high, medium, low) and remediation suggestions
-3. List deal strengths
-4. Calculate composite confidence score: (fund_fit_score * 0.6) + (deal_health_score * 0.4)
-   - fund_fit_score: based on number of matching funds and match quality
-   - deal_health_score: inverse average of risk scores (100 - avg_risk)
-5. Generate verdict: >75 = "pass", 50-75 = "conditional", <50 = "fail"
-6. Provide per-fund recommendations and next steps
-
-Return a JSON object with:
-{
-  "overall_verdict": "pass" | "conditional" | "fail",
-  "confidence_score": 0-100,
-  "confidence_breakdown": { "fund_fit": 0-100, "deal_health": 0-100 },
-  "key_flaws": [{ "flaw": "...", "severity": "critical|high|medium|low", "detail": "...", "remediation": "..." }],
-  "strengths": [{ "strength": "...", "detail": "..." }],
-  "fund_recommendations": [{ "fund_name": "...", "match_score": 0-100, "recommendation": "..." }],
-  "next_steps": ["..."]
-}`,
+  validator: INTAKE_AGENT_PROMPTS.VALIDATOR,
+  fundMatcher: INTAKE_AGENT_PROMPTS.FUND_MATCHER,
+  feedbackGenerator: INTAKE_AGENT_PROMPTS.FEEDBACK_GENERATOR,
 };
 
 async function agent1ValidateAndStructure(deal: any, documents: any[], sessionId?: string): Promise<any> {

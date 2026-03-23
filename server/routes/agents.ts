@@ -7,6 +7,7 @@ import type { Express, Response } from 'express';
 import type { AuthRequest } from '../auth';
 import type { RouteDeps } from './types';
 import { eq, desc, and, or } from 'drizzle-orm';
+import { INTAKE_AGENT_PROMPTS } from '../agents/intakePrompts';
 import {
   agentConfigurations,
   agentRuns,
@@ -166,6 +167,36 @@ export async function seedDefaultAgentConfigs(db: RouteDeps['db']): Promise<void
       modelName: 'gpt-4o',
       maxTokens: 1024,
       temperature: 0.2
+    },
+    {
+      agentType: 'intake_validator',
+      name: 'Deal Validator',
+      systemPrompt: INTAKE_AGENT_PROMPTS.VALIDATOR,
+      toolDefinitions: ['deal_validation', 'metrics_calculation'],
+      modelProvider: 'openai',
+      modelName: 'gpt-4o',
+      maxTokens: 4096,
+      temperature: 0.3
+    },
+    {
+      agentType: 'intake_fund_matcher',
+      name: 'Fund Matcher',
+      systemPrompt: INTAKE_AGENT_PROMPTS.FUND_MATCHER,
+      toolDefinitions: ['fund_matching', 'risk_analysis'],
+      modelProvider: 'openai',
+      modelName: 'gpt-4o',
+      maxTokens: 4096,
+      temperature: 0.3
+    },
+    {
+      agentType: 'intake_feedback_generator',
+      name: 'Feedback Generator',
+      systemPrompt: INTAKE_AGENT_PROMPTS.FEEDBACK_GENERATOR,
+      toolDefinitions: ['feedback_generation', 'verdict_calculation'],
+      modelProvider: 'openai',
+      modelName: 'gpt-4o',
+      maxTokens: 4096,
+      temperature: 0.3
     }
   ];
 
