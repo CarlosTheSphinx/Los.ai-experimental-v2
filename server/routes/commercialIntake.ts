@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import multer from "multer";
 import { db } from "../db";
 import {
   funds, intakeDeals, intakeDealDocuments, intakeDocumentRules,
@@ -12,6 +13,19 @@ import {
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { runIntakeAiPipeline } from "../agents/intakeAgents";
+import { ObjectStorageService } from "../replit_integrations/object_storage/objectStorage";
+
+const objectStorageService = new ObjectStorageService();
+const templateUpload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (_req, file, cb) => {
+    const allowedMimeTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+    const allowedExts = ['.pdf', '.doc', '.docx', '.xls', '.xlsx'];
+    const ext = file.originalname.substring(file.originalname.lastIndexOf('.')).toLowerCase();
+    cb(null, allowedMimeTypes.includes(file.mimetype) || allowedExts.includes(ext));
+  },
+  limits: { fileSize: 50 * 1024 * 1024 }
+});
 
 const router = Router();
 
@@ -176,6 +190,94 @@ router.delete("/api/commercial/document-rules/:id", async (req: Request, res: Re
   }
 });
 
+// ===== DOCUMENT RULE TEMPLATE UPLOAD =====
+
+router.post("/api/commercial/document-rules/:id/template", templateUpload.single("file"), async (req: Request, res: Response) => {
+  try {
+    if (!requireAdmin(req, res)) return;
+    const id = safeParseId(req.params.id);
+    if (!id) return res.status(400).json({ error: "Invalid rule ID" });
+    const { docType } = req.body;
+    if (!docType) return res.status(400).json({ error: "docType is required" });
+    if (!req.file) return res.status(400).json({ error: "No file provided" });
+
+    const tenantId = getTenantId(req);
+    const [rule] = await db.select().from(intakeDocumentRules)
+      .where(and(eq(intakeDocumentRules.id, id), tenantId ? eq(intakeDocumentRules.tenantId, tenantId) : undefined));
+    if (!rule) return res.status(404).json({ error: "Rule not found" });
+
+    const result = await objectStorageService.uploadFile(
+      req.file.buffer,
+      `commercial/templates/${id}/${Date.now()}-${req.file.originalname}`,
+      req.file.mimetype || "application/octet-stream"
+    );
+
+    const templates = (rule.documentTemplates || {}) as Record<string, { url: string; fileName: string }>;
+    templates[docType] = { url: result.objectPath, fileName: req.file.originalname };
+
+    const [updated] = await db.update(intakeDocumentRules)
+      .set({ documentTemplates: templates, updatedAt: new Date() })
+      .where(eq(intakeDocumentRules.id, id))
+      .returning();
+
+    res.json(updated);
+  } catch (error: any) {
+    console.error("Template upload error:", error);
+    res.status(500).json({ error: "Failed to upload template" });
+  }
+});
+
+router.delete("/api/commercial/document-rules/:id/template/:docType", async (req: Request, res: Response) => {
+  try {
+    if (!requireAdmin(req, res)) return;
+    const id = safeParseId(req.params.id);
+    if (!id) return res.status(400).json({ error: "Invalid rule ID" });
+    const docType = decodeURIComponent(req.params.docType);
+
+    const tenantId = getTenantId(req);
+    const [rule] = await db.select().from(intakeDocumentRules)
+      .where(and(eq(intakeDocumentRules.id, id), tenantId ? eq(intakeDocumentRules.tenantId, tenantId) : undefined));
+    if (!rule) return res.status(404).json({ error: "Rule not found" });
+
+    const templates = { ...((rule.documentTemplates || {}) as Record<string, { url: string; fileName: string }>) };
+    delete templates[docType];
+
+    const [updated] = await db.update(intakeDocumentRules)
+      .set({ documentTemplates: templates, updatedAt: new Date() })
+      .where(eq(intakeDocumentRules.id, id))
+      .returning();
+
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ error: "Failed to delete template" });
+  }
+});
+
+router.get("/api/commercial/document-rules/:id/template/:docType/download", async (req: Request, res: Response) => {
+  try {
+    const id = safeParseId(req.params.id);
+    if (!id) return res.status(400).json({ error: "Invalid rule ID" });
+    const docType = decodeURIComponent(req.params.docType);
+
+    const [rule] = await db.select().from(intakeDocumentRules)
+      .where(eq(intakeDocumentRules.id, id));
+    if (!rule) return res.status(404).json({ error: "Rule not found" });
+
+    const templates = (rule.documentTemplates || {}) as Record<string, { url: string; fileName: string }>;
+    const template = templates[docType];
+    if (!template?.url) return res.status(404).json({ error: "No template for this document type" });
+
+    const objectFile = await objectStorageService.getObjectEntityFile(template.url);
+    if (!objectFile) return res.status(404).json({ error: "Template file not found" });
+
+    res.setHeader("Content-Disposition", `attachment; filename="${template.fileName}"`);
+    await objectStorageService.downloadObject(objectFile, res);
+  } catch (error: any) {
+    console.error("Template download error:", error);
+    res.status(500).json({ error: "Failed to download template" });
+  }
+});
+
 // ===== EVALUATE DOCUMENT RULES =====
 
 router.post("/api/commercial/evaluate-document-rules", async (req: Request, res: Response) => {
@@ -194,6 +296,7 @@ router.post("/api/commercial/evaluate-document-rules", async (req: Request, res:
     ];
 
     const additionalDocs = new Set<string>();
+    const templates: Record<string, { ruleId: number; fileName: string }> = {};
     for (const rule of rules) {
       const conds = rule.conditions as Record<string, any>;
       let match = true;
@@ -212,10 +315,14 @@ router.post("/api/commercial/evaluate-document-rules", async (req: Request, res:
       if (match) {
         const docs = rule.requiredDocuments as string[];
         docs.forEach(d => additionalDocs.add(d));
+        const ruleTemplates = (rule.documentTemplates || {}) as Record<string, { url: string; fileName: string }>;
+        for (const [docType, tmpl] of Object.entries(ruleTemplates)) {
+          if (tmpl?.url) templates[docType] = { ruleId: rule.id, fileName: tmpl.fileName };
+        }
       }
     }
 
-    res.json({ requiredDocuments: [...baseDocuments, ...additionalDocs] });
+    res.json({ requiredDocuments: [...baseDocuments, ...additionalDocs], templates });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

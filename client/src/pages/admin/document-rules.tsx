@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, FileCheck, RefreshCw, X } from "lucide-react";
+import { Plus, Pencil, Trash2, FileCheck, RefreshCw, X, Upload, FileText } from "lucide-react";
 
 const ASSET_TYPES = ["Multifamily","Office","Retail","Industrial","Hotel","Land","Development","Mixed Use","Self Storage","Mobile Home Park","Healthcare","Student Housing"];
 const DOCUMENT_TYPES = [
@@ -23,7 +23,7 @@ const DOCUMENT_TYPES = [
 
 type Condition = { field: string; operator: string; value: string };
 
-function RuleForm({ rule, onSave, onCancel }: { rule?: any; onSave: (data: any) => void; onCancel: () => void }) {
+function RuleForm({ rule, onSave, onCancel, onRefresh }: { rule?: any; onSave: (data: any) => void; onCancel: () => void; onRefresh?: () => void }) {
   const existingConditions = rule?.conditions || {};
   const initialConditions: Condition[] = [];
   if (existingConditions.asset_type) {
@@ -45,6 +45,48 @@ function RuleForm({ rule, onSave, onCancel }: { rule?: any; onSave: (data: any) 
     const existing = (rule?.requiredDocuments || []) as string[];
     return existing.filter(d => !DOCUMENT_TYPES.includes(d));
   });
+  const [docTemplates, setDocTemplates] = useState<Record<string, { url: string; fileName: string }>>(
+    (rule?.documentTemplates || {}) as Record<string, { url: string; fileName: string }>
+  );
+  const [uploadingTemplate, setUploadingTemplate] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const handleTemplateUpload = async (docType: string, file: File) => {
+    if (!rule?.id) {
+      toast({ title: "Save the rule first", description: "You need to save the rule before uploading templates.", variant: "destructive" });
+      return;
+    }
+    setUploadingTemplate(docType);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("docType", docType);
+      const res = await fetch(`/api/commercial/document-rules/${rule.id}/template`, { method: "POST", body: formData, credentials: "include" });
+      if (!res.ok) throw new Error("Upload failed");
+      const updated = await res.json();
+      setDocTemplates((updated.documentTemplates || {}) as Record<string, { url: string; fileName: string }>);
+      onRefresh?.();
+      toast({ title: "Template uploaded", description: `Template for "${docType}" uploaded successfully.` });
+    } catch {
+      toast({ title: "Upload failed", description: "Could not upload template file.", variant: "destructive" });
+    } finally {
+      setUploadingTemplate(null);
+    }
+  };
+
+  const handleTemplateRemove = async (docType: string) => {
+    if (!rule?.id) return;
+    try {
+      const res = await fetch(`/api/commercial/document-rules/${rule.id}/template/${encodeURIComponent(docType)}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) throw new Error("Delete failed");
+      const updated = await res.json();
+      setDocTemplates((updated.documentTemplates || {}) as Record<string, { url: string; fileName: string }>);
+      onRefresh?.();
+      toast({ title: "Template removed" });
+    } catch {
+      toast({ title: "Failed to remove template", variant: "destructive" });
+    }
+  };
 
   const addCondition = () => setConditions([...conditions, { field: "asset_type", operator: "equals", value: "" }]);
   const removeCondition = (i: number) => setConditions(conditions.filter((_, idx) => idx !== i));
@@ -139,17 +181,35 @@ function RuleForm({ rule, onSave, onCancel }: { rule?: any; onSave: (data: any) 
         <Label className="text-xs text-slate-400 mb-2 block">Required Documents (THEN)</Label>
         <div className="grid grid-cols-2 gap-2">
           {[...DOCUMENT_TYPES, ...customDocs].map(doc => (
-            <button
-              key={doc}
-              type="button"
-              onClick={() => toggleDoc(doc)}
-              className={`text-left px-3 py-2 rounded text-xs border transition-colors ${
-                selectedDocs.includes(doc)
-                  ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
-                  : "bg-[#0f1629] text-slate-500 border-slate-700 hover:border-slate-500"
-              }`}
-              data-testid={`doc-${doc.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}
-            >{doc}</button>
+            <div key={doc} className="flex flex-col gap-1">
+              <button
+                type="button"
+                onClick={() => toggleDoc(doc)}
+                className={`text-left px-3 py-2 rounded text-xs border transition-colors ${
+                  selectedDocs.includes(doc)
+                    ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                    : "bg-[#0f1629] text-slate-500 border-slate-700 hover:border-slate-500"
+                }`}
+                data-testid={`doc-${doc.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}
+              >{doc}</button>
+              {selectedDocs.includes(doc) && (
+                <div className="flex items-center gap-1 pl-1">
+                  {docTemplates[doc] ? (
+                    <>
+                      <FileText size={10} className="text-emerald-400" />
+                      <span className="text-[10px] text-emerald-400 truncate flex-1">{docTemplates[doc].fileName}</span>
+                      <button type="button" onClick={() => handleTemplateRemove(doc)} className="text-slate-500 hover:text-red-400" data-testid={`remove-template-${doc.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}><X size={10} /></button>
+                    </>
+                  ) : (
+                    <label className="cursor-pointer flex items-center gap-1 text-[10px] text-slate-500 hover:text-blue-400 transition-colors">
+                      <input type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx" onChange={e => { const f = e.target.files?.[0]; if (f) handleTemplateUpload(doc, f); e.target.value = ""; }} />
+                      {uploadingTemplate === doc ? <RefreshCw size={10} className="animate-spin" /> : <Upload size={10} />}
+                      <span>{rule?.id ? "Attach template" : "Save first"}</span>
+                    </label>
+                  )}
+                </div>
+              )}
+            </div>
           ))}
         </div>
         <div className="flex gap-2 mt-2">
@@ -255,6 +315,7 @@ export default function DocumentRulesPage() {
                 if (editingRule) updateMut.mutate({ id: editingRule.id, data });
                 else createMut.mutate(data);
               }}
+              onRefresh={() => queryClient.invalidateQueries({ queryKey: ["/api/commercial/document-rules"] })}
             />
           </DialogContent>
         </Dialog>

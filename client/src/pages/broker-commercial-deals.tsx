@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Building2, DollarSign, MapPin, Clock, Eye, Send, ArrowLeft,
   FileText, Upload, CheckCircle2, AlertTriangle, TrendingUp, RefreshCw,
-  ArrowRight, Save,
+  ArrowRight, Save, Download,
 } from "lucide-react";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 
@@ -233,10 +233,10 @@ function DealForm() {
   const ltv = propVal > 0 ? ((loanAmt / propVal) * 100).toFixed(2) : "—";
   const dscr = loanAmt > 0 ? (noi / (loanAmt * 0.07)).toFixed(2) : "—";
 
-  const { data: requiredDocs = { requiredDocuments: [] } } = useQuery<{ requiredDocuments: string[] }>({
+  const { data: requiredDocs = { requiredDocuments: [], templates: {} } } = useQuery<{ requiredDocuments: string[]; templates: Record<string, { ruleId: number; fileName: string }> }>({
     queryKey: ["/api/commercial/evaluate-document-rules", form.assetType, form.loanAmount, form.propertyState],
     queryFn: async () => {
-      if (!form.assetType) return { requiredDocuments: ["Loan Application (1003)", "Bank Statement", "Tax Returns (2 years)", "Purchase Contract"] };
+      if (!form.assetType) return { requiredDocuments: ["Loan Application (1003)", "Bank Statement", "Tax Returns (2 years)", "Purchase Contract"], templates: {} };
       const res = await fetch("/api/commercial/evaluate-document-rules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -247,7 +247,7 @@ function DealForm() {
           propertyState: form.propertyState || undefined,
         }),
       });
-      if (!res.ok) return { requiredDocuments: ["Loan Application (1003)", "Bank Statement", "Tax Returns (2 years)", "Purchase Contract"] };
+      if (!res.ok) return { requiredDocuments: ["Loan Application (1003)", "Bank Statement", "Tax Returns (2 years)", "Purchase Contract"], templates: {} };
       return res.json();
     },
     enabled: true,
@@ -401,36 +401,52 @@ function DealForm() {
           </p>
         </CardHeader>
         <CardContent className="space-y-2">
-          {requiredDocs.requiredDocuments.map((docType: string) => (
-            <div key={docType} className="flex items-center gap-3 p-3 rounded bg-[#0f1629] border border-slate-700/50" data-testid={`doc-req-${docType.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}>
-              {uploadedDocs[docType] ? (
-                <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
-              ) : (
-                <FileText size={16} className="text-slate-500 shrink-0" />
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-white">{docType}</p>
-                {uploadedDocs[docType] && (
-                  <p className="text-xs text-slate-500">{uploadedDocs[docType].name}</p>
+          {requiredDocs.requiredDocuments.map((docType: string) => {
+            const template = requiredDocs.templates?.[docType];
+            return (
+              <div key={docType} className="flex items-center gap-3 p-3 rounded bg-[#0f1629] border border-slate-700/50" data-testid={`doc-req-${docType.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}>
+                {uploadedDocs[docType] ? (
+                  <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+                ) : (
+                  <FileText size={16} className="text-slate-500 shrink-0" />
                 )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-white">{docType}</p>
+                  {uploadedDocs[docType] && (
+                    <p className="text-xs text-slate-500">{uploadedDocs[docType].name}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {template && (
+                    <a
+                      href={`/api/commercial/document-rules/${template.ruleId}/template/${encodeURIComponent(docType)}/download`}
+                      className="text-xs px-3 py-1.5 rounded border bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20 transition-colors flex items-center gap-1"
+                      data-testid={`template-${docType.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}
+                      download
+                    >
+                      <Download size={12} />
+                      Template
+                    </a>
+                  )}
+                  <label className="cursor-pointer">
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.png"
+                      onChange={e => handleFileSelect(docType, e.target.files?.[0] || null)}
+                    />
+                    <span className={`text-xs px-3 py-1.5 rounded border transition-colors ${
+                      uploadedDocs[docType]
+                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                        : "bg-blue-500/10 text-blue-400 border-blue-500/30 hover:bg-blue-500/20"
+                    }`}>
+                      {uploadedDocs[docType] ? "Replace" : "Upload"}
+                    </span>
+                  </label>
+                </div>
               </div>
-              <label className="cursor-pointer">
-                <input
-                  type="file"
-                  className="hidden"
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.png"
-                  onChange={e => handleFileSelect(docType, e.target.files?.[0] || null)}
-                />
-                <span className={`text-xs px-3 py-1.5 rounded border transition-colors ${
-                  uploadedDocs[docType]
-                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                    : "bg-blue-500/10 text-blue-400 border-blue-500/30 hover:bg-blue-500/20"
-                }`}>
-                  {uploadedDocs[docType] ? "Replace" : "Upload"}
-                </span>
-              </label>
-            </div>
-          ))}
+            );
+          })}
         </CardContent>
       </Card>
 

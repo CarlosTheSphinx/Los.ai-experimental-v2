@@ -4127,6 +4127,7 @@ export const intakeDocumentRules = pgTable("intake_document_rules", {
   ruleName: varchar("rule_name", { length: 255 }).notNull(),
   conditions: jsonb("conditions").$type<Record<string, any>>().notNull(),
   requiredDocuments: jsonb("required_documents").$type<string[]>().notNull(),
+  documentTemplates: jsonb("document_templates").$type<Record<string, { url: string; fileName: string }>>().default({}),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
