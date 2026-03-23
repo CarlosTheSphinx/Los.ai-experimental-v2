@@ -313,7 +313,8 @@ export async function registerRoutes(
   // Register unified Microsoft connect routes (Outlook + OneDrive in one OAuth flow)
   registerMicrosoftConnectRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
 
-  app.use(authenticateUser, commercialIntakeRouter);
+  app.use('/api/commercial', authenticateUser);
+  app.use(commercialIntakeRouter);
 
   // Forgot password
   app.post('/api/auth/forgot-password', async (req: Request, res: Response) => {
