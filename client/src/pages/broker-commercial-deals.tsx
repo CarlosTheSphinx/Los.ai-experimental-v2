@@ -16,6 +16,7 @@ import {
   FileText, Upload, CheckCircle2, AlertTriangle, TrendingUp, RefreshCw,
   ArrowRight, Save,
 } from "lucide-react";
+import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 
 const ASSET_TYPES = ["Multifamily","Office","Retail","Industrial","Hotel","Land","Development","Mixed Use","Self Storage","Mobile Home Park","Healthcare","Student Housing"];
 const ENTITY_TYPES = ["Individual","LLC","Corporation","Partnership","Trust"];
@@ -123,7 +124,7 @@ interface FormFieldConfig {
   options: any;
 }
 
-function DynamicField({ field, value, onChange }: { field: FormFieldConfig; value: any; onChange: (v: any) => void }) {
+function DynamicField({ field, value, onChange, onAddressSelect }: { field: FormFieldConfig; value: any; onChange: (v: any) => void; onAddressSelect?: (data: { formatted: string; city?: string; state?: string; zip?: string }) => void }) {
   const label = `${field.fieldLabel}${field.isRequired ? " *" : ""}`;
   const inputClass = "bg-[#0f1629] border-slate-700 text-white text-sm";
 
@@ -157,6 +158,33 @@ function DynamicField({ field, value, onChange }: { field: FormFieldConfig; valu
             </div>
           ))}
         </RadioGroup>
+      </div>
+    );
+  }
+
+  if (field.fieldKey === "propertyAddress") {
+    return (
+      <div>
+        <Label className="text-xs text-slate-400">{label}</Label>
+        <AddressAutocomplete
+          value={value || ""}
+          onChange={(v) => {
+            onChange(v);
+            onAddressSelect?.({ formatted: v, city: "", state: "", zip: "" });
+          }}
+          onSelectStructured={(data) => {
+            onChange(data.formatted);
+            onAddressSelect?.({
+              formatted: data.formatted,
+              city: data.city || "",
+              state: data.state || "",
+              zip: data.zip || "",
+            });
+          }}
+          placeholder="Start typing an address..."
+          className={inputClass}
+          data-testid="propertyAddress"
+        />
       </div>
     );
   }
@@ -340,6 +368,11 @@ function DealForm() {
                     field={field}
                     value={form[field.fieldKey]}
                     onChange={v => update(field.fieldKey, v)}
+                    onAddressSelect={(data) => {
+                      update("propertyCity", data.city || "");
+                      update("propertyState", data.state || "");
+                      update("propertyZip", data.zip || "");
+                    }}
                   />
                 ))}
               </div>

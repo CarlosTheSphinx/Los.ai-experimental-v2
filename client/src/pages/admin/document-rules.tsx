@@ -40,6 +40,11 @@ function RuleForm({ rule, onSave, onCancel }: { rule?: any; onSave: (data: any) 
   const [conditions, setConditions] = useState<Condition[]>(initialConditions.length ? initialConditions : [{ field: "asset_type", operator: "equals", value: "" }]);
   const [selectedDocs, setSelectedDocs] = useState<string[]>((rule?.requiredDocuments || []) as string[]);
   const [isActive, setIsActive] = useState(rule?.isActive ?? true);
+  const [customDocName, setCustomDocName] = useState("");
+  const [customDocs, setCustomDocs] = useState<string[]>(() => {
+    const existing = (rule?.requiredDocuments || []) as string[];
+    return existing.filter(d => !DOCUMENT_TYPES.includes(d));
+  });
 
   const addCondition = () => setConditions([...conditions, { field: "asset_type", operator: "equals", value: "" }]);
   const removeCondition = (i: number) => setConditions(conditions.filter((_, idx) => idx !== i));
@@ -95,13 +100,31 @@ function RuleForm({ rule, onSave, onCancel }: { rule?: any; onSave: (data: any) 
                 <SelectItem value="less_than">less than</SelectItem>
               </SelectContent>
             </Select>
-            <Input
-              value={cond.value}
-              onChange={e => { const c = [...conditions]; c[i].value = e.target.value; setConditions(c); }}
-              placeholder={cond.field === "asset_type" ? "Hotel, Motel" : cond.field === "loan_amount" ? "5000000" : "CA, NY"}
-              className="bg-[#0f1629] border-slate-700 text-white text-sm flex-1"
-              data-testid={`condition-value-${i}`}
-            />
+            {cond.field === "asset_type" ? (
+              <div className="flex-1 relative">
+                <div className="flex flex-wrap gap-1 min-h-[36px] p-1.5 rounded-md bg-[#0f1629] border border-slate-700 text-sm">
+                  {cond.value ? cond.value.split(",").map(v => v.trim()).filter(Boolean).map(v => (
+                    <span key={v} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 text-xs border border-blue-500/30">
+                      {v}
+                      <button type="button" onClick={() => { const c = [...conditions]; const vals = c[i].value.split(",").map(s => s.trim()).filter(s => s !== v); c[i].value = vals.join(", "); setConditions(c); }} className="hover:text-white"><X size={10} /></button>
+                    </span>
+                  )) : <span className="text-slate-500 text-xs py-0.5">Select asset types...</span>}
+                </div>
+                <div className="mt-1 grid grid-cols-2 gap-1 max-h-32 overflow-y-auto">
+                  {ASSET_TYPES.filter(at => !cond.value.split(",").map(s => s.trim()).includes(at)).map(at => (
+                    <button key={at} type="button" onClick={() => { const c = [...conditions]; const existing = c[i].value ? c[i].value.split(",").map(s => s.trim()).filter(Boolean) : []; c[i].value = [...existing, at].join(", "); setConditions(c); }} className="text-left px-2 py-1 text-xs rounded bg-[#0f1629] text-slate-400 border border-slate-700 hover:border-slate-500 hover:text-white transition-colors" data-testid={`asset-option-${i}-${at}`}>{at}</button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <Input
+                value={cond.value}
+                onChange={e => { const c = [...conditions]; c[i].value = e.target.value; setConditions(c); }}
+                placeholder={cond.field === "loan_amount" ? "5000000" : "CA, NY"}
+                className="bg-[#0f1629] border-slate-700 text-white text-sm flex-1"
+                data-testid={`condition-value-${i}`}
+              />
+            )}
             {conditions.length > 1 && (
               <Button variant="ghost" size="sm" onClick={() => removeCondition(i)} className="text-slate-400 h-8 w-8 p-0">
                 <X size={14} />
@@ -115,7 +138,7 @@ function RuleForm({ rule, onSave, onCancel }: { rule?: any; onSave: (data: any) 
       <div>
         <Label className="text-xs text-slate-400 mb-2 block">Required Documents (THEN)</Label>
         <div className="grid grid-cols-2 gap-2">
-          {DOCUMENT_TYPES.map(doc => (
+          {[...DOCUMENT_TYPES, ...customDocs].map(doc => (
             <button
               key={doc}
               type="button"
@@ -128,6 +151,43 @@ function RuleForm({ rule, onSave, onCancel }: { rule?: any; onSave: (data: any) 
               data-testid={`doc-${doc.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}
             >{doc}</button>
           ))}
+        </div>
+        <div className="flex gap-2 mt-2">
+          <Input
+            value={customDocName}
+            onChange={e => setCustomDocName(e.target.value)}
+            placeholder="Add custom document type..."
+            className="bg-[#0f1629] border-slate-700 text-white text-sm flex-1"
+            data-testid="custom-doc-input"
+            onKeyDown={e => {
+              if (e.key === "Enter" && customDocName.trim()) {
+                e.preventDefault();
+                const name = customDocName.trim();
+                if (!DOCUMENT_TYPES.includes(name) && !customDocs.includes(name)) {
+                  setCustomDocs(prev => [...prev, name]);
+                  setSelectedDocs(prev => [...prev, name]);
+                }
+                setCustomDocName("");
+              }
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!customDocName.trim()}
+            onClick={() => {
+              const name = customDocName.trim();
+              if (name && !DOCUMENT_TYPES.includes(name) && !customDocs.includes(name)) {
+                setCustomDocs(prev => [...prev, name]);
+                setSelectedDocs(prev => [...prev, name]);
+              }
+              setCustomDocName("");
+            }}
+            data-testid="add-custom-doc-button"
+          >
+            <Plus size={14} className="mr-1" /> Add
+          </Button>
         </div>
       </div>
 
