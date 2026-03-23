@@ -25,11 +25,36 @@ interface FormField {
   fieldLabel: string;
   section: string;
   fieldType: string;
+  displayFormat: string;
   isVisible: boolean;
   isRequired: boolean;
+  isCustom: boolean;
   sortOrder: number;
   options: any;
 }
+
+const FIELD_TYPES = [
+  { value: "text", label: "Text" },
+  { value: "number", label: "Number" },
+  { value: "select", label: "Select" },
+  { value: "radio", label: "Radio" },
+  { value: "textarea", label: "Textarea" },
+  { value: "date", label: "Date" },
+  { value: "email", label: "Email" },
+  { value: "phone", label: "Phone" },
+];
+
+const DISPLAY_FORMATS = [
+  { value: "plain", label: "Plain Text" },
+  { value: "currency", label: "Currency ($)" },
+  { value: "percentage", label: "Percentage (%)" },
+  { value: "short", label: "Short Text" },
+  { value: "long", label: "Long Form" },
+  { value: "integer", label: "Whole Number" },
+  { value: "decimal", label: "Decimal" },
+  { value: "phone", label: "Phone Number" },
+  { value: "date", label: "Date" },
+];
 
 type ActiveTab = "fields" | "documents" | "ai";
 
@@ -652,6 +677,8 @@ export default function CommercialFormConfigPage() {
     "Borrower Information": true,
     "Property Metrics": true,
   });
+  const [addFieldSection, setAddFieldSection] = useState<string | null>(null);
+  const [newField, setNewField] = useState({ fieldLabel: "", fieldKey: "", fieldType: "text", displayFormat: "plain", optionsText: "" });
 
   const { data: fields = [], isLoading } = useQuery<FormField[]>({
     queryKey: ["/api/commercial/form-config"],
@@ -672,6 +699,36 @@ export default function CommercialFormConfigPage() {
     },
     onError: (err: any) => {
       toast({ title: "Error saving", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const addFieldMut = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/commercial/form-config", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/commercial/form-config"] });
+      setAddFieldSection(null);
+      setNewField({ fieldLabel: "", fieldKey: "", fieldType: "text", displayFormat: "plain", optionsText: "" });
+      toast({ title: "Field added" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error adding field", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteFieldMut = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("DELETE", `/api/commercial/form-config/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/commercial/form-config"] });
+      toast({ title: "Field removed" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error removing field", description: err.message, variant: "destructive" });
     },
   });
 
@@ -697,6 +754,25 @@ export default function CommercialFormConfigPage() {
   };
 
   const handleReset = () => setEditedFields({});
+
+  const handleAddField = () => {
+    if (!addFieldSection || !newField.fieldLabel.trim()) return;
+    const sectionFields = fields.filter(f => f.section === addFieldSection);
+    const maxSort = sectionFields.length > 0 ? Math.max(...sectionFields.map(f => f.sortOrder)) : 0;
+    const key = newField.fieldKey.trim() || newField.fieldLabel.trim().replace(/[^a-zA-Z0-9]/g, "").replace(/^./, c => c.toLowerCase());
+    const payload: any = {
+      fieldKey: key,
+      fieldLabel: newField.fieldLabel.trim(),
+      section: addFieldSection,
+      fieldType: newField.fieldType,
+      displayFormat: newField.displayFormat,
+      sortOrder: maxSort + 1,
+    };
+    if ((newField.fieldType === "select" || newField.fieldType === "radio") && newField.optionsText.trim()) {
+      payload.options = { choices: newField.optionsText.split(",").map(s => s.trim()).filter(Boolean) };
+    }
+    addFieldMut.mutate(payload);
+  };
 
   const hasChanges = Object.keys(editedFields).length > 0;
 
@@ -822,6 +898,7 @@ export default function CommercialFormConfigPage() {
               <div className="animate-spin h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full" />
             </div>
           ) : (
+            <>
             <div className="space-y-4">
               {Object.entries(sections).map(([sectionName, sectionFields]) => {
                 const isExpanded = expandedSections[sectionName] !== false;
@@ -846,12 +923,14 @@ export default function CommercialFormConfigPage() {
                     </CardHeader>
                     {isExpanded && (
                       <CardContent className="space-y-2 pt-0">
-                        <div className="grid grid-cols-[auto_1fr_80px_80px_60px] gap-x-3 gap-y-0 items-center px-2 text-[10px] text-slate-500 uppercase tracking-wider font-medium pb-1 border-b border-slate-700/30">
+                        <div className="grid grid-cols-[auto_1fr_80px_80px_100px_90px_30px] gap-x-3 gap-y-0 items-center px-2 text-[10px] text-slate-500 uppercase tracking-wider font-medium pb-1 border-b border-slate-700/30">
                           <span></span>
                           <span>Label</span>
                           <span className="text-center">Visible</span>
                           <span className="text-center">Required</span>
                           <span className="text-center">Type</span>
+                          <span className="text-center">Format</span>
+                          <span></span>
                         </div>
                         {sectionFields.map(field => {
                           const f = getField(field);
@@ -859,7 +938,7 @@ export default function CommercialFormConfigPage() {
                           return (
                             <div
                               key={field.id}
-                              className={`grid grid-cols-[auto_1fr_80px_80px_60px] gap-x-3 items-center px-2 py-2 rounded ${
+                              className={`grid grid-cols-[auto_1fr_80px_80px_100px_90px_30px] gap-x-3 items-center px-2 py-2 rounded ${
                                 hasEdits ? "bg-blue-500/10 border border-blue-500/20" : "bg-[#0f1629] border border-slate-700/30"
                               } ${!f.isVisible ? "opacity-50" : ""}`}
                               data-testid={`field-row-${field.fieldKey}`}
@@ -872,7 +951,7 @@ export default function CommercialFormConfigPage() {
                                   className="bg-transparent border-none text-sm text-white p-0 h-auto focus-visible:ring-0"
                                   data-testid={`field-label-${field.fieldKey}`}
                                 />
-                                <span className="text-[10px] text-slate-600 font-mono">{field.fieldKey}</span>
+                                <span className="text-[10px] text-slate-600 font-mono whitespace-nowrap">{field.fieldKey}</span>
                               </div>
                               <div className="flex justify-center">
                                 <Switch
@@ -890,17 +969,170 @@ export default function CommercialFormConfigPage() {
                                 />
                               </div>
                               <div className="flex justify-center">
-                                <Badge className="text-[9px] bg-slate-700/50 text-slate-400">{f.fieldType}</Badge>
+                                <Select value={f.fieldType} onValueChange={v => updateField(field.id, { fieldType: v })}>
+                                  <SelectTrigger className="h-7 text-[10px] bg-slate-800/50 border-slate-700/50 text-slate-300 px-2 w-[90px]" data-testid={`field-type-${field.fieldKey}`}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {FIELD_TYPES.map(t => (
+                                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="flex justify-center">
+                                <Select value={f.displayFormat || "plain"} onValueChange={v => updateField(field.id, { displayFormat: v })}>
+                                  <SelectTrigger className="h-7 text-[10px] bg-slate-800/50 border-slate-700/50 text-slate-300 px-2 w-[85px]" data-testid={`field-format-${field.fieldKey}`}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {DISPLAY_FORMATS.map(f => (
+                                      <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="flex justify-center">
+                                {f.isCustom ? (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0 text-slate-500 hover:text-red-400"
+                                    onClick={() => { if (confirm("Remove this custom field?")) deleteFieldMut.mutate(field.id); }}
+                                    data-testid={`field-delete-${field.fieldKey}`}
+                                  >
+                                    <Trash2 size={12} />
+                                  </Button>
+                                ) : null}
                               </div>
                             </div>
                           );
                         })}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-full mt-2 border border-dashed border-slate-700/50 text-slate-400 hover:text-white hover:border-blue-500/50 hover:bg-blue-500/10"
+                          onClick={() => { setAddFieldSection(sectionName); setNewField({ fieldLabel: "", fieldKey: "", fieldType: "text", displayFormat: "plain", optionsText: "" }); }}
+                          data-testid={`add-field-${sectionName.toLowerCase().replace(/\s/g, "-")}`}
+                        >
+                          <Plus size={14} className="mr-1" />
+                          Add Field
+                        </Button>
                       </CardContent>
                     )}
                   </Card>
                 );
               })}
+
+              <Card className="bg-[#1a2038] border-dashed border-slate-700/50">
+                <CardContent className="p-4">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full text-slate-400 hover:text-white hover:bg-blue-500/10"
+                    onClick={() => {
+                      const name = prompt("Enter new section name:");
+                      if (name?.trim()) {
+                        setAddFieldSection(name.trim());
+                        setNewField({ fieldLabel: "", fieldKey: "", fieldType: "text", displayFormat: "plain", optionsText: "" });
+                      }
+                    }}
+                    data-testid="add-section-button"
+                  >
+                    <Plus size={14} className="mr-1" />
+                    Add New Section
+                  </Button>
+                </CardContent>
+              </Card>
             </div>
+
+            <Dialog open={!!addFieldSection} onOpenChange={open => { if (!open) setAddFieldSection(null); }}>
+              <DialogContent className="bg-[#1a2038] border-slate-700/50 text-white max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="text-white text-base">
+                    Add Field to "{addFieldSection}"
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 pt-2">
+                  <div>
+                    <Label className="text-xs text-slate-400 mb-1 block">Field Label</Label>
+                    <Input
+                      value={newField.fieldLabel}
+                      onChange={e => setNewField(prev => ({ ...prev, fieldLabel: e.target.value }))}
+                      placeholder="e.g. Renovation Budget"
+                      className="bg-[#0f1629] border-slate-700 text-white"
+                      data-testid="new-field-label"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-slate-400 mb-1 block">Field Key (optional — auto-generated from label)</Label>
+                    <Input
+                      value={newField.fieldKey}
+                      onChange={e => setNewField(prev => ({ ...prev, fieldKey: e.target.value }))}
+                      placeholder="e.g. renovationBudget"
+                      className="bg-[#0f1629] border-slate-700 text-white font-mono text-sm"
+                      data-testid="new-field-key"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs text-slate-400 mb-1 block">Field Type</Label>
+                      <Select value={newField.fieldType} onValueChange={v => setNewField(prev => ({ ...prev, fieldType: v }))}>
+                        <SelectTrigger className="bg-[#0f1629] border-slate-700 text-white" data-testid="new-field-type">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FIELD_TYPES.map(t => (
+                            <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-slate-400 mb-1 block">Display Format</Label>
+                      <Select value={newField.displayFormat} onValueChange={v => setNewField(prev => ({ ...prev, displayFormat: v }))}>
+                        <SelectTrigger className="bg-[#0f1629] border-slate-700 text-white" data-testid="new-field-format">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DISPLAY_FORMATS.map(f => (
+                            <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {(newField.fieldType === "select" || newField.fieldType === "radio") && (
+                    <div>
+                      <Label className="text-xs text-slate-400 mb-1 block">Options (comma-separated)</Label>
+                      <Input
+                        value={newField.optionsText}
+                        onChange={e => setNewField(prev => ({ ...prev, optionsText: e.target.value }))}
+                        placeholder="e.g. Option A, Option B, Option C"
+                        className="bg-[#0f1629] border-slate-700 text-white"
+                        data-testid="new-field-options"
+                      />
+                    </div>
+                  )}
+                  <div className="flex justify-end gap-2 pt-2">
+                    <Button variant="ghost" size="sm" onClick={() => setAddFieldSection(null)} className="text-slate-400" data-testid="cancel-add-field">
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleAddField}
+                      disabled={!newField.fieldLabel.trim() || addFieldMut.isPending}
+                      className="bg-blue-600 hover:bg-blue-700"
+                      data-testid="confirm-add-field"
+                    >
+                      <Plus size={14} className="mr-1" />
+                      {addFieldMut.isPending ? "Adding..." : "Add Field"}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+            </>
           )}
 
           {hasChanges && (

@@ -848,9 +848,12 @@ router.put("/api/commercial/form-config", async (req: Request, res: Response) =>
       const [row] = await db.update(commercialFormConfig)
         .set({
           fieldLabel: field.fieldLabel,
+          fieldType: field.fieldType,
+          displayFormat: field.displayFormat || "plain",
           isVisible: field.isVisible,
           isRequired: field.isRequired,
           sortOrder: field.sortOrder,
+          options: field.options ?? null,
           updatedAt: new Date(),
         })
         .where(and(...conditions))
@@ -859,6 +862,66 @@ router.put("/api/commercial/form-config", async (req: Request, res: Response) =>
     }
 
     res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/api/commercial/form-config", async (req: Request, res: Response) => {
+  try {
+    if (!requireAdmin(req, res)) return;
+    const tenantId = getTenantId(req);
+    const { fieldKey, fieldLabel, section, fieldType, displayFormat, isRequired, sortOrder, options } = req.body;
+
+    if (!fieldKey || !fieldLabel || !section || !fieldType) {
+      return res.status(400).json({ error: "fieldKey, fieldLabel, section, and fieldType are required" });
+    }
+
+    const existing = await db.select().from(commercialFormConfig)
+      .where(and(
+        eq(commercialFormConfig.fieldKey, fieldKey),
+        tenantId ? eq(commercialFormConfig.tenantId, tenantId) : undefined
+      ));
+    if (existing.length > 0) {
+      return res.status(409).json({ error: `A field with key "${fieldKey}" already exists` });
+    }
+
+    const [row] = await db.insert(commercialFormConfig).values({
+      tenantId,
+      fieldKey,
+      fieldLabel,
+      section,
+      fieldType,
+      displayFormat: displayFormat || "plain",
+      isVisible: true,
+      isRequired: isRequired ?? false,
+      isCustom: true,
+      sortOrder: sortOrder ?? 99,
+      options: options ?? null,
+    } as any).returning();
+
+    res.json(row);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete("/api/commercial/form-config/:id", async (req: Request, res: Response) => {
+  try {
+    if (!requireAdmin(req, res)) return;
+    const tenantId = getTenantId(req);
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid field id" });
+
+    const conditions = [eq(commercialFormConfig.id, id), eq(commercialFormConfig.isCustom, true)];
+    if (tenantId) conditions.push(eq(commercialFormConfig.tenantId, tenantId));
+
+    const [deleted] = await db.delete(commercialFormConfig)
+      .where(and(...conditions))
+      .returning();
+
+    if (!deleted) return res.status(404).json({ error: "Field not found or cannot be deleted (system fields cannot be removed)" });
+    res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
