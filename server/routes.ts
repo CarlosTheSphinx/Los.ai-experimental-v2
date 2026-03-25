@@ -3593,13 +3593,28 @@ export async function registerRoutes(
       const userId = req.user!.id;
       const { status, archived } = req.query;
       
-      let projectsList = await storage.getProjects(
-        userId,
-        status as string | undefined,
-        archived !== undefined ? archived === 'true' : undefined
-      );
-
       const currentUser = await storage.getUserById(userId);
+      const isAdminRole = currentUser && ['super_admin', 'lender', 'admin', 'processor'].includes(currentUser.role);
+
+      let projectsList: any[];
+      if (isAdminRole) {
+        const tenantId = await getTenantId(req.user!);
+        projectsList = await storage.getAllProjects({
+          status: status as string | undefined,
+          tenantId,
+        });
+        if (archived !== undefined) {
+          const archivedVal = archived === 'true';
+          projectsList = projectsList.filter((p: any) => p.isArchived === archivedVal);
+        }
+      } else {
+        projectsList = await storage.getProjects(
+          userId,
+          status as string | undefined,
+          archived !== undefined ? archived === 'true' : undefined
+        );
+      }
+
       if (currentUser && currentUser.email && (currentUser.role === 'borrower' || currentUser.role === 'broker')) {
         const userEmail = currentUser.email.toLowerCase().trim();
         const emailColumn = currentUser.role === 'broker' ? projects.brokerEmail : projects.borrowerEmail;
@@ -3614,7 +3629,7 @@ export async function registerRoutes(
         const emailMatched = await db.select().from(projects)
           .where(and(...emailConditions))
           .orderBy(desc(projects.lastUpdated));
-        const existingIds = new Set(projectsList.map(p => p.id));
+        const existingIds = new Set(projectsList.map((p: any) => p.id));
         for (const p of emailMatched) {
           if (!existingIds.has(p.id)) {
             projectsList.push(p);
