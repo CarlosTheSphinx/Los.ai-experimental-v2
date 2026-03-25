@@ -795,11 +795,9 @@ function DealDetail() {
         </Button>
         <h1 className="text-xl font-semibold text-white">{deal.dealName || `Deal #${deal.id}`}</h1>
         {statusBadge(deal.status)}
-        {deal.status === "draft" && (
-          <Button size="sm" className="bg-blue-600 hover:bg-blue-700 ml-auto" onClick={() => navigate(`/commercial-deals/${deal.id}/edit`)} data-testid="edit-draft-button">
-            <Pencil size={14} className="mr-1" /> Edit Draft
-          </Button>
-        )}
+        <Button size="sm" className="bg-blue-600 hover:bg-blue-700 ml-auto" onClick={() => navigate(`/commercial-deals/${deal.id}/edit`)} data-testid="edit-deal-button">
+          <Pencil size={14} className="mr-1" /> Edit Deal
+        </Button>
       </div>
 
       {deal.linkedProjectId && (

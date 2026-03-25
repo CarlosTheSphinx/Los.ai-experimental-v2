@@ -4,6 +4,8 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLocation, useParams } from "wouter";
@@ -12,7 +14,12 @@ import {
   ArrowLeft, Building2, DollarSign, MapPin, TrendingUp, User, FileText,
   AlertTriangle, CheckCircle2, XCircle, Clock, Send, RefreshCw,
   ChevronDown, ChevronUp, ArrowRight, Shield, BarChart3, Volume2,
+  Pencil, X, Save,
 } from "lucide-react";
+
+const ASSET_TYPES = ["Multifamily","Office","Retail","Industrial","Hotel","Land","Development","Mixed Use","Self Storage","Mobile Home Park","Healthcare","Student Housing"];
+const ENTITY_TYPES = ["Individual","LLC","Corporation","Partnership","Trust"];
+const US_STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
 
 function VerdictDisplay({ verdict, confidence, breakdown }: { verdict: string; confidence: number; breakdown?: { fund_fit: number; deal_health: number } }) {
   const colors: Record<string, { bg: string; text: string; icon: any }> = {
@@ -57,6 +64,8 @@ export default function CommercialPipelineDetailPage() {
   const [selectedFundId, setSelectedFundId] = useState("");
   const [showFlaws, setShowFlaws] = useState(true);
   const [showStrengths, setShowStrengths] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState<any>({});
 
   const dealId = params.id;
 
@@ -122,6 +131,51 @@ export default function CommercialPipelineDetailPage() {
     },
   });
 
+  const updateDealMut = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("PATCH", `/api/commercial/deals/${dealId}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/commercial/deals", dealId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/commercial/deals"] });
+      setIsEditing(false);
+      toast({ title: "Deal updated" });
+    },
+    onError: () => toast({ title: "Failed to update deal", variant: "destructive" }),
+  });
+
+  const startEdit = () => {
+    if (!deal) return;
+    setEditData({
+      dealName: deal.dealName || "",
+      loanAmount: deal.loanAmount?.toString() || "",
+      assetType: deal.assetType || "",
+      propertyAddress: deal.propertyAddress || "",
+      propertyCity: deal.propertyCity || "",
+      propertyState: deal.propertyState || "",
+      propertyValue: deal.propertyValue?.toString() || "",
+      noiAnnual: deal.noiAnnual?.toString() || "",
+      occupancyPct: deal.occupancyPct?.toString() || "",
+      borrowerName: deal.borrowerName || "",
+      borrowerEntityType: deal.borrowerEntityType || "",
+      borrowerCreditScore: deal.borrowerCreditScore?.toString() || "",
+    });
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = () => {
+    const cleaned: any = {};
+    for (const [k, v] of Object.entries(editData)) {
+      if (v !== "" && v !== null && v !== undefined) {
+        cleaned[k] = ["loanAmount", "propertyValue", "noiAnnual", "occupancyPct", "borrowerCreditScore"].includes(k)
+          ? parseInt(v as string) || undefined
+          : v;
+      }
+    }
+    updateDealMut.mutate(cleaned);
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -185,50 +239,122 @@ export default function CommercialPipelineDetailPage() {
 
       {/* Deal Summary */}
       <Card className="bg-[#1a2038] border-slate-700/50">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm text-slate-300">Deal Summary</CardTitle>
+        <CardHeader className="pb-3 flex flex-row items-center justify-between">
+          <CardTitle className="text-sm text-slate-300 flex items-center gap-2"><Building2 size={16} /> Deal Summary</CardTitle>
+          {!isEditing ? (
+            <Button variant="ghost" size="sm" onClick={startEdit} className="text-slate-400 hover:text-white h-7 px-2" data-testid="edit-summary-button">
+              <Pencil size={12} className="mr-1" /> Edit
+            </Button>
+          ) : (
+            <div className="flex gap-1">
+              <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)} className="text-slate-400 h-7 px-2" data-testid="cancel-edit-button">
+                <X size={12} className="mr-1" /> Cancel
+              </Button>
+              <Button size="sm" onClick={handleSaveEdit} disabled={updateDealMut.isPending} className="bg-[#C9A84C] hover:bg-[#b8973b] h-7 px-2" data-testid="save-edit-button">
+                <Save size={12} className="mr-1" /> {updateDealMut.isPending ? "Saving..." : "Save"}
+              </Button>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-            <div>
-              <p className="text-slate-500 text-xs mb-1">Loan Amount</p>
-              <p className="text-white font-medium" data-testid="loan-amount">
-                ${deal.loanAmount ? (deal.loanAmount).toLocaleString() : "N/A"}
-              </p>
+          {isEditing ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+              <div className="col-span-2 sm:col-span-3">
+                <Label className="text-slate-500 text-xs">Deal Name</Label>
+                <Input value={editData.dealName} onChange={e => setEditData({ ...editData, dealName: e.target.value })} className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-deal-name" />
+              </div>
+              <div>
+                <Label className="text-slate-500 text-xs">Loan Amount ($)</Label>
+                <Input type="number" value={editData.loanAmount} onChange={e => setEditData({ ...editData, loanAmount: e.target.value })} className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-loan-amount" />
+              </div>
+              <div>
+                <Label className="text-slate-500 text-xs">Asset Type</Label>
+                <Select value={editData.assetType} onValueChange={v => setEditData({ ...editData, assetType: v })}>
+                  <SelectTrigger className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-asset-type"><SelectValue /></SelectTrigger>
+                  <SelectContent>{ASSET_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-slate-500 text-xs">Property Value ($)</Label>
+                <Input type="number" value={editData.propertyValue} onChange={e => setEditData({ ...editData, propertyValue: e.target.value })} className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-property-value" />
+              </div>
+              <div className="col-span-2">
+                <Label className="text-slate-500 text-xs">Property Address</Label>
+                <Input value={editData.propertyAddress} onChange={e => setEditData({ ...editData, propertyAddress: e.target.value })} className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-address" />
+              </div>
+              <div>
+                <Label className="text-slate-500 text-xs">State</Label>
+                <Select value={editData.propertyState} onValueChange={v => setEditData({ ...editData, propertyState: v })}>
+                  <SelectTrigger className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-state"><SelectValue /></SelectTrigger>
+                  <SelectContent>{US_STATES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-slate-500 text-xs">NOI Annual ($)</Label>
+                <Input type="number" value={editData.noiAnnual} onChange={e => setEditData({ ...editData, noiAnnual: e.target.value })} className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-noi" />
+              </div>
+              <div>
+                <Label className="text-slate-500 text-xs">Occupancy %</Label>
+                <Input type="number" value={editData.occupancyPct} onChange={e => setEditData({ ...editData, occupancyPct: e.target.value })} className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-occupancy" />
+              </div>
+              <div>
+                <Label className="text-slate-500 text-xs">Borrower Name</Label>
+                <Input value={editData.borrowerName} onChange={e => setEditData({ ...editData, borrowerName: e.target.value })} className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-borrower" />
+              </div>
+              <div>
+                <Label className="text-slate-500 text-xs">Entity Type</Label>
+                <Select value={editData.borrowerEntityType} onValueChange={v => setEditData({ ...editData, borrowerEntityType: v })}>
+                  <SelectTrigger className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-entity-type"><SelectValue /></SelectTrigger>
+                  <SelectContent>{ENTITY_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-slate-500 text-xs">Credit Score</Label>
+                <Input type="number" value={editData.borrowerCreditScore} onChange={e => setEditData({ ...editData, borrowerCreditScore: e.target.value })} className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-credit-score" />
+              </div>
             </div>
-            <div>
-              <p className="text-slate-500 text-xs mb-1">Asset Type</p>
-              <p className="text-white" data-testid="asset-type">{deal.assetType || "N/A"}</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+              <div>
+                <p className="text-slate-500 text-xs mb-1">Loan Amount</p>
+                <p className="text-white font-medium" data-testid="loan-amount">
+                  ${deal.loanAmount ? (deal.loanAmount).toLocaleString() : "N/A"}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs mb-1">Asset Type</p>
+                <p className="text-white" data-testid="asset-type">{deal.assetType || "N/A"}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs mb-1">Property</p>
+                <p className="text-white">{deal.propertyAddress || "N/A"}{deal.propertyState ? `, ${deal.propertyState}` : ""}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs mb-1">LTV</p>
+                <p className="text-white">{deal.ltvPct != null ? `${deal.ltvPct}%` : "N/A"}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs mb-1">DSCR</p>
+                <p className="text-white">{deal.dscr != null ? `${deal.dscr}x` : "N/A"}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs mb-1">Property Value</p>
+                <p className="text-white">${deal.propertyValue ? (deal.propertyValue).toLocaleString() : "N/A"}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs mb-1">Borrower</p>
+                <p className="text-white">{deal.borrowerName || "N/A"} {deal.borrowerEntityType ? `(${deal.borrowerEntityType})` : ""}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs mb-1">Credit Score</p>
+                <p className="text-white">{deal.borrowerCreditScore || "N/A"}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 text-xs mb-1">Broker</p>
+                <p className="text-white">{deal.brokerName || deal.brokerEmail || "N/A"}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-slate-500 text-xs mb-1">Property</p>
-              <p className="text-white">{deal.propertyAddress || "N/A"}{deal.propertyState ? `, ${deal.propertyState}` : ""}</p>
-            </div>
-            <div>
-              <p className="text-slate-500 text-xs mb-1">LTV</p>
-              <p className="text-white">{deal.ltvPct != null ? `${deal.ltvPct}%` : "N/A"}</p>
-            </div>
-            <div>
-              <p className="text-slate-500 text-xs mb-1">DSCR</p>
-              <p className="text-white">{deal.dscr != null ? `${deal.dscr}x` : "N/A"}</p>
-            </div>
-            <div>
-              <p className="text-slate-500 text-xs mb-1">Property Value</p>
-              <p className="text-white">${deal.propertyValue ? (deal.propertyValue).toLocaleString() : "N/A"}</p>
-            </div>
-            <div>
-              <p className="text-slate-500 text-xs mb-1">Borrower</p>
-              <p className="text-white">{deal.borrowerName || "N/A"} {deal.borrowerEntityType ? `(${deal.borrowerEntityType})` : ""}</p>
-            </div>
-            <div>
-              <p className="text-slate-500 text-xs mb-1">Credit Score</p>
-              <p className="text-white">{deal.borrowerCreditScore || "N/A"}</p>
-            </div>
-            <div>
-              <p className="text-slate-500 text-xs mb-1">Broker</p>
-              <p className="text-white">{deal.brokerName || deal.brokerEmail || "N/A"}</p>
-            </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 
