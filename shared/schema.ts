@@ -4094,6 +4094,7 @@ export const intakeDeals = pgTable("intake_deals", {
   dealStoryAudioUrl: text("deal_story_audio_url"),
   dealStoryTranscript: text("deal_story_transcript"),
   dealFormJson: jsonb("deal_form_json"),
+  brokerNotes: jsonb("broker_notes").$type<Array<{ content: string; createdAt: string; authorName: string }>>().default([]),
   linkedProjectId: integer("linked_project_id").references(() => projects.id, { onDelete: "set null" }),
   submittedAt: timestamp("submitted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

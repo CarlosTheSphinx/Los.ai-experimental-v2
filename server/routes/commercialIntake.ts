@@ -504,7 +504,15 @@ router.post("/api/commercial/deals", async (req: Request, res: Response) => {
 router.patch("/api/commercial/deals/:id", async (req: Request, res: Response) => {
   try {
     const dealId = parseInt(req.params.id);
+    const userId = getUserId(req);
+    const role = getUserRole(req);
     const data = { ...req.body, updatedAt: new Date() };
+
+    const whereConditions = [eq(intakeDeals.id, dealId)];
+    if (role === "broker" && userId) whereConditions.push(eq(intakeDeals.brokerId, userId));
+
+    const [existing] = await db.select().from(intakeDeals).where(and(...whereConditions));
+    if (!existing) return res.status(404).json({ error: "Deal not found" });
 
     if (data.loanAmount && data.propertyValue && data.propertyValue > 0) {
       data.ltvPct = parseFloat(((data.loanAmount / data.propertyValue) * 100).toFixed(2));
@@ -522,6 +530,101 @@ router.patch("/api/commercial/deals/:id", async (req: Request, res: Response) =>
     res.json(updated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ===== BROKER NOTES =====
+
+router.post("/api/commercial/deals/:id/notes", async (req: Request, res: Response) => {
+  try {
+    const dealId = parseInt(req.params.id);
+    const userId = getUserId(req);
+    const role = getUserRole(req);
+    const { content } = req.body;
+    if (!content || !content.trim()) return res.status(400).json({ error: "Note content is required" });
+
+    const whereConditions = [eq(intakeDeals.id, dealId)];
+    if (role === "broker" && userId) whereConditions.push(eq(intakeDeals.brokerId, userId));
+
+    const [deal] = await db.select().from(intakeDeals).where(and(...whereConditions));
+    if (!deal) return res.status(404).json({ error: "Deal not found" });
+
+    const user = userId ? await db.select().from(users).where(eq(users.id, userId)).then(r => r[0]) : null;
+    const authorName = user?.fullName || user?.email || "Unknown";
+
+    const existingNotes = (deal.brokerNotes || []) as Array<{ content: string; createdAt: string; authorName: string }>;
+    const newNote = { content: content.trim(), createdAt: new Date().toISOString(), authorName };
+    const updatedNotes = [newNote, ...existingNotes];
+
+    const [updated] = await db.update(intakeDeals)
+      .set({ brokerNotes: updatedNotes, updatedAt: new Date() })
+      .where(eq(intakeDeals.id, dealId))
+      .returning();
+
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ===== BROKER DOCUMENT UPLOAD =====
+
+const docUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 },
+});
+
+router.post("/api/commercial/deals/:id/upload-document", docUpload.single("file"), async (req: Request, res: Response) => {
+  try {
+    const dealId = parseInt(req.params.id);
+    const userId = getUserId(req);
+    const role = getUserRole(req);
+    const documentType = req.body.documentType || "General";
+
+    if (!req.file) return res.status(400).json({ error: "No file provided" });
+
+    const whereConditions = [eq(intakeDeals.id, dealId)];
+    if (role === "broker" && userId) whereConditions.push(eq(intakeDeals.brokerId, userId));
+
+    const [deal] = await db.select().from(intakeDeals).where(and(...whereConditions));
+    if (!deal) return res.status(404).json({ error: "Deal not found" });
+
+    const result = await objectStorageService.uploadFile(
+      req.file.buffer,
+      `commercial/deals/${dealId}/docs/${Date.now()}-${req.file.originalname}`,
+      req.file.mimetype || "application/octet-stream"
+    );
+
+    await db.update(intakeDealDocuments)
+      .set({ isCurrent: false })
+      .where(and(
+        eq(intakeDealDocuments.dealId, dealId),
+        eq(intakeDealDocuments.documentType, documentType),
+        eq(intakeDealDocuments.isCurrent, true),
+      ));
+
+    const existingVersions = await db.select().from(intakeDealDocuments)
+      .where(and(
+        eq(intakeDealDocuments.dealId, dealId),
+        eq(intakeDealDocuments.documentType, documentType),
+      ));
+
+    const [created] = await db.insert(intakeDealDocuments).values({
+      dealId,
+      documentType,
+      version: existingVersions.length + 1,
+      fileName: req.file.originalname,
+      filePath: result.objectPath,
+      fileSize: req.file.size,
+      mimeType: req.file.mimetype,
+      uploadedBy: userId,
+      isCurrent: true,
+    }).returning();
+
+    res.status(201).json(created);
+  } catch (error: any) {
+    console.error("Document upload error:", error);
+    res.status(500).json({ error: "Failed to upload document" });
   }
 });
 

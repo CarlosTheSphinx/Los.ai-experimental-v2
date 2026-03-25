@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Building2, DollarSign, MapPin, Clock, Eye, Send, ArrowLeft,
   FileText, Upload, CheckCircle2, AlertTriangle, TrendingUp, RefreshCw,
-  ArrowRight, Save, Download, Pencil, X,
+  ArrowRight, Save, Download, Pencil, X, MessageSquare, StickyNote,
 } from "lucide-react";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import DealStoryRecorder from "@/components/DealStoryRecorder";
@@ -607,6 +607,12 @@ function DealForm({ editDealId }: { editDealId?: number } = {}) {
 function DealDetail() {
   const params = useLocation()[0].split("/").pop();
   const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState<any>({});
+  const [noteContent, setNoteContent] = useState("");
+  const [uploadDocType, setUploadDocType] = useState("General");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: deal, isLoading } = useQuery<any>({
     queryKey: ["/api/commercial/deals", params],
@@ -617,11 +623,99 @@ function DealDetail() {
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("PATCH", `/api/commercial/deals/${params}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/commercial/deals", params] });
+      setIsEditing(false);
+      toast({ title: "Deal updated" });
+    },
+    onError: () => toast({ title: "Failed to update deal", variant: "destructive" }),
+  });
+
+  const addNoteMutation = useMutation({
+    mutationFn: async (content: string) => {
+      const res = await apiRequest("POST", `/api/commercial/deals/${params}/notes`, { content });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/commercial/deals", params] });
+      setNoteContent("");
+      toast({ title: "Note added" });
+    },
+    onError: () => toast({ title: "Failed to add note", variant: "destructive" }),
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: async ({ file, documentType }: { file: File; documentType: string }) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("documentType", documentType);
+      const res = await fetch(`/api/commercial/deals/${params}/upload-document`, {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/commercial/deals", params] });
+      toast({ title: "Document uploaded" });
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    },
+    onError: () => toast({ title: "Failed to upload document", variant: "destructive" }),
+  });
+
+  const startEdit = () => {
+    setEditData({
+      dealName: deal.dealName || "",
+      loanAmount: deal.loanAmount || "",
+      assetType: deal.assetType || "",
+      propertyAddress: deal.propertyAddress || "",
+      propertyCity: deal.propertyCity || "",
+      propertyState: deal.propertyState || "",
+      propertyZip: deal.propertyZip || "",
+      propertyValue: deal.propertyValue || "",
+      noiAnnual: deal.noiAnnual || "",
+      occupancyPct: deal.occupancyPct || "",
+      borrowerName: deal.borrowerName || "",
+      borrowerEntityType: deal.borrowerEntityType || "",
+      borrowerCreditScore: deal.borrowerCreditScore || "",
+    });
+    setIsEditing(true);
+  };
+
+  const handleSave = () => {
+    const cleaned: any = {};
+    for (const [k, v] of Object.entries(editData)) {
+      if (v !== "" && v !== null && v !== undefined) {
+        cleaned[k] = ["loanAmount", "propertyValue", "noiAnnual", "occupancyPct", "borrowerCreditScore"].includes(k)
+          ? parseInt(v as string) || undefined
+          : v;
+      }
+    }
+    updateMutation.mutate(cleaned);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      uploadMutation.mutate({ file, documentType: uploadDocType });
+    }
+  };
+
   if (isLoading) return <div className="flex justify-center py-12"><RefreshCw size={20} className="animate-spin text-slate-400" /></div>;
   if (!deal) return <div className="p-6"><p className="text-slate-400">Deal not found</p></div>;
 
+  const currentDocs = deal.documents?.filter((d: any) => d.isCurrent) || [];
+  const brokerNotes = (deal.brokerNotes || []) as Array<{ content: string; createdAt: string; authorName: string }>;
+
   return (
-    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 max-w-3xl" data-testid="broker-deal-detail">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6" data-testid="broker-deal-detail">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" onClick={() => navigate("/commercial-deals")} className="text-slate-400" data-testid="back-button">
           <ArrowLeft size={16} className="mr-1" /> Back
@@ -635,65 +729,6 @@ function DealDetail() {
         )}
       </div>
 
-      <Card className="bg-[#1a2038] border-slate-700/50">
-        <CardHeader className="pb-3"><CardTitle className="text-sm text-slate-300">Deal Summary</CardTitle></CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
-            <div><p className="text-slate-500 text-xs">Loan Amount</p><p className="text-white">${deal.loanAmount ? deal.loanAmount.toLocaleString() : "N/A"}</p></div>
-            <div><p className="text-slate-500 text-xs">Asset Type</p><p className="text-white">{deal.assetType || "N/A"}</p></div>
-            <div><p className="text-slate-500 text-xs">Property</p><p className="text-white">{deal.propertyAddress || "N/A"}</p></div>
-            <div><p className="text-slate-500 text-xs">LTV</p><p className="text-white">{deal.ltvPct != null ? `${deal.ltvPct}%` : "N/A"}</p></div>
-            <div><p className="text-slate-500 text-xs">DSCR</p><p className="text-white">{deal.dscr != null ? `${deal.dscr}x` : "N/A"}</p></div>
-            <div><p className="text-slate-500 text-xs">Borrower</p><p className="text-white">{deal.borrowerName || "N/A"}</p></div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Status Timeline */}
-      {deal.statusHistory?.length > 0 && (
-        <Card className="bg-[#1a2038] border-slate-700/50">
-          <CardHeader className="pb-3"><CardTitle className="text-sm text-slate-300 flex items-center gap-2"><Clock size={16} /> Status Timeline</CardTitle></CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {deal.statusHistory.map((sh: any, i: number) => (
-                <div key={sh.id} className="flex items-start gap-3" data-testid={`timeline-${i}`}>
-                  <div className="flex flex-col items-center">
-                    <div className={`w-3 h-3 rounded-full ${i === 0 ? "bg-blue-500" : "bg-slate-600"}`} />
-                    {i < deal.statusHistory.length - 1 && <div className="w-px h-6 bg-slate-700" />}
-                  </div>
-                  <div>
-                    <p className="text-sm text-white">{sh.toStatus.replace(/_/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase())}</p>
-                    <p className="text-xs text-slate-500">{new Date(sh.createdAt).toLocaleString()}</p>
-                    {sh.notes && <p className="text-xs text-slate-400 mt-0.5">{sh.notes}</p>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Documents */}
-      {deal.documents?.length > 0 && (
-        <Card className="bg-[#1a2038] border-slate-700/50">
-          <CardHeader className="pb-3"><CardTitle className="text-sm text-slate-300 flex items-center gap-2"><FileText size={16} /> Documents</CardTitle></CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {deal.documents.filter((d: any) => d.isCurrent).map((doc: any) => (
-                <div key={doc.id} className="flex items-center gap-3 p-2 rounded bg-[#0f1629] border border-slate-700/50">
-                  <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-sm text-white">{doc.documentType}</p>
-                    <p className="text-xs text-slate-500">{doc.fileName} · v{doc.version} · {new Date(doc.uploadedAt).toLocaleDateString()}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Linked Project */}
       {deal.linkedProjectId && (
         <Card className="bg-[#1a2038] border-cyan-500/30">
           <CardContent className="p-4 flex items-center gap-3">
@@ -705,6 +740,263 @@ function DealDetail() {
           </CardContent>
         </Card>
       )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        {/* LEFT COLUMN */}
+        <div className="space-y-4 sm:space-y-6">
+          {/* Deal Summary - Editable */}
+          <Card className="bg-[#1a2038] border-slate-700/50">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm text-slate-300 flex items-center gap-2"><Building2 size={16} /> Deal Summary</CardTitle>
+              {!isEditing ? (
+                <Button variant="ghost" size="sm" onClick={startEdit} className="text-slate-400 hover:text-white h-7 px-2" data-testid="edit-summary-button">
+                  <Pencil size={12} className="mr-1" /> Edit
+                </Button>
+              ) : (
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)} className="text-slate-400 h-7 px-2" data-testid="cancel-edit-button">
+                    <X size={12} className="mr-1" /> Cancel
+                  </Button>
+                  <Button size="sm" onClick={handleSave} disabled={updateMutation.isPending} className="bg-[#C9A84C] hover:bg-[#b8973b] h-7 px-2" data-testid="save-edit-button">
+                    <Save size={12} className="mr-1" /> {updateMutation.isPending ? "Saving..." : "Save"}
+                  </Button>
+                </div>
+              )}
+            </CardHeader>
+            <CardContent>
+              {isEditing ? (
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="col-span-2">
+                    <Label className="text-slate-500 text-xs">Deal Name</Label>
+                    <Input value={editData.dealName} onChange={e => setEditData({ ...editData, dealName: e.target.value })} className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-deal-name" />
+                  </div>
+                  <div>
+                    <Label className="text-slate-500 text-xs">Loan Amount ($)</Label>
+                    <Input type="number" value={editData.loanAmount} onChange={e => setEditData({ ...editData, loanAmount: e.target.value })} className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-loan-amount" />
+                  </div>
+                  <div>
+                    <Label className="text-slate-500 text-xs">Asset Type</Label>
+                    <Select value={editData.assetType} onValueChange={v => setEditData({ ...editData, assetType: v })}>
+                      <SelectTrigger className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-asset-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ASSET_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="col-span-2">
+                    <Label className="text-slate-500 text-xs">Property Address</Label>
+                    <Input value={editData.propertyAddress} onChange={e => setEditData({ ...editData, propertyAddress: e.target.value })} className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-property-address" />
+                  </div>
+                  <div>
+                    <Label className="text-slate-500 text-xs">City</Label>
+                    <Input value={editData.propertyCity} onChange={e => setEditData({ ...editData, propertyCity: e.target.value })} className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-city" />
+                  </div>
+                  <div>
+                    <Label className="text-slate-500 text-xs">State</Label>
+                    <Select value={editData.propertyState} onValueChange={v => setEditData({ ...editData, propertyState: v })}>
+                      <SelectTrigger className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-state">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {US_STATES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-slate-500 text-xs">Property Value ($)</Label>
+                    <Input type="number" value={editData.propertyValue} onChange={e => setEditData({ ...editData, propertyValue: e.target.value })} className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-property-value" />
+                  </div>
+                  <div>
+                    <Label className="text-slate-500 text-xs">NOI Annual ($)</Label>
+                    <Input type="number" value={editData.noiAnnual} onChange={e => setEditData({ ...editData, noiAnnual: e.target.value })} className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-noi" />
+                  </div>
+                  <div>
+                    <Label className="text-slate-500 text-xs">Occupancy %</Label>
+                    <Input type="number" value={editData.occupancyPct} onChange={e => setEditData({ ...editData, occupancyPct: e.target.value })} className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-occupancy" />
+                  </div>
+                  <div>
+                    <Label className="text-slate-500 text-xs">Borrower Name</Label>
+                    <Input value={editData.borrowerName} onChange={e => setEditData({ ...editData, borrowerName: e.target.value })} className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-borrower-name" />
+                  </div>
+                  <div>
+                    <Label className="text-slate-500 text-xs">Entity Type</Label>
+                    <Select value={editData.borrowerEntityType} onValueChange={v => setEditData({ ...editData, borrowerEntityType: v })}>
+                      <SelectTrigger className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-entity-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ENTITY_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-slate-500 text-xs">Credit Score</Label>
+                    <Input type="number" value={editData.borrowerCreditScore} onChange={e => setEditData({ ...editData, borrowerCreditScore: e.target.value })} className="bg-[#0f1629] border-slate-700 text-white text-sm h-8 mt-1" data-testid="edit-credit-score" />
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+                  <div><p className="text-slate-500 text-xs">Loan Amount</p><p className="text-white">${deal.loanAmount ? deal.loanAmount.toLocaleString() : "N/A"}</p></div>
+                  <div><p className="text-slate-500 text-xs">Asset Type</p><p className="text-white">{deal.assetType || "N/A"}</p></div>
+                  <div><p className="text-slate-500 text-xs">Property</p><p className="text-white truncate">{deal.propertyAddress || "N/A"}</p></div>
+                  <div><p className="text-slate-500 text-xs">LTV</p><p className="text-white">{deal.ltvPct != null ? `${deal.ltvPct}%` : "N/A"}</p></div>
+                  <div><p className="text-slate-500 text-xs">DSCR</p><p className="text-white">{deal.dscr != null ? `${deal.dscr}x` : "N/A"}</p></div>
+                  <div><p className="text-slate-500 text-xs">Borrower</p><p className="text-white">{deal.borrowerName || "N/A"}</p></div>
+                  <div><p className="text-slate-500 text-xs">Property Value</p><p className="text-white">{deal.propertyValue ? `$${deal.propertyValue.toLocaleString()}` : "N/A"}</p></div>
+                  <div><p className="text-slate-500 text-xs">NOI</p><p className="text-white">{deal.noiAnnual ? `$${deal.noiAnnual.toLocaleString()}` : "N/A"}</p></div>
+                  <div><p className="text-slate-500 text-xs">Occupancy</p><p className="text-white">{deal.occupancyPct != null ? `${deal.occupancyPct}%` : "N/A"}</p></div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Status Timeline */}
+          {deal.statusHistory?.length > 0 && (
+            <Card className="bg-[#1a2038] border-slate-700/50">
+              <CardHeader className="pb-3"><CardTitle className="text-sm text-slate-300 flex items-center gap-2"><Clock size={16} /> Status Timeline</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {deal.statusHistory.map((sh: any, i: number) => (
+                    <div key={sh.id} className="flex items-start gap-3" data-testid={`timeline-${i}`}>
+                      <div className="flex flex-col items-center">
+                        <div className={`w-3 h-3 rounded-full ${i === 0 ? "bg-blue-500" : "bg-slate-600"}`} />
+                        {i < deal.statusHistory.length - 1 && <div className="w-px h-6 bg-slate-700" />}
+                      </div>
+                      <div>
+                        <p className="text-sm text-white">{sh.toStatus.replace(/_/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase())}</p>
+                        <p className="text-xs text-slate-500">{new Date(sh.createdAt).toLocaleString()}</p>
+                        {sh.notes && <p className="text-xs text-slate-400 mt-0.5">{sh.notes}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Notes Section */}
+          <Card className="bg-[#1a2038] border-slate-700/50">
+            <CardHeader className="pb-3"><CardTitle className="text-sm text-slate-300 flex items-center gap-2"><StickyNote size={16} /> Notes</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex gap-2">
+                <Textarea
+                  placeholder="Add a note about this deal..."
+                  value={noteContent}
+                  onChange={e => setNoteContent(e.target.value)}
+                  className="bg-[#0f1629] border-slate-700 text-white text-sm min-h-[60px] resize-none flex-1"
+                  data-testid="note-input"
+                />
+              </div>
+              <Button
+                size="sm"
+                disabled={!noteContent.trim() || addNoteMutation.isPending}
+                onClick={() => addNoteMutation.mutate(noteContent)}
+                className="bg-[#C9A84C] hover:bg-[#b8973b] text-sm"
+                data-testid="add-note-button"
+              >
+                {addNoteMutation.isPending ? <RefreshCw size={12} className="animate-spin mr-1" /> : <MessageSquare size={12} className="mr-1" />}
+                Add Note
+              </Button>
+
+              {brokerNotes.length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-slate-700/50">
+                  {brokerNotes.map((note, i) => (
+                    <div key={i} className="p-2.5 rounded bg-[#0f1629] border border-slate-700/50" data-testid={`note-${i}`}>
+                      <p className="text-sm text-white whitespace-pre-wrap">{note.content}</p>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <p className="text-xs text-slate-500">{note.authorName}</p>
+                        <span className="text-xs text-slate-700">·</span>
+                        <p className="text-xs text-slate-500">{new Date(note.createdAt).toLocaleString()}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* RIGHT COLUMN */}
+        <div className="space-y-4 sm:space-y-6">
+          {/* Document Collection */}
+          <Card className="bg-[#1a2038] border-slate-700/50">
+            <CardHeader className="pb-3"><CardTitle className="text-sm text-slate-300 flex items-center gap-2"><FileText size={16} /> Documents</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              {/* Upload Section */}
+              <div className="p-3 rounded border border-dashed border-slate-600 bg-[#0f1629]/50">
+                <div className="flex items-center gap-2 mb-2">
+                  <Upload size={14} className="text-slate-400" />
+                  <p className="text-xs text-slate-400">Upload a document</p>
+                </div>
+                <div className="space-y-2">
+                  <Select value={uploadDocType} onValueChange={setUploadDocType}>
+                    <SelectTrigger className="bg-[#0f1629] border-slate-700 text-white text-xs h-8" data-testid="select-doc-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {["General", "Operating Statement", "Rent Roll", "Appraisal", "Purchase Agreement", "Title Report", "Insurance", "Environmental", "Entity Documents", "Financial Statements", "Tax Returns", "Other"].map(t => (
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="flex gap-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      data-testid="file-input"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-slate-600 text-slate-300 hover:bg-slate-700 text-xs flex-1"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadMutation.isPending}
+                      data-testid="upload-button"
+                    >
+                      {uploadMutation.isPending ? <RefreshCw size={12} className="animate-spin mr-1" /> : <Upload size={12} className="mr-1" />}
+                      {uploadMutation.isPending ? "Uploading..." : "Choose File"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Uploaded Documents List */}
+              {currentDocs.length > 0 ? (
+                <div className="space-y-2">
+                  {currentDocs.map((doc: any) => (
+                    <div key={doc.id} className="flex items-center gap-3 p-2.5 rounded bg-[#0f1629] border border-slate-700/50" data-testid={`doc-${doc.id}`}>
+                      <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white truncate">{doc.documentType}</p>
+                        <p className="text-xs text-slate-500 truncate">{doc.fileName} · v{doc.version} · {new Date(doc.uploadedAt).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <FileText size={24} className="mx-auto text-slate-600 mb-2" />
+                  <p className="text-xs text-slate-500">No documents uploaded yet</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Deal Story */}
+          {deal.dealStoryTranscript && (
+            <Card className="bg-[#1a2038] border-slate-700/50">
+              <CardHeader className="pb-3"><CardTitle className="text-sm text-slate-300 flex items-center gap-2"><MessageSquare size={16} /> Deal Story</CardTitle></CardHeader>
+              <CardContent>
+                <p className="text-sm text-slate-300 whitespace-pre-wrap">{deal.dealStoryTranscript}</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
