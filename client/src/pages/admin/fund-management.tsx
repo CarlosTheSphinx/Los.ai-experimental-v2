@@ -13,6 +13,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/phase1/empty-state";
 import {
   Plus, Pencil, Trash2, Building2, RefreshCw, Upload, FileText,
   Search, ArrowLeft, BookOpen, FileUp, ChevronRight, Check, X, Download,
@@ -1223,145 +1225,164 @@ export function FundManagementContent() {
   }
 
   return (
-    <div className="p-6 space-y-6" data-testid="fund-management-page">
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-5" data-testid="fund-management-page">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-white">Fund Management</h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <h1 className="text-[30px] font-display font-bold" data-testid="page-title">Fund Management</h1>
+          <p className="text-[16px] text-muted-foreground mt-0.5">
             {fundsList.length} fund{fundsList.length !== 1 ? "s" : ""} configured
             {filteredFunds.length !== fundsList.length && ` · ${filteredFunds.length} shown`}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setBulkImportOpen(true)} data-testid="import-funds-button">
-            <Upload size={14} className="mr-1" /> Import
-          </Button>
-          <Dialog open={dialogOpen} onOpenChange={v => { setDialogOpen(v); if (!v) setEditingFund(null); }}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="bg-blue-600 hover:bg-blue-700" data-testid="add-fund-button">
-                <Plus size={14} className="mr-1" /> Add Fund
+      </div>
+
+      <div className="bg-card border rounded-[10px] shadow-sm overflow-hidden">
+        <div className="px-4 py-3">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="relative max-w-[320px] w-[320px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search funds..."
+                  className="pl-9 h-9 text-[16px]"
+                  data-testid="search-funds-input"
+                />
+              </div>
+              <div className="flex gap-1">
+                {(["all", "active", "inactive"] as const).map(f => (
+                  <Button
+                    key={f}
+                    variant={filterActive === f ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setFilterActive(f)}
+                    className="text-xs capitalize"
+                    data-testid={`filter-${f}`}
+                  >
+                    {f}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setBulkImportOpen(true)} data-testid="import-funds-button">
+                <Upload size={14} className="mr-1" /> Import
               </Button>
-            </DialogTrigger>
-            <DialogContent className="bg-[#1a2038] border-slate-700 text-white max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>{editingFund ? "Edit Fund" : "Add New Fund"}</DialogTitle>
-              </DialogHeader>
-              <FundForm
-                fund={editingFund}
-                onCancel={() => { setDialogOpen(false); setEditingFund(null); }}
-                onSave={data => {
-                  if (editingFund) {
-                    updateMut.mutate({ id: editingFund.id, data });
-                  } else {
-                    createMut.mutate(data);
-                  }
-                }}
-              />
-            </DialogContent>
-          </Dialog>
+              <Dialog open={dialogOpen} onOpenChange={v => { setDialogOpen(v); if (!v) setEditingFund(null); }}>
+                <DialogTrigger asChild>
+                  <Button size="sm" className="bg-blue-600 hover:bg-blue-700" data-testid="add-fund-button">
+                    <Plus size={14} className="mr-1" /> Add Fund
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>{editingFund ? "Edit Fund" : "Add New Fund"}</DialogTitle>
+                  </DialogHeader>
+                  <FundForm
+                    fund={editingFund}
+                    onCancel={() => { setDialogOpen(false); setEditingFund(null); }}
+                    onSave={data => {
+                      if (editingFund) {
+                        updateMut.mutate({ id: editingFund.id, data });
+                      } else {
+                        createMut.mutate(data);
+                      }
+                    }}
+                  />
+                </DialogContent>
+              </Dialog>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="flex gap-3 items-center">
-        <div className="relative flex-1 max-w-sm">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-          <Input
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search funds..."
-            className="bg-[#1a2038] border-slate-700 text-white text-sm pl-9"
-            data-testid="search-funds-input"
+      <div className="bg-card border rounded-[10px] shadow-sm overflow-hidden">
+        {isLoading ? (
+          <div className="p-6 space-y-3">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        ) : filteredFunds.length === 0 ? (
+          <EmptyState
+            icon={Building2}
+            title={fundsList.length === 0 ? "No funds configured" : "No funds found"}
+            description={fundsList.length === 0
+              ? "Add your first fund or import from Excel."
+              : "Try adjusting your search or filters."}
           />
-        </div>
-        <div className="flex gap-1">
-          {(["all", "active", "inactive"] as const).map(f => (
-            <Button
-              key={f}
-              variant={filterActive === f ? "default" : "outline"}
-              size="sm"
-              onClick={() => setFilterActive(f)}
-              className="text-xs capitalize"
-              data-testid={`filter-${f}`}
-            >
-              {f}
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      {isLoading ? (
-        <div className="flex justify-center py-12"><RefreshCw size={20} className="animate-spin text-slate-400" /></div>
-      ) : filteredFunds.length === 0 ? (
-        <Card className="bg-[#1a2038] border-slate-700/50">
-          <CardContent className="p-12 text-center">
-            <Building2 size={40} className="mx-auto text-slate-500 mb-3" />
-            <p className="text-slate-400">
-              {fundsList.length === 0
-                ? "No funds configured yet. Add your first fund or import from Excel."
-                : "No funds match your search."}
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-3">
-          {filteredFunds.map((fund: any) => (
-            <Card
-              key={fund.id}
-              className="bg-[#1a2038] border-slate-700/50 cursor-pointer hover:border-slate-600 transition-colors"
-              onClick={() => setSelectedFundId(fund.id)}
-              data-testid={`fund-card-${fund.id}`}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-sm font-medium text-white" data-testid={`fund-name-${fund.id}`}>{fund.fundName}</h3>
-                      <Badge className={`text-[10px] ${fund.isActive ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-500/20 text-slate-400"}`}>
-                        {fund.isActive ? "Active" : "Inactive"}
-                      </Badge>
+        ) : (
+          <>
+            <div className="grid gap-0">
+              {filteredFunds.map((fund: any) => (
+                <div
+                  key={fund.id}
+                  className="border-b last:border-b-0 cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => setSelectedFundId(fund.id)}
+                  data-testid={`fund-card-${fund.id}`}
+                >
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="text-[16px] font-medium text-blue-600" data-testid={`fund-name-${fund.id}`}>{fund.fundName}</h3>
+                          <Badge className={`text-[10px] ${fund.isActive ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-500/20 text-slate-400"}`}>
+                            {fund.isActive ? "Active" : "Inactive"}
+                          </Badge>
+                        </div>
+                        {fund.providerName && <p className="text-[13px] text-muted-foreground mb-1">{fund.providerName}</p>}
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted-foreground mt-1">
+                          {(fund.ltvMin != null || fund.ltvMax != null) && (
+                            <span>LTV: {fund.ltvMin ?? "—"}-{fund.ltvMax ?? "—"}%</span>
+                          )}
+                          {(fund.interestRateMin != null || fund.interestRateMax != null) && (
+                            <span>Rate: {fund.interestRateMin ?? "—"}-{fund.interestRateMax ?? "—"}%</span>
+                          )}
+                          {(fund.loanAmountMin != null || fund.loanAmountMax != null) && (
+                            <span>${fmtAmt(fund.loanAmountMin)} - ${fmtAmt(fund.loanAmountMax)}</span>
+                          )}
+                          {fund.allowedStates?.length > 0 && (
+                            <span>States: {fund.allowedStates.slice(0, 5).join(", ")}{fund.allowedStates.length > 5 ? ` +${fund.allowedStates.length - 5}` : ""}</span>
+                          )}
+                          {fund.allowedAssetTypes?.length > 0 && (
+                            <span>Assets: {fund.allowedAssetTypes.slice(0, 3).join(", ")}{fund.allowedAssetTypes.length > 3 ? ` +${fund.allowedAssetTypes.length - 3}` : ""}</span>
+                          )}
+                          {fund.minDscr && <span>Min DSCR: {fund.minDscr}x</span>}
+                          {fund.recourseType && <span>Recourse: {fund.recourseType}</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost" size="sm"
+                          onClick={(e) => { e.stopPropagation(); setEditingFund(fund); setDialogOpen(true); }}
+                          className="text-muted-foreground hover:text-foreground h-8 w-8 p-0"
+                          data-testid={`edit-fund-${fund.id}`}
+                        ><Pencil size={14} /></Button>
+                        <Button
+                          variant="ghost" size="sm"
+                          onClick={(e) => { e.stopPropagation(); if (confirm("Delete this fund?")) deleteMut.mutate(fund.id); }}
+                          className="text-muted-foreground hover:text-red-400 h-8 w-8 p-0"
+                          data-testid={`delete-fund-${fund.id}`}
+                        ><Trash2 size={14} /></Button>
+                        <ChevronRight size={16} className="text-muted-foreground ml-1" />
+                      </div>
                     </div>
-                    {fund.providerName && <p className="text-xs text-slate-400 mb-1">{fund.providerName}</p>}
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 mt-1">
-                      {(fund.ltvMin != null || fund.ltvMax != null) && (
-                        <span>LTV: {fund.ltvMin ?? "—"}-{fund.ltvMax ?? "—"}%</span>
-                      )}
-                      {(fund.interestRateMin != null || fund.interestRateMax != null) && (
-                        <span>Rate: {fund.interestRateMin ?? "—"}-{fund.interestRateMax ?? "—"}%</span>
-                      )}
-                      {(fund.loanAmountMin != null || fund.loanAmountMax != null) && (
-                        <span>${fmtAmt(fund.loanAmountMin)} - ${fmtAmt(fund.loanAmountMax)}</span>
-                      )}
-                      {fund.allowedStates?.length > 0 && (
-                        <span>States: {fund.allowedStates.slice(0, 5).join(", ")}{fund.allowedStates.length > 5 ? ` +${fund.allowedStates.length - 5}` : ""}</span>
-                      )}
-                      {fund.allowedAssetTypes?.length > 0 && (
-                        <span>Assets: {fund.allowedAssetTypes.slice(0, 3).join(", ")}{fund.allowedAssetTypes.length > 3 ? ` +${fund.allowedAssetTypes.length - 3}` : ""}</span>
-                      )}
-                      {fund.minDscr && <span>Min DSCR: {fund.minDscr}x</span>}
-                      {fund.recourseType && <span>Recourse: {fund.recourseType}</span>}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost" size="sm"
-                      onClick={(e) => { e.stopPropagation(); setEditingFund(fund); setDialogOpen(true); }}
-                      className="text-slate-400 hover:text-white h-8 w-8 p-0"
-                      data-testid={`edit-fund-${fund.id}`}
-                    ><Pencil size={14} /></Button>
-                    <Button
-                      variant="ghost" size="sm"
-                      onClick={(e) => { e.stopPropagation(); if (confirm("Delete this fund?")) deleteMut.mutate(fund.id); }}
-                      className="text-slate-400 hover:text-red-400 h-8 w-8 p-0"
-                      data-testid={`delete-fund-${fund.id}`}
-                    ><Trash2 size={14} /></Button>
-                    <ChevronRight size={16} className="text-slate-600 ml-1" />
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+              ))}
+            </div>
+
+            {filteredFunds.length > 0 && (
+              <div className="px-4 py-3 border-t text-[14px] text-muted-foreground flex items-center justify-between">
+                <span>
+                  Showing {filteredFunds.length} of {fundsList.length} funds
+                </span>
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       <BulkImportDialog open={bulkImportOpen} onOpenChange={setBulkImportOpen} />
     </div>
