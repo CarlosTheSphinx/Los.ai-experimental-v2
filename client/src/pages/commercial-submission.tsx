@@ -1821,7 +1821,7 @@ export default function CommercialSubmissionPage() {
         </div>
       </div>
 
-      {watchedPropertyType === "MULTIFAMILY" && (
+      {watchedPropertyType === "Multifamily" && (
         <div className="pt-4 border-t">
           <h3 className="text-sm font-semibold mb-3 text-foreground">Unit Mix</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -3160,7 +3160,7 @@ export default function CommercialSubmissionPage() {
                 <span data-testid="review-closing-timeline">{values.closingTimeline}</span>
               </div>
             )}
-            {values.loanType === "BRIDGE" && (
+            {["Bridge", "Fix & Flip", "Construction", "A&D", "Land Development"].includes(values.loanType) && (
               <>
                 <div>
                   <span className="text-muted-foreground">Exit Strategy:</span>{" "}
@@ -3205,7 +3205,7 @@ export default function CommercialSubmissionPage() {
               <span data-testid="review-occupancy-type">{values.occupancyType}</span>
             </div>
             <div>
-              <span className="text-muted-foreground">{values.propertyType === "MULTIFAMILY" ? "Units" : "Sq Ft"}:</span>{" "}
+              <span className="text-muted-foreground">{values.propertyType === "Multifamily" ? "Units" : "Sq Ft"}:</span>{" "}
               <span data-testid="review-units-sqft">{values.unitsOrSqft}</span>
             </div>
             <div>

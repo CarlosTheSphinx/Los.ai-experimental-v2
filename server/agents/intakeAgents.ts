@@ -4,6 +4,7 @@ import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { OrchestrationTracer } from "../services/orchestrationTracing";
 import OpenAI from "openai";
 import { INTAKE_AGENT_PROMPTS } from "./intakePrompts";
+import { AI_REFERENCE_KEY } from "@shared/loanConstants";
 import { generateEmbedding } from "../services/embeddings";
 
 const OPENAI_API_KEY = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
@@ -228,9 +229,8 @@ async function agent1ValidateAndStructure(deal: any, documents: any[], sessionId
 
 async function agent2MatchFunds(structuredDeal: any, activeFunds: any[], sessionId?: string): Promise<any> {
   const config = await getAgentConfig("intake_fund_matcher");
-  const systemPrompt = config?.systemPrompt
-    ? config.systemPrompt
-    : DEFAULT_PROMPTS.fundMatcher + JSON_FORMAT_SUFFIX.fundMatcher;
+  const basePrompt = config?.systemPrompt || DEFAULT_PROMPTS.fundMatcher;
+  const systemPrompt = basePrompt + "\n\n" + AI_REFERENCE_KEY + JSON_FORMAT_SUFFIX.fundMatcher;
   const model = config?.modelName || "gpt-4o-mini";
   const temperature = config?.temperature ?? 0.3;
 
