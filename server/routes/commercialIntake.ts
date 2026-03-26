@@ -2157,9 +2157,7 @@ router.post("/api/commercial/funds/backfill-strategy", async (req: Request, res:
             }
           }
         }
-        if (normalized.size > 0) {
-          updateData.allowedAssetTypes = Array.from(normalized);
-        }
+        updateData.allowedAssetTypes = Array.from(normalized);
       }
 
       if (Object.keys(updateData).length > 0) {
