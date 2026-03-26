@@ -941,44 +941,52 @@ function FundDetailView({ fundId, onBack }: { fundId: number; onBack: () => void
                   </Button>
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-sm">
-                  <DetailRow label="Fund Name" value={fund.fundName} />
+                  <DetailRow label="Lender" value={fund.fundName} />
                   <DetailRow label="Provider" value={fund.providerName} />
-                  <DetailRow label="Contact Email" value={fund.contactEmail} />
-                  <DetailRow label="Contact Phone" value={fund.contactPhone} />
-                  <DetailRow label="LTV Range" value={fund.ltvMin || fund.ltvMax ? `${fund.ltvMin ?? "—"}% – ${fund.ltvMax ?? "—"}%` : null} />
-                  <DetailRow label="LTC Range" value={fund.ltcMin || fund.ltcMax ? `${fund.ltcMin ?? "—"}% – ${fund.ltcMax ?? "—"}%` : null} />
-                  <DetailRow label="Interest Rate" value={fund.interestRateMin || fund.interestRateMax ? `${fund.interestRateMin ?? "—"}% – ${fund.interestRateMax ?? "—"}%` : null} />
-                  <DetailRow label="Term" value={fund.termMin || fund.termMax ? `${fund.termMin ?? "—"} – ${fund.termMax ?? "—"} months` : null} />
-                  <DetailRow label="Loan Amount" value={fund.loanAmountMin || fund.loanAmountMax ? `$${fmtAmt(fund.loanAmountMin)} – $${fmtAmt(fund.loanAmountMax)}` : null} />
-                  <DetailRow label="Recourse Type" value={fund.recourseType} />
-                  <DetailRow label="Min DSCR" value={fund.minDscr ? `${fund.minDscr}x` : null} />
+                  <DetailRow label="Website" value={fund.website ? <a href={fund.website.startsWith("http") ? fund.website : `https://${fund.website}`} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">{fund.website}</a> : null} />
+                  <DetailRow label="Contact" value={fund.contactName} />
+                  <DetailRow label="Email" value={fund.contactEmail} />
+                  <DetailRow label="Phone" value={fund.contactPhone} />
+                  <DetailRow label="Link to Guidelines" value={fund.guidelineUrl ? <a href={fund.guidelineUrl.startsWith("http") ? fund.guidelineUrl : `https://${fund.guidelineUrl}`} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline truncate block max-w-xs">{fund.guidelineUrl}</a> : null} />
+                  <DetailRow label="Loan Amounts" value={fund.loanAmountMin || fund.loanAmountMax ? `$${fmtAmt(fund.loanAmountMin)} – $${fmtAmt(fund.loanAmountMax)}` : null} />
+                  <DetailRow label="LTV Range" value={fund.ltvMin != null || fund.ltvMax != null ? `${fund.ltvMin ?? "—"}% – ${fund.ltvMax ?? "—"}%` : null} />
+                  <DetailRow label="LTC Range" value={fund.ltcMin != null || fund.ltcMax != null ? `${fund.ltcMin ?? "—"}% – ${fund.ltcMax ?? "—"}%` : null} />
+                  <DetailRow label="Interest Rate" value={fund.interestRateMin != null || fund.interestRateMax != null ? `${fund.interestRateMin ?? "—"}% – ${fund.interestRateMax ?? "—"}%` : null} />
+                  <DetailRow label="Term" value={fund.termMin != null || fund.termMax != null ? `${fund.termMin ?? "—"} – ${fund.termMax ?? "—"} months` : null} />
+                  <DetailRow label="Recourse" value={fund.recourseType} />
+                  <DetailRow label="Min DSCR" value={fund.minDscr != null ? `${fund.minDscr}x` : null} />
                   <DetailRow label="Min Credit Score" value={fund.minCreditScore} />
                   <DetailRow label="Prepayment Terms" value={fund.prepaymentTerms} />
                   <DetailRow label="Closing Timeline" value={fund.closingTimeline} />
-                  <DetailRow label="Origination Fee" value={fund.originationFeeMin || fund.originationFeeMax ? `${fund.originationFeeMin ?? "—"}% – ${fund.originationFeeMax ?? "—"}%` : null} />
+                  <DetailRow label="Origination Fee" value={fund.originationFeeMin != null || fund.originationFeeMax != null ? `${fund.originationFeeMin ?? "—"}% – ${fund.originationFeeMax ?? "—"}%` : null} />
                 </div>
-                {fund.allowedStates?.length > 0 && (
-                  <div className="mt-4">
-                    <p className="text-xs text-slate-500 mb-1">Allowed States</p>
+                <div className="mt-4">
+                  <p className="text-xs text-slate-500 mb-1">Region</p>
+                  {fund.allowedStates?.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
-                      {fund.allowedStates.map((s: string) => <Badge key={s} className="bg-blue-500/10 text-blue-400 text-[10px]">{s}</Badge>)}
+                      {fund.allowedStates.length === 50
+                        ? <Badge className="bg-violet-500/10 text-violet-400 text-[10px]">Nationwide</Badge>
+                        : fund.allowedStates.map((s: string) => <Badge key={s} className="bg-blue-500/10 text-blue-400 text-[10px]">{s}</Badge>)
+                      }
                     </div>
-                  </div>
-                )}
-                {fund.allowedAssetTypes?.length > 0 && (
-                  <div className="mt-3">
-                    <p className="text-xs text-slate-500 mb-1">Asset Types</p>
+                  ) : (
+                    <p className="text-slate-600 italic text-sm">N/A</p>
+                  )}
+                </div>
+                <div className="mt-3">
+                  <p className="text-xs text-slate-500 mb-1">Property Types</p>
+                  {fund.allowedAssetTypes?.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
                       {fund.allowedAssetTypes.map((t: string) => <Badge key={t} className="bg-emerald-500/10 text-emerald-400 text-[10px]">{t}</Badge>)}
                     </div>
-                  </div>
-                )}
-                {fund.fundDescription && (
-                  <div className="mt-4">
-                    <p className="text-xs text-slate-500 mb-1">Description</p>
-                    <p className="text-sm text-slate-300">{fund.fundDescription}</p>
-                  </div>
-                )}
+                  ) : (
+                    <p className="text-slate-600 italic text-sm">N/A</p>
+                  )}
+                </div>
+                <div className="mt-4">
+                  <p className="text-xs text-slate-500 mb-1">Terms</p>
+                  <p className={fund.fundDescription ? "text-sm text-slate-300" : "text-slate-600 italic text-sm"}>{fund.fundDescription || "N/A"}</p>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -1142,11 +1150,11 @@ function FundDetailView({ fundId, onBack }: { fundId: number; onBack: () => void
 }
 
 function DetailRow({ label, value }: { label: string; value: any }) {
-  if (!value && value !== 0) return null;
+  const isEmpty = !value && value !== 0;
   return (
     <div>
       <p className="text-xs text-slate-500">{label}</p>
-      <p className="text-white">{value}</p>
+      <p className={isEmpty ? "text-slate-600 italic" : "text-white"}>{isEmpty ? "N/A" : value}</p>
     </div>
   );
 }
