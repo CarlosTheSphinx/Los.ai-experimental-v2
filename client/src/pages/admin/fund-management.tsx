@@ -1448,10 +1448,15 @@ export function FundManagementContent() {
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-2">
                             <span className="text-[16px] font-medium text-blue-600" data-testid={`fund-name-${fund.id}`}>{fund.fundName}</span>
-                            {(fund as any).loanTypes && (fund as any).loanTypes.length > 0 ? (
-                              (fund as any).loanTypes.slice(0, 3).map((lt: string) => (
-                                <Badge key={lt} variant="outline" className="text-[10px] px-1.5 py-0 text-blue-400 border-blue-500/30" data-testid={`fund-loantype-${fund.id}-${lt}`}>{lt}</Badge>
-                              ))
+                            {Array.isArray((fund as any).loanTypes) && (fund as any).loanTypes.length > 0 ? (
+                              <>
+                                {(fund as any).loanTypes.slice(0, 3).map((lt: string) => (
+                                  <Badge key={lt} variant="outline" className="text-[10px] px-1.5 py-0 text-blue-400 border-blue-500/30" data-testid={`fund-loantype-${fund.id}-${lt}`}>{lt}</Badge>
+                                ))}
+                                {(fund as any).loanTypes.length > 3 && (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-slate-400 border-slate-600">+{(fund as any).loanTypes.length - 3}</Badge>
+                                )}
+                              </>
                             ) : fund.loanStrategy ? (
                               <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${
                                 fund.loanStrategy === "Bridge" ? "text-amber-600 border-amber-300" :
@@ -1459,9 +1464,6 @@ export function FundManagementContent() {
                                 "text-blue-600 border-blue-300"
                               }`} data-testid={`fund-strategy-${fund.id}`}>{fund.loanStrategy}</Badge>
                             ) : null}
-                            {(fund as any).loanTypes && (fund as any).loanTypes.length > 3 && (
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-slate-400 border-slate-600">+{(fund as any).loanTypes.length - 3}</Badge>
-                            )}
                           </div>
                           {fund.providerName && <div className="text-[13px] text-muted-foreground">{fund.providerName}</div>}
                         </td>
