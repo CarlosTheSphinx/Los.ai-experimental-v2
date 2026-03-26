@@ -1345,14 +1345,29 @@ router.post("/api/commercial/funds/bulk-preview", fundFileUpload.single("file"),
     if (rawData.length < 2) return res.status(400).json({ error: "File must have a header row and at least one data row" });
 
     const headers = (rawData[0] as string[]).map(h => String(h || "").trim());
+
+    let customMappingObj: Record<number, string> | null = null;
+    if (req.body?.customMapping) {
+      try { customMappingObj = JSON.parse(req.body.customMapping); } catch {}
+    }
+
     const columnMapping: Record<number, string> = {};
     const unmappedColumns: string[] = [];
 
-    headers.forEach((h, i) => {
-      const mapped = mapColumnName(h);
-      if (mapped) columnMapping[i] = mapped;
-      else if (h) unmappedColumns.push(h);
-    });
+    if (customMappingObj) {
+      for (const [idx, field] of Object.entries(customMappingObj)) {
+        if (field && field !== "_skip") columnMapping[parseInt(idx)] = field;
+      }
+      headers.forEach((h, i) => {
+        if (!columnMapping[i] && h && !(customMappingObj && String(i) in customMappingObj)) unmappedColumns.push(h);
+      });
+    } else {
+      headers.forEach((h, i) => {
+        const mapped = mapColumnName(h);
+        if (mapped) columnMapping[i] = mapped;
+        else if (h) unmappedColumns.push(h);
+      });
+    }
 
     const rows: any[] = [];
     const errors: { row: number; message: string }[] = [];
@@ -1392,8 +1407,10 @@ router.post("/api/commercial/funds/bulk-preview", fundFileUpload.single("file"),
       let displayField = field;
       if (field === "_loanAmountRange") displayField = "loanAmountMin + loanAmountMax (parsed from range)";
       if (field === "_specialty") displayField = "Knowledge Entry (specialty)";
-      return { column: headers[parseInt(colIdx)], mappedTo: displayField };
+      return { column: headers[parseInt(colIdx)], mappedTo: displayField, columnIndex: parseInt(colIdx) };
     });
+
+    const allHeaders = headers.map((h, i) => ({ index: i, name: h, autoMapped: mapColumnName(h) || null })).filter(h => h.name);
 
     res.json({
       totalRows: rows.length,
@@ -1402,6 +1419,7 @@ router.post("/api/commercial/funds/bulk-preview", fundFileUpload.single("file"),
       duplicates: duplicates.map(d => ({ rowNumber: d.rowNumber, fundName: d.data.fundName })),
       columnMapping: displayMapping,
       unmappedColumns,
+      headers: allHeaders,
       preview: rows.slice(0, 10),
       sheetNames,
       selectedSheet,
@@ -1430,11 +1448,23 @@ router.post("/api/commercial/funds/bulk-import", fundFileUpload.single("file"), 
     if (rawData.length < 2) return res.status(400).json({ error: "File must have data rows" });
 
     const headers = (rawData[0] as string[]).map(h => String(h || "").trim());
+
+    let customMappingObj: Record<number, string> | null = null;
+    if (req.body?.customMapping) {
+      try { customMappingObj = JSON.parse(req.body.customMapping); } catch {}
+    }
+
     const columnMapping: Record<number, string> = {};
-    headers.forEach((h, i) => {
-      const mapped = mapColumnName(h);
-      if (mapped) columnMapping[i] = mapped;
-    });
+    if (customMappingObj) {
+      for (const [idx, field] of Object.entries(customMappingObj)) {
+        if (field && field !== "_skip") columnMapping[parseInt(idx)] = field;
+      }
+    } else {
+      headers.forEach((h, i) => {
+        const mapped = mapColumnName(h);
+        if (mapped) columnMapping[i] = mapped;
+      });
+    }
 
     const tenantId = await getTenantId(req);
     const conditions = [];

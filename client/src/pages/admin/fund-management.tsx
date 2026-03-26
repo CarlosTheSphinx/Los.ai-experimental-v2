@@ -23,6 +23,40 @@ const US_STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","
 const ASSET_TYPES = ["Multifamily","Office","Retail","Industrial","Hotel","Land","Development","Mixed Use","Self Storage","Mobile Home Park","Healthcare","Student Housing"];
 const KNOWLEDGE_CATEGORIES = ["general", "rates", "terms", "eligibility", "guidelines", "specialty"];
 
+const FUND_FIELD_OPTIONS: { value: string; label: string; group: string }[] = [
+  { value: "_skip", label: "— Skip —", group: "Actions" },
+  { value: "fundName", label: "Fund Name", group: "Basic" },
+  { value: "providerName", label: "Provider Name", group: "Basic" },
+  { value: "website", label: "Website", group: "Basic" },
+  { value: "contactName", label: "Contact Name", group: "Contact" },
+  { value: "contactEmail", label: "Contact Email", group: "Contact" },
+  { value: "contactPhone", label: "Contact Phone", group: "Contact" },
+  { value: "guidelineUrl", label: "Guideline URL", group: "Contact" },
+  { value: "fundDescription", label: "Description / Notes", group: "Details" },
+  { value: "_specialty", label: "Specialty (→ Knowledge)", group: "Details" },
+  { value: "_loanAmountRange", label: "Loan Amount Range (auto-parse)", group: "Financials" },
+  { value: "loanAmountMin", label: "Loan Amount Min", group: "Financials" },
+  { value: "loanAmountMax", label: "Loan Amount Max", group: "Financials" },
+  { value: "ltvMin", label: "LTV Min %", group: "Financials" },
+  { value: "ltvMax", label: "LTV Max %", group: "Financials" },
+  { value: "ltcMin", label: "LTC Min %", group: "Financials" },
+  { value: "ltcMax", label: "LTC Max %", group: "Financials" },
+  { value: "interestRateMin", label: "Interest Rate Min", group: "Financials" },
+  { value: "interestRateMax", label: "Interest Rate Max", group: "Financials" },
+  { value: "termMin", label: "Term Min (months)", group: "Financials" },
+  { value: "termMax", label: "Term Max (months)", group: "Financials" },
+  { value: "recourseType", label: "Recourse Type", group: "Terms" },
+  { value: "minDscr", label: "Min DSCR", group: "Terms" },
+  { value: "minCreditScore", label: "Min Credit Score", group: "Terms" },
+  { value: "prepaymentTerms", label: "Prepayment Terms", group: "Terms" },
+  { value: "closingTimeline", label: "Closing Timeline", group: "Terms" },
+  { value: "originationFeeMin", label: "Origination Fee Min", group: "Terms" },
+  { value: "originationFeeMax", label: "Origination Fee Max", group: "Terms" },
+  { value: "allowedStates", label: "States / Region", group: "Criteria" },
+  { value: "allowedAssetTypes", label: "Property / Asset Types", group: "Criteria" },
+  { value: "isActive", label: "Active Status", group: "Other" },
+];
+
 function FundForm({ fund, onSave, onCancel }: { fund?: any; onSave: (data: any) => void; onCancel: () => void }) {
   const [form, setForm] = useState({
     fundName: fund?.fundName || "",
@@ -281,6 +315,8 @@ function BulkImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
   const [allSheetsPreview, setAllSheetsPreview] = useState<Record<string, any>>({});
   const [loadingSheets, setLoadingSheets] = useState(false);
   const [duplicateAction, setDuplicateAction] = useState("skip");
+  const [columnMappings, setColumnMappings] = useState<Record<string, Record<number, string>>>({});
+  const [showMappingEditor, setShowMappingEditor] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
 
   const previewMut = useMutation({
@@ -302,10 +338,18 @@ function BulkImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
         setSheetNames(data.sheetNames);
         setSelectedSheets([data.selectedSheet || data.sheetNames[0]]);
         setStep("sheet-select");
-      } else if (step === "sheet-select") {
-        setAllSheetsPreview(prev => ({ ...prev, [data.selectedSheet]: data }));
-        setStep("preview");
       } else {
+        const sheetKey = data.selectedSheet || "_default";
+        setCurrentPreviewSheet(sheetKey);
+        setSelectedSheets([sheetKey]);
+        setAllSheetsPreview(prev => ({ ...prev, [sheetKey]: data }));
+        if (data.headers) {
+          const mapping: Record<number, string> = {};
+          data.headers.forEach((h: any) => {
+            mapping[h.index] = h.autoMapped || "_skip";
+          });
+          setColumnMappings(prev => ({ ...prev, [sheetKey]: mapping }));
+        }
         setStep("preview");
       }
     },
@@ -322,6 +366,8 @@ function BulkImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
         formData.append("file", selectedFile);
         formData.append("duplicateAction", duplicateAction);
         if (sheet) formData.append("sheetName", sheet);
+        const sheetMapping = columnMappings[sheet];
+        if (sheetMapping) formData.append("customMapping", JSON.stringify(sheetMapping));
         const resp = await fetch("/api/commercial/funds/bulk-import", {
           method: "POST",
           body: formData,
@@ -355,6 +401,8 @@ function BulkImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
     setCurrentPreviewSheet("");
     setAllSheetsPreview({});
     setLoadingSheets(false);
+    setColumnMappings({});
+    setShowMappingEditor(false);
     setImportResult(null);
   };
 
@@ -370,6 +418,7 @@ function BulkImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
     setLoadingSheets(true);
     setCurrentPreviewSheet(selectedSheets[0]);
     const previews: Record<string, any> = {};
+    const mappings: Record<string, Record<number, string>> = {};
     for (const sheet of selectedSheets) {
       const formData = new FormData();
       formData.append("file", selectedFile);
@@ -381,11 +430,20 @@ function BulkImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
           credentials: "include",
         });
         if (resp.ok) {
-          previews[sheet] = await resp.json();
+          const data = await resp.json();
+          previews[sheet] = data;
+          const mapping: Record<number, string> = {};
+          if (data.headers) {
+            data.headers.forEach((h: any) => {
+              mapping[h.index] = h.autoMapped || "_skip";
+            });
+          }
+          mappings[sheet] = mapping;
         }
       } catch {}
     }
     setAllSheetsPreview(previews);
+    setColumnMappings(mappings);
     setPreviewData(previews[selectedSheets[0]] || null);
     setLoadingSheets(false);
     setStep("preview");
@@ -516,27 +574,111 @@ function BulkImportDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
               </div>
             </div>
 
-            {previewData.columnMapping?.length > 0 && (
+            {previewData.headers?.length > 0 && (
               <div>
-                <p className="text-xs text-slate-400 mb-2">Column Mapping</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {previewData.columnMapping.map((m: any, i: number) => (
-                    <Badge key={i} className="bg-blue-500/20 text-blue-400 text-[10px]">
-                      {m.column} → {m.mappedTo}
-                    </Badge>
-                  ))}
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-slate-400">Column Mapping</p>
+                  <button
+                    onClick={() => setShowMappingEditor(!showMappingEditor)}
+                    className="text-xs text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
+                    data-testid="toggle-mapping-editor"
+                  >
+                    <Pencil size={10} />
+                    {showMappingEditor ? "Hide Editor" : "Edit Mapping"}
+                  </button>
                 </div>
-              </div>
-            )}
-
-            {previewData.unmappedColumns?.length > 0 && (
-              <div>
-                <p className="text-xs text-slate-400 mb-1">Unmapped Columns (will be skipped)</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {previewData.unmappedColumns.map((c: string, i: number) => (
-                    <Badge key={i} className="bg-slate-500/20 text-slate-400 text-[10px]">{c}</Badge>
-                  ))}
-                </div>
+                {!showMappingEditor ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {previewData.headers.map((h: any) => {
+                      const currentMapping = columnMappings[currentPreviewSheet]?.[h.index];
+                      const field = FUND_FIELD_OPTIONS.find(f => f.value === currentMapping);
+                      const isSkipped = !currentMapping || currentMapping === "_skip";
+                      return (
+                        <Badge key={h.index} className={isSkipped ? "bg-slate-500/20 text-slate-500 text-[10px]" : "bg-blue-500/20 text-blue-400 text-[10px]"}>
+                          {h.name} → {isSkipped ? "skip" : field?.label || currentMapping}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="bg-[#0f1629] rounded-lg p-3 space-y-2 max-h-64 overflow-y-auto">
+                    {previewData.headers.map((h: any) => {
+                      const currentMapping = columnMappings[currentPreviewSheet]?.[h.index] || "_skip";
+                      return (
+                        <div key={h.index} className="flex items-center gap-2">
+                          <span className="text-xs text-slate-300 font-medium w-36 truncate flex-shrink-0" title={h.name}>{h.name}</span>
+                          <ChevronRight size={12} className="text-slate-600 flex-shrink-0" />
+                          <Select
+                            value={currentMapping}
+                            onValueChange={(val) => {
+                              setColumnMappings(prev => ({
+                                ...prev,
+                                [currentPreviewSheet]: { ...prev[currentPreviewSheet], [h.index]: val }
+                              }));
+                            }}
+                          >
+                            <SelectTrigger className="bg-[#1a2038] border-slate-700 text-white text-xs h-8 flex-1" data-testid={`mapping-select-${h.index}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-60">
+                              {(() => {
+                                const groups = [...new Set(FUND_FIELD_OPTIONS.map(f => f.group))];
+                                return groups.map(group => (
+                                  <div key={group}>
+                                    <div className="px-2 py-1 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">{group}</div>
+                                    {FUND_FIELD_OPTIONS.filter(f => f.group === group).map(f => (
+                                      <SelectItem key={f.value} value={f.value} className="text-xs">{f.label}</SelectItem>
+                                    ))}
+                                  </div>
+                                ));
+                              })()}
+                            </SelectContent>
+                          </Select>
+                          {currentMapping !== "_skip" && currentMapping !== h.autoMapped && (
+                            <Badge className="bg-amber-500/20 text-amber-400 text-[9px] flex-shrink-0">edited</Badge>
+                          )}
+                        </div>
+                      );
+                    })}
+                    <div className="flex justify-between pt-2 border-t border-slate-800">
+                      <button
+                        onClick={() => {
+                          const mapping: Record<number, string> = {};
+                          previewData.headers.forEach((h: any) => { mapping[h.index] = h.autoMapped || "_skip"; });
+                          setColumnMappings(prev => ({ ...prev, [currentPreviewSheet]: mapping }));
+                        }}
+                        className="text-xs text-slate-400 hover:text-slate-300"
+                        data-testid="reset-mapping"
+                      >
+                        Reset to Auto-Detect
+                      </button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-7"
+                        onClick={async () => {
+                          if (!selectedFile) return;
+                          const formData = new FormData();
+                          formData.append("file", selectedFile);
+                          formData.append("sheetName", currentPreviewSheet);
+                          formData.append("customMapping", JSON.stringify(columnMappings[currentPreviewSheet]));
+                          try {
+                            const resp = await fetch("/api/commercial/funds/bulk-preview", { method: "POST", body: formData, credentials: "include" });
+                            if (resp.ok) {
+                              const data = await resp.json();
+                              setPreviewData(data);
+                              setAllSheetsPreview(prev => ({ ...prev, [currentPreviewSheet]: data }));
+                              toast({ title: "Preview updated with new mapping" });
+                            }
+                          } catch {}
+                        }}
+                        data-testid="apply-mapping"
+                      >
+                        <RefreshCw size={12} className="mr-1" /> Re-Preview
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
