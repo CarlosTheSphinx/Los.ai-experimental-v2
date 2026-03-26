@@ -654,12 +654,17 @@ router.post("/api/commercial/deals/:id/submit", async (req: Request, res: Respon
 
     const [deal] = await db.select().from(intakeDeals).where(eq(intakeDeals.id, dealId));
     if (!deal) return res.status(404).json({ error: "Deal not found" });
-    if (deal.status !== "draft") return res.status(400).json({ error: "Only draft deals can be submitted" });
+
+    const submittableStatuses = ["draft", "submitted", "analyzed", "no_match", "under_review", "conditional", "rejected"];
+    if (!submittableStatuses.includes(deal.status)) {
+      return res.status(400).json({ error: `Deal in "${deal.status}" status cannot be resubmitted` });
+    }
 
     if (!deal.dealName || !deal.loanAmount || !deal.assetType) {
       return res.status(400).json({ error: "Missing required fields: deal name, loan amount, asset type" });
     }
 
+    const previousStatus = deal.status;
     const [updated] = await db.update(intakeDeals)
       .set({ status: "submitted", submittedAt: new Date(), updatedAt: new Date() })
       .where(eq(intakeDeals.id, dealId))
@@ -667,10 +672,10 @@ router.post("/api/commercial/deals/:id/submit", async (req: Request, res: Respon
 
     await db.insert(intakeDealStatusHistory).values({
       dealId,
-      fromStatus: "draft",
+      fromStatus: previousStatus,
       toStatus: "submitted",
       updatedBy: userId,
-      notes: "Deal submitted for review",
+      notes: previousStatus === "draft" ? "Deal submitted for review" : `Deal resubmitted (was ${previousStatus})`,
     });
 
     runIntakeAiPipeline(dealId).catch(err => {

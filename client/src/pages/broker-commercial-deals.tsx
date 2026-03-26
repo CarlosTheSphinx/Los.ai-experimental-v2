@@ -433,8 +433,8 @@ function DealForm({ editDealId }: { editDealId?: number } = {}) {
         <Button variant="ghost" size="sm" onClick={() => step === 2 ? setStep(1) : navigate("/commercial-deals")} className="text-muted-foreground" data-testid="back-button">
           <ArrowLeft size={16} className="mr-1" /> {step === 2 ? "Back to Deal Info" : "Back"}
         </Button>
-        <h1 className="text-xl font-semibold text-foreground">{isEditing ? "Edit Draft Deal" : "Submit New Deal"}</h1>
-        {isEditing && <Badge className="text-xs bg-muted text-muted-foreground border">Draft</Badge>}
+        <h1 className="text-xl font-semibold text-foreground">{isEditing ? "Edit Deal" : "Submit New Deal"}</h1>
+        {isEditing && existingDeal && <Badge className="text-xs bg-muted text-muted-foreground border">{existingDeal.status === "draft" ? "Draft" : existingDeal.status.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())}</Badge>}
       </div>
 
       {/* Step Indicator */}
@@ -788,6 +788,18 @@ function DealDetail() {
     updateMutation.mutate(cleaned);
   };
 
+  const resubmitMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", `/api/commercial/deals/${params}/submit`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/commercial/deals", params] });
+      queryClient.invalidateQueries({ queryKey: ["/api/commercial/deals"] });
+      toast({ title: "Deal resubmitted for review" });
+    },
+    onError: (err: any) => toast({ title: "Resubmission failed", description: err.message, variant: "destructive" }),
+  });
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -800,6 +812,7 @@ function DealDetail() {
 
   const currentDocs = deal.documents?.filter((d: any) => d.isCurrent) || [];
   const brokerNotes = (deal.brokerNotes || []) as Array<{ content: string; createdAt: string; authorName: string }>;
+  const canResubmit = ["submitted", "analyzed", "no_match", "under_review", "conditional", "rejected"].includes(deal.status);
 
   return (
     <div className="p-3 sm:p-6 space-y-4 sm:space-y-6" data-testid="broker-deal-detail">
@@ -809,9 +822,22 @@ function DealDetail() {
         </Button>
         <h1 className="text-xl font-semibold text-foreground">{deal.dealName || `Deal #${deal.id}`}</h1>
         {statusBadge(deal.status)}
-        <Button size="sm" className="bg-blue-600 hover:bg-blue-700 ml-auto" onClick={() => navigate(`/commercial-deals/${deal.id}/edit`)} data-testid="edit-deal-button">
-          <Pencil size={14} className="mr-1" /> Edit Deal
-        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => navigate(`/commercial-deals/${deal.id}/edit`)} data-testid="edit-deal-button">
+            <Pencil size={14} className="mr-1" /> Edit Deal
+          </Button>
+          {canResubmit && (
+            <Button
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700"
+              onClick={() => resubmitMutation.mutate()}
+              disabled={resubmitMutation.isPending}
+              data-testid="resubmit-deal-button"
+            >
+              <Send size={14} className="mr-1" /> {resubmitMutation.isPending ? "Resubmitting..." : "Resubmit to Lender"}
+            </Button>
+          )}
+        </div>
       </div>
 
       {deal.linkedProjectId && (
