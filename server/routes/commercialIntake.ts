@@ -7,6 +7,7 @@ import {
   insertFundSchema, insertIntakeDealSchema, insertIntakeDocumentRuleSchema,
   commercialFormConfig,
   fundDocuments, fundKnowledgeEntries,
+  intakeDealTasks,
   projects, users,
   type Fund, type IntakeDeal, type IntakeDocumentRule, type IntakeAiAnalysis,
   type IntakeDealStatusHistory, type IntakeDealFundSubmission, type IntakeDealDocument,
@@ -460,6 +461,10 @@ router.get("/api/commercial/deals/:id", async (req: Request, res: Response) => {
       .leftJoin(funds, eq(intakeDealFundSubmissions.fundId, funds.id))
       .where(eq(intakeDealFundSubmissions.dealId, dealId));
 
+    const tasks = await db.select().from(intakeDealTasks)
+      .where(eq(intakeDealTasks.dealId, dealId))
+      .orderBy(desc(intakeDealTasks.createdAt));
+
     res.json({
       ...dealResult.deal,
       brokerName: dealResult.brokerName,
@@ -468,6 +473,7 @@ router.get("/api/commercial/deals/:id", async (req: Request, res: Response) => {
       analysis,
       statusHistory,
       fundSubmissions: fundSubmissions.map(fs => ({ ...fs.submission, fundName: fs.fundName })),
+      tasks,
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -579,6 +585,114 @@ router.post("/api/commercial/deals/:id/notes", async (req: Request, res: Respons
       .returning();
 
     res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ===== DEAL TASKS CRUD =====
+
+router.get("/api/commercial/deals/:id/tasks", async (req: Request, res: Response) => {
+  try {
+    const dealId = parseInt(req.params.id);
+    const tasks = await db.select().from(intakeDealTasks)
+      .where(eq(intakeDealTasks.dealId, dealId))
+      .orderBy(desc(intakeDealTasks.createdAt));
+    res.json(tasks);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/api/commercial/deals/:id/tasks", async (req: Request, res: Response) => {
+  try {
+    const dealId = parseInt(req.params.id);
+    const userId = getUserId(req);
+    const role = getUserRole(req);
+
+    if (!["super_admin", "lender", "processor"].includes(role || "")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const { taskTitle, taskDescription, priority, assignedTo, dueDate } = req.body;
+    if (!taskTitle?.trim()) return res.status(400).json({ error: "Task title is required" });
+
+    const [deal] = await db.select().from(intakeDeals).where(eq(intakeDeals.id, dealId));
+    if (!deal) return res.status(404).json({ error: "Deal not found" });
+
+    const [task] = await db.insert(intakeDealTasks).values({
+      dealId,
+      taskTitle: taskTitle.trim(),
+      taskDescription: taskDescription?.trim() || null,
+      priority: priority || "medium",
+      assignedTo: assignedTo?.trim() || null,
+      dueDate: dueDate ? new Date(dueDate) : null,
+      createdBy: userId,
+    }).returning();
+
+    res.status(201).json(task);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch("/api/commercial/deals/:dealId/tasks/:taskId", async (req: Request, res: Response) => {
+  try {
+    const taskId = parseInt(req.params.taskId);
+    const userId = getUserId(req);
+    const role = getUserRole(req);
+
+    if (!["super_admin", "lender", "processor"].includes(role || "")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const updates: any = {};
+    if (req.body.taskTitle !== undefined) updates.taskTitle = req.body.taskTitle;
+    if (req.body.taskDescription !== undefined) updates.taskDescription = req.body.taskDescription;
+    if (req.body.priority !== undefined) updates.priority = req.body.priority;
+    if (req.body.assignedTo !== undefined) updates.assignedTo = req.body.assignedTo;
+    if (req.body.dueDate !== undefined) updates.dueDate = req.body.dueDate ? new Date(req.body.dueDate) : null;
+
+    if (req.body.status === "completed" && !updates.completedAt) {
+      updates.status = "completed";
+      updates.completedAt = new Date();
+      const user = userId ? await db.select().from(users).where(eq(users.id, userId)).then(r => r[0]) : null;
+      updates.completedBy = user?.fullName || user?.email || "Unknown";
+    } else if (req.body.status !== undefined) {
+      updates.status = req.body.status;
+      if (req.body.status !== "completed") {
+        updates.completedAt = null;
+        updates.completedBy = null;
+      }
+    }
+
+    const [updated] = await db.update(intakeDealTasks)
+      .set(updates)
+      .where(eq(intakeDealTasks.id, taskId))
+      .returning();
+
+    if (!updated) return res.status(404).json({ error: "Task not found" });
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete("/api/commercial/deals/:dealId/tasks/:taskId", async (req: Request, res: Response) => {
+  try {
+    const taskId = parseInt(req.params.taskId);
+    const role = getUserRole(req);
+
+    if (!["super_admin", "lender", "processor"].includes(role || "")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const [deleted] = await db.delete(intakeDealTasks)
+      .where(eq(intakeDealTasks.id, taskId))
+      .returning();
+
+    if (!deleted) return res.status(404).json({ error: "Task not found" });
+    res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

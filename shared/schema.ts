@@ -4166,6 +4166,25 @@ export const insertIntakeDealSchema = createInsertSchema(intakeDeals).omit({ id:
 export type IntakeDeal = typeof intakeDeals.$inferSelect;
 export type InsertIntakeDeal = z.infer<typeof insertIntakeDealSchema>;
 
+export const intakeDealTasks = pgTable("intake_deal_tasks", {
+  id: serial("id").primaryKey(),
+  dealId: integer("deal_id").references(() => intakeDeals.id, { onDelete: "cascade" }).notNull(),
+  taskTitle: varchar("task_title", { length: 255 }).notNull(),
+  taskDescription: text("task_description"),
+  status: varchar("status", { length: 50 }).default("pending").notNull(),
+  priority: varchar("priority", { length: 50 }).default("medium"),
+  assignedTo: varchar("assigned_to", { length: 255 }),
+  dueDate: timestamp("due_date"),
+  completedAt: timestamp("completed_at"),
+  completedBy: varchar("completed_by", { length: 255 }),
+  createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertIntakeDealTaskSchema = createInsertSchema(intakeDealTasks).omit({ id: true, createdAt: true, completedAt: true });
+export type IntakeDealTask = typeof intakeDealTasks.$inferSelect;
+export type InsertIntakeDealTask = z.infer<typeof insertIntakeDealTaskSchema>;
+
 export const intakeDealDocuments = pgTable("intake_deal_documents", {
   id: serial("id").primaryKey(),
   dealId: integer("deal_id").references(() => intakeDeals.id, { onDelete: "cascade" }).notNull(),

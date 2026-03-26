@@ -19,7 +19,7 @@ The application is built using a modern web stack: React 18 with TypeScript for 
 -   **Core Functionality**: JWT-based authentication with Google OAuth 2.0, multi-tenant architecture, user role differentiation, automated notifications, and orchestration of external pricing requests.
 -   **Security**: Implements SOC 2 compliance features including account lockout, immutable audit logging, password management, JWT invalidation, PII encryption, and Content-Security-Policy. Includes SOC 2-compliant API Key Management and Webhook System.
 
-**Database Schema Highlights**: Manages users, pricing requests, quotes, documents, e-signatures, audit logs, projects (deals), tasks, activities, system settings, partners, loan programs, message threads, commercial loan submissions, and the commercial intake system (funds, fund_documents, fund_knowledge_entries, intake_deals, intake_deal_documents, intake_document_rules, intake_ai_analysis, intake_deal_status_history, intake_deal_fund_submissions).
+**Database Schema Highlights**: Manages users, pricing requests, quotes, documents, e-signatures, audit logs, projects (deals), tasks, activities, system settings, partners, loan programs, message threads, commercial loan submissions, and the commercial intake system (funds, fund_documents, fund_knowledge_entries, intake_deals, intake_deal_documents, intake_deal_tasks, intake_document_rules, intake_ai_analysis, intake_deal_status_history, intake_deal_fund_submissions).
 
 **Key Architectural Decisions:**
 -   **Multi-Tenancy**: Ensures full data isolation using `tenantId`.

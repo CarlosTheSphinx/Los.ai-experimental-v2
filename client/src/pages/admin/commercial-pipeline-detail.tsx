@@ -14,7 +14,8 @@ import {
   ArrowLeft, Building2, DollarSign, MapPin, TrendingUp, User, FileText,
   AlertTriangle, CheckCircle2, XCircle, Clock, Send, RefreshCw,
   ChevronDown, ChevronUp, ArrowRight, Shield, BarChart3, Volume2,
-  Pencil, X, Save, MessageSquare, Sparkles, Loader2,
+  Pencil, X, Save, MessageSquare, Sparkles, Loader2, ListTodo, Plus,
+  Circle, Trash2,
 } from "lucide-react";
 import { StatusBadge } from "@/components/ui/phase1/status-badge";
 
@@ -111,6 +112,9 @@ export default function CommercialPipelineDetailPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<any>({});
   const [noteContent, setNoteContent] = useState("");
+  const [showAddTask, setShowAddTask] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskPriority, setNewTaskPriority] = useState("medium");
 
   const dealId = params.id;
 
@@ -187,6 +191,41 @@ export default function CommercialPipelineDetailPage() {
     },
     onError: () => {
       toast({ title: "Failed to add note", variant: "destructive" });
+    },
+  });
+
+  const addTaskMut = useMutation({
+    mutationFn: async (data: { taskTitle: string; priority: string }) => {
+      return apiRequest("POST", `/api/commercial/deals/${dealId}/tasks`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/commercial/deals", dealId] });
+      setNewTaskTitle("");
+      setNewTaskPriority("medium");
+      setShowAddTask(false);
+      toast({ title: "Task added" });
+    },
+    onError: () => {
+      toast({ title: "Failed to add task", variant: "destructive" });
+    },
+  });
+
+  const toggleTaskMut = useMutation({
+    mutationFn: async ({ taskId, status }: { taskId: number; status: string }) => {
+      return apiRequest("PATCH", `/api/commercial/deals/${dealId}/tasks/${taskId}`, { status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/commercial/deals", dealId] });
+    },
+  });
+
+  const deleteTaskMut = useMutation({
+    mutationFn: async (taskId: number) => {
+      return apiRequest("DELETE", `/api/commercial/deals/${dealId}/tasks/${taskId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/commercial/deals", dealId] });
+      toast({ title: "Task removed" });
     },
   });
 
@@ -595,6 +634,110 @@ export default function CommercialPipelineDetailPage() {
               <p className="text-xs text-muted-foreground mt-1">This may take a moment. The page will refresh automatically.</p>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="bg-card border shadow-sm" data-testid="tasks-section">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+              <ListTodo size={16} /> Tasks ({deal.tasks?.length || 0})
+            </CardTitle>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowAddTask(!showAddTask)}
+              data-testid="add-task-button"
+            >
+              <Plus size={14} className="mr-1" /> Add Task
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {showAddTask && (
+            <div className="flex gap-2 items-end" data-testid="add-task-form">
+              <div className="flex-1">
+                <Input
+                  placeholder="Task title..."
+                  value={newTaskTitle}
+                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                  data-testid="input-task-title"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newTaskTitle.trim()) {
+                      addTaskMut.mutate({ taskTitle: newTaskTitle, priority: newTaskPriority });
+                    }
+                  }}
+                />
+              </div>
+              <Select value={newTaskPriority} onValueChange={setNewTaskPriority}>
+                <SelectTrigger className="w-28" data-testid="select-task-priority">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="critical">Critical</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                size="sm"
+                onClick={() => addTaskMut.mutate({ taskTitle: newTaskTitle, priority: newTaskPriority })}
+                disabled={!newTaskTitle.trim() || addTaskMut.isPending}
+                data-testid="button-submit-task"
+              >
+                {addTaskMut.isPending ? <Loader2 size={14} className="animate-spin" /> : "Add"}
+              </Button>
+            </div>
+          )}
+
+          {(!deal.tasks || deal.tasks.length === 0) && !showAddTask && (
+            <p className="text-sm text-muted-foreground text-center py-4">No tasks yet. Click "Add Task" to create one.</p>
+          )}
+
+          {deal.tasks?.map((task: any) => (
+            <div
+              key={task.id}
+              className={`flex items-center gap-3 p-3 rounded-md border ${task.status === "completed" ? "bg-muted/30" : "bg-muted/50"}`}
+              data-testid={`task-row-${task.id}`}
+            >
+              <button
+                onClick={() => toggleTaskMut.mutate({
+                  taskId: task.id,
+                  status: task.status === "completed" ? "pending" : "completed",
+                })}
+                className="shrink-0"
+                data-testid={`task-toggle-${task.id}`}
+              >
+                {task.status === "completed" ? (
+                  <CheckCircle2 size={18} className="text-green-500" />
+                ) : (
+                  <Circle size={18} className="text-muted-foreground" />
+                )}
+              </button>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-medium ${task.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                  {task.taskTitle}
+                </p>
+                {task.taskDescription && (
+                  <p className="text-xs text-muted-foreground mt-0.5">{task.taskDescription}</p>
+                )}
+              </div>
+              <Badge variant={
+                task.priority === "critical" ? "destructive" :
+                task.priority === "high" ? "default" : "secondary"
+              } className="text-[10px] shrink-0">
+                {task.priority}
+              </Badge>
+              <button
+                onClick={() => deleteTaskMut.mutate(task.id)}
+                className="text-muted-foreground hover:text-destructive shrink-0"
+                data-testid={`task-delete-${task.id}`}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
         </CardContent>
       </Card>
 
