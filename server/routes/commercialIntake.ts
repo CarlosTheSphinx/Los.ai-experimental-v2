@@ -1627,6 +1627,23 @@ function parseRowValue(field: string, value: any): any {
     if (Array.isArray(value)) return value;
     return normalizeRegion(str);
   }
+  if (field === "loanTypes") {
+    if (Array.isArray(value)) return value;
+    const validLoanTypes = ["Bridge", "Construction", "DSCR", "A&D", "Fix & Flip", "Long-Term Financing", "Land Development"];
+    const parts = str.split(/[,;|\/]+/).map((s: string) => s.trim()).filter(Boolean);
+    const result: string[] = [];
+    for (const part of parts) {
+      const match = validLoanTypes.find(lt => lt.toLowerCase() === part.toLowerCase());
+      if (match) {
+        result.push(match);
+      } else {
+        const termMap: Record<string, string> = { "bridge": "Bridge", "construction": "Construction", "dscr": "DSCR", "a&d": "A&D", "fix & flip": "Fix & Flip", "fix and flip": "Fix & Flip", "long-term": "Long-Term Financing", "long term": "Long-Term Financing", "permanent": "Long-Term Financing", "land development": "Land Development" };
+        const mapped = termMap[part.toLowerCase()];
+        if (mapped && !result.includes(mapped)) result.push(mapped);
+      }
+    }
+    return result.length > 0 ? result : null;
+  }
   if (field === "isActive") {
     const lower = str.toLowerCase();
     return lower === "false" || lower === "no" || lower === "0" || lower === "inactive" ? false : true;

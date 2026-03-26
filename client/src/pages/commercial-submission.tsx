@@ -256,7 +256,7 @@ const formSchema = z.object({
       path: ["requestedLTV"],
     });
   }
-  if (["Bridge", "Fix & Flip", "Construction"].includes(data.loanType)) {
+  if (["Bridge", "Fix & Flip", "Construction", "A&D", "Land Development"].includes(data.loanType)) {
     if (!data.exitStrategyType) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
