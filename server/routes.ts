@@ -5826,17 +5826,18 @@ export async function registerRoutes(
       const user = await storage.getUserById(req.user!.id);
       const isFullAccess = user && ['admin', 'super_admin'].includes(user.role);
       const filterUserId = isFullAccess ? undefined : req.user!.id;
+      const tenantId = user?.role === 'super_admin' ? null : (user?.tenantId || null);
 
-      const tasks = await storage.getTaskBoardTasks({ date, status, userId: filterUserId });
+      const tasks = await storage.getTaskBoardTasks({ date, status, userId: filterUserId, tenantId });
       
       const startDate = req.query.startDate as string | undefined;
       const endDate = req.query.endDate as string | undefined;
       let dateCounts: Record<string, number> = {};
       if (startDate && endDate) {
-        dateCounts = await storage.getTaskBoardDateCounts(startDate, endDate, filterUserId);
+        dateCounts = await storage.getTaskBoardDateCounts(startDate, endDate, filterUserId, tenantId);
       }
 
-      const pendingCount = await storage.getPendingProjectTasksCount(filterUserId);
+      const pendingCount = await storage.getPendingProjectTasksCount(filterUserId, tenantId);
       
       res.json({ tasks, dateCounts, pendingCount });
     } catch (error) {

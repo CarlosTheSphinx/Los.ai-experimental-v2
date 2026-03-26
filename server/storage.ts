@@ -563,7 +563,7 @@ export class DatabaseStorage implements IStorage {
     return { completed: Number(result[0]?.completed || 0), total: Number(result[0]?.total || 0) };
   }
 
-  async getTaskBoardTasks(filters: { date?: string; status?: string; userId?: number }): Promise<any[]> {
+  async getTaskBoardTasks(filters: { date?: string; status?: string; userId?: number; tenantId?: number | null }): Promise<any[]> {
     const conditions = [];
     
     if (filters.status === 'completed') {
@@ -645,6 +645,9 @@ export class DatabaseStorage implements IStorage {
     if (filters.userId !== undefined) {
       intakeConditions.push(eq(intakeDealTasks.assignedTo, String(filters.userId)));
     }
+    if (filters.tenantId) {
+      intakeConditions.push(eq(intakeDeals.tenantId, filters.tenantId));
+    }
 
     const commercialTasks = await db
       .select({
@@ -692,7 +695,7 @@ export class DatabaseStorage implements IStorage {
     return allTasks;
   }
 
-  async getPendingProjectTasksCount(userId?: number): Promise<number> {
+  async getPendingProjectTasksCount(userId?: number, tenantId?: number | null): Promise<number> {
     const conditions = [
       sql`${projectTasks.status} != 'completed'`,
       sql`${projectTasks.status} != 'not_applicable'`
@@ -704,20 +707,25 @@ export class DatabaseStorage implements IStorage {
       count: count()
     }).from(projectTasks).where(and(...conditions));
 
-    const intakeConditions = [
+    const intakeConditions: any[] = [
       sql`${intakeDealTasks.status} != 'completed'`
     ];
     if (userId !== undefined) {
       intakeConditions.push(sql`${intakeDealTasks.assignedTo} = ${String(userId)}`);
     }
+    if (tenantId) {
+      intakeConditions.push(eq(intakeDeals.tenantId, tenantId));
+    }
     const [intakeResult] = await db.select({
       count: count()
-    }).from(intakeDealTasks).where(and(...intakeConditions));
+    }).from(intakeDealTasks)
+      .innerJoin(intakeDeals, eq(intakeDealTasks.dealId, intakeDeals.id))
+      .where(and(...intakeConditions));
 
     return (result?.count ?? 0) + (intakeResult?.count ?? 0);
   }
 
-  async getTaskBoardDateCounts(startDate: string, endDate: string, userId?: number): Promise<Record<string, number>> {
+  async getTaskBoardDateCounts(startDate: string, endDate: string, userId?: number, tenantId?: number | null): Promise<Record<string, number>> {
     const start = new Date(startDate);
     start.setHours(0, 0, 0, 0);
     const end = new Date(endDate);
@@ -742,7 +750,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(...conditions))
       .groupBy(sql`DATE(${projectTasks.dueDate})`);
 
-    const intakeConditions = [
+    const intakeConditions: any[] = [
       sql`${intakeDealTasks.dueDate} >= ${start}`,
       sql`${intakeDealTasks.dueDate} <= ${end}`,
       sql`${intakeDealTasks.status} != 'completed'`
@@ -750,12 +758,19 @@ export class DatabaseStorage implements IStorage {
     if (userId !== undefined) {
       intakeConditions.push(sql`${intakeDealTasks.assignedTo} = ${String(userId)}`);
     }
-    const intakeResults = await db
+    if (tenantId) {
+      intakeConditions.push(eq(intakeDeals.tenantId, tenantId));
+    }
+    const intakeQuery = db
       .select({
         date: sql<string>`DATE(${intakeDealTasks.dueDate})`,
         count: count(),
       })
-      .from(intakeDealTasks)
+      .from(intakeDealTasks);
+    if (tenantId) {
+      intakeQuery.innerJoin(intakeDeals, eq(intakeDealTasks.dealId, intakeDeals.id));
+    }
+    const intakeResults = await intakeQuery
       .where(and(...intakeConditions))
       .groupBy(sql`DATE(${intakeDealTasks.dueDate})`);
     
