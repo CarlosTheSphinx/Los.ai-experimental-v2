@@ -18,7 +18,7 @@ import { EmptyState } from "@/components/ui/phase1/empty-state";
 import {
   Plus, Pencil, Trash2, Building2, RefreshCw, Upload, FileText,
   Search, ArrowLeft, BookOpen, FileUp, ChevronRight, Check, X, Download,
-  CheckCircle2, XCircle, ExternalLink
+  CheckCircle2, XCircle
 } from "lucide-react";
 import { ExpandableRow } from "@/components/ui/phase1/expandable-row";
 
