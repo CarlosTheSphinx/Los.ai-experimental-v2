@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -767,7 +768,7 @@ function fmtAmt(v: number | null | undefined): string {
   return v.toLocaleString();
 }
 
-export default function FundManagementPage() {
+export function FundManagementContent() {
   const { toast } = useToast();
   const [editingFund, setEditingFund] = useState<any>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -967,4 +968,10 @@ export default function FundManagementPage() {
       <BulkImportDialog open={bulkImportOpen} onOpenChange={setBulkImportOpen} />
     </div>
   );
+}
+
+export default function FundManagementPage() {
+  const [, navigate] = useLocation();
+  navigate("/admin/commercial-pipeline?tab=funds", { replace: true });
+  return null;
 }

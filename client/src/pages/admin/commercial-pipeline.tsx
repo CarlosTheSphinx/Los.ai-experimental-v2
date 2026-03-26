@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,8 +9,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLocation } from "wouter";
 import {
   Plus, Search, Building2, DollarSign, MapPin, TrendingUp, Eye, AlertTriangle,
-  CheckCircle2, XCircle, Clock, ArrowRight, RefreshCw,
+  CheckCircle2, XCircle, Clock, ArrowRight, RefreshCw, Landmark,
 } from "lucide-react";
+import { FundManagementContent } from "./fund-management";
 
 type IntakeDeal = {
   id: number;
@@ -63,7 +64,21 @@ function statusBadge(status: string) {
 export default function CommercialPipelinePage() {
   const [, navigate] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState("new");
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const initialTab = urlParams.get("tab") === "funds" ? "funds" : "new";
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    const url = new URL(window.location.href);
+    if (tab === "funds") {
+      url.searchParams.set("tab", "funds");
+    } else {
+      url.searchParams.delete("tab");
+    }
+    window.history.replaceState({}, "", url.toString());
+  };
 
   const { data: deals = [], isLoading } = useQuery<IntakeDeal[]>({
     queryKey: ["/api/commercial/deals", activeTab],
@@ -72,6 +87,7 @@ export default function CommercialPipelinePage() {
       if (!res.ok) throw new Error("Failed to fetch deals");
       return res.json();
     },
+    enabled: activeTab !== "funds",
   });
 
   const { data: summary } = useQuery({
@@ -100,128 +116,142 @@ export default function CommercialPipelinePage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-        {[
-          { label: "New", value: (intakeStats.submitted || 0) + (intakeStats.analyzed || 0) + (intakeStats.no_match || 0), icon: Clock },
-          { label: "Under Review", value: intakeStats.under_review || 0, icon: Eye },
-          { label: "Approved", value: intakeStats.approved || 0, icon: CheckCircle2 },
-          { label: "Conditional", value: intakeStats.conditional || 0, icon: AlertTriangle },
-          { label: "Rejected", value: intakeStats.rejected || 0, icon: XCircle },
-          { label: "Transferred", value: intakeStats.transferred || 0, icon: ArrowRight },
-        ].map(stat => (
-          <Card key={stat.label} className="bg-[#1a2038] border-slate-700/50">
-            <CardContent className="p-3">
-              <div className="flex items-center gap-2">
-                <stat.icon size={14} className="text-slate-400" />
-                <span className="text-xs text-slate-400">{stat.label}</span>
-              </div>
-              <p className="text-xl font-semibold text-white mt-1" data-testid={`stat-${stat.label.toLowerCase().replace(/\s/g, "-")}`}>
-                {stat.value}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {activeTab !== "funds" && (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+            {[
+              { label: "New", value: (intakeStats.submitted || 0) + (intakeStats.analyzed || 0) + (intakeStats.no_match || 0), icon: Clock },
+              { label: "Under Review", value: intakeStats.under_review || 0, icon: Eye },
+              { label: "Approved", value: intakeStats.approved || 0, icon: CheckCircle2 },
+              { label: "Conditional", value: intakeStats.conditional || 0, icon: AlertTriangle },
+              { label: "Rejected", value: intakeStats.rejected || 0, icon: XCircle },
+              { label: "Transferred", value: intakeStats.transferred || 0, icon: ArrowRight },
+            ].map(stat => (
+              <Card key={stat.label} className="bg-[#1a2038] border-slate-700/50">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-2">
+                    <stat.icon size={14} className="text-slate-400" />
+                    <span className="text-xs text-slate-400">{stat.label}</span>
+                  </div>
+                  <p className="text-xl font-semibold text-white mt-1" data-testid={`stat-${stat.label.toLowerCase().replace(/\s/g, "-")}`}>
+                    {stat.value}
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
 
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <Input
-            placeholder="Search deals..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="pl-9 bg-[#1a2038] border-slate-700 text-white text-sm"
-            data-testid="search-deals"
-          />
-        </div>
-      </div>
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1 max-w-sm">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Input
+                placeholder="Search deals..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="pl-9 bg-[#1a2038] border-slate-700 text-white text-sm"
+                data-testid="search-deals"
+              />
+            </div>
+          </div>
+        </>
+      )}
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="bg-[#1a2038] border border-slate-700/50">
           <TabsTrigger value="new" className="text-xs" data-testid="tab-new">New Submissions</TabsTrigger>
           <TabsTrigger value="review" className="text-xs" data-testid="tab-review">Under Review</TabsTrigger>
           <TabsTrigger value="completed" className="text-xs" data-testid="tab-completed">Completed</TabsTrigger>
+          <TabsTrigger value="funds" className="text-xs" data-testid="tab-funds">
+            <Landmark size={12} className="mr-1" />
+            Funds
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value={activeTab} className="mt-4">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <RefreshCw size={20} className="animate-spin text-slate-400" />
-            </div>
-          ) : filtered.length === 0 ? (
-            <Card className="bg-[#1a2038] border-slate-700/50">
-              <CardContent className="p-12 text-center">
-                <Building2 size={40} className="mx-auto text-slate-500 mb-3" />
-                <p className="text-slate-400">No deals in this category</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {filtered.map(deal => (
-                <Card
-                  key={deal.id}
-                  className="bg-[#1a2038] border-slate-700/50 hover:border-slate-600 transition-colors cursor-pointer"
-                  onClick={() => navigate(`/admin/commercial-pipeline/${deal.id}`)}
-                  data-testid={`deal-card-${deal.id}`}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="text-sm font-medium text-white truncate" data-testid={`deal-name-${deal.id}`}>
-                            {deal.dealName || `Deal #${deal.id}`}
-                          </h3>
-                          {statusBadge(deal.status)}
+        {activeTab !== "funds" && (
+          <TabsContent value={activeTab} className="mt-4">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <RefreshCw size={20} className="animate-spin text-slate-400" />
+              </div>
+            ) : filtered.length === 0 ? (
+              <Card className="bg-[#1a2038] border-slate-700/50">
+                <CardContent className="p-12 text-center">
+                  <Building2 size={40} className="mx-auto text-slate-500 mb-3" />
+                  <p className="text-slate-400">No deals in this category</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {filtered.map(deal => (
+                  <Card
+                    key={deal.id}
+                    className="bg-[#1a2038] border-slate-700/50 hover:border-slate-600 transition-colors cursor-pointer"
+                    onClick={() => navigate(`/admin/commercial-pipeline/${deal.id}`)}
+                    data-testid={`deal-card-${deal.id}`}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="text-sm font-medium text-white truncate" data-testid={`deal-name-${deal.id}`}>
+                              {deal.dealName || `Deal #${deal.id}`}
+                            </h3>
+                            {statusBadge(deal.status)}
+                          </div>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400 mt-2">
+                            {deal.loanAmount && (
+                              <span className="flex items-center gap-1">
+                                <DollarSign size={12} />
+                                ${(deal.loanAmount / 1000000).toFixed(1)}M
+                              </span>
+                            )}
+                            {deal.assetType && (
+                              <span className="flex items-center gap-1">
+                                <Building2 size={12} />
+                                {deal.assetType}
+                              </span>
+                            )}
+                            {deal.propertyState && (
+                              <span className="flex items-center gap-1">
+                                <MapPin size={12} />
+                                {deal.propertyState}
+                              </span>
+                            )}
+                            {deal.ltvPct != null && (
+                              <span className="flex items-center gap-1">
+                                <TrendingUp size={12} />
+                                LTV {deal.ltvPct}%
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex gap-x-4 text-xs text-slate-500 mt-2">
+                            {deal.brokerName && <span>Broker: {deal.brokerName}</span>}
+                            {deal.borrowerName && <span>Borrower: {deal.borrowerName}</span>}
+                            <span>{deal.submittedAt ? new Date(deal.submittedAt).toLocaleDateString() : new Date(deal.createdAt).toLocaleDateString()}</span>
+                          </div>
                         </div>
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400 mt-2">
-                          {deal.loanAmount && (
-                            <span className="flex items-center gap-1">
-                              <DollarSign size={12} />
-                              ${(deal.loanAmount / 1000000).toFixed(1)}M
-                            </span>
-                          )}
-                          {deal.assetType && (
-                            <span className="flex items-center gap-1">
-                              <Building2 size={12} />
-                              {deal.assetType}
-                            </span>
-                          )}
-                          {deal.propertyState && (
-                            <span className="flex items-center gap-1">
-                              <MapPin size={12} />
-                              {deal.propertyState}
-                            </span>
-                          )}
-                          {deal.ltvPct != null && (
-                            <span className="flex items-center gap-1">
-                              <TrendingUp size={12} />
-                              LTV {deal.ltvPct}%
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex gap-x-4 text-xs text-slate-500 mt-2">
-                          {deal.brokerName && <span>Broker: {deal.brokerName}</span>}
-                          {deal.borrowerName && <span>Borrower: {deal.borrowerName}</span>}
-                          <span>{deal.submittedAt ? new Date(deal.submittedAt).toLocaleDateString() : new Date(deal.createdAt).toLocaleDateString()}</span>
+                        <div className="flex flex-col items-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-slate-400 hover:text-white"
+                            onClick={e => { e.stopPropagation(); navigate(`/admin/commercial-pipeline/${deal.id}`); }}
+                            data-testid={`view-deal-${deal.id}`}
+                          >
+                            <Eye size={14} className="mr-1" /> View
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex flex-col items-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-slate-400 hover:text-white"
-                          onClick={e => { e.stopPropagation(); navigate(`/admin/commercial-pipeline/${deal.id}`); }}
-                          data-testid={`view-deal-${deal.id}`}
-                        >
-                          <Eye size={14} className="mr-1" /> View
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        )}
+
+        <TabsContent value="funds" className="mt-4">
+          <FundManagementContent />
         </TabsContent>
       </Tabs>
     </div>
