@@ -8936,7 +8936,7 @@ export async function registerRoutes(
   app.post('/api/admin/deals/:dealId/properties', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const dealId = parseInt(req.params.dealId);
-      const { address, city, state, zip, propertyType, estimatedValue, isPrimary } = req.body;
+      const { address, city, state, zip, propertyType, estimatedValue, isPrimary, units, monthlyRent, annualTaxes, annualInsurance, metadata } = req.body;
       if (!address || !address.trim()) {
         return res.status(400).json({ error: 'Address is required' });
       }
@@ -8953,6 +8953,11 @@ export async function registerRoutes(
         zip: zip || null,
         propertyType: propertyType || null,
         estimatedValue: estimatedValue || null,
+        units: units != null ? Number(units) : null,
+        monthlyRent: monthlyRent != null ? Number(monthlyRent) : null,
+        annualTaxes: annualTaxes != null ? Number(annualTaxes) : null,
+        annualInsurance: annualInsurance != null ? Number(annualInsurance) : null,
+        metadata: metadata || null,
         isPrimary: isPrimary || count === 0,
         sortOrder: count,
       }).returning();
