@@ -123,66 +123,65 @@ export default function CommercialPipelinePage() {
         </div>
       </div>
 
-      <div className="flex gap-3 items-stretch">
-        <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {[
-            { label: "New", value: (intakeStats.submitted || 0) + (intakeStats.analyzed || 0) + (intakeStats.no_match || 0), icon: Clock },
-            { label: "Under Review", value: intakeStats.under_review || 0, icon: Eye },
-            { label: "Approved", value: intakeStats.approved || 0, icon: CheckCircle2 },
-            { label: "Conditional", value: intakeStats.conditional || 0, icon: AlertTriangle },
-            { label: "Rejected", value: intakeStats.rejected || 0, icon: XCircle },
-            { label: "Transferred", value: intakeStats.transferred || 0, icon: ArrowRight },
-          ].map(stat => (
-            <Card key={stat.label} className="bg-[#1a2038] border-slate-700/50">
-              <CardContent className="p-3">
-                <div className="flex items-center gap-2">
-                  <stat.icon size={14} className="text-slate-400" />
-                  <span className="text-xs text-slate-400">{stat.label}</span>
-                </div>
-                <p className="text-xl font-semibold text-white mt-1" data-testid={`stat-${stat.label.toLowerCase().replace(/\s/g, "-")}`}>
-                  {stat.value}
-                </p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        <Card
-          className="bg-gradient-to-br from-[#1a2038] to-[#1e2545] border-blue-500/30 hover:border-blue-400/50 transition-all cursor-pointer min-w-[160px] flex items-stretch"
-          onClick={handleShowFunds}
-          data-testid="funds-card"
-        >
-          <CardContent className="p-4 flex flex-col justify-center items-center text-center w-full">
-            <div className="p-2.5 rounded-lg bg-blue-500/10 mb-2">
-              <Landmark size={22} className="text-blue-400" />
-            </div>
-            <p className="text-2xl font-semibold text-white">{fundsList.length}</p>
-            <p className="text-xs text-slate-400 mt-0.5">Funds</p>
-            <p className="text-[10px] text-blue-400 mt-1">{activeFunds} active</p>
-            <ChevronRight size={14} className="text-slate-500 mt-1" />
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <Input
-            placeholder="Search deals..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="pl-9 bg-[#1a2038] border-slate-700 text-white text-sm"
-            data-testid="search-deals"
-          />
-        </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {[
+          { label: "New", value: (intakeStats.submitted || 0) + (intakeStats.analyzed || 0) + (intakeStats.no_match || 0), icon: Clock },
+          { label: "Under Review", value: intakeStats.under_review || 0, icon: Eye },
+          { label: "Approved", value: intakeStats.approved || 0, icon: CheckCircle2 },
+          { label: "Conditional", value: intakeStats.conditional || 0, icon: AlertTriangle },
+          { label: "Rejected", value: intakeStats.rejected || 0, icon: XCircle },
+          { label: "Transferred", value: intakeStats.transferred || 0, icon: ArrowRight },
+        ].map(stat => (
+          <Card key={stat.label} className="bg-[#1a2038] border-slate-700/50">
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2">
+                <stat.icon size={14} className="text-slate-400" />
+                <span className="text-xs text-slate-400">{stat.label}</span>
+              </div>
+              <p className="text-xl font-semibold text-white mt-1" data-testid={`stat-${stat.label.toLowerCase().replace(/\s/g, "-")}`}>
+                {stat.value}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="bg-[#1a2038] border border-slate-700/50">
-          <TabsTrigger value="new" className="text-xs" data-testid="tab-new">New Submissions</TabsTrigger>
-          <TabsTrigger value="review" className="text-xs" data-testid="tab-review">Under Review</TabsTrigger>
-          <TabsTrigger value="completed" className="text-xs" data-testid="tab-completed">Completed</TabsTrigger>
-        </TabsList>
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 max-w-sm">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Input
+              placeholder="Search deals..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="pl-9 bg-[#1a2038] border-slate-700 text-white text-sm"
+              data-testid="search-deals"
+            />
+          </div>
+
+          <TabsList className="bg-[#1a2038] border border-slate-700/50">
+            <TabsTrigger value="new" className="text-xs" data-testid="tab-new">New Submissions</TabsTrigger>
+            <TabsTrigger value="review" className="text-xs" data-testid="tab-review">Under Review</TabsTrigger>
+            <TabsTrigger value="completed" className="text-xs" data-testid="tab-completed">Completed</TabsTrigger>
+          </TabsList>
+
+          <Card
+            className="bg-gradient-to-br from-[#1a2038] to-[#1e2545] border-blue-500/30 hover:border-blue-400/50 transition-all cursor-pointer"
+            onClick={handleShowFunds}
+            data-testid="funds-card"
+          >
+            <CardContent className="px-4 py-2 flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-500/10">
+                <Landmark size={18} className="text-blue-400" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">{fundsList.length} Funds</p>
+                <p className="text-[10px] text-blue-400">{activeFunds} active</p>
+              </div>
+              <ChevronRight size={14} className="text-slate-500" />
+            </CardContent>
+          </Card>
+        </div>
 
         <TabsContent value={activeTab} className="mt-4">
           {isLoading ? (
