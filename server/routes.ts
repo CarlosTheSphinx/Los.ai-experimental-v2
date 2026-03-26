@@ -5870,8 +5870,8 @@ export async function registerRoutes(
         const { intakeDeals } = await import('@shared/schema');
         const [deal] = await db.select().from(intakeDeals).where(eq(intakeDeals.id, task.dealId));
         if (!deal) return res.status(404).json({ error: 'Deal not found' });
-        const userTenantId = req.user?.tenantId ?? req.user?.id;
-        if (deal.tenantId && userTenantId && deal.tenantId !== userTenantId && req.user?.role !== 'super_admin') {
+        const userTenantId = req.user?.tenantId;
+        if (req.user?.role !== 'super_admin' && userTenantId && deal.tenantId && deal.tenantId !== userTenantId) {
           return res.status(403).json({ error: 'Access denied' });
         }
         const [updated] = await db.update(intakeDealTasks)
