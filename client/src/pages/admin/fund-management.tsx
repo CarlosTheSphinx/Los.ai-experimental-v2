@@ -944,11 +944,11 @@ function FundDetailView({ fundId, onBack }: { fundId: number; onBack: () => void
                   <DetailRow label="Lender" value={fund.fundName} />
                   <DetailRow label="Provider" value={fund.providerName} />
                   <DetailRow label="Website" value={fund.website ? <a href={fund.website.startsWith("http") ? fund.website : `https://${fund.website}`} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">{fund.website}</a> : null} />
-                  <DetailRow label="Contact" value={fund.contactName} />
+                  <DetailRow label="Contact Name" value={fund.contactName} />
                   <DetailRow label="Email" value={fund.contactEmail} />
                   <DetailRow label="Phone" value={fund.contactPhone} />
-                  <DetailRow label="Link to Guidelines" value={fund.guidelineUrl ? <a href={fund.guidelineUrl.startsWith("http") ? fund.guidelineUrl : `https://${fund.guidelineUrl}`} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline truncate block max-w-xs">{fund.guidelineUrl}</a> : null} />
-                  <DetailRow label="Loan Amounts" value={fund.loanAmountMin || fund.loanAmountMax ? `$${fmtAmt(fund.loanAmountMin)} – $${fmtAmt(fund.loanAmountMax)}` : null} />
+                  <DetailRow label="Guideline URL" value={fund.guidelineUrl ? <a href={fund.guidelineUrl.startsWith("http") ? fund.guidelineUrl : `https://${fund.guidelineUrl}`} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline truncate block max-w-xs">{fund.guidelineUrl}</a> : null} />
+                  <DetailRow label="Loan Amounts" value={fund.loanAmountMin != null || fund.loanAmountMax != null ? `$${fmtAmt(fund.loanAmountMin)} – $${fmtAmt(fund.loanAmountMax)}` : null} />
                   <DetailRow label="LTV Range" value={fund.ltvMin != null || fund.ltvMax != null ? `${fund.ltvMin ?? "—"}% – ${fund.ltvMax ?? "—"}%` : null} />
                   <DetailRow label="LTC Range" value={fund.ltcMin != null || fund.ltcMax != null ? `${fund.ltcMin ?? "—"}% – ${fund.ltcMax ?? "—"}%` : null} />
                   <DetailRow label="Interest Rate" value={fund.interestRateMin != null || fund.interestRateMax != null ? `${fund.interestRateMin ?? "—"}% – ${fund.interestRateMax ?? "—"}%` : null} />
@@ -984,7 +984,7 @@ function FundDetailView({ fundId, onBack }: { fundId: number; onBack: () => void
                   )}
                 </div>
                 <div className="mt-4">
-                  <p className="text-xs text-slate-500 mb-1">Terms</p>
+                  <p className="text-xs text-slate-500 mb-1">Description / Notes</p>
                   <p className={fund.fundDescription ? "text-sm text-slate-300" : "text-slate-600 italic text-sm"}>{fund.fundDescription || "N/A"}</p>
                 </div>
               </CardContent>
