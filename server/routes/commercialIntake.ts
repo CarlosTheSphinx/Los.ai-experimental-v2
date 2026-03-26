@@ -1037,6 +1037,33 @@ router.post("/api/commercial/form-config", async (req: Request, res: Response) =
   }
 });
 
+router.post("/api/commercial/transcribe-audio", audioUpload.single("audio"), async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    if (!user) return res.status(401).json({ error: "Not authenticated" });
+
+    const file = (req as any).file;
+    if (!file) return res.status(400).json({ error: "No audio file provided" });
+
+    if (!openai) return res.status(500).json({ error: "OpenAI not configured" });
+
+    const audioFile = new File([file.buffer], file.originalname || "recording.webm", {
+      type: file.mimetype,
+    });
+
+    const transcription = await openai.audio.transcriptions.create({
+      file: audioFile,
+      model: "whisper-1",
+      language: "en",
+    });
+
+    res.json({ transcript: transcription.text });
+  } catch (error: any) {
+    console.error("[Audio Transcription Error]", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.post("/api/commercial/deals/:id/transcribe-story", audioUpload.single("audio"), async (req: Request, res: Response) => {
   try {
     const dealId = parseInt(req.params.id);

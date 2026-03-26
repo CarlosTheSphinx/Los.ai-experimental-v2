@@ -5,7 +5,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Mic, Square, Loader2, RotateCcw, CheckCircle2, Volume2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
 
 interface DealStoryRecorderProps {
   dealId?: number;
@@ -96,17 +95,12 @@ export default function DealStoryRecorder({
   const transcribeAudio = async () => {
     if (!audioBlob) return;
 
-    if (!dealId) {
-      toast({ title: "Save deal first", description: "Please save the deal as a draft before transcribing.", variant: "destructive" });
-      return;
-    }
-
     setIsTranscribing(true);
     try {
       const formData = new FormData();
       formData.append("audio", audioBlob, "recording.webm");
 
-      const res = await fetch(`/api/commercial/deals/${dealId}/transcribe-story`, {
+      const res = await fetch("/api/commercial/transcribe-audio", {
         method: "POST",
         credentials: "include",
         body: formData,
@@ -119,7 +113,8 @@ export default function DealStoryRecorder({
 
       const data = await res.json();
       onTranscriptChange(data.transcript);
-      toast({ title: "Story transcribed", description: "Your recording has been converted to text." });
+      setAudioBlob(null);
+      toast({ title: "Story transcribed", description: "Your recording has been converted to text. You can edit it below." });
     } catch (err: any) {
       toast({ title: "Transcription failed", description: err.message, variant: "destructive" });
     } finally {
@@ -130,7 +125,6 @@ export default function DealStoryRecorder({
   const resetRecording = () => {
     setAudioBlob(null);
     setRecordingTime(0);
-    onTranscriptChange("");
   };
 
   const formatTime = (s: number) => {
@@ -145,24 +139,24 @@ export default function DealStoryRecorder({
         <div className="flex items-center gap-2">
           <Volume2 size={16} className="text-amber-400" />
           <CardTitle className="text-sm text-slate-300">Deal Story</CardTitle>
-          {transcript && <Badge className="text-[9px] bg-emerald-500/20 text-emerald-400">Recorded</Badge>}
+          {transcript && <Badge className="text-[9px] bg-emerald-500/20 text-emerald-400">Story Added</Badge>}
         </div>
         <p className="text-xs text-slate-500 mt-1">
-          Tell us the story behind this deal — what makes it special, the borrower's vision, and why it's a good opportunity. Click the microphone to record.
+          Tell us the story behind this deal — what makes it special, the borrower's vision, and why it's a good opportunity. Record a voice note or type it below.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="flex items-center gap-3">
-          {!isRecording && !audioBlob && !transcript && (
+        <div className="flex items-center gap-3 flex-wrap">
+          {!isRecording && !audioBlob && (
             <Button
               type="button"
               onClick={startRecording}
-              disabled={disabled}
+              disabled={disabled || isTranscribing}
               className="bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 gap-2"
               data-testid="start-recording"
             >
               <Mic size={16} />
-              Start Recording
+              {transcript ? "Re-record" : "Record Voice Note"}
             </Button>
           )}
 
@@ -184,7 +178,7 @@ export default function DealStoryRecorder({
             </>
           )}
 
-          {audioBlob && !transcript && !isTranscribing && (
+          {audioBlob && !isTranscribing && (
             <>
               <Badge className="text-xs bg-slate-700/50 text-slate-300">
                 {formatTime(recordingTime)} recorded
@@ -192,7 +186,6 @@ export default function DealStoryRecorder({
               <Button
                 type="button"
                 onClick={transcribeAudio}
-                disabled={!dealId}
                 className="bg-blue-600 hover:bg-blue-700 gap-2"
                 data-testid="transcribe-button"
               >
@@ -207,7 +200,7 @@ export default function DealStoryRecorder({
                 data-testid="reset-recording"
               >
                 <RotateCcw size={14} />
-                Re-record
+                Discard
               </Button>
             </>
           )}
@@ -218,46 +211,16 @@ export default function DealStoryRecorder({
               <span className="text-sm">Transcribing your story...</span>
             </div>
           )}
-
-          {transcript && !isRecording && (
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                setAudioBlob(null);
-                startRecording();
-              }}
-              disabled={disabled}
-              className="text-slate-400 hover:text-white gap-1"
-              data-testid="re-record-button"
-            >
-              <Mic size={14} />
-              Re-record
-            </Button>
-          )}
         </div>
 
-        {(transcript || isTranscribing) && (
-          <Textarea
-            value={transcript}
-            onChange={(e) => onTranscriptChange(e.target.value)}
-            placeholder={isTranscribing ? "Transcribing..." : "Your deal story will appear here after transcription. You can also type or edit it directly."}
-            className="bg-[#0f1629] border-slate-700 text-white text-sm min-h-[100px]"
-            disabled={isTranscribing || disabled}
-            data-testid="story-transcript"
-          />
-        )}
-
-        {!transcript && !audioBlob && !isRecording && (
-          <Textarea
-            value={transcript}
-            onChange={(e) => onTranscriptChange(e.target.value)}
-            placeholder="Or type your deal story here..."
-            className="bg-[#0f1629] border-slate-700 text-white text-sm min-h-[80px]"
-            disabled={disabled}
-            data-testid="story-transcript-manual"
-          />
-        )}
+        <Textarea
+          value={transcript}
+          onChange={(e) => onTranscriptChange(e.target.value)}
+          placeholder="Type your deal story here, or use the record button above to dictate it..."
+          className="bg-[#0f1629] border-slate-700 text-white text-sm min-h-[100px]"
+          disabled={isTranscribing || disabled}
+          data-testid="story-transcript"
+        />
       </CardContent>
     </Card>
   );
