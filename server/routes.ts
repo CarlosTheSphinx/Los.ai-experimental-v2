@@ -1463,7 +1463,7 @@ export async function registerRoutes(
         if (templateId) {
           const template = await storage.getQuotePdfTemplateById(templateId);
           const uTid = getTenantId(req.user!);
-          if (template && (template.tenantId === null || uTid === null || template.tenantId === String(uTid))) {
+          if (template && (template.tenantId === null || uTid === null || template.tenantId === uTid)) {
             templateConfig = template.config;
           }
         }
@@ -1641,7 +1641,7 @@ export async function registerRoutes(
   app.get('/api/quote-pdf-templates', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const tId = getTenantId(req.user!);
-      const templates = await storage.getQuotePdfTemplates(tId != null ? String(tId) : undefined);
+      const templates = await storage.getQuotePdfTemplates(tId ?? undefined);
       res.json(templates);
     } catch (error) {
       console.error('Error fetching quote PDF templates:', error);
@@ -1656,7 +1656,7 @@ export async function registerRoutes(
         return;
       }
       const tId = getTenantId(req.user!);
-      const data = { ...req.body, tenantId: tId != null ? String(tId) : null };
+      const data = { ...req.body, tenantId: tId };
       const template = await storage.createQuotePdfTemplate(data);
       res.json(template);
     } catch (error) {
@@ -1678,7 +1678,7 @@ export async function registerRoutes(
         return;
       }
       const tId = getTenantId(req.user!);
-      if (tId !== null && existing.tenantId && existing.tenantId !== String(tId)) {
+      if (tId !== null && existing.tenantId && existing.tenantId !== tId) {
         res.status(403).json({ success: false, error: 'Access denied' });
         return;
       }
@@ -1703,7 +1703,7 @@ export async function registerRoutes(
         return;
       }
       const tId = getTenantId(req.user!);
-      if (tId !== null && existing.tenantId && existing.tenantId !== String(tId)) {
+      if (tId !== null && existing.tenantId && existing.tenantId !== tId) {
         res.status(403).json({ success: false, error: 'Access denied' });
         return;
       }
