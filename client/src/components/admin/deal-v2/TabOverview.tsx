@@ -515,6 +515,8 @@ export default function TabOverview({
             value: formatFieldValue(val, f.fieldType),
           });
         });
+      const primaryDscrProgram = primaryProp ? calcPropertyDscr(primaryProp) : null;
+      baseFields.push({ key: 'propertyDscr', label: "Property DSCR", value: primaryDscrProgram ? `${primaryDscrProgram}x` : "—", tooltip: "DSCR based on this property's proportional loan share" });
     } else {
       const meta = primaryProp?.metadata || {};
       baseFields.push(
