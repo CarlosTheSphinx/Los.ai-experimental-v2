@@ -223,13 +223,18 @@ async function agent2MatchFunds(structuredDeal: any, activeFunds: any[], session
       if (dealEmbedding) {
         const embeddingStr = `[${dealEmbedding.join(",")}]`;
 
+        interface DescSimilarityRow { id: number; similarity: string }
+        interface KnowledgeRow { fund_id: number; content: string; category: string }
+
+        const fundIdsArr = `{${fundIds.join(",")}}`;
+
         const descScores = await db.execute(
           sql`SELECT id, 1 - (description_embedding <=> ${embeddingStr}::vector) AS similarity
               FROM funds
-              WHERE id = ANY(${fundIds})
+              WHERE id = ANY(${fundIdsArr}::int[])
                 AND description_embedding IS NOT NULL`
         );
-        for (const row of descScores.rows as any[]) {
+        for (const row of descScores.rows as DescSimilarityRow[]) {
           fundSimilarityScores[row.id] = parseFloat(row.similarity) || 0;
         }
 
@@ -238,11 +243,11 @@ async function agent2MatchFunds(structuredDeal: any, activeFunds: any[], session
                 SELECT fund_id, content, category,
                        ROW_NUMBER() OVER (PARTITION BY fund_id ORDER BY embedding <=> ${embeddingStr}::vector) AS rn
                 FROM fund_knowledge_entries
-                WHERE fund_id = ANY(${fundIds})
+                WHERE fund_id = ANY(${fundIdsArr}::int[])
                   AND embedding IS NOT NULL
               ) ranked WHERE rn <= 8`
         );
-        for (const row of similarRows.rows as any[]) {
+        for (const row of similarRows.rows as KnowledgeRow[]) {
           const fid = row.fund_id;
           if (!knowledgeByFund[fid]) knowledgeByFund[fid] = [];
           knowledgeByFund[fid].push(`[${row.category}] ${row.content}`);
