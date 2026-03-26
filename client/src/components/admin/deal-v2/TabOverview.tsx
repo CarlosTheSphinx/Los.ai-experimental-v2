@@ -259,10 +259,6 @@ export default function TabOverview({
   const isDSCR = loanType.toLowerCase().includes("dscr");
   const isRTL = !isDSCR;
 
-  const calculatedLtv = (loanAmount && propertyValue && Number(propertyValue) > 0)
-    ? ((Number(loanAmount) / Number(propertyValue)) * 100).toFixed(1)
-    : null;
-
   const calculatedDscr = (() => {
     const loan = Number(loanAmount) || 0;
     if (loan <= 0) return null;
@@ -450,7 +446,7 @@ export default function TabOverview({
 
     fields.push({ key: 'interestRate', label: "Interest Rate", value: rateDisplay });
     const storedLtv = deal.ltv ?? appData.ltv ?? deal.loanData?.ltv;
-    fields.push({ key: 'ltv', label: "LTV", value: storedLtv != null ? `${storedLtv}%` : (calculatedLtv ? `${calculatedLtv}%` : "—") });
+    fields.push({ key: 'ltv', label: "LTV", value: storedLtv != null ? `${storedLtv}%` : "—" });
     fields.push({ key: 'dscr', label: "DSCR", value: calculatedDscr ? `${calculatedDscr}x` : "—", tooltip: "Auto-calculated: NOI ÷ Annual Debt Service (30yr amortization)" });
 
     if (isAdmin) {
@@ -1135,10 +1131,7 @@ export default function TabOverview({
                 )}
                 <Field label="LTV" value={(() => {
                   const storedLtvEdit = deal.ltv ?? appData.ltv ?? deal.loanData?.ltv;
-                  if (storedLtvEdit != null) return `${storedLtvEdit}%`;
-                  if (loanForm.loanAmount && propertyValue && Number(propertyValue) > 0)
-                    return `${((Number(loanForm.loanAmount) / Number(propertyValue)) * 100).toFixed(1)}%`;
-                  return calculatedLtv ? `${calculatedLtv}%` : "—";
+                  return storedLtvEdit != null ? `${storedLtvEdit}%` : "—";
                 })()} />
                 <Field label="DSCR" value={(() => {
                   const loan = Number(loanForm.loanAmount) || Number(loanAmount) || 0;
