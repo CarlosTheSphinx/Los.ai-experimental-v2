@@ -29,8 +29,8 @@ export function ExpandableRow({ summary, details, isExpanded: controlledExpanded
       <tr
         onClick={handleToggle}
         className={cn(
-          "cursor-pointer transition-colors hover:bg-blue-50/50",
-          isExpanded && "bg-blue-50/30",
+          "cursor-pointer transition-colors hover:bg-muted/50",
+          isExpanded && "bg-muted/30",
           className
         )}
       >
@@ -45,7 +45,7 @@ export function ExpandableRow({ summary, details, isExpanded: controlledExpanded
         {summary}
       </tr>
       {isExpanded && (
-        <tr className="bg-slate-50/80 border-b-2 border-b-blue-500">
+        <tr className="bg-muted/50 border-b-2 border-b-primary">
           <td colSpan={columns + 1} className="p-0">
             <div className="px-6 py-5 border-t border-border/50 animate-in slide-in-from-top-1 duration-200">
               {details}

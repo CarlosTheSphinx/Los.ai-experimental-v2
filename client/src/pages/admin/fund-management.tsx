@@ -18,8 +18,9 @@ import { EmptyState } from "@/components/ui/phase1/empty-state";
 import {
   Plus, Pencil, Trash2, Building2, RefreshCw, Upload, FileText,
   Search, ArrowLeft, BookOpen, FileUp, ChevronRight, Check, X, Download,
-  CheckCircle2, XCircle
+  CheckCircle2, XCircle, ExternalLink
 } from "lucide-react";
+import { ExpandableRow } from "@/components/ui/phase1/expandable-row";
 
 const US_STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
 const ASSET_TYPES = ["Multifamily","Office","Retail","Industrial","Hotel","Land","Development","Mixed Use","Self Storage","Mobile Home Park","Healthcare","Student Housing"];
@@ -892,40 +893,40 @@ function FundDetailView({ fundId, onBack }: { fundId: number; onBack: () => void
     },
   });
 
-  if (isLoading) return <div className="flex justify-center py-12"><RefreshCw size={20} className="animate-spin text-slate-400" /></div>;
-  if (!fund) return <div className="text-slate-400 text-center py-12">Fund not found</div>;
+  if (isLoading) return <div className="flex justify-center py-12"><RefreshCw size={20} className="animate-spin text-muted-foreground" /></div>;
+  if (!fund) return <div className="text-muted-foreground text-center py-12">Fund not found</div>;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={onBack} className="text-slate-400 hover:text-white" data-testid="fund-detail-back">
+        <Button variant="ghost" size="sm" onClick={onBack} className="text-muted-foreground hover:text-foreground" data-testid="fund-detail-back">
           <ArrowLeft size={16} className="mr-1" /> Back
         </Button>
         <div className="flex-1">
-          <h2 className="text-xl font-semibold text-white" data-testid="fund-detail-name">{fund.fundName}</h2>
-          {fund.providerName && <p className="text-sm text-slate-400">{fund.providerName}</p>}
+          <h2 className="text-xl font-semibold" data-testid="fund-detail-name">{fund.fundName}</h2>
+          {fund.providerName && <p className="text-sm text-muted-foreground">{fund.providerName}</p>}
         </div>
-        <Badge className={`${fund.isActive ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-500/20 text-slate-400"}`}>
+        <Badge className={`text-[11px] ${fund.isActive ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200"}`} variant="outline">
           {fund.isActive ? "Active" : "Inactive"}
         </Badge>
       </div>
 
       <Tabs defaultValue="details" className="w-full">
-        <TabsList className="bg-[#0f1629] border border-slate-700">
+        <TabsList>
           <TabsTrigger value="details" data-testid="tab-details">Details</TabsTrigger>
           <TabsTrigger value="documents" data-testid="tab-documents">
             Documents
-            {documents.length > 0 && <Badge className="ml-1.5 bg-blue-500/20 text-blue-400 text-[10px] px-1.5 py-0">{documents.length}</Badge>}
+            {documents.length > 0 && <Badge className="ml-1.5 bg-blue-50 text-blue-600 border-blue-200 text-[10px] px-1.5 py-0" variant="outline">{documents.length}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="knowledge" data-testid="tab-knowledge">
             Knowledge
-            {knowledgeEntries.length > 0 && <Badge className="ml-1.5 bg-purple-500/20 text-purple-400 text-[10px] px-1.5 py-0">{knowledgeEntries.length}</Badge>}
+            {knowledgeEntries.length > 0 && <Badge className="ml-1.5 bg-purple-50 text-purple-600 border-purple-200 text-[10px] px-1.5 py-0" variant="outline">{knowledgeEntries.length}</Badge>}
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="details" className="mt-4">
           {editMode ? (
-            <Card className="bg-[#1a2038] border-slate-700/50">
+            <Card>
               <CardContent className="p-4">
                 <FundForm
                   fund={fund}
@@ -935,7 +936,7 @@ function FundDetailView({ fundId, onBack }: { fundId: number; onBack: () => void
               </CardContent>
             </Card>
           ) : (
-            <Card className="bg-[#1a2038] border-slate-700/50">
+            <Card>
               <CardContent className="p-4">
                 <div className="flex justify-end mb-3">
                   <Button variant="outline" size="sm" onClick={() => setEditMode(true)} data-testid="edit-fund-detail">
@@ -945,11 +946,11 @@ function FundDetailView({ fundId, onBack }: { fundId: number; onBack: () => void
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <DetailRow label="Lender" value={fund.fundName} />
                   <DetailRow label="Provider" value={fund.providerName} />
-                  <DetailRow label="Website" value={fund.website ? <a href={fund.website.startsWith("http") ? fund.website : `https://${fund.website}`} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">{fund.website}</a> : null} />
+                  <DetailRow label="Website" value={fund.website ? <a href={fund.website.startsWith("http") ? fund.website : `https://${fund.website}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{fund.website}</a> : null} />
                   <DetailRow label="Contact Name" value={fund.contactName} />
                   <DetailRow label="Email" value={fund.contactEmail} />
                   <DetailRow label="Phone" value={fund.contactPhone} />
-                  <DetailRow label="Guideline URL" value={fund.guidelineUrl ? <a href={fund.guidelineUrl.startsWith("http") ? fund.guidelineUrl : `https://${fund.guidelineUrl}`} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline truncate block max-w-xs">{fund.guidelineUrl}</a> : null} />
+                  <DetailRow label="Guideline URL" value={fund.guidelineUrl ? <a href={fund.guidelineUrl.startsWith("http") ? fund.guidelineUrl : `https://${fund.guidelineUrl}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline truncate block max-w-xs">{fund.guidelineUrl}</a> : null} />
                   <DetailRow label="Loan Amounts" value={fund.loanAmountMin != null || fund.loanAmountMax != null ? `$${fmtAmt(fund.loanAmountMin)} – $${fmtAmt(fund.loanAmountMax)}` : null} />
                   <DetailRow label="LTV Range" value={fund.ltvMin != null || fund.ltvMax != null ? `${fund.ltvMin ?? "—"}% – ${fund.ltvMax ?? "—"}%` : null} />
                   <DetailRow label="LTC Range" value={fund.ltcMin != null || fund.ltcMax != null ? `${fund.ltcMin ?? "—"}% – ${fund.ltcMax ?? "—"}%` : null} />
@@ -963,31 +964,31 @@ function FundDetailView({ fundId, onBack }: { fundId: number; onBack: () => void
                   <DetailRow label="Origination Fee" value={fund.originationFeeMin != null || fund.originationFeeMax != null ? `${fund.originationFeeMin ?? "—"}% – ${fund.originationFeeMax ?? "—"}%` : null} />
                 </div>
                 <div className="mt-4">
-                  <p className="text-xs text-slate-500 mb-1">Region</p>
+                  <p className="text-xs text-muted-foreground mb-1">Region</p>
                   {fund.allowedStates?.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
                       {fund.allowedStates.length === 50
-                        ? <Badge className="bg-violet-500/10 text-violet-400 text-[10px]">Nationwide</Badge>
-                        : fund.allowedStates.map((s: string) => <Badge key={s} className="bg-blue-500/10 text-blue-400 text-[10px]">{s}</Badge>)
+                        ? <Badge variant="outline" className="text-[10px]">Nationwide</Badge>
+                        : fund.allowedStates.map((s: string) => <Badge key={s} variant="outline" className="text-[10px]">{s}</Badge>)
                       }
                     </div>
                   ) : (
-                    <p className="text-slate-600 italic text-sm">N/A</p>
+                    <p className="text-muted-foreground italic text-sm">N/A</p>
                   )}
                 </div>
                 <div className="mt-3">
-                  <p className="text-xs text-slate-500 mb-1">Property Types</p>
+                  <p className="text-xs text-muted-foreground mb-1">Property Types</p>
                   {fund.allowedAssetTypes?.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
-                      {fund.allowedAssetTypes.map((t: string) => <Badge key={t} className="bg-emerald-500/10 text-emerald-400 text-[10px]">{t}</Badge>)}
+                      {fund.allowedAssetTypes.map((t: string) => <Badge key={t} variant="outline" className="text-[10px]">{t}</Badge>)}
                     </div>
                   ) : (
-                    <p className="text-slate-600 italic text-sm">N/A</p>
+                    <p className="text-muted-foreground italic text-sm">N/A</p>
                   )}
                 </div>
                 <div className="mt-4">
-                  <p className="text-xs text-slate-500 mb-1">Description / Notes</p>
-                  <p className={fund.fundDescription ? "text-sm text-slate-300" : "text-slate-600 italic text-sm"}>{fund.fundDescription || "N/A"}</p>
+                  <p className="text-xs text-muted-foreground mb-1">Description / Notes</p>
+                  <p className={fund.fundDescription ? "text-sm" : "text-muted-foreground italic text-sm"}>{fund.fundDescription || "N/A"}</p>
                 </div>
               </CardContent>
             </Card>
@@ -995,21 +996,21 @@ function FundDetailView({ fundId, onBack }: { fundId: number; onBack: () => void
         </TabsContent>
 
         <TabsContent value="documents" className="mt-4 space-y-4">
-          <Card className="bg-[#0f1629]/50 border-blue-500/20">
+          <Card className="border-blue-200 bg-blue-50/30">
             <CardContent className="p-4">
               <div className="flex items-start gap-3">
-                <div className="p-2 rounded-lg bg-blue-500/10 shrink-0 mt-0.5">
-                  <Upload size={18} className="text-blue-400" />
+                <div className="p-2 rounded-lg bg-blue-100 shrink-0 mt-0.5">
+                  <Upload size={18} className="text-blue-600" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-white">Upload Fund Documents</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Upload term sheets, rate sheets, guidelines, or any fund documentation. Our AI will automatically extract key details like rates, terms, eligibility criteria, and other relevant information into the Knowledge tab.</p>
+                  <p className="text-sm font-medium">Upload Fund Documents</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Upload term sheets, rate sheets, guidelines, or any fund documentation. Our AI will automatically extract key details like rates, terms, eligibility criteria, and other relevant information into the Knowledge tab.</p>
                   <div className="flex items-center gap-3 mt-3">
                     <Button size="sm" onClick={() => docInputRef.current?.click()} disabled={uploadDocMut.isPending} data-testid="upload-fund-doc">
                       {uploadDocMut.isPending ? <RefreshCw size={14} className="animate-spin mr-1" /> : <FileUp size={14} className="mr-1" />}
                       {uploadDocMut.isPending ? "Uploading..." : "Choose File"}
                     </Button>
-                    <span className="text-[10px] text-slate-500">PDF, DOC, DOCX, TXT, XLS, XLSX</span>
+                    <span className="text-[10px] text-muted-foreground">PDF, DOC, DOCX, TXT, XLS, XLSX</span>
                   </div>
                 </div>
               </div>
@@ -1025,42 +1026,40 @@ function FundDetailView({ fundId, onBack }: { fundId: number; onBack: () => void
           </Card>
 
           {documents.length === 0 ? (
-            <Card className="bg-[#1a2038] border-slate-700/50">
+            <Card>
               <CardContent className="p-10 text-center">
-                <FileText size={36} className="mx-auto text-slate-600 mb-3" />
-                <p className="text-sm text-slate-400 font-medium">No documents uploaded yet</p>
-                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">Upload your first document above and our AI will automatically analyze it to build this fund's knowledge base.</p>
+                <FileText size={36} className="mx-auto text-muted-foreground mb-3" />
+                <p className="text-sm font-medium text-muted-foreground">No documents uploaded yet</p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">Upload your first document above and our AI will automatically analyze it to build this fund's knowledge base.</p>
               </CardContent>
             </Card>
           ) : (
             <div className="space-y-2">
               {documents.map((doc: any) => (
-                <Card key={doc.id} className={`border-slate-700/50 ${
-                  doc.extractionStatus === "processing" ? "bg-[#1a2038] border-blue-500/20" : "bg-[#1a2038]"
-                }`} data-testid={`fund-doc-${doc.id}`}>
+                <Card key={doc.id} className={doc.extractionStatus === "processing" ? "border-blue-200" : ""} data-testid={`fund-doc-${doc.id}`}>
                   <CardContent className="p-3 flex items-center gap-3">
                     <div className={`p-1.5 rounded ${
-                      doc.extractionStatus === "completed" ? "bg-emerald-500/10" :
-                      doc.extractionStatus === "processing" ? "bg-blue-500/10" :
-                      doc.extractionStatus === "failed" ? "bg-red-500/10" :
-                      "bg-slate-500/10"
+                      doc.extractionStatus === "completed" ? "bg-emerald-100" :
+                      doc.extractionStatus === "processing" ? "bg-blue-100" :
+                      doc.extractionStatus === "failed" ? "bg-red-100" :
+                      "bg-muted"
                     }`}>
                       <FileText size={16} className={
-                        doc.extractionStatus === "completed" ? "text-emerald-400" :
-                        doc.extractionStatus === "processing" ? "text-blue-400" :
-                        doc.extractionStatus === "failed" ? "text-red-400" :
-                        "text-slate-500"
+                        doc.extractionStatus === "completed" ? "text-emerald-600" :
+                        doc.extractionStatus === "processing" ? "text-blue-600" :
+                        doc.extractionStatus === "failed" ? "text-red-500" :
+                        "text-muted-foreground"
                       } />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-white truncate">{doc.fileName}</p>
+                      <p className="text-sm truncate">{doc.fileName}</p>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-slate-500">{doc.fileSize ? `${(doc.fileSize / 1024).toFixed(0)} KB` : ""}</span>
-                        <Badge className={`text-[10px] px-2 py-0.5 ${
-                          doc.extractionStatus === "completed" ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" :
-                          doc.extractionStatus === "processing" ? "bg-blue-500/20 text-blue-400 border-blue-500/30" :
-                          doc.extractionStatus === "failed" ? "bg-red-500/20 text-red-400 border-red-500/30" :
-                          "bg-slate-500/20 text-slate-400 border-slate-500/30"
+                        <span className="text-xs text-muted-foreground">{doc.fileSize ? `${(doc.fileSize / 1024).toFixed(0)} KB` : ""}</span>
+                        <Badge variant="outline" className={`text-[10px] px-2 py-0.5 ${
+                          doc.extractionStatus === "completed" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                          doc.extractionStatus === "processing" ? "bg-blue-50 text-blue-700 border-blue-200" :
+                          doc.extractionStatus === "failed" ? "bg-red-50 text-red-700 border-red-200" :
+                          ""
                         }`}>
                           {doc.extractionStatus === "processing" && <RefreshCw size={10} className="animate-spin mr-1 inline" />}
                           {doc.extractionStatus === "completed" && <CheckCircle2 size={10} className="mr-1 inline" />}
@@ -1071,11 +1070,11 @@ function FundDetailView({ fundId, onBack }: { fundId: number; onBack: () => void
                            doc.extractionStatus || "Pending"}
                         </Badge>
                         {doc.extractionStatus === "completed" && (
-                          <span className="text-[10px] text-slate-500">Knowledge extracted</span>
+                          <span className="text-[10px] text-muted-foreground">Knowledge extracted</span>
                         )}
                       </div>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => { if (confirm("Delete this document and its extracted knowledge?")) deleteDocMut.mutate(doc.id); }} className="text-slate-400 hover:text-red-400 h-8 w-8 p-0" data-testid={`delete-doc-${doc.id}`}>
+                    <Button variant="ghost" size="sm" onClick={() => { if (confirm("Delete this document and its extracted knowledge?")) deleteDocMut.mutate(doc.id); }} className="text-muted-foreground hover:text-red-500 h-8 w-8 p-0" data-testid={`delete-doc-${doc.id}`}>
                       <Trash2 size={14} />
                     </Button>
                   </CardContent>
@@ -1086,12 +1085,12 @@ function FundDetailView({ fundId, onBack }: { fundId: number; onBack: () => void
         </TabsContent>
 
         <TabsContent value="knowledge" className="mt-4 space-y-4">
-          <Card className="bg-[#1a2038] border-slate-700/50">
+          <Card>
             <CardContent className="p-3 space-y-2">
-              <p className="text-xs text-slate-400">Add Knowledge Note</p>
+              <p className="text-xs text-muted-foreground">Add Knowledge Note</p>
               <div className="flex gap-2">
                 <Select value={noteCategory} onValueChange={setNoteCategory}>
-                  <SelectTrigger className="bg-[#0f1629] border-slate-700 text-white text-sm w-32" data-testid="note-category-select">
+                  <SelectTrigger className="text-sm w-32" data-testid="note-category-select">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1104,7 +1103,7 @@ function FundDetailView({ fundId, onBack }: { fundId: number; onBack: () => void
                   value={noteContent}
                   onChange={e => setNoteContent(e.target.value)}
                   placeholder="Enter knowledge note..."
-                  className="bg-[#0f1629] border-slate-700 text-white text-sm flex-1"
+                  className="text-sm flex-1"
                   data-testid="knowledge-note-input"
                 />
                 <Button size="sm" disabled={!noteContent.trim() || addNoteMut.isPending} onClick={() => addNoteMut.mutate()} data-testid="add-note-button">
@@ -1115,29 +1114,29 @@ function FundDetailView({ fundId, onBack }: { fundId: number; onBack: () => void
           </Card>
 
           {knowledgeEntries.length === 0 ? (
-            <Card className="bg-[#1a2038] border-slate-700/50">
+            <Card>
               <CardContent className="p-8 text-center">
-                <BookOpen size={32} className="mx-auto text-slate-500 mb-2" />
-                <p className="text-sm text-slate-400">No knowledge entries yet</p>
-                <p className="text-xs text-slate-500 mt-1">Add notes manually or upload documents to auto-extract knowledge</p>
+                <BookOpen size={32} className="mx-auto text-muted-foreground mb-2" />
+                <p className="text-sm text-muted-foreground">No knowledge entries yet</p>
+                <p className="text-xs text-muted-foreground mt-1">Add notes manually or upload documents to auto-extract knowledge</p>
               </CardContent>
             </Card>
           ) : (
             <div className="space-y-2">
               {knowledgeEntries.map((entry: any) => (
-                <Card key={entry.id} className="bg-[#1a2038] border-slate-700/50" data-testid={`knowledge-entry-${entry.id}`}>
+                <Card key={entry.id} data-testid={`knowledge-entry-${entry.id}`}>
                   <CardContent className="p-3 flex items-start gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <Badge className="bg-blue-500/10 text-blue-400 text-[10px]">{entry.category}</Badge>
-                        <Badge className={`text-[10px] ${entry.sourceType === "manual" ? "bg-slate-500/20 text-slate-400" : "bg-purple-500/20 text-purple-400"}`}>
+                        <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-200 text-[10px]">{entry.category}</Badge>
+                        <Badge variant="outline" className={`text-[10px] ${entry.sourceType === "manual" ? "" : "bg-purple-50 text-purple-600 border-purple-200"}`}>
                           {entry.sourceType === "manual" ? "Manual" : "Extracted"}
                         </Badge>
-                        {entry.sourceDocumentName && <span className="text-[10px] text-slate-500 truncate">{entry.sourceDocumentName}</span>}
+                        {entry.sourceDocumentName && <span className="text-[10px] text-muted-foreground truncate">{entry.sourceDocumentName}</span>}
                       </div>
-                      <p className="text-sm text-slate-300">{entry.content}</p>
+                      <p className="text-sm">{entry.content}</p>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => deleteKnowledgeMut.mutate(entry.id)} className="text-slate-400 hover:text-red-400 h-8 w-8 p-0 shrink-0" data-testid={`delete-knowledge-${entry.id}`}>
+                    <Button variant="ghost" size="sm" onClick={() => deleteKnowledgeMut.mutate(entry.id)} className="text-muted-foreground hover:text-red-500 h-8 w-8 p-0 shrink-0" data-testid={`delete-knowledge-${entry.id}`}>
                       <Trash2 size={14} />
                     </Button>
                   </CardContent>
@@ -1155,8 +1154,8 @@ function DetailRow({ label, value }: { label: string; value: any }) {
   const isEmpty = !value && value !== 0;
   return (
     <div>
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className={isEmpty ? "text-slate-600 italic" : "text-white"}>{isEmpty ? "N/A" : value}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={isEmpty ? "text-muted-foreground italic" : ""}>{isEmpty ? "N/A" : value}</p>
     </div>
   );
 }
@@ -1174,6 +1173,7 @@ export function FundManagementContent() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [selectedFundId, setSelectedFundId] = useState<number | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterActive, setFilterActive] = useState<"all" | "active" | "inactive">("all");
 
@@ -1314,64 +1314,196 @@ export function FundManagementContent() {
           />
         ) : (
           <>
-            <div className="grid gap-0">
-              {filteredFunds.map((fund: any) => (
-                <div
-                  key={fund.id}
-                  className="border-b last:border-b-0 cursor-pointer hover:bg-muted/50 transition-colors"
-                  onClick={() => setSelectedFundId(fund.id)}
-                  data-testid={`fund-card-${fund.id}`}
-                >
-                  <div className="p-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="text-[16px] font-medium text-blue-600" data-testid={`fund-name-${fund.id}`}>{fund.fundName}</h3>
-                          <Badge className={`text-[10px] ${fund.isActive ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-500/20 text-slate-400"}`}>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b-2">
+                  <th className="w-8" />
+                  <th className="text-left px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">Lender</th>
+                  <th className="text-left px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">Loan Range</th>
+                  <th className="text-left px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">LTV</th>
+                  <th className="text-left px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">Rate</th>
+                  <th className="text-left px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">Region</th>
+                  <th className="text-left px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">Property Types</th>
+                  <th className="text-left px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredFunds.map((fund: any) => (
+                  <ExpandableRow
+                    key={fund.id}
+                    columns={7}
+                    isExpanded={expandedId === fund.id}
+                    onToggle={(expanded) => setExpandedId(expanded ? fund.id : null)}
+                    summary={
+                      <>
+                        <td className="px-3 py-3">
+                          <div className="text-[16px] font-medium text-blue-600" data-testid={`fund-name-${fund.id}`}>{fund.fundName}</div>
+                          {fund.providerName && <div className="text-[13px] text-muted-foreground">{fund.providerName}</div>}
+                        </td>
+                        <td className="px-3 py-3 text-[14px]">
+                          {fund.loanAmountMin != null || fund.loanAmountMax != null
+                            ? `$${fmtAmt(fund.loanAmountMin)} – $${fmtAmt(fund.loanAmountMax)}`
+                            : <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className="px-3 py-3 text-[14px]">
+                          {fund.ltvMin != null || fund.ltvMax != null
+                            ? `${fund.ltvMin ?? "—"}–${fund.ltvMax ?? "—"}%`
+                            : <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className="px-3 py-3 text-[14px]">
+                          {fund.interestRateMin != null || fund.interestRateMax != null
+                            ? `${fund.interestRateMin ?? "—"}–${fund.interestRateMax ?? "—"}%`
+                            : <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className="px-3 py-3 text-[13px]">
+                          {fund.allowedStates?.length > 0
+                            ? fund.allowedStates.length === 50
+                              ? <Badge variant="outline" className="text-[11px]">Nationwide</Badge>
+                              : <span className="text-muted-foreground">{fund.allowedStates.slice(0, 4).join(", ")}{fund.allowedStates.length > 4 ? ` +${fund.allowedStates.length - 4}` : ""}</span>
+                            : <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className="px-3 py-3 text-[13px]">
+                          {fund.allowedAssetTypes?.length > 0
+                            ? <span className="text-muted-foreground">{fund.allowedAssetTypes.slice(0, 2).join(", ")}{fund.allowedAssetTypes.length > 2 ? ` +${fund.allowedAssetTypes.length - 2}` : ""}</span>
+                            : <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className="px-3 py-3">
+                          <Badge className={`text-[11px] ${fund.isActive ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200"}`} variant="outline">
                             {fund.isActive ? "Active" : "Inactive"}
                           </Badge>
+                        </td>
+                      </>
+                    }
+                    details={
+                      <div data-testid={`fund-expanded-${fund.id}`}>
+                        <div className="grid grid-cols-3 gap-8">
+                          <div>
+                            <h4 className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">Contact Info</h4>
+                            <div className="space-y-2.5">
+                              <div className="flex items-center justify-between text-[14px]">
+                                <span className="text-muted-foreground">Contact Name</span>
+                                <span className="font-medium">{fund.contactName || "—"}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-[14px]">
+                                <span className="text-muted-foreground">Email</span>
+                                <span className="font-medium">{fund.contactEmail || "—"}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-[14px]">
+                                <span className="text-muted-foreground">Phone</span>
+                                <span className="font-medium">{fund.contactPhone || "—"}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-[14px]">
+                                <span className="text-muted-foreground">Website</span>
+                                <span className="font-medium truncate max-w-[160px]">
+                                  {fund.website
+                                    ? <a href={fund.website.startsWith("http") ? fund.website : `https://${fund.website}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{fund.website}</a>
+                                    : "—"}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between text-[14px]">
+                                <span className="text-muted-foreground">Guidelines</span>
+                                <span className="font-medium truncate max-w-[160px]">
+                                  {fund.guidelineUrl
+                                    ? <a href={fund.guidelineUrl.startsWith("http") ? fund.guidelineUrl : `https://${fund.guidelineUrl}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">View</a>
+                                    : "—"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <h4 className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">Financial Terms</h4>
+                            <div className="space-y-2.5">
+                              <div className="flex items-center justify-between text-[14px]">
+                                <span className="text-muted-foreground">LTC</span>
+                                <span className="font-medium">{fund.ltcMin != null || fund.ltcMax != null ? `${fund.ltcMin ?? "—"}–${fund.ltcMax ?? "—"}%` : "—"}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-[14px]">
+                                <span className="text-muted-foreground">Term</span>
+                                <span className="font-medium">{fund.termMin != null || fund.termMax != null ? `${fund.termMin ?? "—"}–${fund.termMax ?? "—"} mo` : "—"}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-[14px]">
+                                <span className="text-muted-foreground">Recourse</span>
+                                <span className="font-medium">{fund.recourseType || "—"}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-[14px]">
+                                <span className="text-muted-foreground">Min DSCR</span>
+                                <span className="font-medium">{fund.minDscr != null ? `${fund.minDscr}x` : "—"}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-[14px]">
+                                <span className="text-muted-foreground">Min Credit Score</span>
+                                <span className="font-medium">{fund.minCreditScore ?? "—"}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-[14px]">
+                                <span className="text-muted-foreground">Origination Fee</span>
+                                <span className="font-medium">{fund.originationFeeMin != null || fund.originationFeeMax != null ? `${fund.originationFeeMin ?? "—"}–${fund.originationFeeMax ?? "—"}%` : "—"}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <h4 className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">Additional Details</h4>
+                            <div className="space-y-2.5">
+                              <div className="flex items-center justify-between text-[14px]">
+                                <span className="text-muted-foreground">Prepayment</span>
+                                <span className="font-medium">{fund.prepaymentTerms || "—"}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-[14px]">
+                                <span className="text-muted-foreground">Closing Timeline</span>
+                                <span className="font-medium">{fund.closingTimeline || "—"}</span>
+                              </div>
+                            </div>
+                            {fund.allowedStates?.length > 0 && (
+                              <div className="mt-3">
+                                <p className="text-[13px] text-muted-foreground mb-1.5">Region</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {fund.allowedStates.length === 50
+                                    ? <Badge variant="outline" className="text-[11px]">Nationwide</Badge>
+                                    : fund.allowedStates.map((s: string) => <Badge key={s} variant="outline" className="text-[10px]">{s}</Badge>)
+                                  }
+                                </div>
+                              </div>
+                            )}
+                            {fund.allowedAssetTypes?.length > 0 && (
+                              <div className="mt-3">
+                                <p className="text-[13px] text-muted-foreground mb-1.5">Property Types</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {fund.allowedAssetTypes.map((t: string) => <Badge key={t} variant="outline" className="text-[10px]">{t}</Badge>)}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        {fund.providerName && <p className="text-[13px] text-muted-foreground mb-1">{fund.providerName}</p>}
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-muted-foreground mt-1">
-                          {(fund.ltvMin != null || fund.ltvMax != null) && (
-                            <span>LTV: {fund.ltvMin ?? "—"}-{fund.ltvMax ?? "—"}%</span>
-                          )}
-                          {(fund.interestRateMin != null || fund.interestRateMax != null) && (
-                            <span>Rate: {fund.interestRateMin ?? "—"}-{fund.interestRateMax ?? "—"}%</span>
-                          )}
-                          {(fund.loanAmountMin != null || fund.loanAmountMax != null) && (
-                            <span>${fmtAmt(fund.loanAmountMin)} - ${fmtAmt(fund.loanAmountMax)}</span>
-                          )}
-                          {fund.allowedStates?.length > 0 && (
-                            <span>States: {fund.allowedStates.slice(0, 5).join(", ")}{fund.allowedStates.length > 5 ? ` +${fund.allowedStates.length - 5}` : ""}</span>
-                          )}
-                          {fund.allowedAssetTypes?.length > 0 && (
-                            <span>Assets: {fund.allowedAssetTypes.slice(0, 3).join(", ")}{fund.allowedAssetTypes.length > 3 ? ` +${fund.allowedAssetTypes.length - 3}` : ""}</span>
-                          )}
-                          {fund.minDscr && <span>Min DSCR: {fund.minDscr}x</span>}
-                          {fund.recourseType && <span>Recourse: {fund.recourseType}</span>}
+
+                        {fund.fundDescription && (
+                          <div className="mt-4 pt-3 border-t border-border/50">
+                            <p className="text-[13px] text-muted-foreground mb-1">Description / Notes</p>
+                            <p className="text-[14px]">{fund.fundDescription}</p>
+                          </div>
+                        )}
+
+                        <div className="mt-5 pt-4 border-t border-border/50 flex items-center gap-3">
+                          <Button size="default" className="text-[16px] shadow-md" onClick={(e) => { e.stopPropagation(); setSelectedFundId(fund.id); }} data-testid={`button-open-fund-${fund.id}`}>
+                            Open Fund <ChevronRight className="h-4 w-4 ml-1" />
+                          </Button>
+                          <Button
+                            variant="outline" size="sm"
+                            onClick={(e) => { e.stopPropagation(); setEditingFund(fund); setDialogOpen(true); }}
+                            data-testid={`edit-fund-${fund.id}`}
+                          ><Pencil size={14} className="mr-1" /> Edit</Button>
+                          <Button
+                            variant="outline" size="sm"
+                            onClick={(e) => { e.stopPropagation(); if (confirm("Delete this fund?")) deleteMut.mutate(fund.id); }}
+                            className="text-red-500 hover:text-red-600 hover:border-red-300"
+                            data-testid={`delete-fund-${fund.id}`}
+                          ><Trash2 size={14} className="mr-1" /> Delete</Button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost" size="sm"
-                          onClick={(e) => { e.stopPropagation(); setEditingFund(fund); setDialogOpen(true); }}
-                          className="text-muted-foreground hover:text-foreground h-8 w-8 p-0"
-                          data-testid={`edit-fund-${fund.id}`}
-                        ><Pencil size={14} /></Button>
-                        <Button
-                          variant="ghost" size="sm"
-                          onClick={(e) => { e.stopPropagation(); if (confirm("Delete this fund?")) deleteMut.mutate(fund.id); }}
-                          className="text-muted-foreground hover:text-red-400 h-8 w-8 p-0"
-                          data-testid={`delete-fund-${fund.id}`}
-                        ><Trash2 size={14} /></Button>
-                        <ChevronRight size={16} className="text-muted-foreground ml-1" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                    }
+                  />
+                ))}
+              </tbody>
+            </table>
 
             {filteredFunds.length > 0 && (
               <div className="px-4 py-3 border-t text-[14px] text-muted-foreground flex items-center justify-between">
