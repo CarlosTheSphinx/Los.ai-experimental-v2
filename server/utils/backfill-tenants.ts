@@ -4,7 +4,7 @@ import {
   funds, pricingRequests, quotePdfTemplates, intakeDeals, intakeDocumentRules,
   commercialFormConfig, teamChats, tenants
 } from "@shared/schema";
-import { eq, isNull, sql } from "drizzle-orm";
+import { eq, sql, ne } from "drizzle-orm";
 
 export async function backfillTenantIds(): Promise<void> {
   const SPHINX_CAPITAL_TENANT_ID = 1;
@@ -23,126 +23,40 @@ export async function backfillTenantIds(): Promise<void> {
 
   let totalUpdated = 0;
 
-  const usersResult = await db.update(users)
-    .set({ tenantId: SPHINX_CAPITAL_TENANT_ID })
-    .where(isNull(users.tenantId))
-    .returning({ id: users.id });
-  if (usersResult.length > 0) {
-    console.log(`[Tenant Backfill] Assigned ${usersResult.length} users to tenant ${SPHINX_CAPITAL_TENANT_ID}`);
-    totalUpdated += usersResult.length;
-  }
-
-  const fundsResult = await db.update(funds)
-    .set({ tenantId: SPHINX_CAPITAL_TENANT_ID })
-    .where(isNull(funds.tenantId))
-    .returning({ id: funds.id });
-  if (fundsResult.length > 0) {
-    console.log(`[Tenant Backfill] Assigned ${fundsResult.length} funds to tenant ${SPHINX_CAPITAL_TENANT_ID}`);
-    totalUpdated += fundsResult.length;
-  }
-
-  const projectsResult = await db.update(projects)
-    .set({ tenantId: SPHINX_CAPITAL_TENANT_ID })
-    .where(isNull(projects.tenantId))
-    .returning({ id: projects.id });
-  if (projectsResult.length > 0) {
-    console.log(`[Tenant Backfill] Assigned ${projectsResult.length} projects to tenant ${SPHINX_CAPITAL_TENANT_ID}`);
-    totalUpdated += projectsResult.length;
-  }
-
-  const dealsResult = await db.update(intakeDeals)
-    .set({ tenantId: SPHINX_CAPITAL_TENANT_ID })
-    .where(isNull(intakeDeals.tenantId))
-    .returning({ id: intakeDeals.id });
-  if (dealsResult.length > 0) {
-    console.log(`[Tenant Backfill] Assigned ${dealsResult.length} intake_deals to tenant ${SPHINX_CAPITAL_TENANT_ID}`);
-    totalUpdated += dealsResult.length;
-  }
-
-  const programsResult = await db.update(loanPrograms)
-    .set({ tenantId: SPHINX_CAPITAL_TENANT_ID })
-    .where(isNull(loanPrograms.tenantId))
-    .returning({ id: loanPrograms.id });
-  if (programsResult.length > 0) {
-    console.log(`[Tenant Backfill] Assigned ${programsResult.length} loan_programs to tenant ${SPHINX_CAPITAL_TENANT_ID}`);
-    totalUpdated += programsResult.length;
-  }
-
-  const partnersResult = await db.update(partners)
-    .set({ tenantId: SPHINX_CAPITAL_TENANT_ID })
-    .where(isNull(partners.tenantId))
-    .returning({ id: partners.id });
-  if (partnersResult.length > 0) {
-    console.log(`[Tenant Backfill] Assigned ${partnersResult.length} partners to tenant ${SPHINX_CAPITAL_TENANT_ID}`);
-    totalUpdated += partnersResult.length;
-  }
-
-  const pricingResult = await db.update(pricingRequests)
-    .set({ tenantId: SPHINX_CAPITAL_TENANT_ID })
-    .where(isNull(pricingRequests.tenantId))
-    .returning({ id: pricingRequests.id });
-  if (pricingResult.length > 0) {
-    console.log(`[Tenant Backfill] Assigned ${pricingResult.length} pricing_requests to tenant ${SPHINX_CAPITAL_TENANT_ID}`);
-    totalUpdated += pricingResult.length;
-  }
-
-  const tasksResult = await db.update(adminTasks)
-    .set({ tenantId: SPHINX_CAPITAL_TENANT_ID })
-    .where(isNull(adminTasks.tenantId))
-    .returning({ id: adminTasks.id });
-  if (tasksResult.length > 0) {
-    console.log(`[Tenant Backfill] Assigned ${tasksResult.length} admin_tasks to tenant ${SPHINX_CAPITAL_TENANT_ID}`);
-    totalUpdated += tasksResult.length;
-  }
-
-  const formConfigResult = await db.update(commercialFormConfig)
-    .set({ tenantId: SPHINX_CAPITAL_TENANT_ID })
-    .where(isNull(commercialFormConfig.tenantId))
-    .returning({ id: commercialFormConfig.id });
-  if (formConfigResult.length > 0) {
-    console.log(`[Tenant Backfill] Assigned ${formConfigResult.length} commercial_form_config to tenant ${SPHINX_CAPITAL_TENANT_ID}`);
-    totalUpdated += formConfigResult.length;
-  }
-
-  const docRulesResult = await db.update(intakeDocumentRules)
-    .set({ tenantId: SPHINX_CAPITAL_TENANT_ID })
-    .where(isNull(intakeDocumentRules.tenantId))
-    .returning({ id: intakeDocumentRules.id });
-  if (docRulesResult.length > 0) {
-    console.log(`[Tenant Backfill] Assigned ${docRulesResult.length} intake_document_rules to tenant ${SPHINX_CAPITAL_TENANT_ID}`);
-    totalUpdated += docRulesResult.length;
-  }
-
-  const templatesResult = await db.update(quotePdfTemplates)
-    .set({ tenantId: SPHINX_CAPITAL_TENANT_ID })
-    .where(isNull(quotePdfTemplates.tenantId))
-    .returning({ id: quotePdfTemplates.id });
-  if (templatesResult.length > 0) {
-    console.log(`[Tenant Backfill] Assigned ${templatesResult.length} quote_pdf_templates to tenant ${SPHINX_CAPITAL_TENANT_ID}`);
-    totalUpdated += templatesResult.length;
-  }
-
-  const settingsResult = await db.update(systemSettings)
-    .set({ tenantId: SPHINX_CAPITAL_TENANT_ID })
-    .where(isNull(systemSettings.tenantId))
-    .returning({ id: systemSettings.id });
-  if (settingsResult.length > 0) {
-    console.log(`[Tenant Backfill] Assigned ${settingsResult.length} system_settings to tenant ${SPHINX_CAPITAL_TENANT_ID}`);
-    totalUpdated += settingsResult.length;
-  }
-
-  const chatsResult = await db.update(teamChats)
-    .set({ tenantId: SPHINX_CAPITAL_TENANT_ID })
-    .where(isNull(teamChats.tenantId))
-    .returning({ id: teamChats.id });
-  if (chatsResult.length > 0) {
-    console.log(`[Tenant Backfill] Assigned ${chatsResult.length} team_chats to tenant ${SPHINX_CAPITAL_TENANT_ID}`);
-    totalUpdated += chatsResult.length;
-  }
+  totalUpdated += await normalizeTable(users, users.id, users.tenantId, "users", SPHINX_CAPITAL_TENANT_ID);
+  totalUpdated += await normalizeTable(funds, funds.id, funds.tenantId, "funds", SPHINX_CAPITAL_TENANT_ID);
+  totalUpdated += await normalizeTable(projects, projects.id, projects.tenantId, "projects", SPHINX_CAPITAL_TENANT_ID);
+  totalUpdated += await normalizeTable(intakeDeals, intakeDeals.id, intakeDeals.tenantId, "intake_deals", SPHINX_CAPITAL_TENANT_ID);
+  totalUpdated += await normalizeTable(loanPrograms, loanPrograms.id, loanPrograms.tenantId, "loan_programs", SPHINX_CAPITAL_TENANT_ID);
+  totalUpdated += await normalizeTable(partners, partners.id, partners.tenantId, "partners", SPHINX_CAPITAL_TENANT_ID);
+  totalUpdated += await normalizeTable(pricingRequests, pricingRequests.id, pricingRequests.tenantId, "pricing_requests", SPHINX_CAPITAL_TENANT_ID);
+  totalUpdated += await normalizeTable(adminTasks, adminTasks.id, adminTasks.tenantId, "admin_tasks", SPHINX_CAPITAL_TENANT_ID);
+  totalUpdated += await normalizeTable(commercialFormConfig, commercialFormConfig.id, commercialFormConfig.tenantId, "commercial_form_config", SPHINX_CAPITAL_TENANT_ID);
+  totalUpdated += await normalizeTable(intakeDocumentRules, intakeDocumentRules.id, intakeDocumentRules.tenantId, "intake_document_rules", SPHINX_CAPITAL_TENANT_ID);
+  totalUpdated += await normalizeTable(quotePdfTemplates, quotePdfTemplates.id, quotePdfTemplates.tenantId, "quote_pdf_templates", SPHINX_CAPITAL_TENANT_ID);
+  totalUpdated += await normalizeTable(systemSettings, systemSettings.id, systemSettings.tenantId, "system_settings", SPHINX_CAPITAL_TENANT_ID);
+  totalUpdated += await normalizeTable(teamChats, teamChats.id, teamChats.tenantId, "team_chats", SPHINX_CAPITAL_TENANT_ID);
 
   if (totalUpdated > 0) {
-    console.log(`[Tenant Backfill] Total: ${totalUpdated} rows backfilled to tenant ${SPHINX_CAPITAL_TENANT_ID}`);
+    console.log(`[Tenant Backfill] Total: ${totalUpdated} rows normalized to tenant ${SPHINX_CAPITAL_TENANT_ID}`);
   } else {
-    console.log("[Tenant Backfill] All rows already have tenant IDs assigned");
+    console.log("[Tenant Backfill] All rows already correctly assigned to tenant 1");
   }
+}
+
+async function normalizeTable(
+  table: { [key: string]: any },
+  idCol: any,
+  tenantIdCol: any,
+  tableName: string,
+  targetTenantId: number
+): Promise<number> {
+  const result = await db.execute(
+    sql`UPDATE ${table} SET tenant_id = ${targetTenantId} WHERE tenant_id IS NULL OR tenant_id != ${targetTenantId}`
+  );
+  const count = Number(result.rowCount ?? 0);
+  if (count > 0) {
+    console.log(`[Tenant Backfill] Normalized ${count} ${tableName} rows to tenant ${targetTenantId}`);
+  }
+  return count;
 }
