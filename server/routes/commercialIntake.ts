@@ -187,6 +187,35 @@ router.delete("/api/commercial/funds/:id", async (req: Request, res: Response) =
   }
 });
 
+router.post("/api/commercial/funds/bulk-action", async (req: Request, res: Response) => {
+  try {
+    if (!requireAdmin(req, res)) return;
+    const { ids, action, data } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids array required" });
+    const tenantId = await getTenantId(req);
+    const whereClause = tenantId
+      ? and(inArray(funds.id, ids), eq(funds.tenantId, tenantId))
+      : inArray(funds.id, ids);
+
+    if (action === "delete") {
+      for (const id of ids) {
+        await db.delete(fundKnowledgeEntries).where(eq(fundKnowledgeEntries.fundId, id));
+        await db.delete(fundDocuments).where(eq(fundDocuments.fundId, id));
+      }
+      const result = await db.delete(funds).where(whereClause!).returning({ id: funds.id });
+      res.json({ success: true, deleted: result.length });
+    } else if (action === "update") {
+      if (!data || typeof data !== "object") return res.status(400).json({ error: "data object required for update" });
+      const result = await db.update(funds).set({ ...data, updatedAt: new Date() }).where(whereClause!).returning({ id: funds.id });
+      res.json({ success: true, updated: result.length });
+    } else {
+      return res.status(400).json({ error: "action must be 'delete' or 'update'" });
+    }
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ===== DOCUMENT RULES CRUD =====
 
 router.get("/api/commercial/document-rules", async (req: Request, res: Response) => {

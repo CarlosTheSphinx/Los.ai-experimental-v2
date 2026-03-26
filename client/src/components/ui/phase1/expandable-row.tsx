@@ -5,13 +5,14 @@ import { ChevronRight } from "lucide-react";
 interface ExpandableRowProps {
   summary: React.ReactNode;
   details: React.ReactNode;
+  prefix?: React.ReactNode;
   isExpanded?: boolean;
   onToggle?: (expanded: boolean) => void;
   className?: string;
   columns?: number;
 }
 
-export function ExpandableRow({ summary, details, isExpanded: controlledExpanded, onToggle, className, columns = 1 }: ExpandableRowProps) {
+export function ExpandableRow({ summary, details, prefix, isExpanded: controlledExpanded, onToggle, className, columns = 1 }: ExpandableRowProps) {
   const [internalExpanded, setInternalExpanded] = useState(false);
   const isExpanded = controlledExpanded ?? internalExpanded;
 
@@ -24,6 +25,8 @@ export function ExpandableRow({ summary, details, isExpanded: controlledExpanded
     }
   }, [isExpanded, onToggle]);
 
+  const extraCols = prefix ? 2 : 1;
+
   return (
     <>
       <tr
@@ -34,6 +37,7 @@ export function ExpandableRow({ summary, details, isExpanded: controlledExpanded
           className
         )}
       >
+        {prefix}
         <td className="pl-3 pr-0 py-3 w-8">
           <ChevronRight
             className={cn(
@@ -46,7 +50,7 @@ export function ExpandableRow({ summary, details, isExpanded: controlledExpanded
       </tr>
       {isExpanded && (
         <tr className="bg-muted/50 border-b-2 border-b-primary">
-          <td colSpan={columns + 1} className="p-0">
+          <td colSpan={columns + extraCols} className="p-0">
             <div className="px-6 py-5 border-t border-border/50 animate-in slide-in-from-top-1 duration-200">
               {details}
             </div>

@@ -18,8 +18,9 @@ import { EmptyState } from "@/components/ui/phase1/empty-state";
 import {
   Plus, Pencil, Trash2, Building2, RefreshCw, Upload, FileText,
   Search, ArrowLeft, BookOpen, FileUp, ChevronRight, Check, X, Download,
-  CheckCircle2, XCircle
+  CheckCircle2, XCircle, ToggleLeft, ToggleRight
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ExpandableRow } from "@/components/ui/phase1/expandable-row";
 
 const US_STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
@@ -1196,6 +1197,7 @@ export function FundManagementContent() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterActive, setFilterActive] = useState<"all" | "active" | "inactive">("all");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const { data: fundsList = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/commercial/funds"] });
 
@@ -1235,6 +1237,39 @@ export function FundManagementContent() {
       toast({ title: "Fund deleted" });
     },
   });
+
+  const bulkActionMut = useMutation({
+    mutationFn: async ({ ids, action, data }: { ids: number[]; action: string; data?: any }) =>
+      apiRequest("POST", "/api/commercial/funds/bulk-action", { ids, action, data }),
+    onSuccess: (_: any, vars: { ids: number[]; action: string }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/commercial/funds"] });
+      setSelectedIds(new Set());
+      toast({
+        title: vars.action === "delete"
+          ? `${vars.ids.length} fund${vars.ids.length > 1 ? "s" : ""} deleted`
+          : `${vars.ids.length} fund${vars.ids.length > 1 ? "s" : ""} updated`,
+      });
+    },
+    onError: (err: any) => {
+      toast({ title: "Bulk action failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredFunds.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredFunds.map((f: any) => f.id)));
+    }
+  };
 
   const backfillMut = useMutation({
     mutationFn: async () => {
@@ -1360,6 +1395,14 @@ export function FundManagementContent() {
             <table className="w-full">
               <thead>
                 <tr className="border-b-2">
+                  <th className="w-10 px-3 py-2.5">
+                    <Checkbox
+                      checked={filteredFunds.length > 0 && selectedIds.size === filteredFunds.length}
+                      onCheckedChange={toggleSelectAll}
+                      data-testid="select-all-funds"
+                      className="border-slate-400"
+                    />
+                  </th>
                   <th className="w-8" />
                   <th className="text-left px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">Lender</th>
                   <th className="text-left px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">Loan Range</th>
@@ -1377,6 +1420,16 @@ export function FundManagementContent() {
                     columns={7}
                     isExpanded={expandedId === fund.id}
                     onToggle={(expanded) => setExpandedId(expanded ? fund.id : null)}
+                    prefix={
+                      <td className="w-10 px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedIds.has(fund.id)}
+                          onCheckedChange={() => toggleSelect(fund.id)}
+                          data-testid={`select-fund-${fund.id}`}
+                          className="border-slate-400"
+                        />
+                      </td>
+                    }
                     summary={
                       <>
                         <td className="px-3 py-3">
@@ -1567,6 +1620,70 @@ export function FundManagementContent() {
           </>
         )}
       </div>
+
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-[#1a2340] border border-slate-600 rounded-xl shadow-2xl px-5 py-3 flex items-center gap-3 animate-in slide-in-from-bottom-4 duration-200" data-testid="bulk-action-bar">
+          <span className="text-[14px] text-slate-300 font-medium mr-1" data-testid="bulk-selected-count">
+            {selectedIds.size} selected
+          </span>
+          <div className="h-5 w-px bg-slate-600" />
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/10 text-[13px]"
+            onClick={() => bulkActionMut.mutate({ ids: Array.from(selectedIds), action: "update", data: { isActive: true } })}
+            disabled={bulkActionMut.isPending}
+            data-testid="bulk-activate"
+          >
+            <ToggleRight className="h-3.5 w-3.5 mr-1" /> Activate
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-slate-400 border-slate-500/40 hover:bg-slate-500/10 text-[13px]"
+            onClick={() => bulkActionMut.mutate({ ids: Array.from(selectedIds), action: "update", data: { isActive: false } })}
+            disabled={bulkActionMut.isPending}
+            data-testid="bulk-deactivate"
+          >
+            <ToggleLeft className="h-3.5 w-3.5 mr-1" /> Deactivate
+          </Button>
+          <Select onValueChange={(val) => bulkActionMut.mutate({ ids: Array.from(selectedIds), action: "update", data: { loanStrategy: val || null } })}>
+            <SelectTrigger className="w-[140px] h-8 text-[13px] bg-transparent border-slate-500/40 text-slate-300" data-testid="bulk-strategy-select">
+              <SelectValue placeholder="Set Strategy" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Bridge">Bridge</SelectItem>
+              <SelectItem value="Permanent">Permanent</SelectItem>
+              <SelectItem value="Both">Both</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="h-5 w-px bg-slate-600" />
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-red-400 border-red-500/40 hover:bg-red-500/10 text-[13px]"
+            onClick={() => {
+              if (confirm(`Delete ${selectedIds.size} fund${selectedIds.size > 1 ? "s" : ""}? This cannot be undone.`)) {
+                bulkActionMut.mutate({ ids: Array.from(selectedIds), action: "delete" });
+              }
+            }}
+            disabled={bulkActionMut.isPending}
+            data-testid="bulk-delete"
+          >
+            <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+          </Button>
+          <div className="h-5 w-px bg-slate-600" />
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-slate-500 hover:text-slate-300 text-[13px]"
+            onClick={() => setSelectedIds(new Set())}
+            data-testid="bulk-clear"
+          >
+            <X className="h-3.5 w-3.5 mr-1" /> Clear
+          </Button>
+        </div>
+      )}
 
       <BulkImportDialog open={bulkImportOpen} onOpenChange={setBulkImportOpen} />
     </div>
