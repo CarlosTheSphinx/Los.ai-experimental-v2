@@ -1447,7 +1447,7 @@ interface SpecialtyParsed {
 
 function parseSpecialtyToLoanTypes(specialty: string): SpecialtyParsed {
   const lower = specialty.toLowerCase().trim();
-  const parts = lower.split(/[,;|&+\/]+/).map(s => s.trim()).filter(Boolean);
+  const parts = lower.split(/[,;|+\/]+/).map(s => s.trim()).filter(Boolean);
 
   const loanTypes = new Set<string>();
   const assetTypes = new Set<string>();
@@ -1483,11 +1483,11 @@ function parseSpecialtyToLoanTypes(specialty: string): SpecialtyParsed {
     if (matched) continue;
 
     const mapped = PROPERTY_TYPE_MAP[part];
-    if (mapped) {
+    if (mapped !== undefined && mapped !== null) {
       assetTypes.add(mapped);
-    } else {
+    } else if (mapped === undefined) {
       for (const [key, val] of Object.entries(PROPERTY_TYPE_MAP)) {
-        if (part.includes(key) && val) { assetTypes.add(val); break; }
+        if (val && part.includes(key)) { assetTypes.add(val); break; }
       }
     }
   }

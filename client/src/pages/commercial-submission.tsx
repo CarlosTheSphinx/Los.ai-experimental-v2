@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useLocation } from "wouter";
+import { STANDARD_LOAN_TYPES, STANDARD_PROPERTY_TYPES, LOAN_TYPE_VALUES, PROPERTY_TYPE_VALUES } from "@shared/loanConstants";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -147,7 +148,7 @@ const formSchema = z.object({
   phone: z.string().min(1, "Phone number is required"),
   roleOnDeal: z.string().min(1, "Role on deal is required"),
 
-  loanType: z.enum(["Bridge", "Construction", "DSCR", "A&D", "Fix & Flip", "Long-Term Financing", "Land Development"], { required_error: "Select a loan type" }),
+  loanType: z.enum(LOAN_TYPE_VALUES as [string, ...string[]], { required_error: "Select a loan type" }),
   requestedLoanAmount: z.coerce.number().min(1, "Loan amount is required"),
   requestedLTV: z.coerce.number().min(0).max(100).optional().or(z.literal("")),
   requestedLTC: z.coerce.number().min(0).max(100).optional().or(z.literal("")),
@@ -164,7 +165,7 @@ const formSchema = z.object({
   city: z.string().min(1, "City is required"),
   state: z.string().length(2, "Select a state"),
   zip: z.string().min(5, "ZIP code is required"),
-  propertyType: z.enum(["Residential", "Multifamily", "Office", "Retail", "Industrial", "Land", "Development", "Mixed Use", "Hospitality", "Student Housing", "Self-Storage"], { required_error: "Select property type" }),
+  propertyType: z.enum(PROPERTY_TYPE_VALUES as [string, ...string[]], { required_error: "Select property type" }),
   occupancyType: z.enum(["STABILIZED", "VALUE_ADD", "LEASE_UP", "GROUND_UP", "OTHER"], { required_error: "Select occupancy type" }),
   unitsOrSqft: z.coerce.number().min(1, "Units/Sq Ft is required"),
   yearBuilt: z.coerce.number().optional().or(z.literal("")),
@@ -449,8 +450,7 @@ export default function CommercialSubmissionPage() {
           "self-storage": "Self-Storage",
         };
         const mapped = mapping[preScreenAssetClass.toLowerCase()] || preScreenAssetClass;
-        const validTypes = ["Residential", "Multifamily", "Office", "Retail", "Industrial", "Land", "Development", "Mixed Use", "Hospitality", "Student Housing", "Self-Storage"];
-        if (validTypes.includes(mapped)) {
+        if (PROPERTY_TYPE_VALUES.includes(mapped)) {
           form.setValue("propertyType", mapped as any);
         }
       }
@@ -469,8 +469,7 @@ export default function CommercialSubmissionPage() {
           "land_development": "Land Development",
         };
         const mapped = dtMapping[preScreenDealType.toLowerCase()] || preScreenDealType;
-        const validLoanTypes = ["Bridge", "Construction", "DSCR", "A&D", "Fix & Flip", "Long-Term Financing", "Land Development"];
-        if (validLoanTypes.includes(mapped)) {
+        if (LOAN_TYPE_VALUES.includes(mapped)) {
           form.setValue("loanType", mapped as any);
         }
       }
@@ -942,13 +941,9 @@ export default function CommercialSubmissionPage() {
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="Bridge">Bridge</SelectItem>
-                  <SelectItem value="Construction">Construction</SelectItem>
-                  <SelectItem value="DSCR">DSCR</SelectItem>
-                  <SelectItem value="A&D">A&D (Acquisition & Development)</SelectItem>
-                  <SelectItem value="Fix & Flip">Fix & Flip</SelectItem>
-                  <SelectItem value="Long-Term Financing">Long-Term Financing</SelectItem>
-                  <SelectItem value="Land Development">Land Development</SelectItem>
+                  {STANDARD_LOAN_TYPES.map(lt => (
+                    <SelectItem key={lt.value} value={lt.value}>{lt.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <FormMessage />
@@ -1287,17 +1282,9 @@ export default function CommercialSubmissionPage() {
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="Residential">Residential</SelectItem>
-                  <SelectItem value="Multifamily">Multifamily</SelectItem>
-                  <SelectItem value="Office">Office</SelectItem>
-                  <SelectItem value="Retail">Retail</SelectItem>
-                  <SelectItem value="Industrial">Industrial</SelectItem>
-                  <SelectItem value="Land">Land</SelectItem>
-                  <SelectItem value="Development">Development</SelectItem>
-                  <SelectItem value="Mixed Use">Mixed Use</SelectItem>
-                  <SelectItem value="Hospitality">Hospitality</SelectItem>
-                  <SelectItem value="Student Housing">Student Housing</SelectItem>
-                  <SelectItem value="Self-Storage">Self-Storage</SelectItem>
+                  {STANDARD_PROPERTY_TYPES.map(pt => (
+                    <SelectItem key={pt.value} value={pt.value}>{pt.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <FormMessage />
