@@ -11,8 +11,21 @@ import {
   index,
   uuid,
   smallint,
+  customType,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+
+const vector = customType<{ data: number[]; driverParam: string }>({
+  dataType() {
+    return "vector(1536)";
+  },
+  toDriver(value: number[]): string {
+    return `[${value.join(",")}]`;
+  },
+  fromDriver(value: string): number[] {
+    return JSON.parse(value);
+  },
+});
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -4073,12 +4086,13 @@ export const funds = pgTable("funds", {
   allowedStates: jsonb("allowed_states").$type<string[]>(),
   allowedAssetTypes: jsonb("allowed_asset_types").$type<string[]>(),
   fundDescription: text("fund_description"),
+  descriptionEmbedding: vector("description_embedding"),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const insertFundSchema = createInsertSchema(funds).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertFundSchema = createInsertSchema(funds).omit({ id: true, createdAt: true, updatedAt: true, descriptionEmbedding: true });
 export type Fund = typeof funds.$inferSelect;
 export type InsertFund = z.infer<typeof insertFundSchema>;
 
@@ -4104,11 +4118,12 @@ export const fundKnowledgeEntries = pgTable("fund_knowledge_entries", {
   sourceDocumentName: varchar("source_document_name", { length: 500 }),
   content: text("content").notNull(),
   category: varchar("category", { length: 50 }).default("general").notNull(),
+  embedding: vector("embedding"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const insertFundKnowledgeEntrySchema = createInsertSchema(fundKnowledgeEntries).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertFundKnowledgeEntrySchema = createInsertSchema(fundKnowledgeEntries).omit({ id: true, createdAt: true, updatedAt: true, embedding: true });
 export type FundKnowledgeEntry = typeof fundKnowledgeEntries.$inferSelect;
 export type InsertFundKnowledgeEntry = z.infer<typeof insertFundKnowledgeEntrySchema>;
 

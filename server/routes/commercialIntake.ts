@@ -18,6 +18,7 @@ import { ObjectStorageService } from "../replit_integrations/object_storage/obje
 import { getTenantId as resolveUserTenant } from "../utils/tenant";
 
 import OpenAI from "openai";
+import { embedKnowledgeEntry, embedFundDescription, backfillEmbeddings } from "../services/embeddings";
 
 const OPENAI_API_KEY = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
 const openai = OPENAI_API_KEY
@@ -118,6 +119,9 @@ router.post("/api/commercial/funds", async (req: Request, res: Response) => {
     const tenantId = await getTenantId(req);
     const data = { ...req.body, tenantId };
     const [created] = await db.insert(funds).values(data).returning();
+    if (created.fundDescription) {
+      embedFundDescription(created.id, created.fundDescription).catch(() => {});
+    }
     res.status(201).json(created);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -135,6 +139,9 @@ router.patch("/api/commercial/funds/:id", async (req: Request, res: Response) =>
       .where(and(eq(funds.id, id), tenantId ? eq(funds.tenantId, tenantId) : undefined))
       .returning();
     if (!updated) return res.status(404).json({ error: "Fund not found" });
+    if (req.body.fundDescription !== undefined && updated.fundDescription) {
+      embedFundDescription(updated.id, updated.fundDescription).catch(() => {});
+    }
     res.json(updated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -1374,6 +1381,7 @@ router.post("/api/commercial/funds/:fundId/knowledge", async (req: Request, res:
       content,
       category: category || "general",
     }).returning();
+    embedKnowledgeEntry(entry.id, entry.content).catch(() => {});
     res.status(201).json(entry);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -1390,6 +1398,9 @@ router.patch("/api/commercial/funds/knowledge/:id", async (req: Request, res: Re
       .where(eq(fundKnowledgeEntries.id, id))
       .returning();
     if (!updated) return res.status(404).json({ error: "Entry not found" });
+    if (req.body.content !== undefined) {
+      embedKnowledgeEntry(updated.id, updated.content).catch(() => {});
+    }
     res.json(updated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -1493,13 +1504,15 @@ router.post("/api/commercial/funds/:fundId/documents", fundDocUpload.single("fil
               if (Array.isArray(extracted)) {
                 for (const entry of extracted) {
                   if (entry.content && typeof entry.content === "string") {
-                    await db.insert(fundKnowledgeEntries).values({
+                    const entryContent = entry.content.substring(0, 5000);
+                    const [inserted] = await db.insert(fundKnowledgeEntries).values({
                       fundId,
                       sourceType: "document_extraction",
                       sourceDocumentName: file.originalname,
-                      content: entry.content.substring(0, 5000),
+                      content: entryContent,
                       category: ["general", "rates", "terms", "eligibility", "guidelines"].includes(entry.category) ? entry.category : "general",
-                    });
+                    }).returning();
+                    embedKnowledgeEntry(inserted.id, inserted.content).catch(() => {});
                   }
                 }
               }
@@ -1540,6 +1553,16 @@ router.delete("/api/commercial/funds/documents/:id", async (req: Request, res: R
     );
     await db.delete(fundDocuments).where(eq(fundDocuments.id, id));
     res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/api/commercial/embeddings/backfill", async (req: Request, res: Response) => {
+  try {
+    if (!requireAdmin(req, res)) return;
+    const result = await backfillEmbeddings();
+    res.json({ success: true, ...result });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

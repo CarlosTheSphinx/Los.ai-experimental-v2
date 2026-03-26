@@ -1,9 +1,10 @@
 import { db } from "../db";
 import { funds, intakeDeals, intakeAiAnalysis, intakeDealStatusHistory, intakeDealDocuments, agentConfigurations, fundKnowledgeEntries } from "@shared/schema";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { OrchestrationTracer } from "../services/orchestrationTracing";
 import OpenAI from "openai";
 import { INTAKE_AGENT_PROMPTS } from "./intakePrompts";
+import { generateEmbedding } from "../services/embeddings";
 
 const OPENAI_API_KEY = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
 
@@ -214,19 +215,63 @@ async function agent2MatchFunds(structuredDeal: any, activeFunds: any[], session
   if (fundsToUse.length > 0) {
     try {
       const fundIds = fundsToUse.map(f => f.id);
-      const knowledgeRows = await db.select({
-        fundId: fundKnowledgeEntries.fundId,
-        content: fundKnowledgeEntries.content,
-        category: fundKnowledgeEntries.category,
-      }).from(fundKnowledgeEntries)
-        .where(inArray(fundKnowledgeEntries.fundId, fundIds));
+      const dealSummary = `${dealAsset} property in ${dealState}, loan amount $${dealAmount}, LTV ${dealLtv}%, borrower: ${structuredDeal.structured_deal?.borrower_info?.name || "unknown"}, DSCR ${metrics.dscr || "N/A"}`;
+      const dealEmbedding = await generateEmbedding(dealSummary);
 
-      for (const row of knowledgeRows) {
-        if (!knowledgeByFund[row.fundId]) knowledgeByFund[row.fundId] = [];
-        knowledgeByFund[row.fundId].push(`[${row.category}] ${row.content}`);
+      if (dealEmbedding) {
+        const embeddingStr = `[${dealEmbedding.join(",")}]`;
+        const similarRows = await db.execute(
+          sql`SELECT id, fund_id, content, category,
+                     embedding <=> ${embeddingStr}::vector AS distance
+              FROM fund_knowledge_entries
+              WHERE fund_id = ANY(${fundIds})
+                AND embedding IS NOT NULL
+              ORDER BY embedding <=> ${embeddingStr}::vector
+              LIMIT ${fundsToUse.length * 8}`
+        );
+        for (const row of similarRows.rows as any[]) {
+          const fid = row.fund_id;
+          if (!knowledgeByFund[fid]) knowledgeByFund[fid] = [];
+          if (knowledgeByFund[fid].length < 8) {
+            knowledgeByFund[fid].push(`[${row.category}] ${row.content}`);
+          }
+        }
+      }
+
+      const fundsWithoutKnowledge = fundIds.filter(id => !knowledgeByFund[id] || knowledgeByFund[id].length === 0);
+      if (fundsWithoutKnowledge.length > 0) {
+        const fallbackRows = await db.select({
+          fundId: fundKnowledgeEntries.fundId,
+          content: fundKnowledgeEntries.content,
+          category: fundKnowledgeEntries.category,
+        }).from(fundKnowledgeEntries)
+          .where(inArray(fundKnowledgeEntries.fundId, fundsWithoutKnowledge));
+        for (const row of fallbackRows) {
+          if (!knowledgeByFund[row.fundId]) knowledgeByFund[row.fundId] = [];
+          if (knowledgeByFund[row.fundId].length < 8) {
+            knowledgeByFund[row.fundId].push(`[${row.category}] ${row.content}`);
+          }
+        }
       }
     } catch (e) {
       console.error("Knowledge retrieval error:", e);
+      try {
+        const fundIds = fundsToUse.map(f => f.id);
+        const fallbackRows = await db.select({
+          fundId: fundKnowledgeEntries.fundId,
+          content: fundKnowledgeEntries.content,
+          category: fundKnowledgeEntries.category,
+        }).from(fundKnowledgeEntries)
+          .where(inArray(fundKnowledgeEntries.fundId, fundIds));
+        for (const row of fallbackRows) {
+          if (!knowledgeByFund[row.fundId]) knowledgeByFund[row.fundId] = [];
+          if (knowledgeByFund[row.fundId].length < 8) {
+            knowledgeByFund[row.fundId].push(`[${row.category}] ${row.content}`);
+          }
+        }
+      } catch (e2) {
+        console.error("Knowledge fallback retrieval error:", e2);
+      }
     }
   }
 
@@ -240,7 +285,8 @@ async function agent2MatchFunds(structuredDeal: any, activeFunds: any[], session
       min_dscr: f.minDscr, min_credit_score: f.minCreditScore,
       recourse_type: f.recourseType,
       allowed_states: f.allowedStates, allowed_asset_types: f.allowedAssetTypes,
-      knowledge: knowledgeByFund[f.id]?.slice(0, 10) || [],
+      description: f.fundDescription || null,
+      knowledge: knowledgeByFund[f.id]?.slice(0, 8) || [],
     })),
   });
 
