@@ -68,7 +68,16 @@ const JSON_FORMAT_SUFFIX = {
     "documents_missing": ["doc_type2"]
   }
 }`,
-  fundMatcher: `\n\nCRITICAL: You MUST respond with ONLY a valid JSON object using EXACTLY these field names:
+  fundMatcher: `\n\nIMPORTANT MATCHING RULES:
+- You MUST evaluate EVERY fund in the list, not just ones with complete criteria.
+- If a fund has null/empty/missing criteria for a field (e.g. ltv_max is null, allowed_states is empty), treat that as NO RESTRICTION — the fund accepts any value for that field.
+- A fund with no criteria set at all should be treated as a POTENTIAL MATCH (score 60-70) because it has no disqualifying restrictions.
+- Only mark a fund as non-matching if it has an explicit criterion that the deal violates.
+- Use the fund_summary, description, and knowledge fields to understand each fund's specialty and lending focus.
+- Set total_funds_checked to the actual number of funds you evaluated (should equal the total funds provided).
+- Include ALL funds that could potentially work in eligible_funds (score >= 50).
+
+CRITICAL: You MUST respond with ONLY a valid JSON object using EXACTLY these field names:
 {
   "eligible_funds": [{ "fund_id": 0, "fund_name": "...", "match_score": 0, "match_reason": "..." }],
   "total_funds_checked": 0,
@@ -103,12 +112,39 @@ function normalizeAgent1Result(result: any): any {
 
 function normalizeAgent2Result(result: any): any {
   if (!result || typeof result !== "object") return result;
-  const matches = result.eligible_funds || result.eligibleFunds || result.matched_funds || result.matchedFunds || result.fund_matches || [];
+
+  let allFunds = result.fund_matches || result.eligible_funds || result.eligibleFunds || result.matched_funds || result.matchedFunds || [];
+
+  const eligible = allFunds.filter((f: any) => {
+    const verdict = (f.match_verdict || "").toLowerCase();
+    const score = f.match_score ?? f.fit_score ?? 0;
+    if (verdict === "yes" || verdict === "maybe") return true;
+    if (score >= 50) return true;
+    return false;
+  }).map((f: any) => ({
+    fund_id: f.fund_id,
+    fund_name: f.fund_name,
+    match_score: f.match_score ?? f.fit_score ?? 0,
+    match_reason: f.recommendation || f.match_reason || "",
+    match_verdict: f.match_verdict,
+  }));
+
+  const totalChecked = result.total_funds_checked || result.totalFundsChecked
+    || result.summary?.total_funds_evaluated || allFunds.length || 0;
+
+  const forFeedback = result.for_feedback_agent || {};
+
   return {
     ...result,
-    eligible_funds: matches,
-    fund_matches: matches,
-    total_funds_checked: result.total_funds_checked || result.totalFundsChecked || 0,
+    eligible_funds: eligible,
+    fund_matches: eligible,
+    total_funds_checked: totalChecked,
+    for_feedback_agent: {
+      eligible_funds: forFeedback.eligible_funds || eligible.map((f: any) => ({
+        fund_id: f.fund_id, fund_name: f.fund_name, fit_score: f.match_score,
+      })),
+      matching_challenges: forFeedback.matching_challenges || [],
+    },
     deal_health: result.deal_health || result.dealHealth || result.risk_assessment || result.riskAssessment || {
       borrower_risk_score: 50, borrower_risk_detail: "Not assessed",
       property_risk_score: 50, property_risk_detail: "Not assessed",
@@ -192,8 +228,9 @@ async function agent1ValidateAndStructure(deal: any, documents: any[], sessionId
 
 async function agent2MatchFunds(structuredDeal: any, activeFunds: any[], sessionId?: string): Promise<any> {
   const config = await getAgentConfig("intake_fund_matcher");
-  const basePrompt = config?.systemPrompt || DEFAULT_PROMPTS.fundMatcher;
-  const systemPrompt = basePrompt + JSON_FORMAT_SUFFIX.fundMatcher;
+  const systemPrompt = config?.systemPrompt
+    ? config.systemPrompt
+    : DEFAULT_PROMPTS.fundMatcher + JSON_FORMAT_SUFFIX.fundMatcher;
   const model = config?.modelName || "gpt-4o-mini";
   const temperature = config?.temperature ?? 0.3;
 

@@ -13,6 +13,8 @@ function getEmbeddingClients(): OpenAI[] {
   return clients;
 }
 
+let _lastEmbedWarning = 0;
+
 export async function generateEmbedding(text: string): Promise<number[] | null> {
   const clients = getEmbeddingClients();
   if (clients.length === 0 || !text || text.trim().length === 0) return null;
@@ -33,7 +35,11 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
       return null;
     }
   }
-  console.error("[Embeddings] All API keys exhausted or failed");
+  const now = Date.now();
+  if (now - _lastEmbedWarning > 60000) {
+    console.warn("[Embeddings] All API keys exhausted or quota exceeded — embeddings unavailable");
+    _lastEmbedWarning = now;
+  }
   return null;
 }
 
