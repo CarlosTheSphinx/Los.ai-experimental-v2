@@ -575,12 +575,16 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
 
     const userType = req.query.userType as string | undefined;
     const returnTo = req.query.returnTo as string | undefined;
+    const inviteToken = req.query.inviteToken as string | undefined;
     const stateObj: Record<string, string> = {};
     if (userType && ['broker', 'borrower', 'lender'].includes(userType)) {
       stateObj.userType = userType;
     }
     if (returnTo && returnTo.startsWith('/')) {
       stateObj.returnTo = returnTo;
+    }
+    if (inviteToken) {
+      stateObj.inviteToken = inviteToken;
     }
 
     const authorizeUrl = googleOAuth.generateAuthUrl({
@@ -657,6 +661,38 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
       }
       if (tokens.expiry_date) {
         tokenUpdates.googleTokenExpiresAt = new Date(tokens.expiry_date);
+      }
+
+      const oauthInviteToken = oauthState.inviteToken || null;
+      if (oauthInviteToken) {
+        const [invitedUser] = await db.select().from(users).where(eq(users.inviteToken, oauthInviteToken));
+        if (!invitedUser) {
+          return res.redirect('/login?error=invite_invalid');
+        }
+        if (invitedUser.inviteTokenExpires && new Date() > new Date(invitedUser.inviteTokenExpires)) {
+          return res.redirect('/login?error=invite_expired');
+        }
+        if (email !== invitedUser.email.toLowerCase()) {
+          return res.redirect('/login?error=invite_email_mismatch');
+        }
+        await storage.updateUser(invitedUser.id, {
+          googleId,
+          avatarUrl: avatarUrl || invitedUser.avatarUrl,
+          inviteToken: null,
+          inviteTokenExpires: null,
+          inviteStatus: 'accepted',
+          emailVerified: true,
+          isActive: true,
+          lastLoginAt: new Date(),
+          ...tokenUpdates,
+        });
+        user = await storage.getUserById(invitedUser.id);
+        const jwtToken = generateToken(user!.id, user!.email, user!.tokenVersion ?? 0);
+        setAuthCookie(res, jwtToken);
+        if (user!.role === 'broker' && !user!.onboardingCompleted) {
+          return res.redirect('/onboarding');
+        }
+        return res.redirect('/');
       }
 
       if (user) {

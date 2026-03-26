@@ -46,6 +46,9 @@ export default function LoginPage() {
         google_auth_failed: 'Google sign-in failed. Please try again.',
         google_not_configured: 'Google sign-in is not available at this time.',
         account_deactivated: 'Your account has been deactivated. Please contact support.',
+        invite_expired: 'This invitation has expired. Please ask your admin to send a new one.',
+        invite_invalid: 'This invitation link is no longer valid.',
+        invite_email_mismatch: 'The Google account you signed in with does not match the invited email address. Please use the same email that received the invitation.',
       };
       toast({
         title: 'Sign-in error',
