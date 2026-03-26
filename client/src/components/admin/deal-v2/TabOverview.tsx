@@ -827,7 +827,7 @@ export default function TabOverview({
                   {!hasProgram ? (
                     <>
                       <PropertyTypeSelectField label="Property Type" value={propForm.propertyType} onChange={(v) => setPropForm({ ...propForm, propertyType: v })} />
-                      <EditField label="Units" value={propForm.units} onChange={(v) => setPropForm({ ...propForm, units: v })} type="number" />
+                      <EditField label="Number of Units" value={propForm.units} onChange={(v) => setPropForm({ ...propForm, units: v })} type="number" />
                       <EditField label="Original Purchase Date" value={propForm.originalPurchaseDate} onChange={(v) => setPropForm({ ...propForm, originalPurchaseDate: v })} type="date" />
                       <EditField label="Original Purchase Price" value={propForm.originalPurchasePrice} onChange={(v) => setPropForm({ ...propForm, originalPurchasePrice: v })} type="number" />
                       <EditField label="As-Is Value" value={propForm.estimatedValue} onChange={(v) => setPropForm({ ...propForm, estimatedValue: v })} type="number" />
@@ -871,7 +871,7 @@ export default function TabOverview({
                       <div className="border-t border-muted my-4" />
                       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Additional Property {idx + 1}</p>
                       <div className="grid grid-cols-2 gap-x-8 gap-y-2.5">
-                        <Field label="Property Address" value={prop.address || "—"} />
+                        <Field label="Property Address" value={[prop.address, prop.city, prop.state, prop.zip].filter(Boolean).join(", ") || "—"} />
                         <Field label="State" value={prop.state || "—"} />
                         <Field label="Zip Code" value={prop.zip || "—"} />
                         <Field label="Property Type" value={getTypeLabel(prop.propertyType)} />
