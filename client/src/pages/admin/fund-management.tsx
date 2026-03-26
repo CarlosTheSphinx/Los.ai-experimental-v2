@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
@@ -972,6 +972,8 @@ export function FundManagementContent() {
 
 export default function FundManagementPage() {
   const [, navigate] = useLocation();
-  navigate("/admin/commercial-pipeline?tab=funds", { replace: true });
+  useEffect(() => {
+    navigate("/admin/commercial-pipeline?tab=funds", { replace: true });
+  }, [navigate]);
   return null;
 }
