@@ -15,7 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Pencil, Trash2, Building2, RefreshCw, Upload, FileText,
-  Search, ArrowLeft, BookOpen, FileUp, ChevronRight, Check, X, Download
+  Search, ArrowLeft, BookOpen, FileUp, ChevronRight, Check, X, Download,
+  CheckCircle2, XCircle, Sparkles, Brain
 } from "lucide-react";
 
 const US_STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
@@ -563,8 +564,14 @@ function FundDetailView({ fundId, onBack }: { fundId: number; onBack: () => void
       <Tabs defaultValue="details" className="w-full">
         <TabsList className="bg-[#0f1629] border border-slate-700">
           <TabsTrigger value="details" data-testid="tab-details">Details</TabsTrigger>
-          <TabsTrigger value="documents" data-testid="tab-documents">Documents ({documents.length})</TabsTrigger>
-          <TabsTrigger value="knowledge" data-testid="tab-knowledge">Knowledge ({knowledgeEntries.length})</TabsTrigger>
+          <TabsTrigger value="documents" data-testid="tab-documents">
+            Documents
+            {documents.length > 0 && <Badge className="ml-1.5 bg-blue-500/20 text-blue-400 text-[10px] px-1.5 py-0">{documents.length}</Badge>}
+          </TabsTrigger>
+          <TabsTrigger value="knowledge" data-testid="tab-knowledge">
+            Knowledge
+            {knowledgeEntries.length > 0 && <Badge className="ml-1.5 bg-purple-500/20 text-purple-400 text-[10px] px-1.5 py-0">{knowledgeEntries.length}</Badge>}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="details" className="mt-4">
@@ -631,48 +638,84 @@ function FundDetailView({ fundId, onBack }: { fundId: number; onBack: () => void
         </TabsContent>
 
         <TabsContent value="documents" className="mt-4 space-y-4">
-          <div className="flex justify-end">
-            <Button size="sm" onClick={() => docInputRef.current?.click()} disabled={uploadDocMut.isPending} data-testid="upload-fund-doc">
-              {uploadDocMut.isPending ? <RefreshCw size={14} className="animate-spin mr-1" /> : <Upload size={14} className="mr-1" />}
-              Upload Document
-            </Button>
-            <input
-              ref={docInputRef}
-              type="file"
-              accept=".pdf,.doc,.docx,.txt,.xlsx,.xls"
-              className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) uploadDocMut.mutate(f); e.target.value = ""; }}
-              data-testid="fund-doc-file-input"
-            />
-          </div>
+          <Card className="bg-[#0f1629]/50 border-blue-500/20">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg bg-blue-500/10 shrink-0 mt-0.5">
+                  <Upload size={18} className="text-blue-400" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-white">Upload Fund Documents</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Upload term sheets, rate sheets, guidelines, or any fund documentation. Our AI will automatically extract key details like rates, terms, eligibility criteria, and other relevant information into the Knowledge tab.</p>
+                  <div className="flex items-center gap-3 mt-3">
+                    <Button size="sm" onClick={() => docInputRef.current?.click()} disabled={uploadDocMut.isPending} data-testid="upload-fund-doc">
+                      {uploadDocMut.isPending ? <RefreshCw size={14} className="animate-spin mr-1" /> : <FileUp size={14} className="mr-1" />}
+                      {uploadDocMut.isPending ? "Uploading..." : "Choose File"}
+                    </Button>
+                    <span className="text-[10px] text-slate-500">PDF, DOC, DOCX, TXT, XLS, XLSX</span>
+                  </div>
+                </div>
+              </div>
+              <input
+                ref={docInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.txt,.xlsx,.xls"
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) uploadDocMut.mutate(f); e.target.value = ""; }}
+                data-testid="fund-doc-file-input"
+              />
+            </CardContent>
+          </Card>
 
           {documents.length === 0 ? (
             <Card className="bg-[#1a2038] border-slate-700/50">
-              <CardContent className="p-8 text-center">
-                <FileText size={32} className="mx-auto text-slate-500 mb-2" />
-                <p className="text-sm text-slate-400">No documents uploaded yet</p>
-                <p className="text-xs text-slate-500 mt-1">Upload term sheets, rate sheets, or fund guidelines to auto-extract knowledge</p>
+              <CardContent className="p-10 text-center">
+                <FileText size={36} className="mx-auto text-slate-600 mb-3" />
+                <p className="text-sm text-slate-400 font-medium">No documents uploaded yet</p>
+                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">Upload your first document above and our AI will automatically analyze it to build this fund's knowledge base.</p>
               </CardContent>
             </Card>
           ) : (
             <div className="space-y-2">
               {documents.map((doc: any) => (
-                <Card key={doc.id} className="bg-[#1a2038] border-slate-700/50" data-testid={`fund-doc-${doc.id}`}>
+                <Card key={doc.id} className={`border-slate-700/50 ${
+                  doc.extractionStatus === "processing" ? "bg-[#1a2038] border-blue-500/20" : "bg-[#1a2038]"
+                }`} data-testid={`fund-doc-${doc.id}`}>
                   <CardContent className="p-3 flex items-center gap-3">
-                    <FileText size={18} className="text-slate-500 shrink-0" />
+                    <div className={`p-1.5 rounded ${
+                      doc.extractionStatus === "completed" ? "bg-emerald-500/10" :
+                      doc.extractionStatus === "processing" ? "bg-blue-500/10" :
+                      doc.extractionStatus === "failed" ? "bg-red-500/10" :
+                      "bg-slate-500/10"
+                    }`}>
+                      <FileText size={16} className={
+                        doc.extractionStatus === "completed" ? "text-emerald-400" :
+                        doc.extractionStatus === "processing" ? "text-blue-400" :
+                        doc.extractionStatus === "failed" ? "text-red-400" :
+                        "text-slate-500"
+                      } />
+                    </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-white truncate">{doc.fileName}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
+                      <div className="flex items-center gap-2 mt-1">
                         <span className="text-xs text-slate-500">{doc.fileSize ? `${(doc.fileSize / 1024).toFixed(0)} KB` : ""}</span>
-                        <Badge className={`text-[10px] ${
-                          doc.extractionStatus === "completed" ? "bg-emerald-500/20 text-emerald-400" :
-                          doc.extractionStatus === "processing" ? "bg-blue-500/20 text-blue-400" :
-                          doc.extractionStatus === "failed" ? "bg-red-500/20 text-red-400" :
-                          "bg-slate-500/20 text-slate-400"
+                        <Badge className={`text-[10px] px-2 py-0.5 ${
+                          doc.extractionStatus === "completed" ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" :
+                          doc.extractionStatus === "processing" ? "bg-blue-500/20 text-blue-400 border-blue-500/30" :
+                          doc.extractionStatus === "failed" ? "bg-red-500/20 text-red-400 border-red-500/30" :
+                          "bg-slate-500/20 text-slate-400 border-slate-500/30"
                         }`}>
                           {doc.extractionStatus === "processing" && <RefreshCw size={10} className="animate-spin mr-1 inline" />}
-                          {doc.extractionStatus}
+                          {doc.extractionStatus === "completed" && <CheckCircle2 size={10} className="mr-1 inline" />}
+                          {doc.extractionStatus === "failed" && <XCircle size={10} className="mr-1 inline" />}
+                          {doc.extractionStatus === "completed" ? "AI Reviewed" :
+                           doc.extractionStatus === "processing" ? "AI Reviewing..." :
+                           doc.extractionStatus === "failed" ? "Review Failed" :
+                           doc.extractionStatus || "Pending"}
                         </Badge>
+                        {doc.extractionStatus === "completed" && (
+                          <span className="text-[10px] text-slate-500">Knowledge extracted</span>
+                        )}
                       </div>
                     </div>
                     <Button variant="ghost" size="sm" onClick={() => { if (confirm("Delete this document and its extracted knowledge?")) deleteDocMut.mutate(doc.id); }} className="text-slate-400 hover:text-red-400 h-8 w-8 p-0" data-testid={`delete-doc-${doc.id}`}>
