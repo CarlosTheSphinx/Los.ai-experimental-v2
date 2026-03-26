@@ -240,6 +240,8 @@ async function agent2MatchFunds(structuredDeal: any, activeFunds: any[], session
   const dealAmount = basicInfo.loan_amount || 0;
   const dealState = basicInfo.property_state || "";
   const dealAsset = basicInfo.asset_type || "";
+  const dealLoanType = basicInfo.loan_type || structuredDeal.structured_deal?.loan_type || structuredDeal.loan_type || "";
+  const dealStrategy = dealLoanType === "BRIDGE" ? "Bridge" : dealLoanType === "LONG_TERM" ? "Permanent" : "";
 
   const candidateFunds = activeFunds.filter(f => {
     const hasAnyCriteria = f.ltvMax || f.loanAmountMin || f.loanAmountMax || 
@@ -247,6 +249,7 @@ async function agent2MatchFunds(structuredDeal: any, activeFunds: any[], session
       (f.allowedStates && f.allowedStates.length > 0);
     if (!hasAnyCriteria) return true;
 
+    if (dealStrategy && f.loanStrategy && f.loanStrategy !== "Both" && f.loanStrategy !== dealStrategy) return false;
     if (f.ltvMax && dealLtv > 0 && dealLtv > f.ltvMax * 1.5) return false;
     if (f.loanAmountMin && dealAmount > 0 && dealAmount < f.loanAmountMin * 0.3) return false;
     if (f.loanAmountMax && dealAmount > 0 && dealAmount > f.loanAmountMax * 3) return false;
@@ -258,7 +261,7 @@ async function agent2MatchFunds(structuredDeal: any, activeFunds: any[], session
 
   let knowledgeByFund: Record<number, string[]> = {};
   let fundSimilarityScores: Record<number, number> = {};
-  const dealSummary = `${dealAsset} property in ${dealState}, loan amount $${dealAmount}, LTV ${dealLtv}%, borrower: ${structuredDeal.structured_deal?.borrower_info?.name || "unknown"}, DSCR ${metrics.dscr || "N/A"}`;
+  const dealSummary = `${dealAsset} property in ${dealState}, loan amount $${dealAmount}, LTV ${dealLtv}%${dealStrategy ? `, ${dealStrategy} loan` : ""}, borrower: ${structuredDeal.structured_deal?.borrower_info?.name || "unknown"}, DSCR ${metrics.dscr || "N/A"}`;
   let embeddingsAvailable = false;
 
   if (fundsToUse.length > 0) {
@@ -343,6 +346,7 @@ async function agent2MatchFunds(structuredDeal: any, activeFunds: any[], session
     deal: structuredDeal,
     funds: rankedFunds.map(f => {
       const fundContext: string[] = [];
+      if (f.loanStrategy) fundContext.push(`Loan strategy: ${f.loanStrategy}`);
       if (f.fundDescription) fundContext.push(`Description: ${f.fundDescription}`);
       if (f.allowedAssetTypes?.length) fundContext.push(`Asset types: ${f.allowedAssetTypes.join(", ")}`);
       if (f.allowedStates?.length) {
@@ -360,6 +364,7 @@ async function agent2MatchFunds(structuredDeal: any, activeFunds: any[], session
 
       return {
         fund_id: f.id, fund_name: f.fundName,
+        loan_strategy: f.loanStrategy || null,
         ltv_min: f.ltvMin, ltv_max: f.ltvMax, ltc_min: f.ltcMin, ltc_max: f.ltcMax,
         loan_amount_min: f.loanAmountMin, loan_amount_max: f.loanAmountMax,
         interest_rate_min: f.interestRateMin, interest_rate_max: f.interestRateMax,

@@ -4088,6 +4088,7 @@ export const funds = pgTable("funds", {
   originationFeeMax: real("origination_fee_max"),
   allowedStates: jsonb("allowed_states").$type<string[]>(),
   allowedAssetTypes: jsonb("allowed_asset_types").$type<string[]>(),
+  loanStrategy: varchar("loan_strategy", { length: 50 }),
   fundDescription: text("fund_description"),
   descriptionEmbedding: vector("description_embedding"),
   isActive: boolean("is_active").default(true).notNull(),

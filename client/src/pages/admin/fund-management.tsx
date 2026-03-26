@@ -57,6 +57,7 @@ const FUND_FIELD_OPTIONS: { value: string; label: string; group: string }[] = [
   { value: "originationFeeMax", label: "Origination Fee Max", group: "Terms" },
   { value: "allowedStates", label: "States / Region", group: "Criteria" },
   { value: "allowedAssetTypes", label: "Property / Asset Types", group: "Criteria" },
+  { value: "loanStrategy", label: "Loan Strategy (Bridge/Permanent/Both)", group: "Criteria" },
   { value: "isActive", label: "Active Status", group: "Other" },
 ];
 
@@ -88,6 +89,7 @@ function FundForm({ fund, onSave, onCancel }: { fund?: any; onSave: (data: any) 
     originationFeeMax: fund?.originationFeeMax ?? "",
     allowedStates: (fund?.allowedStates || []) as string[],
     allowedAssetTypes: (fund?.allowedAssetTypes || []) as string[],
+    loanStrategy: fund?.loanStrategy || "",
     fundDescription: fund?.fundDescription || "",
     isActive: fund?.isActive ?? true,
   });
@@ -251,6 +253,24 @@ function FundForm({ fund, onSave, onCancel }: { fund?: any; onSave: (data: any) 
               }`}
               data-testid={`state-${state}`}
             >{state}</button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <Label className="text-xs text-slate-400 mb-1 block">Loan Strategy</Label>
+        <div className="flex gap-2">
+          {["Bridge", "Permanent", "Both"].map(s => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setForm(f => ({ ...f, loanStrategy: f.loanStrategy === s ? "" : s }))}
+              className={`px-3 py-1 rounded text-xs border transition-colors ${
+                form.loanStrategy === s
+                  ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                  : "bg-[#0f1629] text-slate-500 border-slate-700 hover:border-slate-500"
+              }`}
+              data-testid={`strategy-${s.toLowerCase()}`}
+            >{s}</button>
           ))}
         </div>
       </div>
@@ -1360,7 +1380,16 @@ export function FundManagementContent() {
                     summary={
                       <>
                         <td className="px-3 py-3">
-                          <div className="text-[16px] font-medium text-blue-600" data-testid={`fund-name-${fund.id}`}>{fund.fundName}</div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[16px] font-medium text-blue-600" data-testid={`fund-name-${fund.id}`}>{fund.fundName}</span>
+                            {fund.loanStrategy && (
+                              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${
+                                fund.loanStrategy === "Bridge" ? "text-amber-600 border-amber-300" :
+                                fund.loanStrategy === "Permanent" ? "text-emerald-600 border-emerald-300" :
+                                "text-blue-600 border-blue-300"
+                              }`} data-testid={`fund-strategy-${fund.id}`}>{fund.loanStrategy}</Badge>
+                            )}
+                          </div>
                           {fund.providerName && <div className="text-[13px] text-muted-foreground">{fund.providerName}</div>}
                         </td>
                         <td className="px-3 py-3 text-[14px]">
