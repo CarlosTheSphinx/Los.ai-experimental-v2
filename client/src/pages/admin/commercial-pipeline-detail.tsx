@@ -10,12 +10,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLocation, useParams } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
 import {
   ArrowLeft, Building2, DollarSign, MapPin, TrendingUp, User, FileText,
   AlertTriangle, CheckCircle2, XCircle, Clock, Send, RefreshCw,
   ChevronDown, ChevronUp, ArrowRight, Shield, BarChart3, Volume2,
   Pencil, X, Save, MessageSquare, Sparkles, Loader2, ListTodo, Plus,
-  Circle, Trash2,
+  Circle, Trash2, Mail, Target, Zap,
 } from "lucide-react";
 import { StatusBadge } from "@/components/ui/phase1/status-badge";
 
@@ -117,6 +119,9 @@ export default function CommercialPipelineDetailPage() {
   const [newTaskPriority, setNewTaskPriority] = useState("medium");
   const [newTaskDueDate, setNewTaskDueDate] = useState("");
   const [newTaskAssignee, setNewTaskAssignee] = useState("");
+  const [emailDialog, setEmailDialog] = useState<{ fundId: number; fundName: string; contactEmail: string } | null>(null);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
 
   const dealId = params.id;
 
@@ -167,6 +172,21 @@ export default function CommercialPipelineDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/commercial/deals", dealId] });
       queryClient.invalidateQueries({ queryKey: ["/api/commercial/deals"] });
       toast({ title: "Deal transferred to origination pipeline" });
+    },
+  });
+
+  const emailFundMut = useMutation({
+    mutationFn: async (data: { fundId: number; subject: string; body: string }) => {
+      return apiRequest("POST", `/api/commercial/deals/${dealId}/email-fund`, data);
+    },
+    onSuccess: () => {
+      toast({ title: "Email sent successfully" });
+      setEmailDialog(null);
+      setEmailSubject("");
+      setEmailBody("");
+    },
+    onError: () => {
+      toast({ title: "Failed to send email", variant: "destructive" });
     },
   });
 
@@ -876,16 +896,120 @@ export default function CommercialPipelineDetailPage() {
         </Card>
       )}
 
-      {!["transferred", "rejected"].includes(deal.status) && (
-        <Card className="bg-card border shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm text-muted-foreground">Actions</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {allFunds.length > 0 && (
-              <div className="flex items-end gap-3">
+      <Card className="bg-card border shadow-sm" data-testid="fund-match-card">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+            <Target size={16} /> Fund Matches
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {(() => {
+            const latestAnalysis = Array.isArray(deal.analysis) ? deal.analysis[0] : deal.analysis;
+            const eligibleFunds: any[] = latestAnalysis?.agent2Matching?.eligible_funds || [];
+            const fundRecommendations: any[] = latestAnalysis?.agent3Feedback?.fund_recommendations || [];
+
+            if (!latestAnalysis) {
+              return (
+                <div className="text-center py-6" data-testid="fund-match-empty">
+                  <Sparkles size={24} className="mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">No AI analysis yet</p>
+                  <p className="text-xs text-muted-foreground mt-1">Run AI Analysis from the header to see fund matches</p>
+                </div>
+              );
+            }
+
+            if (eligibleFunds.length === 0) {
+              return (
+                <div className="text-center py-6" data-testid="fund-match-none">
+                  <XCircle size={24} className="mx-auto text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">No matching funds found</p>
+                  <p className="text-xs text-muted-foreground mt-1">Try adjusting deal parameters or adding more funds</p>
+                </div>
+              );
+            }
+
+            return eligibleFunds.map((ef: any, idx: number) => {
+              const recommendation = fundRecommendations.find(
+                (r: any) => r.fund_name === ef.fund_name || r.fund_id === ef.fund_id
+              );
+              const matchedFund = allFunds.find((f: any) => f.id === ef.fund_id || f.fundName === ef.fund_name);
+              const score = ef.match_score ?? 0;
+              const alreadySent = deal.fundSubmissions?.some((fs: any) => fs.fundId === matchedFund?.id);
+
+              return (
+                <div
+                  key={ef.fund_id || idx}
+                  className="border rounded-lg p-3 bg-muted/30 space-y-2"
+                  data-testid={`fund-match-row-${ef.fund_id || idx}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Building2 size={14} className="text-muted-foreground" />
+                      <span className="text-sm font-medium text-foreground">{ef.fund_name}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-xs font-semibold ${score >= 70 ? 'text-green-500' : score >= 40 ? 'text-yellow-500' : 'text-red-400'}`}>
+                        {score}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <Progress value={score} className="h-1.5" />
+
+                  {(ef.match_reason || recommendation?.recommendation) && (
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {recommendation?.recommendation || ef.match_reason}
+                    </p>
+                  )}
+
+                  <div className="flex items-center gap-2 pt-1">
+                    {matchedFund && !alreadySent && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => sendToFundMut.mutate({ fundId: matchedFund.id, notes: "" })}
+                        disabled={sendToFundMut.isPending}
+                        data-testid={`send-to-fund-${matchedFund.id}`}
+                      >
+                        <Send size={12} className="mr-1" /> Send to Fund
+                      </Button>
+                    )}
+                    {alreadySent && (
+                      <Badge variant="secondary" className="text-[10px]">
+                        <CheckCircle2 size={10} className="mr-1" /> Sent
+                      </Badge>
+                    )}
+                    {matchedFund?.contactEmail && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs"
+                        onClick={() => {
+                          setEmailDialog({
+                            fundId: matchedFund.id,
+                            fundName: matchedFund.fundName || ef.fund_name,
+                            contactEmail: matchedFund.contactEmail,
+                          });
+                          setEmailSubject(`Deal Inquiry: ${deal.dealName || 'Commercial Deal'}`);
+                          setEmailBody(`Hi,\n\nI'd like to discuss a potential deal opportunity:\n\nDeal: ${deal.dealName || 'N/A'}\nLoan Amount: $${deal.loanAmount?.toLocaleString() || 'N/A'}\nAsset Type: ${deal.assetType || 'N/A'}\nLocation: ${deal.propertyAddress || 'N/A'}, ${deal.propertyState || ''}\n\nPlease let me know if you'd like to review the details.\n\nBest regards`);
+                        }}
+                        data-testid={`email-fund-${matchedFund.id}`}
+                      >
+                        <Mail size={12} className="mr-1" /> Email
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            });
+          })()}
+
+          {allFunds.length > 0 && (Array.isArray(deal.analysis) ? deal.analysis[0] : deal.analysis) && (
+            <div className="pt-2 border-t">
+              <div className="flex items-end gap-2">
                 <div className="flex-1">
-                  <label className="text-xs text-muted-foreground mb-1 block">Send to Fund</label>
+                  <label className="text-xs text-muted-foreground mb-1 block">Send to additional fund</label>
                   <Select value={selectedFundId} onValueChange={setSelectedFundId}>
                     <SelectTrigger className="text-sm" data-testid="select-fund">
                       <SelectValue placeholder="Select fund..." />
@@ -901,14 +1025,24 @@ export default function CommercialPipelineDetailPage() {
                   size="sm"
                   disabled={!selectedFundId || sendToFundMut.isPending}
                   onClick={() => sendToFundMut.mutate({ fundId: parseInt(selectedFundId), notes: "" })}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
                   data-testid="send-to-fund-button"
                 >
                   <Send size={14} className="mr-1" /> Send
                 </Button>
               </div>
-            )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
+      {!["transferred", "rejected"].includes(deal.status) && (
+        <Card className="bg-card border shadow-sm" data-testid="deal-actions-card">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+              <Zap size={16} /> Deal Actions
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <div className="flex items-end gap-3">
               <div className="flex-1">
                 <label className="text-xs text-muted-foreground mb-1 block">Update Status</label>
@@ -949,7 +1083,7 @@ export default function CommercialPipelineDetailPage() {
                 <Button
                   onClick={() => transferMut.mutate()}
                   disabled={transferMut.isPending}
-                  className="bg-cyan-600 hover:bg-cyan-700 text-white w-full"
+                  className="w-full"
                   data-testid="transfer-button"
                 >
                   <ArrowRight size={14} className="mr-2" />
@@ -989,6 +1123,58 @@ export default function CommercialPipelineDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={!!emailDialog} onOpenChange={(open) => { if (!open) setEmailDialog(null); }}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail size={18} /> Email {emailDialog?.fundName}
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground">{emailDialog?.contactEmail}</p>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-sm">Subject</Label>
+              <Input
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+                className="mt-1"
+                data-testid="email-subject-input"
+              />
+            </div>
+            <div>
+              <Label className="text-sm">Message</Label>
+              <Textarea
+                value={emailBody}
+                onChange={(e) => setEmailBody(e.target.value)}
+                className="mt-1 min-h-[180px]"
+                data-testid="email-body-input"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEmailDialog(null)} data-testid="email-cancel-button">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (emailDialog) {
+                  emailFundMut.mutate({
+                    fundId: emailDialog.fundId,
+                    subject: emailSubject,
+                    body: emailBody,
+                  });
+                }
+              }}
+              disabled={emailFundMut.isPending || !emailSubject.trim() || !emailBody.trim()}
+              data-testid="email-send-button"
+            >
+              {emailFundMut.isPending ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Send size={14} className="mr-1" />}
+              Send Email
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

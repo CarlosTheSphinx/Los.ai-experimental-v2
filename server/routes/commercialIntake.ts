@@ -955,6 +955,58 @@ router.post("/api/commercial/deals/:id/send-to-fund", async (req: Request, res: 
   }
 });
 
+// ===== EMAIL FUND CONTACT =====
+
+router.post("/api/commercial/deals/:id/email-fund", async (req: Request, res: Response) => {
+  try {
+    if (!requireAdmin(req, res)) return;
+    const dealId = safeParseId(req.params.id);
+    if (!dealId) return res.status(400).json({ error: "Invalid deal ID" });
+    const tenantId = await getTenantId(req);
+
+    const { fundId, subject, body } = req.body;
+    if (!fundId) return res.status(400).json({ error: "Fund ID required" });
+    if (!subject?.trim()) return res.status(400).json({ error: "Subject required" });
+    if (!body?.trim()) return res.status(400).json({ error: "Email body required" });
+
+    const parsedFundId = safeParseId(fundId);
+    if (!parsedFundId) return res.status(400).json({ error: "Invalid fund ID" });
+
+    const dealConditions = [eq(intakeDeals.id, dealId)];
+    if (tenantId) dealConditions.push(eq(intakeDeals.tenantId, tenantId));
+    const [deal] = await db.select().from(intakeDeals).where(and(...dealConditions));
+    if (!deal) return res.status(404).json({ error: "Deal not found" });
+
+    const fundConditions = [eq(funds.id, parsedFundId)];
+    if (tenantId) fundConditions.push(eq(funds.tenantId, tenantId));
+    const [fund] = await db.select().from(funds).where(and(...fundConditions));
+    if (!fund) return res.status(404).json({ error: "Fund not found" });
+    if (!fund.contactEmail) return res.status(400).json({ error: "Fund has no contact email" });
+
+    const { getResendClient } = await import("../email");
+    const { client, fromEmail } = await getResendClient();
+
+    await client.emails.send({
+      from: fromEmail || "Lendry.AI <info@lendry.ai>",
+      to: fund.contactEmail,
+      subject: subject.trim(),
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #0F1629;">${subject.trim()}</h2>
+          <div style="white-space: pre-wrap; color: #333; line-height: 1.6;">${body.trim()}</div>
+          <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
+          <p style="color: #888; font-size: 12px;">Sent via Lendry.AI</p>
+        </div>
+      `,
+    });
+
+    res.json({ success: true, message: `Email sent to ${fund.contactEmail}` });
+  } catch (error: any) {
+    console.error("Email fund error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ===== TRANSFER TO ORIGINATION =====
 
 router.post("/api/commercial/deals/:id/transfer", async (req: Request, res: Response) => {
