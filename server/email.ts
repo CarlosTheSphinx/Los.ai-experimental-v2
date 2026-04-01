@@ -404,7 +404,8 @@ export async function sendBrokerWelcomeEmail(
   recipientEmail: string,
   recipientName: string,
   portalLink: string,
-  tenantId?: number | null
+  tenantId?: number | null,
+  companyName?: string | null
 ) {
   try {
     const { getSettingByKey } = await import('./storage').then(m => ({ getSettingByKey: m.storage.getSettingByKey.bind(m.storage) }));
@@ -439,10 +440,14 @@ export async function sendBrokerWelcomeEmail(
     }
 
     const firstName = recipientName.split(' ')[0] || recipientName;
-    subject = subject.replace(/\{\{firstName\}\}/g, firstName).replace(/\{\{portalLink\}\}/g, portalLink);
+    subject = subject
+      .replace(/\{\{firstName\}\}/g, firstName)
+      .replace(/\{\{portalLink\}\}/g, portalLink)
+      .replace(/\{\{companyName\}\}/g, companyName || '');
     bodyHtml = bodyHtml
       .replace(/\{\{firstName\}\}/g, firstName)
       .replace(/\{\{fullName\}\}/g, recipientName)
+      .replace(/\{\{companyName\}\}/g, companyName || '')
       .replace(/\{\{portalLink\}\}/g, portalLink)
       .replace(/\{\{supportEmail\}\}/g, 'support@lendry.ai');
 

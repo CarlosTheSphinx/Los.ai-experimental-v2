@@ -14,7 +14,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { z } from "zod";
 import { v4 as uuidv4 } from 'uuid';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import { sendCompletedDocument, sendVoidNotification, sendPasswordResetEmail, sendTeamInviteEmail, sendMagicLinkEmail } from './email';
+import { sendCompletedDocument, sendVoidNotification, sendPasswordResetEmail, sendTeamInviteEmail, sendMagicLinkEmail, sendBrokerWelcomeEmail } from './email';
 import { sendCommercialNotification, checkExpiredSubmissions } from './services/commercialNotifications';
 import { 
   hashPassword, 
@@ -6515,6 +6515,15 @@ export async function registerRoutes(
         emailVerified: true,
         onboardingCompleted: true,
       });
+
+      if (user.role === 'broker') {
+        const protocol = req.headers['x-forwarded-proto'] || 'https';
+        const host = req.headers['host'] || 'app.lendry.ai';
+        const portalLink = `${protocol}://${host}/broker-portal`;
+        sendBrokerWelcomeEmail(user.email, user.fullName || user.email, portalLink, user.tenantId, user.companyName).catch(err => {
+          console.error('Failed to send broker welcome email (invite accept):', err);
+        });
+      }
       
       res.json({ success: true, message: 'Account setup complete. You can now sign in.' });
     } catch (error) {

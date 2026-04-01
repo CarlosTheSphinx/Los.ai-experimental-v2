@@ -430,7 +430,7 @@ function EmailTemplatesConfig() {
         <CardHeader>
           <CardTitle>Broker Welcome Email</CardTitle>
           <CardDescription>
-            Sent automatically when a new broker creates their account. Supports merge tags: {'{{firstName}}'}, {'{{fullName}}'}, {'{{portalLink}}'}, {'{{supportEmail}}'}.
+            Sent automatically when a new broker creates their account. Supports merge tags: {'{{firstName}}'}, {'{{fullName}}'}, {'{{companyName}}'}, {'{{portalLink}}'}, {'{{supportEmail}}'}.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -467,9 +467,10 @@ function EmailTemplatesConfig() {
             />
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
             <Badge variant="outline">{'{{firstName}}'}</Badge>
             <Badge variant="outline">{'{{fullName}}'}</Badge>
+            <Badge variant="outline">{'{{companyName}}'}</Badge>
             <Badge variant="outline">{'{{portalLink}}'}</Badge>
             <Badge variant="outline">{'{{supportEmail}}'}</Badge>
           </div>
