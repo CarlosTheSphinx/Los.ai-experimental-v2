@@ -14,7 +14,7 @@ import {
   encryptToken,
   verifyToken
 } from '../auth';
-import { sendPasswordResetEmail } from '../email';
+import { sendPasswordResetEmail, sendBrokerWelcomeEmail } from '../email';
 import {
   isAccountLocked,
   calculateLockoutUntil,
@@ -247,6 +247,15 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         statusCode: 201,
         success: true,
       });
+
+      if (userRole === 'broker') {
+        const protocol = req.headers['x-forwarded-proto'] || 'https';
+        const host = req.headers['host'] || 'app.lendry.ai';
+        const portalLink = `${protocol}://${host}/broker-portal`;
+        sendBrokerWelcomeEmail(user.email, resolvedFullName, portalLink, user.tenantId).catch(err => {
+          console.error('Failed to send broker welcome email:', err);
+        });
+      }
 
       const token = generateToken(user.id, user.email, user.tokenVersion ?? 0);
       setAuthCookie(res, token);
@@ -727,6 +736,15 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
           passwordResetExpires: null,
           role: assignedRole || 'broker',
         });
+
+        if ((assignedRole || 'broker') === 'broker') {
+          const proto = req.headers['x-forwarded-proto'] || 'https';
+          const hostHeader = req.headers['host'] || 'app.lendry.ai';
+          const link = `${proto}://${hostHeader}/broker-portal`;
+          sendBrokerWelcomeEmail(email, fullName || email, link, user.tenantId).catch(err => {
+            console.error('Failed to send broker welcome email (OAuth):', err);
+          });
+        }
       }
 
       const token = generateToken(user.id, user.email, user.tokenVersion ?? 0);
@@ -790,11 +808,16 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
       const user = await storage.getUserById(req.user!.id);
       if (!user) return res.status(404).json({ error: 'User not found' });
 
-      const { fullName, phone, companyName } = req.body;
+      const { fullName, phone, companyName, brokerCompanyName, brokerLicenseNumber, brokerOperatingStates, brokerYearsExperience, brokerPreferredLoanTypes } = req.body;
       const updates: Record<string, any> = {};
       if (fullName !== undefined) updates.fullName = fullName;
       if (phone !== undefined) updates.phone = phone;
       if (companyName !== undefined) updates.companyName = companyName;
+      if (brokerCompanyName !== undefined) updates.brokerCompanyName = brokerCompanyName;
+      if (brokerLicenseNumber !== undefined) updates.brokerLicenseNumber = brokerLicenseNumber;
+      if (brokerOperatingStates !== undefined) updates.brokerOperatingStates = brokerOperatingStates;
+      if (brokerYearsExperience !== undefined) updates.brokerYearsExperience = brokerYearsExperience;
+      if (brokerPreferredLoanTypes !== undefined) updates.brokerPreferredLoanTypes = brokerPreferredLoanTypes;
 
       await storage.updateUser(user.id, updates);
       res.json({ success: true });

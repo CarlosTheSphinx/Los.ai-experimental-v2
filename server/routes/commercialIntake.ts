@@ -8,15 +8,16 @@ import {
   commercialFormConfig,
   fundDocuments, fundKnowledgeEntries,
   intakeDealTasks,
-  projects, users,
+  projects, users, notifications,
   type Fund, type IntakeDeal, type IntakeDocumentRule, type IntakeAiAnalysis,
   type IntakeDealStatusHistory, type IntakeDealFundSubmission, type IntakeDealDocument,
 } from "@shared/schema";
-import { eq, and, desc, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, sql, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 import { runIntakeAiPipeline } from "../agents/intakeAgents";
 import { ObjectStorageService } from "../replit_integrations/object_storage/objectStorage";
 import { getTenantId as resolveUserTenant } from "../utils/tenant";
+import { sendCommercialNotification } from "../services/commercialNotifications";
 
 import OpenAI from "openai";
 import { embedKnowledgeEntry, embedFundDescription, backfillEmbeddings } from "../services/embeddings";
@@ -830,9 +831,20 @@ router.post("/api/commercial/deals/:id/submit", async (req: Request, res: Respon
   try {
     const dealId = parseInt(req.params.id);
     const userId = getUserId(req);
+    const userRole = getUserRole(req);
+    const tenantId = getTenantId(req);
 
     const [deal] = await db.select().from(intakeDeals).where(eq(intakeDeals.id, dealId));
     if (!deal) return res.status(404).json({ error: "Deal not found" });
+
+    const isAdmin = ['super_admin', 'lender', 'processor'].includes(userRole);
+    const isBrokerOwner = userRole === 'broker' && deal.brokerId === userId;
+    if (!isAdmin && !isBrokerOwner) {
+      return res.status(403).json({ error: "You do not have permission to submit this deal" });
+    }
+    if (isAdmin && tenantId != null && deal.tenantId != null && deal.tenantId !== tenantId) {
+      return res.status(403).json({ error: "You do not have permission to submit this deal" });
+    }
 
     const submittableStatuses = ["draft", "submitted", "analyzed", "no_match", "under_review", "conditional", "rejected"];
     if (!submittableStatuses.includes(deal.status)) {
@@ -861,11 +873,74 @@ router.post("/api/commercial/deals/:id/submit", async (req: Request, res: Respon
       console.error(`[Intake AI] Pipeline failed for deal ${dealId}:`, err);
     });
 
+    notifyAdminsOfNewDeal(deal, userId, tenantId).catch(err => {
+      console.error(`[Intake Notifications] Failed for deal ${dealId}:`, err);
+    });
+
     res.json(updated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
+
+async function notifyAdminsOfNewDeal(deal: IntakeDeal, submitterId: number | null, tenantId: number | null) {
+  try {
+    const enabledSetting = await storage.getSettingByKey('commercial_notify_admin_new_submission', tenantId ?? undefined);
+    if (enabledSetting && enabledSetting.settingValue === 'false') return;
+
+    const [broker] = deal.brokerId
+      ? await db.select({ fullName: users.fullName, email: users.email }).from(users).where(eq(users.id, deal.brokerId))
+      : [{ fullName: null, email: null }];
+
+    const submissionData = {
+      id: deal.id,
+      propertyName: deal.dealName || 'Commercial Deal',
+      propertyAddress: (deal.dealData as any)?.propertyAddress || '',
+      city: (deal.dealData as any)?.city || '',
+      state: (deal.dealData as any)?.state || '',
+      zip: (deal.dealData as any)?.zip || '',
+      loanType: deal.loanType || 'N/A',
+      requestedLoanAmount: deal.loanAmount,
+      propertyType: deal.assetType || 'N/A',
+      brokerOrDeveloperName: broker?.fullName || 'Unknown Broker',
+      email: broker?.email || '',
+      companyName: (deal.dealData as any)?.companyName || 'N/A',
+    };
+
+    await sendCommercialNotification('admin_new_submission', submissionData, undefined, tenantId);
+
+    const adminConditions = [or(eq(users.role, 'super_admin'), eq(users.role, 'lender'))];
+    if (tenantId != null) {
+      adminConditions.push(eq(users.tenantId, tenantId));
+    }
+    const adminUsers = await db.select({ id: users.id }).from(users)
+      .where(and(...adminConditions));
+
+    const formatAmount = (val: number | string | null) => {
+      if (val == null) return 'N/A';
+      const num = typeof val === 'string' ? parseFloat(val) : val;
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(num);
+    };
+
+    for (const admin of adminUsers) {
+      if (submitterId && admin.id === submitterId) continue;
+      try {
+        await db.insert(notifications).values({
+          userId: admin.id,
+          type: 'intake_new_submission',
+          title: `New Deal Submitted: ${deal.dealName || 'Commercial Deal'}`,
+          message: `${broker?.fullName || 'A broker'} submitted a ${deal.assetType || 'commercial'} deal for ${formatAmount(deal.loanAmount)}.`,
+          link: `/admin/commercial/deals/${deal.id}`,
+          isRead: false,
+        });
+      } catch (err) {
+        console.error(`Failed to create in-app notification for admin ${admin.id}:`, err);
+      }
+    }
+  } catch (err) {
+    console.error('Failed to send admin deal submission notifications:', err);
+  }
+}
 
 // ===== DEAL DOCUMENTS =====
 

@@ -125,6 +125,7 @@ const CONFIG_TABS = [
   { id: "inquiry-forms", label: "Inquiry Forms", icon: FileText },
   { id: "quote-pdfs", label: "Quote PDFs", icon: FileText },
   { id: "custom-fields", label: "Custom Fields", icon: LayoutList },
+  { id: "email-templates", label: "Email Templates", icon: Mail },
   { id: "billing", label: "Billing & Plans", icon: CreditCard },
 ] as const;
 
@@ -357,6 +358,133 @@ function TeamPermissionsCard() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function EmailTemplatesConfig() {
+  const { toast } = useToast();
+  const [welcomeEnabled, setWelcomeEnabled] = useState(true);
+  const [welcomeSubject, setWelcomeSubject] = useState('Welcome to Sphinx Capital - Your Broker Portal is Ready');
+  const [welcomeBody, setWelcomeBody] = useState(`<p>Hello {{firstName}},</p>
+<p>Welcome to Sphinx Capital's lending platform! Your broker account has been created successfully.</p>
+<p>Here's what you can do in your broker portal:</p>
+<ul>
+  <li><strong>Submit Commercial Deals</strong> — Send us your deals for quick AI-powered analysis and fund matching</li>
+  <li><strong>Track Deal Status</strong> — Monitor the progress of all your submissions in real time</li>
+  <li><strong>View Commissions</strong> — See your earnings and commission details</li>
+  <li><strong>Upload Documents</strong> — Securely share required documents for your deals</li>
+</ul>
+<div style="text-align: center;">
+  <a href="{{portalLink}}" style="display: inline-block; background-color: #1e40af; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0; font-size: 16px;">Go to Your Portal</a>
+</div>
+<p>If you have any questions, our team is here to help.</p>`);
+  const [loaded, setLoaded] = useState(false);
+
+  const { data: settingsData, isLoading } = useQuery<{ settings: Array<{ id: number; settingKey: string; settingValue: string }> }>({
+    queryKey: ['/api/admin/settings'],
+  });
+
+  useEffect(() => {
+    const settings = settingsData?.settings;
+    if (settings && !loaded) {
+      const enabledSetting = settings.find(s => s.settingKey === 'broker_welcome_email_enabled');
+      if (enabledSetting) setWelcomeEnabled(enabledSetting.settingValue !== 'false');
+
+      const templateSetting = settings.find(s => s.settingKey === 'broker_welcome_email_template');
+      if (templateSetting?.settingValue) {
+        try {
+          const tmpl = JSON.parse(templateSetting.settingValue);
+          if (tmpl.subject) setWelcomeSubject(tmpl.subject);
+          if (tmpl.body) setWelcomeBody(tmpl.body);
+        } catch {}
+      }
+      setLoaded(true);
+    }
+  }, [settingsData, loaded]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest('PUT', '/api/admin/settings/broker_welcome_email_enabled', {
+        value: welcomeEnabled ? 'true' : 'false',
+        description: 'Enable/disable welcome email for new broker registrations',
+      });
+      await apiRequest('PUT', '/api/admin/settings/broker_welcome_email_template', {
+        value: JSON.stringify({ subject: welcomeSubject, body: welcomeBody }),
+        description: 'Template for broker welcome email (subject and body HTML)',
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/settings'] });
+      toast({ title: 'Email template saved' });
+    },
+    onError: () => {
+      toast({ title: 'Failed to save template', variant: 'destructive' });
+    },
+  });
+
+  if (isLoading) return <Skeleton className="h-64 w-full" />;
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Broker Welcome Email</CardTitle>
+          <CardDescription>
+            Sent automatically when a new broker creates their account. Supports merge tags: {'{{firstName}}'}, {'{{fullName}}'}, {'{{portalLink}}'}, {'{{supportEmail}}'}.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={welcomeEnabled}
+              onCheckedChange={setWelcomeEnabled}
+              data-testid="switch-welcome-email-enabled"
+            />
+            <Label>Send welcome email on registration</Label>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="welcome-subject">Subject Line</Label>
+            <Input
+              id="welcome-subject"
+              value={welcomeSubject}
+              onChange={(e) => setWelcomeSubject(e.target.value)}
+              disabled={!welcomeEnabled}
+              data-testid="input-welcome-email-subject"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="welcome-body">Email Body (HTML)</Label>
+            <Textarea
+              id="welcome-body"
+              value={welcomeBody}
+              onChange={(e) => setWelcomeBody(e.target.value)}
+              disabled={!welcomeEnabled}
+              rows={12}
+              className="font-mono text-xs"
+              data-testid="input-welcome-email-body"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Badge variant="outline">{'{{firstName}}'}</Badge>
+            <Badge variant="outline">{'{{fullName}}'}</Badge>
+            <Badge variant="outline">{'{{portalLink}}'}</Badge>
+            <Badge variant="outline">{'{{supportEmail}}'}</Badge>
+          </div>
+
+          <Button
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending}
+            data-testid="button-save-email-template"
+          >
+            <Save className="h-4 w-4 mr-2" />
+            {saveMutation.isPending ? 'Saving...' : 'Save Template'}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -1220,6 +1348,8 @@ export default function AdminSettings() {
           {activeTab === "quote-pdfs" && <QuotePdfTemplateConfig />}
 
           {activeTab === "custom-fields" && <CustomFieldsConfig />}
+
+          {activeTab === "email-templates" && <EmailTemplatesConfig />}
 
           {activeTab === "billing" && <BillingPlansConfig />}
 

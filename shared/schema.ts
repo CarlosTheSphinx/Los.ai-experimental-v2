@@ -80,6 +80,11 @@ export const users = pgTable("users", {
   inviteStatus: varchar("invite_status", { length: 50 }).default("none"),
   inviteTokenSentAt: timestamp("invite_token_sent_at"),
   brokerSettings: jsonb("broker_settings"),
+  brokerCompanyName: varchar("broker_company_name", { length: 255 }),
+  brokerLicenseNumber: varchar("broker_license_number", { length: 100 }),
+  brokerOperatingStates: text("broker_operating_states").array(),
+  brokerYearsExperience: integer("broker_years_experience"),
+  brokerPreferredLoanTypes: text("broker_preferred_loan_types").array(),
   emailConsent: boolean("email_consent").default(false),
   smsConsent: boolean("sms_consent").default(false),
   // Magic Links — lender-scoped shareable URLs for borrower/broker self-registration
