@@ -19827,6 +19827,7 @@ Return JSON only:
   // Helper: validate a magic link token and return lender info
   async function validateMagicLinkToken(token: string): Promise<{
     lenderId: number;
+    tenantId: number | null;
     type: 'borrower' | 'broker';
     lenderName: string;
     companyName: string;
@@ -19836,12 +19837,14 @@ Return JSON only:
       id: users.id,
       fullName: users.fullName,
       companyName: users.companyName,
+      tenantId: users.tenantId,
       borrowerMagicLinkEnabled: users.borrowerMagicLinkEnabled,
     }).from(users).where(eq(users.borrowerMagicLink, token));
 
     if (borrowerMatch && borrowerMatch.borrowerMagicLinkEnabled) {
       return {
         lenderId: borrowerMatch.id,
+        tenantId: borrowerMatch.tenantId,
         type: 'borrower',
         lenderName: borrowerMatch.fullName || 'Lender',
         companyName: borrowerMatch.companyName || 'Lendry',
@@ -19853,12 +19856,14 @@ Return JSON only:
       id: users.id,
       fullName: users.fullName,
       companyName: users.companyName,
+      tenantId: users.tenantId,
       brokerMagicLinkEnabled: users.brokerMagicLinkEnabled,
     }).from(users).where(eq(users.brokerMagicLink, token));
 
     if (brokerMatch && brokerMatch.brokerMagicLinkEnabled) {
       return {
         lenderId: brokerMatch.id,
+        tenantId: brokerMatch.tenantId,
         type: 'broker',
         lenderName: brokerMatch.fullName || 'Lender',
         companyName: brokerMatch.companyName || 'Lendry',
@@ -19890,6 +19895,10 @@ Return JSON only:
         return res.status(404).json({ error: 'Invalid or disabled magic link' });
       }
 
+      const programFilter = linkData.tenantId
+        ? eq(loanPrograms.tenantId, linkData.tenantId)
+        : eq(loanPrograms.createdBy, linkData.lenderId);
+
       const programs = await db
         .select({
           id: loanPrograms.id,
@@ -19898,6 +19907,13 @@ Return JSON only:
           loanType: loanPrograms.loanType,
           minLoanAmount: loanPrograms.minLoanAmount,
           maxLoanAmount: loanPrograms.maxLoanAmount,
+          minLtv: loanPrograms.minLtv,
+          maxLtv: loanPrograms.maxLtv,
+          minInterestRate: loanPrograms.minInterestRate,
+          maxInterestRate: loanPrograms.maxInterestRate,
+          minDscr: loanPrograms.minDscr,
+          minFico: loanPrograms.minFico,
+          termOptions: loanPrograms.termOptions,
           eligiblePropertyTypes: loanPrograms.eligiblePropertyTypes,
           quoteFormFields: loanPrograms.quoteFormFields,
           yspEnabled: loanPrograms.yspEnabled,
@@ -19913,7 +19929,7 @@ Return JSON only:
         })
         .from(loanPrograms)
         .where(and(
-          eq(loanPrograms.createdBy, linkData.lenderId),
+          programFilter,
           eq(loanPrograms.isActive, true)
         ))
         .orderBy(loanPrograms.sortOrder);
@@ -19938,9 +19954,10 @@ Return JSON only:
         return res.status(400).json({ error: 'programId and inputs are required' });
       }
 
-      // Verify program belongs to this lender
-      const [program] = await db.select().from(loanPrograms)
-        .where(and(eq(loanPrograms.id, programId), eq(loanPrograms.createdBy, linkData.lenderId)));
+      const pricingProgramFilter = linkData.tenantId
+        ? and(eq(loanPrograms.id, programId), eq(loanPrograms.tenantId, linkData.tenantId))
+        : and(eq(loanPrograms.id, programId), eq(loanPrograms.createdBy, linkData.lenderId));
+      const [program] = await db.select().from(loanPrograms).where(pricingProgramFilter);
       if (!program) {
         return res.status(404).json({ error: 'Program not found' });
       }
@@ -21730,6 +21747,52 @@ Return JSON only:
     } catch (error) {
       console.error('Error updating deal review mode:', error);
       res.status(500).json({ error: 'Failed to update review mode' });
+    }
+  });
+
+  app.get('/api/broker/programs', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const currentUser = await storage.getUserById(userId);
+      if (!currentUser || currentUser.role !== 'broker') {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const brokerTenantId = currentUser.tenantId;
+      if (!brokerTenantId) {
+        return res.json({ programs: [] });
+      }
+
+      const programs = await db
+        .select({
+          id: loanPrograms.id,
+          name: loanPrograms.name,
+          description: loanPrograms.description,
+          loanType: loanPrograms.loanType,
+          minLoanAmount: loanPrograms.minLoanAmount,
+          maxLoanAmount: loanPrograms.maxLoanAmount,
+          minLtv: loanPrograms.minLtv,
+          maxLtv: loanPrograms.maxLtv,
+          minInterestRate: loanPrograms.minInterestRate,
+          maxInterestRate: loanPrograms.maxInterestRate,
+          minDscr: loanPrograms.minDscr,
+          minFico: loanPrograms.minFico,
+          termOptions: loanPrograms.termOptions,
+          eligiblePropertyTypes: loanPrograms.eligiblePropertyTypes,
+          isActive: loanPrograms.isActive,
+          updatedAt: loanPrograms.updatedAt,
+        })
+        .from(loanPrograms)
+        .where(and(
+          eq(loanPrograms.tenantId, brokerTenantId),
+          eq(loanPrograms.isActive, true)
+        ))
+        .orderBy(loanPrograms.sortOrder);
+
+      res.json({ programs });
+    } catch (error) {
+      console.error('Broker programs error:', error);
+      res.status(500).json({ error: 'Failed to fetch programs' });
     }
   });
 

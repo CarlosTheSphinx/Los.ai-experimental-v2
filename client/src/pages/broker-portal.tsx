@@ -23,6 +23,11 @@ import {
   MessageSquare,
   ChevronDown,
   HelpCircle,
+  LayoutGrid,
+  Hash,
+  MapPin,
+  TrendingUp,
+  Percent,
 } from "lucide-react";
 import { format } from "date-fns";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -611,6 +616,10 @@ function BrokerPortalContent({ token }: { token: string }) {
           </div>
         )}
 
+        {activeView === "programs" && (
+          <BrokerProgramsView />
+        )}
+
         {activeView === "commissions" && (
           <div>
             <div className="mb-6">
@@ -626,6 +635,180 @@ function BrokerPortalContent({ token }: { token: string }) {
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+interface BrokerProgram {
+  id: number;
+  name: string;
+  description: string | null;
+  loanType: string;
+  minLoanAmount: number | null;
+  maxLoanAmount: number | null;
+  minLtv: number | null;
+  maxLtv: number | null;
+  minInterestRate: number | null;
+  maxInterestRate: number | null;
+  minDscr: number | null;
+  minFico: number | null;
+  termOptions: string | null;
+  eligiblePropertyTypes: string[] | null;
+  isActive: boolean;
+  updatedAt: string | null;
+}
+
+function BrokerProgramsView() {
+  const { data, isLoading } = useQuery<{ programs: BrokerProgram[] }>({
+    queryKey: ["/api/broker/programs"],
+    refetchInterval: 30000,
+  });
+
+  const programs = data?.programs || [];
+
+  const formatCurrency = (amount: number | null) => {
+    if (!amount) return "N/A";
+    if (amount >= 1000000) return `$${(amount / 1000000).toFixed(1)}M`;
+    return `$${(amount / 1000).toFixed(0)}K`;
+  };
+
+  const getLoanTypeBadgeColor = (type: string) => {
+    const t = type?.toLowerCase();
+    if (t === "dscr") return "bg-blue-100 text-blue-800";
+    if (t === "rtl" || t === "fix & flip") return "bg-orange-100 text-orange-800";
+    if (t === "bridge") return "bg-purple-100 text-purple-800";
+    if (t === "construction") return "bg-amber-100 text-amber-800";
+    return "bg-gray-100 text-gray-800";
+  };
+
+  return (
+    <div data-testid="broker-programs-view">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900" data-testid="text-programs-title">Available Programs</h1>
+        <p className="text-sm text-muted-foreground">Loan programs available from your lender</p>
+      </div>
+
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-48" />
+          ))}
+        </div>
+      ) : programs.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <LayoutGrid className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+            <h3 className="text-lg font-medium text-gray-700" data-testid="text-no-programs">No Programs Available</h3>
+            <p className="text-sm text-muted-foreground mt-2">
+              Your lender has not published any loan programs yet. Check back later.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-testid="programs-grid">
+          {programs.map((program) => (
+            <Card key={program.id} className="hover:shadow-md transition-shadow" data-testid={`card-program-${program.id}`}>
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <CardTitle className="text-base font-semibold truncate">{program.name}</CardTitle>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Hash className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                      <span className="text-xs text-muted-foreground font-mono" data-testid={`text-program-id-${program.id}`}>
+                        ID: {program.id}
+                      </span>
+                    </div>
+                  </div>
+                  <Badge className={`${getLoanTypeBadgeColor(program.loanType)} flex-shrink-0 text-xs`} data-testid={`badge-program-type-${program.id}`}>
+                    {program.loanType}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {program.description && (
+                  <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{program.description}</p>
+                )}
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                  <div className="flex items-center gap-1.5">
+                    <DollarSign className="h-3.5 w-3.5 text-green-600 flex-shrink-0" />
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">Loan Range</p>
+                      <p className="text-xs font-medium">
+                        {formatCurrency(program.minLoanAmount)} – {formatCurrency(program.maxLoanAmount)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Percent className="h-3.5 w-3.5 text-blue-600 flex-shrink-0" />
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">LTV</p>
+                      <p className="text-xs font-medium">
+                        {program.minLtv ?? "—"}% – {program.maxLtv ?? "—"}%
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <TrendingUp className="h-3.5 w-3.5 text-purple-600 flex-shrink-0" />
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">Interest Rate</p>
+                      <p className="text-xs font-medium">
+                        {program.minInterestRate ?? "—"}% – {program.maxInterestRate ?? "—"}%
+                      </p>
+                    </div>
+                  </div>
+                  {program.minDscr != null && (
+                    <div className="flex items-center gap-1.5">
+                      <TrendingUp className="h-3.5 w-3.5 text-orange-600 flex-shrink-0" />
+                      <div>
+                        <p className="text-[11px] text-muted-foreground">Min DSCR</p>
+                        <p className="text-xs font-medium">{program.minDscr}</p>
+                      </div>
+                    </div>
+                  )}
+                  {program.minFico != null && (
+                    <div className="flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5 text-teal-600 flex-shrink-0" />
+                      <div>
+                        <p className="text-[11px] text-muted-foreground">Min FICO</p>
+                        <p className="text-xs font-medium">{program.minFico}</p>
+                      </div>
+                    </div>
+                  )}
+                  {program.termOptions && (
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5 text-indigo-600 flex-shrink-0" />
+                      <div>
+                        <p className="text-[11px] text-muted-foreground">Terms</p>
+                        <p className="text-xs font-medium">{program.termOptions} mo</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {program.eligiblePropertyTypes && program.eligiblePropertyTypes.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <MapPin className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-[11px] text-muted-foreground">Eligible Property Types</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {program.eligiblePropertyTypes.slice(0, 5).map((pt: string) => (
+                        <Badge key={pt} variant="outline" className="text-[10px] px-1.5 py-0 capitalize">
+                          {pt.replace(/-/g, " ")}
+                        </Badge>
+                      ))}
+                      {program.eligiblePropertyTypes.length > 5 && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                          +{program.eligiblePropertyTypes.length - 5} more
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

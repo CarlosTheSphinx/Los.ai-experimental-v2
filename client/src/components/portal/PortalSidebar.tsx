@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Inbox, FileText, DollarSign, FolderOpen, UserCircle, LogOut, Menu } from "lucide-react";
+import { Inbox, FileText, DollarSign, FolderOpen, UserCircle, LogOut, Menu, LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 
-export type PortalView = "dashboard" | "inbox" | "loans" | "commissions" | "documents" | "profile" | "deal-detail";
+export type PortalView = "dashboard" | "inbox" | "loans" | "commissions" | "documents" | "profile" | "deal-detail" | "programs";
 
 interface PortalSidebarProps {
   portalType: "broker" | "borrower";
@@ -19,6 +19,7 @@ interface PortalSidebarProps {
 const BROKER_NAV = [
   { id: "inbox" as PortalView, label: "Inbox", icon: Inbox },
   { id: "loans" as PortalView, label: "Loans", icon: FileText },
+  { id: "programs" as PortalView, label: "Programs", icon: LayoutGrid },
   { id: "commissions" as PortalView, label: "Commissions", icon: DollarSign },
 ];
 
