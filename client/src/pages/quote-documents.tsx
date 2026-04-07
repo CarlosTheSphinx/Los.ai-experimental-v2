@@ -15,7 +15,7 @@ import type { SavedQuote } from "@shared/schema";
 import { Document as PDFDocument, Page as PDFPage, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 function safeNumber(value: any): number {
   if (value === undefined || value === null || value === '') return 0;
@@ -130,6 +130,7 @@ export default function QuoteDocuments() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
   const pdfBlobUrlRef = useRef<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const templateInitializedRef = useRef(false);
@@ -197,14 +198,18 @@ export default function QuoteDocuments() {
     abortControllerRef.current = controller;
 
     setPdfLoading(true);
+    setPdfError(null);
 
     const url = selectedTemplateId
       ? `/api/quotes/${quoteId}/pdf?templateId=${selectedTemplateId}`
       : `/api/quotes/${quoteId}/pdf`;
 
     fetch(url, { credentials: 'include', signal: controller.signal })
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to generate PDF preview');
+      .then(async res => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || 'Failed to generate PDF preview');
+        }
         return res.blob();
       })
       .then(blob => {
@@ -215,12 +220,16 @@ export default function QuoteDocuments() {
         const newUrl = window.URL.createObjectURL(blob);
         pdfBlobUrlRef.current = newUrl;
         setPdfBlobUrl(newUrl);
+        setPdfError(null);
       })
       .catch(err => {
         if (controller.signal.aborted) return;
+        const msg = err instanceof Error ? err.message : "Failed to load PDF preview";
+        setPdfError(msg);
+        setPdfBlobUrl(null);
         toast({
           title: "Preview Error",
-          description: err instanceof Error ? err.message : "Failed to load PDF preview",
+          description: msg,
           variant: "destructive",
         });
       })
@@ -260,6 +269,12 @@ export default function QuoteDocuments() {
 
   const onDocumentLoadSuccess = useCallback(({ numPages: n }: { numPages: number }) => {
     setNumPages(n);
+    setPdfError(null);
+  }, []);
+
+  const onDocumentLoadError = useCallback((error: Error) => {
+    console.error('PDF render error:', error);
+    setPdfError('Unable to render document preview. Try downloading the PDF instead.');
   }, []);
 
   const handleDownloadPdf = async () => {
@@ -642,7 +657,24 @@ export default function QuoteDocuments() {
               </div>
             </div>
             <div className="max-h-[600px] overflow-y-auto bg-muted/30" ref={pdfContainerRef} data-testid="preview-pdf">
-              {pdfLoading && !pdfBlobUrl ? (
+              {pdfError ? (
+                <div className="h-96 flex items-center justify-center">
+                  <div className="text-center space-y-3">
+                    <FileText className="h-10 w-10 text-destructive/50 mx-auto" />
+                    <p className="text-sm text-destructive font-medium">Preview Failed</p>
+                    <p className="text-xs text-muted-foreground max-w-xs">{pdfError}</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { setPdfError(null); setPdfVersion(v => v + 1); }}
+                      className="mt-2"
+                      data-testid="button-retry-preview"
+                    >
+                      Retry
+                    </Button>
+                  </div>
+                </div>
+              ) : pdfLoading && !pdfBlobUrl ? (
                 <div className="h-96 flex items-center justify-center">
                   <div className="text-center space-y-3">
                     <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
@@ -654,6 +686,7 @@ export default function QuoteDocuments() {
                   <PDFDocument
                     file={pdfBlobUrl}
                     onLoadSuccess={onDocumentLoadSuccess}
+                    onLoadError={onDocumentLoadError}
                     loading={
                       <div className="flex items-center justify-center py-12">
                         <Loader2 className="h-6 w-6 animate-spin text-primary" />
