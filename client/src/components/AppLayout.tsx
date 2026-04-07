@@ -226,16 +226,19 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
 
   const isAdmin = user?.role && ['admin', 'staff', 'super_admin', 'lender', 'processor'].includes(user.role);
   const isBorrower = user?.role === 'borrower';
+  const isBroker = user?.role === 'broker';
 
   const userIsSuperAdmin = isSuperAdmin || user?.role === 'super_admin';
 
-  const isPreviewingOtherRole = userIsSuperAdmin && viewAsMode !== "super_admin";
-  const effectiveViewAsBorrower = userIsSuperAdmin && viewAsMode === "borrower";
-  const effectiveViewAsLender = userIsSuperAdmin && viewAsMode === "lender";
+  const canViewAs = userIsSuperAdmin && !isBroker && !isBorrower;
+
+  const isPreviewingOtherRole = canViewAs && viewAsMode !== "super_admin";
+  const effectiveViewAsBorrower = canViewAs && viewAsMode === "borrower";
+  const effectiveViewAsLender = canViewAs && viewAsMode === "lender";
 
   const navItems = (effectiveViewAsBorrower || isBorrower) ? borrowerNavItems : brokerNavItems;
 
-  const showAdminSection = isAdmin && !effectiveViewAsBorrower && !effectiveViewAsLender;
+  const showAdminSection = isAdmin && !isBroker && !isBorrower && !effectiveViewAsBorrower && !effectiveViewAsLender;
 
   const { isEnabled: isFlagEnabled } = useFeatureFlags();
   const useV2Nav = isFlagEnabled("phase1.sidebar");
@@ -473,7 +476,7 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
           )}
 
           {/* Lendry Admin section — only visible to super_admin / Lendry platform team */}
-          {userIsSuperAdmin && !effectiveViewAsBorrower && (
+          {canViewAs && !effectiveViewAsBorrower && (
             <SidebarGroup className="mt-4 pt-4 border-t border-sidebar-border">
               <SidebarGroupLabel className="text-[12px] uppercase tracking-[0.15em] text-muted-foreground/60 px-0 pb-2">
                 Lendry Admin View
@@ -514,7 +517,7 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border p-2">
           <div className="flex flex-col gap-2">
-            {userIsSuperAdmin && (
+            {canViewAs && (
               <div className="px-2 py-1 group-data-[collapsible=icon]:hidden">
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <Eye className="h-3 w-3 text-[hsl(212,67%,51%)]" />
