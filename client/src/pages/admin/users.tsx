@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Slider } from "@/components/ui/slider";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Search, MoreHorizontal, UserCog, Shield, User as UserIcon, Plus, Users, Briefcase, Pencil, Mail, CheckCircle, Clock, Link2, Send, Phone, Copy, ChevronDown, ChevronRight, ExternalLink, MessageSquare, Check, X, KeyRound, Trash2, Wand2 } from "lucide-react";
+import { Search, MoreHorizontal, UserCog, Shield, User as UserIcon, Plus, Users, Briefcase, Pencil, Mail, CheckCircle, Clock, Link2, Send, Phone, Copy, ChevronDown, ChevronRight, ExternalLink, MessageSquare, Check, X, KeyRound, Trash2, Wand2, AlertCircle } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { format } from "date-fns";
@@ -135,7 +135,7 @@ function UserDetailPanel({ userId, onClose }: { userId: number; onClose: () => v
   const [editingField, setEditingField] = useState<"email" | "phone" | "fullName" | "companyName" | "title" | null>(null);
   const [editValue, setEditValue] = useState("");
 
-  const { data, isLoading, refetch } = useQuery<{
+  const { data, isLoading, error, refetch } = useQuery<{
     user: AdminUser;
     deals: UserDeal[];
     programs: LoanProgram[];
@@ -329,7 +329,22 @@ function UserDetailPanel({ userId, onClose }: { userId: number; onClose: () => v
     );
   }
 
-  if (!user) return null;
+  if (error || !user) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 px-4 text-center space-y-4" data-testid="user-detail-error">
+        <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
+          <AlertCircle className="h-6 w-6 text-destructive" />
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm font-medium">Unable to load user details</p>
+          <p className="text-xs text-muted-foreground">This may be due to a network issue or expired session.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => refetch()} data-testid="button-retry-user-details">
+          Try Again
+        </Button>
+      </div>
+    );
+  }
 
   const status = inviteStatusConfig[user.inviteStatus || "none"] || inviteStatusConfig.none;
 
