@@ -97,7 +97,23 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
-  async function getProjectWithBorrowerAccess(projectId: number, userId: number, userRole: string): Promise<any> {
+  function isAdminRole(role: string): boolean {
+    return ['super_admin', 'lender', 'processor', 'admin'].includes(role);
+  }
+
+  async function verifyTenantOwnership(recordUserId: number | null | undefined, adminTenantId: number): Promise<boolean> {
+    if (!recordUserId) return false;
+    const owner = await storage.getUserById(recordUserId);
+    return owner?.tenantId === adminTenantId;
+  }
+
+  async function getProjectWithTenantAccess(projectId: number, userId: number, userRole: string, userTenantId?: number | null): Promise<any> {
+    if (isAdminRole(userRole)) {
+      const project = await storage.getProjectByIdInternal(projectId);
+      if (project && userTenantId && project.tenantId === userTenantId) return project;
+      if (project && !project.tenantId) return project;
+      return null;
+    }
     let project = await storage.getProjectById(projectId, userId);
     if (!project && (userRole === 'borrower' || userRole === 'broker')) {
       const portalUser = await storage.getUserById(userId);
@@ -1273,7 +1289,10 @@ export async function registerRoutes(
 
   app.get(api.quotes.list.path, authenticateUser, async (req: AuthRequest, res) => {
     try {
-      const quotes = await storage.getQuotes(req.user!.id);
+      const tenantId = getTenantId(req.user!);
+      const quotes = isAdminRole(req.user!.role) && tenantId
+        ? await storage.getQuotesByTenant(tenantId)
+        : await storage.getQuotes(req.user!.id);
       res.json({ success: true, quotes });
     } catch (error) {
       console.error('Error fetching quotes:', error);
@@ -1284,10 +1303,19 @@ export async function registerRoutes(
   app.get('/api/quotes/:id', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
-      const quote = await storage.getQuoteById(id, req.user!.id);
+      const tenantId = getTenantId(req.user!);
+      const quote = isAdminRole(req.user!.role)
+        ? await storage.getQuoteByIdInternal(id)
+        : await storage.getQuoteById(id, req.user!.id);
       if (!quote) {
         res.status(404).json({ success: false, error: 'Quote not found' });
         return;
+      }
+      if (isAdminRole(req.user!.role) && tenantId && quote.userId) {
+        if (!await verifyTenantOwnership(quote.userId, tenantId)) {
+          res.status(404).json({ success: false, error: 'Quote not found' });
+          return;
+        }
       }
       res.json({ success: true, quote });
     } catch (error) {
@@ -1299,7 +1327,16 @@ export async function registerRoutes(
   app.delete('/api/quotes/:id', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
-      await storage.deleteQuote(id, req.user!.id);
+      if (isAdminRole(req.user!.role)) {
+        const tenantId = getTenantId(req.user!);
+        const quote = await storage.getQuoteByIdInternal(id);
+        if (!quote || (tenantId && quote.userId && !await verifyTenantOwnership(quote.userId, tenantId))) {
+          return res.status(404).json({ success: false, error: 'Quote not found' });
+        }
+        await storage.deleteQuoteInternal(id);
+      } else {
+        await storage.deleteQuote(id, req.user!.id);
+      }
       res.json({ success: true });
     } catch (error) {
       console.error('Error deleting quote:', error);
@@ -1325,8 +1362,15 @@ export async function registerRoutes(
         return res.status(400).json({ success: false, error: 'Invalid input', details: parsed.error.flatten() });
       }
 
-      const existing = await storage.getQuoteById(id, req.user!.id);
+      const admin = isAdminRole(req.user!.role);
+      const tenantId = getTenantId(req.user!);
+      const existing = admin
+        ? await storage.getQuoteByIdInternal(id)
+        : await storage.getQuoteById(id, req.user!.id);
       if (!existing) {
+        return res.status(404).json({ success: false, error: 'Quote not found' });
+      }
+      if (admin && tenantId && existing.userId && !await verifyTenantOwnership(existing.userId, tenantId)) {
         return res.status(404).json({ success: false, error: 'Quote not found' });
       }
 
@@ -1336,7 +1380,9 @@ export async function registerRoutes(
         updates.loanData = { ...(existing.loanData as Record<string, any>), ...parsed.data.loanData };
       }
 
-      const updated = await storage.updateQuote(id, req.user!.id, updates);
+      const updated = admin
+        ? await storage.updateQuoteInternal(id, updates)
+        : await storage.updateQuote(id, req.user!.id, updates);
       res.json({ success: true, quote: updated });
     } catch (error) {
       console.error('Error updating quote:', error);
@@ -1348,8 +1394,15 @@ export async function registerRoutes(
   app.get('/api/quotes/:id/pdf', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
-      const quote = await storage.getQuoteById(id, req.user!.id);
+      const tenantId = getTenantId(req.user!);
+      const quote = isAdminRole(req.user!.role)
+        ? await storage.getQuoteByIdInternal(id)
+        : await storage.getQuoteById(id, req.user!.id);
       if (!quote) {
+        res.status(404).json({ success: false, error: 'Quote not found' });
+        return;
+      }
+      if (isAdminRole(req.user!.role) && tenantId && quote.userId && !await verifyTenantOwnership(quote.userId, tenantId)) {
         res.status(404).json({ success: false, error: 'Quote not found' });
         return;
       }
@@ -1406,8 +1459,15 @@ export async function registerRoutes(
       const id = parseInt(req.params.id);
       const { recipientEmail, recipientName, templateId, resend, existingDocumentId } = req.body;
 
-      const quote = await storage.getQuoteById(id, req.user!.id);
+      const tenantId = getTenantId(req.user!);
+      const quote = isAdminRole(req.user!.role)
+        ? await storage.getQuoteByIdInternal(id)
+        : await storage.getQuoteById(id, req.user!.id);
       if (!quote) {
+        res.status(404).json({ success: false, error: 'Quote not found' });
+        return;
+      }
+      if (isAdminRole(req.user!.role) && tenantId && quote.userId && !await verifyTenantOwnership(quote.userId, tenantId)) {
         res.status(404).json({ success: false, error: 'Quote not found' });
         return;
       }
@@ -1726,8 +1786,15 @@ export async function registerRoutes(
         return;
       }
 
-      const quote = await storage.getQuoteById(quoteId, userId);
+      const adminTenantId = getTenantId(req.user!);
+      const quote = isAdminRole(req.user!.role)
+        ? await storage.getQuoteByIdInternal(quoteId)
+        : await storage.getQuoteById(quoteId, userId);
       if (!quote) {
+        res.status(404).json({ success: false, error: 'Quote not found' });
+        return;
+      }
+      if (isAdminRole(req.user!.role) && adminTenantId && quote.userId && !await verifyTenantOwnership(quote.userId, adminTenantId)) {
         res.status(404).json({ success: false, error: 'Quote not found' });
         return;
       }
@@ -1919,7 +1986,10 @@ export async function registerRoutes(
   // List all documents
   app.get('/api/documents', authenticateUser, async (req: AuthRequest, res) => {
     try {
-      const docs = await storage.getDocuments(req.user!.id);
+      const tenantId = getTenantId(req.user!);
+      const docs = isAdminRole(req.user!.role) && tenantId
+        ? await storage.getDocumentsByTenant(tenantId)
+        : await storage.getDocuments(req.user!.id);
       const documentsWithSigners = await Promise.all(
         docs.map(async (doc) => {
           const signers = await storage.getSignersByDocumentId(doc.id);
@@ -1949,10 +2019,17 @@ export async function registerRoutes(
   app.get('/api/documents/:id', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
-      const doc = await storage.getDocumentById(id, req.user!.id);
+      const doc = await storage.getDocumentById(id, isAdminRole(req.user!.role) ? undefined : req.user!.id);
       if (!doc) {
         res.status(404).json({ success: false, error: 'Document not found' });
         return;
+      }
+      if (isAdminRole(req.user!.role)) {
+        const tenantId = getTenantId(req.user!);
+        if (tenantId && doc.userId && !await verifyTenantOwnership(doc.userId, tenantId)) {
+          res.status(404).json({ success: false, error: 'Document not found' });
+          return;
+        }
       }
       
       const signers = await storage.getSignersByDocumentId(id);
@@ -1969,7 +2046,7 @@ export async function registerRoutes(
   app.get('/api/quotes/:quoteId/documents', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const quoteId = parseInt(req.params.quoteId);
-      const docs = await storage.getDocumentsByQuoteId(quoteId, req.user!.id);
+      const docs = await storage.getDocumentsByQuoteId(quoteId, isAdminRole(req.user!.role) ? undefined : req.user!.id);
       
       // Fetch signers for each document
       const documentsWithSigners = await Promise.all(
@@ -1990,7 +2067,12 @@ export async function registerRoutes(
   app.delete('/api/documents/:id', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
-      await storage.deleteDocument(id, req.user!.id);
+      if (isAdminRole(req.user!.role)) {
+        const doc = await storage.getDocumentById(id);
+        if (doc) await storage.deleteDocument(id, doc.userId!);
+      } else {
+        await storage.deleteDocument(id, req.user!.id);
+      }
       res.json({ success: true });
     } catch (error) {
       console.error('Error deleting document:', error);
@@ -2006,7 +2088,7 @@ export async function registerRoutes(
       const { name, email, color, signingOrder } = req.body;
 
       // Verify user owns this document
-      const doc = await storage.getDocumentById(documentId, userId);
+      const doc = await storage.getDocumentById(documentId, isAdminRole(req.user!.role) ? undefined : userId);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Document not found' });
       }
@@ -2043,7 +2125,7 @@ export async function registerRoutes(
       if (!signer) {
         return res.status(404).json({ success: false, error: 'Signer not found' });
       }
-      const doc = await storage.getDocumentById(signer.documentId, userId);
+      const doc = await storage.getDocumentById(signer.documentId, isAdminRole(req.user!.role) ? undefined : userId);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Document not found' });
       }
@@ -2064,7 +2146,7 @@ export async function registerRoutes(
       const { signerId, pageNumber, fieldType, x, y, width, height, required, label, value } = req.body;
 
       // Verify user owns this document
-      const doc = await storage.getDocumentById(documentId, userId);
+      const doc = await storage.getDocumentById(documentId, isAdminRole(req.user!.role) ? undefined : userId);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Document not found' });
       }
@@ -2102,7 +2184,7 @@ export async function registerRoutes(
       if (!existingField) {
         return res.status(404).json({ success: false, error: 'Field not found' });
       }
-      const doc = await storage.getDocumentById(existingField.documentId, userId);
+      const doc = await storage.getDocumentById(existingField.documentId, isAdminRole(req.user!.role) ? undefined : userId);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Document not found' });
       }
@@ -2126,7 +2208,7 @@ export async function registerRoutes(
       if (!existingField) {
         return res.status(404).json({ success: false, error: 'Field not found' });
       }
-      const doc = await storage.getDocumentById(existingField.documentId, userId);
+      const doc = await storage.getDocumentById(existingField.documentId, isAdminRole(req.user!.role) ? undefined : userId);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Document not found' });
       }
@@ -2147,7 +2229,7 @@ export async function registerRoutes(
       const { fields } = req.body;
       
       // Verify user owns this document
-      const doc = await storage.getDocumentById(documentId, userId);
+      const doc = await storage.getDocumentById(documentId, isAdminRole(req.user!.role) ? undefined : userId);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Document not found' });
       }
@@ -2285,7 +2367,7 @@ export async function registerRoutes(
     try {
       const documentId = parseInt(req.params.id);
       const userId = req.user!.id;
-      const doc = await storage.getDocumentById(documentId, userId);
+      const doc = await storage.getDocumentById(documentId, isAdminRole(req.user!.role) ? undefined : userId);
       if (!doc) return res.status(404).json({ error: 'Document not found' });
       
       const docFields = await storage.getFieldsByDocumentId(documentId);
@@ -2340,7 +2422,7 @@ export async function registerRoutes(
         return res.status(400).json({ success: false, error: 'Invalid document ID' });
       }
 
-      const doc = await storage.getDocumentById(documentId, userId);
+      const doc = await storage.getDocumentById(documentId, isAdminRole(req.user!.role) ? undefined : userId);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Document not found' });
       }
@@ -2986,7 +3068,7 @@ export async function registerRoutes(
       const documentId = parseInt(req.params.id);
       const userId = req.user!.id;
       
-      const doc = await storage.getDocumentById(documentId, userId);
+      const doc = await storage.getDocumentById(documentId, isAdminRole(req.user!.role) ? undefined : userId);
       if (!doc) {
         res.status(404).json({ success: false, error: 'Document not found' });
         return;
@@ -3057,7 +3139,7 @@ export async function registerRoutes(
       const documentId = parseInt(req.params.id);
       const userId = req.user!.id;
       // Verify user owns this document before returning audit logs
-      const doc = await storage.getDocumentById(documentId, userId);
+      const doc = await storage.getDocumentById(documentId, isAdminRole(req.user!.role) ? undefined : userId);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Document not found' });
       }
@@ -3074,7 +3156,10 @@ export async function registerRoutes(
   // Get agreements list with signer counts
   app.get('/api/esignature/agreements', authenticateUser, async (req: AuthRequest, res) => {
     try {
-      const docs = await storage.getDocuments(req.user!.id);
+      const tenantId = getTenantId(req.user!);
+      const docs = isAdminRole(req.user!.role) && tenantId
+        ? await storage.getDocumentsByTenant(tenantId)
+        : await storage.getDocuments(req.user!.id);
       
       const agreements = await Promise.all(docs.map(async (doc) => {
         const docSigners = await storage.getSignersByDocumentId(doc.id);
@@ -3103,8 +3188,16 @@ export async function registerRoutes(
         };
       }));
       
+      let envelopeFilter;
+      if (isAdminRole(req.user!.role) && tenantId) {
+        const tenantUserIds = await db.select({ id: users.id }).from(users).where(eq(users.tenantId, tenantId));
+        const ids = tenantUserIds.map(u => u.id);
+        envelopeFilter = ids.length > 0 ? inArray(esignEnvelopes.createdBy, ids) : eq(esignEnvelopes.createdBy, req.user!.id);
+      } else {
+        envelopeFilter = eq(esignEnvelopes.createdBy, req.user!.id);
+      }
       const pandadocEnvelopes = await db.select().from(esignEnvelopes)
-        .where(eq(esignEnvelopes.createdBy, req.user!.id))
+        .where(envelopeFilter)
         .orderBy(desc(esignEnvelopes.createdAt));
       
       const pandadocAgreements = pandadocEnvelopes.map(env => {
@@ -3275,7 +3368,7 @@ export async function registerRoutes(
       const documentId = parseInt(req.params.id);
       const userId = req.user!.id;
       
-      const doc = await storage.getDocumentById(documentId, userId);
+      const doc = await storage.getDocumentById(documentId, isAdminRole(req.user!.role) ? undefined : userId);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Agreement not found' });
       }
@@ -3523,7 +3616,7 @@ export async function registerRoutes(
       const documentId = parseInt(req.params.id);
       const userId = req.user!.id;
       
-      const doc = await storage.getDocumentById(documentId, userId);
+      const doc = await storage.getDocumentById(documentId, isAdminRole(req.user!.role) ? undefined : userId);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Agreement not found' });
       }
@@ -3537,7 +3630,11 @@ export async function registerRoutes(
       }
       
       // Delete document (cascades to signers, fields, audit log)
-      await storage.deleteDocument(documentId, userId);
+      if (isAdminRole(req.user!.role)) {
+        await storage.deleteDocument(documentId, doc.userId!);
+      } else {
+        await storage.deleteDocument(documentId, userId);
+      }
       
       res.json({ success: true, message: 'Draft deleted successfully' });
     } catch (error) {
@@ -3846,7 +3943,7 @@ export async function registerRoutes(
       const userId = req.user!.id;
       const projectId = parseInt(req.params.id);
       
-      const project = await getProjectWithBorrowerAccess(projectId, userId, req.user!.role);
+      const project = await getProjectWithTenantAccess(projectId, userId, req.user!.role, req.user!.tenantId);
       if (!project) {
         return res.status(404).json({ error: 'Project not found' });
       }
@@ -3933,7 +4030,7 @@ export async function registerRoutes(
       const tId = parseInt(req.params.taskId);
       const userId = req.user!.id;
 
-      const project = await getProjectWithBorrowerAccess(projectId, userId, req.user!.role);
+      const project = await getProjectWithTenantAccess(projectId, userId, req.user!.role, req.user!.tenantId);
       if (!project) return res.status(404).json({ error: 'Deal not found' });
 
       const [task] = await db.select().from(projectTasks)
@@ -4044,13 +4141,13 @@ export async function registerRoutes(
       const userId = req.user!.id;
       const projectId = parseInt(req.params.id);
       
-      const existingProject = await storage.getProjectById(projectId, userId);
+      const existingProject = await getProjectWithTenantAccess(projectId, userId, req.user!.role, req.user!.tenantId);
       if (!existingProject) {
         return res.status(404).json({ error: 'Project not found' });
       }
       
       const userRole = req.user!.role;
-      const isAdminUser = userRole === 'admin' || userRole === 'super_admin' || userRole === 'staff';
+      const isAdminUser = isAdminRole(userRole);
       const baseFields = [
         'projectName', 'status', 'loanAmount', 'interestRate', 'loanTermMonths',
         'loanType', 'propertyAddress', 'propertyType', 'borrowerName',
@@ -4072,7 +4169,9 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'No valid fields to update' });
       }
       
-      const updated = await storage.updateProject(projectId, userId, updates);
+      const updated = isAdminUser
+        ? await storage.updateProjectInternal(projectId, updates)
+        : await storage.updateProject(projectId, userId, updates);
       
       // Log activity
       await storage.createProjectActivity({
@@ -4112,7 +4211,7 @@ export async function registerRoutes(
       const taskId = parseInt(req.params.taskId);
       const { status, completedBy, documentUrl } = req.body;
       
-      const project = await storage.getProjectById(projectId, userId);
+      const project = await getProjectWithTenantAccess(projectId, userId, req.user!.role, req.user!.tenantId);
       if (!project) {
         return res.status(404).json({ error: 'Project not found' });
       }
@@ -4247,7 +4346,7 @@ export async function registerRoutes(
       const userId = req.user!.id;
       const projectId = parseInt(req.params.id);
       
-      const project = await storage.getProjectById(projectId, userId);
+      const project = await getProjectWithTenantAccess(projectId, userId, req.user!.role, req.user!.tenantId);
       if (!project) {
         return res.status(404).json({ error: 'Project not found' });
       }
@@ -4297,14 +4396,14 @@ export async function registerRoutes(
       const userId = req.user!.id;
       const projectId = parseInt(req.params.id);
       
-      const project = await storage.getProjectById(projectId, userId);
+      const project = await getProjectWithTenantAccess(projectId, userId, req.user!.role, req.user!.tenantId);
       if (!project) {
         return res.status(404).json({ error: 'Project not found' });
       }
       
-      const updated = await storage.updateProject(projectId, userId, {
-        borrowerPortalEnabled: !project.borrowerPortalEnabled,
-      });
+      const updated = isAdminRole(req.user!.role)
+        ? await storage.updateProjectInternal(projectId, { borrowerPortalEnabled: !project.borrowerPortalEnabled })
+        : await storage.updateProject(projectId, userId, { borrowerPortalEnabled: !project.borrowerPortalEnabled });
       
       res.json({ borrowerPortalEnabled: updated?.borrowerPortalEnabled });
     } catch (error) {
@@ -4320,7 +4419,7 @@ export async function registerRoutes(
       const projectId = parseInt(req.params.id);
       const { name, size, contentType, documentType, documentCategory } = req.body;
 
-      const project = await getProjectWithBorrowerAccess(projectId, userId, req.user!.role);
+      const project = await getProjectWithTenantAccess(projectId, userId, req.user!.role, req.user!.tenantId);
       if (!project) {
         return res.status(404).json({ error: 'Project not found' });
       }
@@ -4385,7 +4484,7 @@ export async function registerRoutes(
       const projectId = parseInt(req.params.id);
       const { objectPath, fileName, fileSize, mimeType, documentType, documentCategory } = req.body;
 
-      const project = await getProjectWithBorrowerAccess(projectId, userId, req.user!.role);
+      const project = await getProjectWithTenantAccess(projectId, userId, req.user!.role, req.user!.tenantId);
       if (!project) {
         return res.status(404).json({ error: 'Project not found' });
       }
@@ -4468,7 +4567,7 @@ export async function registerRoutes(
       const userId = req.user!.id;
       const projectId = parseInt(req.params.id);
 
-      const project = await storage.getProjectById(projectId, userId);
+      const project = await getProjectWithTenantAccess(projectId, userId, req.user!.role, req.user!.tenantId);
       if (!project) {
         return res.status(404).json({ error: 'Project not found' });
       }
@@ -4487,7 +4586,7 @@ export async function registerRoutes(
       const userId = req.user!.id;
       const projectId = parseInt(req.params.id);
 
-      const project = await getProjectWithBorrowerAccess(projectId, userId, req.user!.role);
+      const project = await getProjectWithTenantAccess(projectId, userId, req.user!.role, req.user!.tenantId);
       if (!project) {
         return res.status(404).json({ error: 'Project not found' });
       }
@@ -4509,7 +4608,7 @@ export async function registerRoutes(
       const projectId = parseInt(req.params.id);
       const docId = parseInt(req.params.docId);
 
-      const project = await getProjectWithBorrowerAccess(projectId, userId, req.user!.role);
+      const project = await getProjectWithTenantAccess(projectId, userId, req.user!.role, req.user!.tenantId);
       if (!project) return res.status(404).json({ error: 'Project not found' });
 
       const { objectPath, fileName, fileSize, mimeType } = req.body;
@@ -4674,7 +4773,7 @@ export async function registerRoutes(
       const projectId = parseInt(req.params.id);
       const docId = parseInt(req.params.docId);
 
-      const project = await getProjectWithBorrowerAccess(projectId, userId, req.user!.role);
+      const project = await getProjectWithTenantAccess(projectId, userId, req.user!.role, req.user!.tenantId);
       if (!project) {
         return res.status(404).json({ error: 'Project not found' });
       }
@@ -4923,7 +5022,7 @@ export async function registerRoutes(
       const projectId = parseInt(req.params.id);
       const { eventType, data } = req.body;
       
-      const project = await storage.getProjectById(projectId, userId);
+      const project = await getProjectWithTenantAccess(projectId, userId, req.user!.role, req.user!.tenantId);
       if (!project) {
         return res.status(404).json({ error: 'Project not found' });
       }
@@ -4944,7 +5043,7 @@ export async function registerRoutes(
       const userId = req.user!.id;
       const projectId = parseInt(req.params.id);
       
-      const project = await storage.getProjectById(projectId, userId);
+      const project = await getProjectWithTenantAccess(projectId, userId, req.user!.role, req.user!.tenantId);
       if (!project) {
         return res.status(404).json({ error: 'Project not found' });
       }
@@ -5432,8 +5531,6 @@ export async function registerRoutes(
   registerAdminProgramsRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
 
   // Note: Old messaging routes code has been moved to routes/messaging.ts
-
-  const isAdminRole = (role: string | undefined) => ['admin', 'super_admin', 'staff', 'lender', 'processor'].includes(role || '');
 
   // Get single thread with messages
   app.get('/api/messages/threads/:id', authenticateUser, async (req: AuthRequest, res: Response) => {
@@ -9166,7 +9263,7 @@ export async function registerRoutes(
       const viewerRole = ['super_admin', 'lender', 'admin', 'staff', 'processor'].includes(req.user!.role) ? 'admin' : 
                          req.user!.role === 'borrower' ? 'borrower' : 'broker';
 
-      const project = await storage.getProjectById(projectId, userId);
+      const project = await getProjectWithTenantAccess(projectId, userId, req.user!.role, req.user!.tenantId);
       if (!project) return res.status(404).json({ error: 'Deal not found' });
 
       const docs = await db.select().from(dealDocuments)

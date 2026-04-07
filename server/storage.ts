@@ -57,15 +57,20 @@ export interface IStorage {
   logPricingRequest(request: InsertPricingRequest): Promise<PricingRequest>;
   saveQuote(quote: InsertSavedQuote, userId: number): Promise<SavedQuote>;
   getQuotes(userId: number): Promise<SavedQuote[]>;
+  getQuotesByTenant(tenantId: number): Promise<SavedQuote[]>;
   getQuoteById(id: number, userId: number): Promise<SavedQuote | undefined>;
+  getQuoteByIdInternal(id: number): Promise<SavedQuote | undefined>;
   updateQuote(id: number, userId: number, updates: Partial<SavedQuote>): Promise<SavedQuote | undefined>;
+  updateQuoteInternal(id: number, updates: Partial<SavedQuote>): Promise<SavedQuote | undefined>;
   deleteQuote(id: number, userId: number): Promise<void>;
+  deleteQuoteInternal(id: number): Promise<void>;
   
   // Document methods
   createDocument(doc: InsertDocument, userId: number): Promise<Document>;
   getDocuments(userId: number): Promise<Document[]>;
+  getDocumentsByTenant(tenantId: number): Promise<Document[]>;
   getDocumentById(id: number, userId?: number): Promise<Document | undefined>;
-  getDocumentsByQuoteId(quoteId: number, userId: number): Promise<Document[]>;
+  getDocumentsByQuoteId(quoteId: number, userId?: number): Promise<Document[]>;
   updateDocumentStatus(id: number, status: string, completedAt?: Date): Promise<Document | undefined>;
   updateDocument(id: number, updates: Partial<Document>, userId?: number): Promise<Document | undefined>;
   deleteDocument(id: number, userId: number): Promise<void>;
@@ -250,10 +255,22 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(savedQuotes).where(eq(savedQuotes.userId, userId)).orderBy(desc(savedQuotes.createdAt));
   }
 
+  async getQuotesByTenant(tenantId: number): Promise<SavedQuote[]> {
+    const tenantUserIds = await db.select({ id: users.id }).from(users).where(eq(users.tenantId, tenantId));
+    const ids = tenantUserIds.map(u => u.id);
+    if (ids.length === 0) return [];
+    return await db.select().from(savedQuotes).where(inArray(savedQuotes.userId, ids)).orderBy(desc(savedQuotes.createdAt));
+  }
+
   async getQuoteById(id: number, userId: number): Promise<SavedQuote | undefined> {
     const [quote] = await db.select().from(savedQuotes).where(
       and(eq(savedQuotes.id, id), eq(savedQuotes.userId, userId))
     );
+    return quote;
+  }
+
+  async getQuoteByIdInternal(id: number): Promise<SavedQuote | undefined> {
+    const [quote] = await db.select().from(savedQuotes).where(eq(savedQuotes.id, id));
     return quote;
   }
 
@@ -265,10 +282,22 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  async updateQuoteInternal(id: number, updates: Partial<SavedQuote>): Promise<SavedQuote | undefined> {
+    const [updated] = await db.update(savedQuotes)
+      .set(updates)
+      .where(eq(savedQuotes.id, id))
+      .returning();
+    return updated;
+  }
+
   async deleteQuote(id: number, userId: number): Promise<void> {
     await db.delete(savedQuotes).where(
       and(eq(savedQuotes.id, id), eq(savedQuotes.userId, userId))
     );
+  }
+
+  async deleteQuoteInternal(id: number): Promise<void> {
+    await db.delete(savedQuotes).where(eq(savedQuotes.id, id));
   }
 
   // Document methods
@@ -279,6 +308,13 @@ export class DatabaseStorage implements IStorage {
 
   async getDocuments(userId: number): Promise<Document[]> {
     return await db.select().from(documents).where(eq(documents.userId, userId)).orderBy(desc(documents.createdAt));
+  }
+
+  async getDocumentsByTenant(tenantId: number): Promise<Document[]> {
+    const tenantUserIds = await db.select({ id: users.id }).from(users).where(eq(users.tenantId, tenantId));
+    const ids = tenantUserIds.map(u => u.id);
+    if (ids.length === 0) return [];
+    return await db.select().from(documents).where(inArray(documents.userId, ids)).orderBy(desc(documents.createdAt));
   }
 
   async getDocumentById(id: number, userId?: number): Promise<Document | undefined> {
@@ -292,10 +328,10 @@ export class DatabaseStorage implements IStorage {
     return doc;
   }
 
-  async getDocumentsByQuoteId(quoteId: number, userId: number): Promise<Document[]> {
-    return await db.select().from(documents).where(
-      and(eq(documents.quoteId, quoteId), eq(documents.userId, userId))
-    ).orderBy(desc(documents.createdAt));
+  async getDocumentsByQuoteId(quoteId: number, userId?: number): Promise<Document[]> {
+    const conditions = [eq(documents.quoteId, quoteId)];
+    if (userId !== undefined) conditions.push(eq(documents.userId, userId));
+    return await db.select().from(documents).where(and(...conditions)).orderBy(desc(documents.createdAt));
   }
 
   async updateDocumentStatus(id: number, status: string, completedAt?: Date): Promise<Document | undefined> {
@@ -501,6 +537,14 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db.update(projects)
       .set({ ...updates, lastUpdated: new Date() })
       .where(and(eq(projects.id, id), eq(projects.userId, userId)))
+      .returning();
+    return updated;
+  }
+
+  async updateProjectInternal(id: number, updates: Partial<Project>): Promise<Project | undefined> {
+    const [updated] = await db.update(projects)
+      .set({ ...updates, lastUpdated: new Date() })
+      .where(eq(projects.id, id))
       .returning();
     return updated;
   }
