@@ -3,7 +3,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, documentReviewResults, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema, projectActivity, projectTasks, platformSettings, dealMemoryEntries, dealNotes, insertDealMemoryEntrySchema, insertDealNoteSchema, notifications, dealStatuses, insertDealStatusSchema, insertMessageTemplateSchema, dealThirdParties, systemSettings, betaSignups, insertBetaSignupSchema, inquiryFormTemplates, taskFormSubmissions, externalPricingFormSchema, intakeDealTasks } from "@shared/schema";
+import { savedQuotes, users, dealDocuments, dealDocumentFiles, dealTasks, dealProperties, partners, loanPrograms, programDocumentTemplates, programTaskTemplates, pricingRulesets, ruleProposals, guidelineUploads, pricingQuoteLogs, pricingRulesSchema, messageThreads, messages, messageReads, onboardingDocuments, userOnboardingProgress, projects, digestTemplates, documentTemplates, templateFields, fieldBindingKeys, workflowStepDefinitions, programWorkflowSteps, dealProcessors, projectStages, programReviewRules, creditPolicies, documentReviewResults, insertSubmissionCriteriaSchema, insertSubmissionFieldSchema, insertSubmissionDocumentRequirementSchema, insertSubmissionReviewRuleSchema, projectActivity, projectTasks, platformSettings, dealMemoryEntries, dealNotes, insertDealMemoryEntrySchema, insertDealNoteSchema, notifications, dealStatuses, insertDealStatusSchema, insertMessageTemplateSchema, dealThirdParties, systemSettings, betaSignups, insertBetaSignupSchema, inquiryFormTemplates, taskFormSubmissions, externalPricingFormSchema, intakeDealTasks, documents, signers } from "@shared/schema";
 import { priceQuote, validateRuleset, SAMPLE_RTL_RULESET, SAMPLE_DSCR_RULESET, type PricingInputs, analyzeGuidelines, refineProposal } from "./pricing";
 import { getDocumentTemplatesForLoanType } from "./document-templates";
 import { eq, desc, asc, inArray, and, gt, gte, lte, sql, isNull, isNotNull, or } from "drizzle-orm";
@@ -2133,6 +2133,26 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error) {
       console.error('Error deleting document:', error);
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+  app.post('/api/documents/:id/unsign', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      if (req.user!.role !== 'super_admin') {
+        return res.status(403).json({ success: false, error: 'Super admin only' });
+      }
+      const id = parseInt(req.params.id);
+      const [doc] = await db.select().from(documents).where(eq(documents.id, id));
+      if (!doc) {
+        return res.status(404).json({ success: false, error: 'Document not found' });
+      }
+      await db.update(documents).set({ status: 'sent', completedAt: null }).where(eq(documents.id, id));
+      await db.update(signers).set({ status: 'sent', signedAt: null }).where(eq(signers.documentId, id));
+      const updatedSigners = await db.select().from(signers).where(eq(signers.documentId, id));
+      res.json({ success: true, document: { id, name: doc.name, status: 'sent' }, signers: updatedSigners });
+    } catch (error) {
+      console.error('Error unsigning document:', error);
       res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
