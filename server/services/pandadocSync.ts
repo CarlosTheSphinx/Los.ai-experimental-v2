@@ -105,8 +105,16 @@ export async function syncEnvelopeStatus(envelopeId: number): Promise<{
               }
             }
 
+            let projectTenantId: number = 1;
+            const projOwnerId = quote.userId || envelope.createdBy;
+            if (projOwnerId) {
+              const projOwner = await storage.getUserById(projOwnerId);
+              if (projOwner?.tenantId) projectTenantId = projOwner.tenantId;
+            }
+
             const project = await storage.createProject({
               userId: quote.userId || envelope.createdBy!,
+              tenantId: projectTenantId,
               projectName: `${borrowerName} — ${quote.propertyAddress || envelope.documentName || 'New Loan'}`,
               projectNumber,
               ...(quote.loanNumber ? { loanNumber: quote.loanNumber } : {}),

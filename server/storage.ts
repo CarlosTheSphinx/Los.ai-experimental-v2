@@ -464,10 +464,19 @@ export class DatabaseStorage implements IStorage {
       project.loanNumber = await this.generateLoanNumber(project.propertyAddress || '');
     }
     if (!project.tenantId && project.programId) {
-      const [program] = await db.select({ createdBy: loanPrograms.createdBy }).from(loanPrograms).where(eq(loanPrograms.id, project.programId)).limit(1);
-      if (program?.createdBy) {
-        project.tenantId = program.createdBy;
+      const [program] = await db.select({ tenantId: loanPrograms.tenantId }).from(loanPrograms).where(eq(loanPrograms.id, project.programId)).limit(1);
+      if (program?.tenantId) {
+        project.tenantId = program.tenantId;
       }
+    }
+    if (!project.tenantId && project.userId) {
+      const [owner] = await db.select({ tenantId: users.tenantId }).from(users).where(eq(users.id, project.userId)).limit(1);
+      if (owner?.tenantId) {
+        project.tenantId = owner.tenantId;
+      }
+    }
+    if (!project.tenantId) {
+      project.tenantId = 1;
     }
     const [created] = await db.insert(projects).values(project).returning();
     return created;

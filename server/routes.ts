@@ -3043,8 +3043,15 @@ export async function registerRoutes(
             }
           }
 
+          let projectTenantId: number = 1;
+          if (doc.userId) {
+            const docOwner = await storage.getUserById(doc.userId);
+            if (docOwner?.tenantId) projectTenantId = docOwner.tenantId;
+          }
+
           const project = await storage.createProject({
             userId: doc.userId!,
+            tenantId: projectTenantId,
             projectName: `${borrowerSigner.name} - ${doc.name}`,
             projectNumber,
             ...(quoteLoanNumber ? { loanNumber: quoteLoanNumber } : {}),
@@ -18901,9 +18908,17 @@ If the user provides specific criteria, extract as many rules as you can from th
                       if (!brokerDisplayName) brokerDisplayName = quoteCreator.fullName || quoteCreator.email;
                     }
                   }
+
+                  let projectTenantId: number = 1;
+                  const projOwnerId = quote.userId || envelope.createdBy;
+                  if (projOwnerId) {
+                    const projOwner = await storage.getUserById(projOwnerId);
+                    if (projOwner?.tenantId) projectTenantId = projOwner.tenantId;
+                  }
                   
                   const project = await storage.createProject({
                     userId: quote.userId || envelope.createdBy!,
+                    tenantId: projectTenantId,
                     projectName: `${borrowerName} — ${quote.propertyAddress || envelope.documentName || 'New Loan'}`,
                     projectNumber,
                     ...(quote.loanNumber ? { loanNumber: quote.loanNumber } : {}),
