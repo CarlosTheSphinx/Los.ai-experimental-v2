@@ -113,7 +113,7 @@ export async function registerRoutes(
     if (isAdminRole(user.role)) {
       const tenantId = user.tenantId != null ? user.tenantId : undefined;
       if (!tenantId) return null;
-      if (doc.userId && !await verifyTenantOwnership(doc.userId, tenantId)) {
+      if (!doc.userId || !await verifyTenantOwnership(doc.userId, tenantId)) {
         return null;
       }
     }
@@ -122,9 +122,9 @@ export async function registerRoutes(
 
   async function getProjectWithTenantAccess(projectId: number, userId: number, userRole: string, userTenantId?: number | null): Promise<any> {
     if (isAdminRole(userRole)) {
+      if (!userTenantId) return null;
       const project = await storage.getProjectByIdInternal(projectId);
-      if (project && userTenantId && project.tenantId === userTenantId) return project;
-      if (project && !project.tenantId) return project;
+      if (project && project.tenantId === userTenantId) return project;
       return null;
     }
     let project = await storage.getProjectById(projectId, userId);
@@ -1325,7 +1325,7 @@ export async function registerRoutes(
         return;
       }
       if (isAdminRole(req.user!.role)) {
-        if (!tenantId || (quote.userId && !await verifyTenantOwnership(quote.userId, tenantId))) {
+        if (!tenantId || (!quote.userId || !await verifyTenantOwnership(quote.userId, tenantId))) {
           res.status(404).json({ success: false, error: 'Quote not found' });
           return;
         }
@@ -1343,7 +1343,7 @@ export async function registerRoutes(
       if (isAdminRole(req.user!.role)) {
         const tenantId = getTenantId(req.user!);
         const quote = await storage.getQuoteByIdInternal(id);
-        if (!quote || !tenantId || (quote.userId && !await verifyTenantOwnership(quote.userId, tenantId))) {
+        if (!quote || !tenantId || !quote.userId || !await verifyTenantOwnership(quote.userId, tenantId)) {
           return res.status(404).json({ success: false, error: 'Quote not found' });
         }
         await storage.deleteQuoteInternal(id);
@@ -1383,7 +1383,7 @@ export async function registerRoutes(
       if (!existing) {
         return res.status(404).json({ success: false, error: 'Quote not found' });
       }
-      if (admin && (!tenantId || (existing.userId && !await verifyTenantOwnership(existing.userId, tenantId)))) {
+      if (admin && (!tenantId || !existing.userId || !await verifyTenantOwnership(existing.userId, tenantId))) {
         return res.status(404).json({ success: false, error: 'Quote not found' });
       }
 
@@ -1415,7 +1415,7 @@ export async function registerRoutes(
         res.status(404).json({ success: false, error: 'Quote not found' });
         return;
       }
-      if (isAdminRole(req.user!.role) && (!tenantId || (quote.userId && !await verifyTenantOwnership(quote.userId, tenantId)))) {
+      if (isAdminRole(req.user!.role) && (!tenantId || !quote.userId || !await verifyTenantOwnership(quote.userId, tenantId))) {
         res.status(404).json({ success: false, error: 'Quote not found' });
         return;
       }
@@ -1480,7 +1480,7 @@ export async function registerRoutes(
         res.status(404).json({ success: false, error: 'Quote not found' });
         return;
       }
-      if (isAdminRole(req.user!.role) && (!tenantId || (quote.userId && !await verifyTenantOwnership(quote.userId, tenantId)))) {
+      if (isAdminRole(req.user!.role) && (!tenantId || !quote.userId || !await verifyTenantOwnership(quote.userId, tenantId))) {
         res.status(404).json({ success: false, error: 'Quote not found' });
         return;
       }
@@ -1807,7 +1807,7 @@ export async function registerRoutes(
         res.status(404).json({ success: false, error: 'Quote not found' });
         return;
       }
-      if (isAdminRole(req.user!.role) && (!adminTenantId || (quote.userId && !await verifyTenantOwnership(quote.userId, adminTenantId)))) {
+      if (isAdminRole(req.user!.role) && (!adminTenantId || !quote.userId || !await verifyTenantOwnership(quote.userId, adminTenantId))) {
         res.status(404).json({ success: false, error: 'Quote not found' });
         return;
       }
@@ -2058,7 +2058,7 @@ export async function registerRoutes(
           return res.status(403).json({ success: false, error: 'Tenant not found' });
         }
         const quote = await storage.getQuoteByIdInternal(quoteId);
-        if (!quote || (quote.userId && !await verifyTenantOwnership(quote.userId, tenantId))) {
+        if (!quote || !quote.userId || !await verifyTenantOwnership(quote.userId, tenantId)) {
           return res.status(404).json({ success: false, error: 'Quote not found' });
         }
       }
