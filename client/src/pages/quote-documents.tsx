@@ -274,8 +274,14 @@ export default function QuoteDocuments() {
 
   const onDocumentLoadError = useCallback((error: Error) => {
     console.error('PDF render error:', error);
-    setPdfError('Unable to render document preview. Try downloading the PDF instead.');
-  }, []);
+    const msg = 'Unable to render document preview. Try downloading the PDF instead.';
+    setPdfError(msg);
+    toast({
+      title: "Preview Error",
+      description: msg,
+      variant: "destructive",
+    });
+  }, [toast]);
 
   const handleDownloadPdf = async () => {
     if (!quoteId) return;

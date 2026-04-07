@@ -1452,10 +1452,12 @@ export async function registerRoutes(
         ? await storage.getQuoteByIdInternal(id)
         : await storage.getQuoteById(id, req.user!.id);
       if (!quote) {
+        console.warn(`[PDF] Quote not found: quoteId=${id}, userId=${req.user!.id}, role=${req.user!.role}`);
         res.status(404).json({ success: false, error: 'Quote not found' });
         return;
       }
       if (isAdminRole(req.user!.role) && (!tenantId || !quote.userId || !await verifyTenantOwnership(quote.userId, tenantId))) {
+        console.warn(`[PDF] Tenant ownership check failed: quoteId=${id}, tenantId=${tenantId}, quoteUserId=${quote.userId}`);
         res.status(404).json({ success: false, error: 'Quote not found' });
         return;
       }
