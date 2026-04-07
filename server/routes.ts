@@ -98,13 +98,25 @@ export async function registerRoutes(
 ): Promise<Server> {
 
   function isAdminRole(role: string): boolean {
-    return ['super_admin', 'lender', 'processor', 'admin'].includes(role);
+    return ['super_admin', 'lender', 'processor', 'admin', 'staff'].includes(role);
   }
 
   async function verifyTenantOwnership(recordUserId: number | null | undefined, adminTenantId: number): Promise<boolean> {
     if (!recordUserId) return false;
     const owner = await storage.getUserById(recordUserId);
     return owner?.tenantId === adminTenantId;
+  }
+
+  async function getDocumentWithTenantAccess(documentId: number, user: { id: number; role: string; tenantId?: number | null }): Promise<any | null> {
+    const doc = await storage.getDocumentById(documentId, isAdminRole(user.role) ? undefined : user.id);
+    if (!doc) return null;
+    if (isAdminRole(user.role)) {
+      const tenantId = user.tenantId ?? getTenantId(user as any);
+      if (tenantId && doc.userId && !await verifyTenantOwnership(doc.userId, tenantId)) {
+        return null;
+      }
+    }
+    return doc;
   }
 
   async function getProjectWithTenantAccess(projectId: number, userId: number, userRole: string, userTenantId?: number | null): Promise<any> {
@@ -2019,17 +2031,10 @@ export async function registerRoutes(
   app.get('/api/documents/:id', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
-      const doc = await storage.getDocumentById(id, isAdminRole(req.user!.role) ? undefined : req.user!.id);
+      const doc = await getDocumentWithTenantAccess(id, req.user!);
       if (!doc) {
         res.status(404).json({ success: false, error: 'Document not found' });
         return;
-      }
-      if (isAdminRole(req.user!.role)) {
-        const tenantId = getTenantId(req.user!);
-        if (tenantId && doc.userId && !await verifyTenantOwnership(doc.userId, tenantId)) {
-          res.status(404).json({ success: false, error: 'Document not found' });
-          return;
-        }
       }
       
       const signers = await storage.getSignersByDocumentId(id);
@@ -2067,12 +2072,11 @@ export async function registerRoutes(
   app.delete('/api/documents/:id', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
-      if (isAdminRole(req.user!.role)) {
-        const doc = await storage.getDocumentById(id);
-        if (doc) await storage.deleteDocument(id, doc.userId!);
-      } else {
-        await storage.deleteDocument(id, req.user!.id);
+      const doc = await getDocumentWithTenantAccess(id, req.user!);
+      if (!doc) {
+        return res.status(404).json({ success: false, error: 'Document not found' });
       }
+      await storage.deleteDocument(id, doc.userId!);
       res.json({ success: true });
     } catch (error) {
       console.error('Error deleting document:', error);
@@ -2088,7 +2092,7 @@ export async function registerRoutes(
       const { name, email, color, signingOrder } = req.body;
 
       // Verify user owns this document
-      const doc = await storage.getDocumentById(documentId, isAdminRole(req.user!.role) ? undefined : userId);
+      const doc = await getDocumentWithTenantAccess(documentId, req.user!);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Document not found' });
       }
@@ -2125,7 +2129,7 @@ export async function registerRoutes(
       if (!signer) {
         return res.status(404).json({ success: false, error: 'Signer not found' });
       }
-      const doc = await storage.getDocumentById(signer.documentId, isAdminRole(req.user!.role) ? undefined : userId);
+      const doc = await getDocumentWithTenantAccess(signer.documentId, req.user!);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Document not found' });
       }
@@ -2146,7 +2150,7 @@ export async function registerRoutes(
       const { signerId, pageNumber, fieldType, x, y, width, height, required, label, value } = req.body;
 
       // Verify user owns this document
-      const doc = await storage.getDocumentById(documentId, isAdminRole(req.user!.role) ? undefined : userId);
+      const doc = await getDocumentWithTenantAccess(documentId, req.user!);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Document not found' });
       }
@@ -2184,7 +2188,7 @@ export async function registerRoutes(
       if (!existingField) {
         return res.status(404).json({ success: false, error: 'Field not found' });
       }
-      const doc = await storage.getDocumentById(existingField.documentId, isAdminRole(req.user!.role) ? undefined : userId);
+      const doc = await getDocumentWithTenantAccess(existingField.documentId, req.user!);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Document not found' });
       }
@@ -2208,7 +2212,7 @@ export async function registerRoutes(
       if (!existingField) {
         return res.status(404).json({ success: false, error: 'Field not found' });
       }
-      const doc = await storage.getDocumentById(existingField.documentId, isAdminRole(req.user!.role) ? undefined : userId);
+      const doc = await getDocumentWithTenantAccess(existingField.documentId, req.user!);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Document not found' });
       }
@@ -2229,7 +2233,7 @@ export async function registerRoutes(
       const { fields } = req.body;
       
       // Verify user owns this document
-      const doc = await storage.getDocumentById(documentId, isAdminRole(req.user!.role) ? undefined : userId);
+      const doc = await getDocumentWithTenantAccess(documentId, req.user!);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Document not found' });
       }
@@ -2367,7 +2371,7 @@ export async function registerRoutes(
     try {
       const documentId = parseInt(req.params.id);
       const userId = req.user!.id;
-      const doc = await storage.getDocumentById(documentId, isAdminRole(req.user!.role) ? undefined : userId);
+      const doc = await getDocumentWithTenantAccess(documentId, req.user!);
       if (!doc) return res.status(404).json({ error: 'Document not found' });
       
       const docFields = await storage.getFieldsByDocumentId(documentId);
@@ -2422,7 +2426,7 @@ export async function registerRoutes(
         return res.status(400).json({ success: false, error: 'Invalid document ID' });
       }
 
-      const doc = await storage.getDocumentById(documentId, isAdminRole(req.user!.role) ? undefined : userId);
+      const doc = await getDocumentWithTenantAccess(documentId, req.user!);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Document not found' });
       }
@@ -3068,7 +3072,7 @@ export async function registerRoutes(
       const documentId = parseInt(req.params.id);
       const userId = req.user!.id;
       
-      const doc = await storage.getDocumentById(documentId, isAdminRole(req.user!.role) ? undefined : userId);
+      const doc = await getDocumentWithTenantAccess(documentId, req.user!);
       if (!doc) {
         res.status(404).json({ success: false, error: 'Document not found' });
         return;
@@ -3139,7 +3143,7 @@ export async function registerRoutes(
       const documentId = parseInt(req.params.id);
       const userId = req.user!.id;
       // Verify user owns this document before returning audit logs
-      const doc = await storage.getDocumentById(documentId, isAdminRole(req.user!.role) ? undefined : userId);
+      const doc = await getDocumentWithTenantAccess(documentId, req.user!);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Document not found' });
       }
@@ -3242,7 +3246,7 @@ export async function registerRoutes(
   app.get('/api/esignature/agreements/:id', authenticateUser, async (req: AuthRequest, res) => {
     try {
       const documentId = parseInt(req.params.id);
-      const doc = await storage.getDocumentById(documentId, req.user!.id);
+      const doc = await getDocumentWithTenantAccess(documentId, req.user!);
       
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Agreement not found' });
@@ -3309,7 +3313,7 @@ export async function registerRoutes(
       const documentId = parseInt(req.params.id);
       const { reason } = req.body;
       
-      const doc = await storage.getDocumentById(documentId, req.user!.id);
+      const doc = await getDocumentWithTenantAccess(documentId, req.user!);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Agreement not found' });
       }
@@ -3368,7 +3372,7 @@ export async function registerRoutes(
       const documentId = parseInt(req.params.id);
       const userId = req.user!.id;
       
-      const doc = await storage.getDocumentById(documentId, isAdminRole(req.user!.role) ? undefined : userId);
+      const doc = await getDocumentWithTenantAccess(documentId, req.user!);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Agreement not found' });
       }
@@ -3466,7 +3470,7 @@ export async function registerRoutes(
     try {
       const documentId = parseInt(req.params.id);
       
-      const doc = await storage.getDocumentById(documentId, req.user!.id);
+      const doc = await getDocumentWithTenantAccess(documentId, req.user!);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Agreement not found' });
       }
@@ -3513,7 +3517,7 @@ export async function registerRoutes(
       const documentId = parseInt(req.params.id);
       const signerId = parseInt(req.params.signerId);
       
-      const doc = await storage.getDocumentById(documentId, req.user!.id);
+      const doc = await getDocumentWithTenantAccess(documentId, req.user!);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Agreement not found' });
       }
@@ -3569,7 +3573,7 @@ export async function registerRoutes(
     try {
       const documentId = parseInt(req.params.id);
       
-      const doc = await storage.getDocumentById(documentId, req.user!.id);
+      const doc = await getDocumentWithTenantAccess(documentId, req.user!);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Agreement not found' });
       }
@@ -3616,7 +3620,7 @@ export async function registerRoutes(
       const documentId = parseInt(req.params.id);
       const userId = req.user!.id;
       
-      const doc = await storage.getDocumentById(documentId, isAdminRole(req.user!.role) ? undefined : userId);
+      const doc = await getDocumentWithTenantAccess(documentId, req.user!);
       if (!doc) {
         return res.status(404).json({ success: false, error: 'Agreement not found' });
       }
@@ -3630,11 +3634,7 @@ export async function registerRoutes(
       }
       
       // Delete document (cascades to signers, fields, audit log)
-      if (isAdminRole(req.user!.role)) {
-        await storage.deleteDocument(documentId, doc.userId!);
-      } else {
-        await storage.deleteDocument(documentId, userId);
-      }
+      await storage.deleteDocument(documentId, doc.userId!);
       
       res.json({ success: true, message: 'Draft deleted successfully' });
     } catch (error) {
