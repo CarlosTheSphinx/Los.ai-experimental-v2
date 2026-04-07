@@ -483,6 +483,7 @@ export async function registerRoutes(
       }
 
       const matchConditionalRules = (numResult: number, conditionalRules: any[], fallbackOption?: string): string | null => {
+        if (!isFinite(numResult)) return fallbackOption || null;
         for (const rule of conditionalRules) {
           const v1 = parseFloat(rule.value);
           if (isNaN(v1)) continue;
