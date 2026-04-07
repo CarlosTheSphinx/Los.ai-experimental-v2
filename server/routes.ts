@@ -3032,11 +3032,14 @@ export async function registerRoutes(
             if (partner?.email) brokerEmailAddr = partner.email;
             if (partner?.name && !brokerDisplayName) brokerDisplayName = partner.name;
           }
-          if (!brokerEmailAddr && doc.userId) {
-            const docCreator = await storage.getUserById(doc.userId);
-            if (docCreator?.role === 'broker' && docCreator.email) {
-              brokerEmailAddr = docCreator.email;
-              if (!brokerDisplayName) brokerDisplayName = docCreator.fullName || docCreator.email;
+          if (!brokerEmailAddr) {
+            const fallbackUserId = (quoteRef as any)?.userId || doc.userId;
+            if (fallbackUserId) {
+              const fallbackUser = await storage.getUserById(fallbackUserId);
+              if (fallbackUser?.role === 'broker' && fallbackUser.email) {
+                brokerEmailAddr = fallbackUser.email;
+                if (!brokerDisplayName) brokerDisplayName = fallbackUser.fullName || fallbackUser.email;
+              }
             }
           }
 
