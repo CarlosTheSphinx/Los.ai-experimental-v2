@@ -220,13 +220,17 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
     return "super_admin";
   });
 
-  useEffect(() => {
-    localStorage.setItem(VIEW_AS_STORAGE_KEY, viewAsMode);
-  }, [viewAsMode]);
-
   const isAdmin = user?.role && ['admin', 'staff', 'super_admin', 'lender', 'processor'].includes(user.role);
   const isBorrower = user?.role === 'borrower';
   const isBroker = user?.role === 'broker';
+
+  useEffect(() => {
+    if (isBroker || isBorrower) {
+      localStorage.removeItem(VIEW_AS_STORAGE_KEY);
+    } else {
+      localStorage.setItem(VIEW_AS_STORAGE_KEY, viewAsMode);
+    }
+  }, [viewAsMode, isBroker, isBorrower]);
 
   const userIsSuperAdmin = isSuperAdmin || user?.role === 'super_admin';
 
