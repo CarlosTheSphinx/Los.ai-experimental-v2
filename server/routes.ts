@@ -1388,7 +1388,7 @@ export async function registerRoutes(
       };
 
       const pdfBytes = templateConfig.templateType === 'loi'
-        ? await generateLoiPdf(pdfData, templateConfig.loiDefaults)
+        ? (await generateLoiPdf(pdfData, templateConfig.loiDefaults)).pdfBytes
         : await generateQuotePdf(pdfData, templateConfig);
 
       res.setHeader('Content-Type', 'application/pdf');
@@ -1625,7 +1625,7 @@ export async function registerRoutes(
       };
 
       const pdfBytes = templateConfig.templateType === 'loi'
-        ? await generateLoiPdf(pdfData, templateConfig.loiDefaults)
+        ? (await generateLoiPdf(pdfData, templateConfig.loiDefaults)).pdfBytes
         : await generateQuotePdf(pdfData, templateConfig);
 
       res.setHeader('Content-Type', 'application/pdf');
@@ -2828,8 +2828,7 @@ export async function registerRoutes(
           ipAddress: req.ip
         });
 
-        // Generate signed PDF and send to all parties
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
         const downloadLink = `${baseUrl}/api/documents/${doc.id}/download`;
         
         const signerNames = allSigners.map(s => s.name);
@@ -6517,9 +6516,7 @@ export async function registerRoutes(
       });
 
       if (user.role === 'broker') {
-        const protocol = req.headers['x-forwarded-proto'] || 'https';
-        const host = req.headers['host'] || 'app.lendry.ai';
-        const portalLink = `${protocol}://${host}/broker-portal`;
+        const portalLink = `${process.env.BASE_URL || `${req.protocol}://${req.get('host')}`}/broker-portal`;
         sendBrokerWelcomeEmail(user.email, user.fullName || user.email, portalLink, user.tenantId, user.companyName).catch(err => {
           console.error('Failed to send broker welcome email (invite accept):', err);
         });
@@ -7151,7 +7148,7 @@ export async function registerRoutes(
               .join(', ');
 
             const portalUrl = stageProj.borrowerPortalToken
-              ? `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : ''}/portal/${stageProj.borrowerPortalToken}`
+              ? `${process.env.BASE_URL || `${req.protocol}://${req.get('host')}`}/portal/${stageProj.borrowerPortalToken}`
               : null;
 
             const [borrowerUser] = await db.select({ id: users.id }).from(users)
@@ -15548,7 +15545,7 @@ If the user provides specific criteria, extract as many rules as you can from th
       let documentsSection = '';
       let updatesSection = '';
       let documentsCount = 0;
-      let portalLink = process.env.BASE_URL || 'https://app.lendry.ai';
+      let portalLink = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
       
       // Try to get real data from project or deal
       if (projectId) {
@@ -15558,7 +15555,7 @@ If the user provides specific criteria, extract as many rules as you can from th
           .limit(1);
         
         if (project) {
-          portalLink = `${process.env.BASE_URL || 'https://app.lendry.ai'}/portal/${project.borrowerToken}`;
+          portalLink = `${portalLink}/portal/${project.borrowerToken}`;
           
           // Get quote for property info
           if (project.quoteId) {

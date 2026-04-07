@@ -228,7 +228,7 @@ export const LOI_DEFAULT_VALUES: Required<LoiDefaults> = {
   feesFootnote: DEFAULT_LOI_FEES_FOOTNOTE,
 };
 
-export async function generateLoiPdf(data: QuotePdfData, loiDefaults?: LoiDefaults): Promise<Uint8Array> {
+export async function generateLoiPdf(data: QuotePdfData, loiDefaults?: LoiDefaults): Promise<{ pdfBytes: Uint8Array; signingFields: LoiSigningField[] }> {
   const d = { ...LOI_DEFAULT_VALUES, ...loiDefaults };
   const pdfDoc = await PDFDocument.create();
 
@@ -476,10 +476,11 @@ export async function generateLoiPdf(data: QuotePdfData, loiDefaults?: LoiDefaul
 
   const sigFieldHeight = 25;
   const dateFieldHeight = 20;
-  _lastSigningFields = [
+  const computedSigningFields: LoiSigningField[] = [
     { fieldType: 'signature', pageNumber: 2, x: MARGIN + 60, y: PAGE_H - sigFieldY_pdflib - sigFieldHeight, width: 200, height: sigFieldHeight },
     { fieldType: 'date', pageNumber: 2, x: MARGIN + 35, y: PAGE_H - dateFieldY_pdflib - dateFieldHeight, width: 120, height: dateFieldHeight },
   ];
+  _lastSigningFields = computedSigningFields;
 
   // ==================== PAGE 3 ====================
   const page3 = pdfDoc.addPage([PAGE_W, PAGE_H]);
@@ -508,7 +509,7 @@ export async function generateLoiPdf(data: QuotePdfData, loiDefaults?: LoiDefaul
     }
   }
 
-  return pdfDoc.save();
+  return { pdfBytes: await pdfDoc.save(), signingFields: computedSigningFields };
 }
 
 export interface LoiSigningField {
@@ -527,6 +528,6 @@ export function getLastLoiSigningFields(): LoiSigningField[] {
 }
 
 export async function generateLoiPdfWithFields(data: QuotePdfData, loiDefaults?: LoiDefaults): Promise<{ pdfBytes: Uint8Array; signingFields: LoiSigningField[] }> {
-  const pdfBytes = await generateLoiPdf(data, loiDefaults);
-  return { pdfBytes: new Uint8Array(pdfBytes), signingFields: [..._lastSigningFields] };
+  const result = await generateLoiPdf(data, loiDefaults);
+  return { pdfBytes: new Uint8Array(result.pdfBytes), signingFields: result.signingFields };
 }

@@ -249,9 +249,7 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
       });
 
       if (userRole === 'broker') {
-        const protocol = req.headers['x-forwarded-proto'] || 'https';
-        const host = req.headers['host'] || 'app.lendry.ai';
-        const portalLink = `${protocol}://${host}/broker-portal`;
+        const portalLink = `${process.env.BASE_URL || `${req.protocol}://${req.get('host')}`}/broker-portal`;
         sendBrokerWelcomeEmail(user.email, resolvedFullName, portalLink, user.tenantId, companyName || null).catch(err => {
           console.error('Failed to send broker welcome email:', err);
         });
@@ -699,9 +697,7 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         const jwtToken = generateToken(user!.id, user!.email, user!.tokenVersion ?? 0);
         setAuthCookie(res, jwtToken);
         if (user!.role === 'broker') {
-          const proto = req.headers['x-forwarded-proto'] || 'https';
-          const hostHeader = req.headers['host'] || 'app.lendry.ai';
-          const link = `${proto}://${hostHeader}/broker-portal`;
+          const link = `${process.env.BASE_URL || `${req.protocol}://${req.get('host')}`}/broker-portal`;
           sendBrokerWelcomeEmail(user!.email, user!.fullName || email, link, user!.tenantId, user!.companyName).catch(err => {
             console.error('Failed to send broker welcome email (invite accept):', err);
           });
@@ -746,9 +742,7 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         });
 
         if ((assignedRole || 'broker') === 'broker') {
-          const proto = req.headers['x-forwarded-proto'] || 'https';
-          const hostHeader = req.headers['host'] || 'app.lendry.ai';
-          const link = `${proto}://${hostHeader}/broker-portal`;
+          const link = `${process.env.BASE_URL || `${req.protocol}://${req.get('host')}`}/broker-portal`;
           sendBrokerWelcomeEmail(email, fullName || email, link, user.tenantId, user.companyName).catch(err => {
             console.error('Failed to send broker welcome email (OAuth):', err);
           });
