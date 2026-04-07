@@ -2989,14 +2989,17 @@ export async function registerRoutes(
           const borrowerSigner = allSigners[0]; // First signer is typically the borrower
           const projectNumber = await storage.generateProjectNumber();
           const borrowerToken = uuidv4().replace(/-/g, '') + uuidv4().replace(/-/g, '');
+          const brokerToken = uuidv4().replace(/-/g, '') + uuidv4().replace(/-/g, '');
           
           // Get quote data if linked
           let loanData: Record<string, unknown> = {};
           let quoteProgramId: number | null = null;
           let quoteFields: Record<string, any> = {};
+          let quoteRef: any = null;
           if (doc.quoteId) {
             const quote = await storage.getQuoteById(doc.quoteId, doc.userId!);
             if (quote) {
+              quoteRef = quote;
               loanData = {
                 loanAmount: Number(quote.loanAmount),
                 interestRate: Number(quote.interestRate),
@@ -3010,7 +3013,6 @@ export async function registerRoutes(
                 ysp: (quote as any).yspAmount ?? null,
                 lenderOriginationPoints: (quote as any).basePointsCharged ?? null,
                 brokerOriginationPoints: (quote as any).brokerPointsCharged ?? null,
-                brokerName: (quote as any).partnerName || null,
                 prepaymentPenalty: qLoanData?.prepaymentPenalty || null,
                 holdbackAmount: qLoanData?.holdbackAmount ?? null,
               };
@@ -3019,8 +3021,23 @@ export async function registerRoutes(
           
           let quoteLoanNumber: string | undefined;
           if (doc.quoteId) {
-            const quote = await storage.getQuoteById(doc.quoteId, doc.userId!);
+            const quote = quoteRef || await storage.getQuoteById(doc.quoteId, doc.userId!);
             if (quote?.loanNumber) quoteLoanNumber = quote.loanNumber;
+          }
+
+          let brokerEmailAddr: string | null = null;
+          let brokerDisplayName: string | null = (quoteRef as any)?.partnerName || null;
+          if (quoteRef?.partnerId) {
+            const [partner] = await db.select().from(partners).where(eq(partners.id, quoteRef.partnerId));
+            if (partner?.email) brokerEmailAddr = partner.email;
+            if (partner?.name && !brokerDisplayName) brokerDisplayName = partner.name;
+          }
+          if (!brokerEmailAddr && doc.userId) {
+            const docCreator = await storage.getUserById(doc.userId);
+            if (docCreator?.role === 'broker' && docCreator.email) {
+              brokerEmailAddr = docCreator.email;
+              if (!brokerDisplayName) brokerDisplayName = docCreator.fullName || docCreator.email;
+            }
           }
 
           const project = await storage.createProject({
@@ -3043,6 +3060,10 @@ export async function registerRoutes(
             targetCloseDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000), // 60 days
             borrowerPortalToken: borrowerToken,
             borrowerPortalEnabled: true,
+            brokerPortalToken: brokerToken,
+            brokerPortalEnabled: true,
+            brokerEmail: brokerEmailAddr,
+            brokerName: brokerDisplayName,
             agreementId: doc.id,
             quoteId: doc.quoteId || undefined,
             ...quoteFields,
@@ -3088,6 +3109,104 @@ export async function registerRoutes(
           });
           
           console.log(`✓ Project ${projectNumber} auto-created from signed agreement ${doc.id}`);
+
+          // Send notifications (email + in-app) to admins, owner, and broker
+          try {
+            const { isNotificationEnabled } = await import('./services/notificationHelper');
+            const resolvedOwnerId = (quoteRef as any)?.userId || doc.userId;
+            let tenantId: number | null = null;
+            if (resolvedOwnerId) {
+              const ownerUser = await storage.getUserById(resolvedOwnerId);
+              tenantId = ownerUser?.tenantId ?? 1;
+            } else {
+              tenantId = 1;
+            }
+            if (await isNotificationEnabled('term_sheet_signed', tenantId)) {
+              const notifiedUserIds = new Set<number>();
+              const adminUsers = await db.select({ id: users.id, email: users.email, fullName: users.fullName })
+                .from(users)
+                .where(and(
+                  inArray(users.role, ['super_admin', 'lender', 'processor']),
+                  eq(users.isActive, true),
+                  eq(users.tenantId, tenantId!),
+                ));
+
+              for (const admin of adminUsers) {
+                await db.insert(notifications).values({
+                  userId: admin.id,
+                  type: 'term_sheet_signed',
+                  title: 'Term Sheet Signed',
+                  message: `${borrowerSigner.name || 'Borrower'} signed the term sheet. Deal ${projectNumber} has been created.`,
+                  dealId: project.id,
+                  link: `/admin/deals/${project.id}`,
+                });
+                notifiedUserIds.add(admin.id);
+              }
+
+              if (resolvedOwnerId && !notifiedUserIds.has(resolvedOwnerId)) {
+                const ownerUser = await storage.getUserById(resolvedOwnerId);
+                const ownerIsBroker = ownerUser?.role === 'broker';
+                await db.insert(notifications).values({
+                  userId: resolvedOwnerId,
+                  type: 'term_sheet_signed',
+                  title: 'Term Sheet Signed',
+                  message: `${borrowerSigner.name || 'Borrower'} signed the term sheet. Deal ${projectNumber} has been created.`,
+                  dealId: project.id,
+                  link: ownerIsBroker ? `/loans` : `/admin/deals/${project.id}`,
+                });
+                notifiedUserIds.add(resolvedOwnerId);
+              }
+
+              if (brokerEmailAddr) {
+                const brokerUsers = await db.select({ id: users.id }).from(users)
+                  .where(and(eq(users.email, brokerEmailAddr), eq(users.isActive, true), eq(users.tenantId, tenantId!)));
+                for (const bu of brokerUsers) {
+                  if (!notifiedUserIds.has(bu.id)) {
+                    await db.insert(notifications).values({
+                      userId: bu.id,
+                      type: 'term_sheet_signed',
+                      title: 'Term Sheet Signed',
+                      message: `${borrowerSigner.name || 'Borrower'} signed the term sheet for ${loanData.propertyAddress || 'a loan'}. Deal ${projectNumber} is now active.`,
+                      dealId: project.id,
+                      link: `/loans`,
+                    });
+                    notifiedUserIds.add(bu.id);
+                  }
+                }
+              }
+
+              try {
+                const { getResendClient } = await import('./email');
+                const { client: resend, fromEmail } = await getResendClient();
+                const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+                const formattedAmount = loanData.loanAmount ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(loanData.loanAmount as number) : 'N/A';
+
+                for (const admin of adminUsers) {
+                  if (admin.email) {
+                    await resend.emails.send({
+                      from: fromEmail || 'Lendry.AI <info@lendry.ai>',
+                      to: admin.email,
+                      subject: `Term Sheet Signed — ${borrowerSigner.name || 'New Deal'} (${projectNumber})`,
+                      html: `<!DOCTYPE html><html><head><style>body{font-family:Arial,sans-serif;line-height:1.6;color:#333}.container{max-width:600px;margin:0 auto;padding:20px}.header{background-color:#0F1629;color:white;padding:20px;text-align:center;border-radius:8px 8px 0 0}.content{background-color:#f8fafc;padding:30px;border-radius:0 0 8px 8px}.detail-row{padding:8px 0;border-bottom:1px solid #e2e8f0}.detail-label{font-weight:bold;color:#475569}.button{display:inline-block;background-color:#C9A84C;color:#0F1629;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;margin:20px 0}.footer{text-align:center;color:#64748b;font-size:12px;margin-top:20px}</style></head><body><div class="container"><div class="header"><h1>Term Sheet Signed</h1></div><div class="content"><p>Great news! <strong>${borrowerSigner.name || 'The borrower'}</strong> has signed the term sheet.</p><div style="background:white;padding:15px;border-radius:6px;margin:15px 0"><div class="detail-row"><span class="detail-label">Deal:</span> ${projectNumber}</div><div class="detail-row"><span class="detail-label">Property:</span> ${loanData.propertyAddress || 'N/A'}</div><div class="detail-row"><span class="detail-label">Loan Amount:</span> ${formattedAmount}</div></div><p>The loan is now active and ready for documentation.</p><a href="${baseUrl}/admin/deals/${project.id}" class="button">View Deal</a></div><div class="footer"><p>Powered by Lendry.AI</p></div></div></body></html>`,
+                    }).catch((e: any) => console.error(`[Internal Signing] Email to admin ${admin.email} failed:`, e.message));
+                  }
+                }
+
+                if (brokerEmailAddr) {
+                  await resend.emails.send({
+                    from: fromEmail || 'Lendry.AI <info@lendry.ai>',
+                    to: brokerEmailAddr,
+                    subject: `Term Sheet Signed — ${borrowerSigner.name || 'Your Deal'} (${projectNumber})`,
+                    html: `<!DOCTYPE html><html><head><style>body{font-family:Arial,sans-serif;line-height:1.6;color:#333}.container{max-width:600px;margin:0 auto;padding:20px}.header{background-color:#0F1629;color:white;padding:20px;text-align:center;border-radius:8px 8px 0 0}.content{background-color:#f8fafc;padding:30px;border-radius:0 0 8px 8px}.detail-row{padding:8px 0;border-bottom:1px solid #e2e8f0}.detail-label{font-weight:bold;color:#475569}.button{display:inline-block;background-color:#C9A84C;color:#0F1629;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;margin:20px 0}.footer{text-align:center;color:#64748b;font-size:12px;margin-top:20px}</style></head><body><div class="container"><div class="header"><h1>Term Sheet Signed</h1></div><div class="content"><p>Great news! <strong>${borrowerSigner.name || 'The borrower'}</strong> has signed the term sheet for your deal.</p><div style="background:white;padding:15px;border-radius:6px;margin:15px 0"><div class="detail-row"><span class="detail-label">Deal:</span> ${projectNumber}</div><div class="detail-row"><span class="detail-label">Property:</span> ${loanData.propertyAddress || 'N/A'}</div><div class="detail-row"><span class="detail-label">Loan Amount:</span> ${formattedAmount}</div></div><p>The loan is now active. You can view it in your portal under My Loans.</p><a href="${baseUrl}/loans" class="button">View My Loans</a></div><div class="footer"><p>Powered by Lendry.AI</p></div></div></body></html>`,
+                  }).catch((e: any) => console.error(`[Internal Signing] Email to broker ${brokerEmailAddr} failed:`, e.message));
+                }
+              } catch (emailErr: any) {
+                console.error('[Internal Signing] Email notification error:', emailErr.message);
+              }
+            }
+          } catch (notifErr: any) {
+            console.error('[Internal Signing] Notification error:', notifErr.message);
+          }
 
           // Google Drive folder creation (non-blocking)
           try {
