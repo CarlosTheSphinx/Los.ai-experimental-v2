@@ -6419,6 +6419,9 @@ export async function registerRoutes(
       const primaryRole = getPrimaryRole(userRoles);
       const fullName = `${firstName.trim()} ${lastName.trim()}`;
       
+      const invitingAdmin = await storage.getUserById(req.user!.id);
+      const adminTenantId = invitingAdmin?.tenantId || null;
+
       const newUser = await storage.createUser({
         email: email.toLowerCase().trim(),
         passwordHash: null,
@@ -6435,6 +6438,7 @@ export async function registerRoutes(
         inviteTokenExpires: inviteExpires,
         invitedBy: req.user!.id,
         inviteStatus: 'pending',
+        ...(adminTenantId ? { tenantId: adminTenantId } : {}),
       });
       
       const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;

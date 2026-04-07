@@ -228,7 +228,7 @@ function AccountStep({ portalType, token, returnPath }: { portalType: "broker" |
   const [regPassword, setRegPassword] = useState("");
 
   const portalPath = returnPath || (portalType === "broker" ? `/broker-portal/${token}` : `/portal/${token}`);
-  const googleAuthUrl = `/api/auth/google?userType=${portalType}&returnTo=${encodeURIComponent(portalPath)}`;
+  const googleAuthUrl = `/api/auth/google?userType=${portalType}&returnTo=${encodeURIComponent(portalPath)}&magicLinkToken=${encodeURIComponent(token)}`;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -268,6 +268,7 @@ function AccountStep({ portalType, token, returnPath }: { portalType: "broker" |
         firstName: regFirstName,
         lastName: regLastName,
         userType: portalType,
+        magicLinkToken: token,
       });
       if (!res.ok) {
         const data = await res.json();

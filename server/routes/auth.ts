@@ -191,7 +191,7 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
   // Register
   app.post('/api/auth/register', async (req: Request, res: Response) => {
     try {
-      const { email, password, fullName, firstName, lastName, companyName, phone, userType: requestedRole } = req.body;
+      const { email, password, fullName, firstName, lastName, companyName, phone, userType: requestedRole, magicLinkToken } = req.body;
 
       // Support both fullName and firstName/lastName
       const resolvedFullName = fullName || (firstName && lastName ? `${firstName} ${lastName}` : null);
@@ -219,6 +219,33 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
 
       const onboardingCompleted = userRole === 'borrower';
 
+      let resolvedTenantId: number | null = null;
+      let resolvedInvitedBy: number | null = null;
+
+      if (magicLinkToken) {
+        const [borrowerMatch] = await db.select({
+          id: users.id,
+          tenantId: users.tenantId,
+          borrowerMagicLinkEnabled: users.borrowerMagicLinkEnabled,
+        }).from(users).where(eq(users.borrowerMagicLink, magicLinkToken));
+
+        if (borrowerMatch && borrowerMatch.borrowerMagicLinkEnabled) {
+          resolvedTenantId = borrowerMatch.tenantId;
+          resolvedInvitedBy = borrowerMatch.id;
+        } else {
+          const [brokerMatch] = await db.select({
+            id: users.id,
+            tenantId: users.tenantId,
+            brokerMagicLinkEnabled: users.brokerMagicLinkEnabled,
+          }).from(users).where(eq(users.brokerMagicLink, magicLinkToken));
+
+          if (brokerMatch && brokerMatch.brokerMagicLinkEnabled) {
+            resolvedTenantId = brokerMatch.tenantId;
+            resolvedInvitedBy = brokerMatch.id;
+          }
+        }
+      }
+
       const user = await storage.createUser({
         email: email.toLowerCase(),
         passwordHash,
@@ -233,6 +260,8 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         userType: userRole,
         onboardingCompleted,
         passwordExpiresAt: calculatePasswordExpiry(),
+        ...(resolvedTenantId ? { tenantId: resolvedTenantId } : {}),
+        ...(resolvedInvitedBy ? { invitedBy: resolvedInvitedBy } : {}),
       });
 
       await logAudit(db, {
@@ -583,6 +612,7 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
     const userType = req.query.userType as string | undefined;
     const returnTo = req.query.returnTo as string | undefined;
     const inviteToken = req.query.inviteToken as string | undefined;
+    const magicLinkToken = req.query.magicLinkToken as string | undefined;
     const stateObj: Record<string, string> = {};
     if (userType && ['broker', 'borrower', 'lender'].includes(userType)) {
       stateObj.userType = userType;
@@ -592,6 +622,9 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
     }
     if (inviteToken) {
       stateObj.inviteToken = inviteToken;
+    }
+    if (magicLinkToken) {
+      stateObj.magicLinkToken = magicLinkToken;
     }
 
     const authorizeUrl = googleOAuth.generateAuthUrl({
@@ -724,6 +757,25 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
           : null;
         const onboardingCompleted = assignedRole === 'borrower';
 
+        let oauthTenantId: number | null = null;
+        let oauthInvitedById: number | null = null;
+        const oauthMagicLinkToken = oauthState.magicLinkToken || null;
+        if (oauthMagicLinkToken) {
+          const [bMatch] = await db.select({ id: users.id, tenantId: users.tenantId, borrowerMagicLinkEnabled: users.borrowerMagicLinkEnabled })
+            .from(users).where(eq(users.borrowerMagicLink, oauthMagicLinkToken));
+          if (bMatch && bMatch.borrowerMagicLinkEnabled) {
+            oauthTenantId = bMatch.tenantId;
+            oauthInvitedById = bMatch.id;
+          } else {
+            const [brMatch] = await db.select({ id: users.id, tenantId: users.tenantId, brokerMagicLinkEnabled: users.brokerMagicLinkEnabled })
+              .from(users).where(eq(users.brokerMagicLink, oauthMagicLinkToken));
+            if (brMatch && brMatch.brokerMagicLinkEnabled) {
+              oauthTenantId = brMatch.tenantId;
+              oauthInvitedById = brMatch.id;
+            }
+          }
+        }
+
         user = await storage.createUser({
           email,
           passwordHash: null,
@@ -739,6 +791,8 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
           passwordResetToken: null,
           passwordResetExpires: null,
           role: assignedRole || 'broker',
+          ...(oauthTenantId ? { tenantId: oauthTenantId } : {}),
+          ...(oauthInvitedById ? { invitedBy: oauthInvitedById } : {}),
         });
 
         if ((assignedRole || 'broker') === 'broker') {

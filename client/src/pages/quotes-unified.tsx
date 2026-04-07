@@ -1220,23 +1220,9 @@ export default function QuotesUnified() {
                       </SelectContent>
                     </Select>
                   ) : (
-                    <Select
-                      value={loanProductType}
-                      onValueChange={(v: "dscr" | "rtl") => {
-                        setLoanProductType(v);
-                        setSelectedProgramId(null);
-                        setDscrResult(null);
-                        setRtlResult(null);
-                      }}
-                    >
-                      <SelectTrigger className="w-full md:w-80" data-testid="select-loan-product-type">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="dscr">DSCR</SelectItem>
-                        <SelectItem value="rtl">Fix and Flip/Ground Up Construction</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-md border border-dashed border-muted-foreground/30 text-sm text-muted-foreground" data-testid="text-no-programs">
+                      No loan programs available — contact your lender to set up programs.
+                    </div>
                   )}
                 </div>
               </div>
