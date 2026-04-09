@@ -1265,6 +1265,7 @@ export default function QuotesUnified() {
               {selectedProgramId && (() => {
                 const selectedProgram = allActivePrograms.find(p => p.id === selectedProgramId);
                 const baseQuoteFields = safeParseQuoteFields(selectedProgram?.quoteFormFields);
+                const hasConfiguredFields = Array.isArray(baseQuoteFields) && baseQuoteFields.length > 0;
                 const { pricingFields, pricingNormalizedKeys, keyAliases } = selectedProgram
                   ? buildPricingFields(selectedProgram, baseQuoteFields)
                   : { pricingFields: [], pricingNormalizedKeys: new Set<string>(), keyAliases: {} as Record<string, string> };
@@ -1277,7 +1278,7 @@ export default function QuotesUnified() {
                 const quoteFields = Array.isArray(mergedFields)
                   ? mergedFields.filter((f: any) => f.visible !== false)
                   : mergedFields;
-                const hasDynamicFields = Array.isArray(quoteFields) && quoteFields.length > 0;
+                const hasDynamicFields = hasConfiguredFields || (Array.isArray(quoteFields) && quoteFields.length > 0);
 
                 return (
                   <div className="max-w-4xl mx-auto">

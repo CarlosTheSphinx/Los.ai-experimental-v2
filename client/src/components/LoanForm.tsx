@@ -27,9 +27,10 @@ interface LoanFormProps {
 
 export function LoanForm({ onSubmit, isLoading, defaultData, visibleFields }: LoanFormProps) {
   const isFieldVisible = (fieldKey: string) => {
-    if (!visibleFields || visibleFields.length === 0) return true;
+    if (!visibleFields) return true;
+    if (visibleFields.length === 0) return false;
     const field = visibleFields.find(f => f.fieldKey === fieldKey);
-    return field ? field.visible : false;
+    return field ? field.visible !== false : false;
   };
   const form = useForm<LoanPricingFormData>({
     resolver: zodResolver(loanPricingFormSchema),
