@@ -268,7 +268,7 @@ export async function generateLoiPdf(data: QuotePdfData, loiDefaults?: LoiDefaul
     const rateStr = String(data.interestRate || resolveField(allData, 'interestRate', 'interest_rate') || '');
     const annualRate = safeNumber(rateStr) / 100;
     let termMonths = 360;
-    const termStr = String(resolveField(allData, 'loanTerm', 'loan_term', 'amortizationTerm') || data.loanData?.loanType || '');
+    const termStr = String(resolveField(allData, 'loanTerm', 'loan_term', 'amortizationTerm') || resolveField(allData, 'loanType', 'loan_type') || '');
     const moMatch = termStr.match(/(\d+)\s*months?/i);
     const yrMatch = termStr.match(/(\d+)\s*(?:yr|year)/i);
     if (moMatch) termMonths = parseInt(moMatch[1]);
