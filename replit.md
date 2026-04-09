@@ -59,3 +59,4 @@ The application is built using a modern web stack: React 18 with TypeScript for 
 -   **Google OAuth 2.0**: Authentication and Google Drive integration.
 -   **Google Drive API**: For folder creation and document synchronization.
 -   **n8n / External LOS**: Optional webhook integrations.
+-   **Pricing Field Templates**: Admins can save/apply reusable external pricing field mapping configurations via `pricing_field_templates` table (schema, CRUD API in `admin-programs.ts`, UI in `PricingConfiguration.tsx`).

@@ -1079,6 +1079,20 @@ export const insertLoanProgramSchema = createInsertSchema(loanPrograms).omit({
 export type LoanProgram = typeof loanPrograms.$inferSelect;
 export type InsertLoanProgram = z.infer<typeof insertLoanProgramSchema>;
 
+// Pricing Field Mapping Templates — save & reuse external pricing field configs
+export const pricingFieldTemplates = pgTable("pricing_field_templates", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  tenantId: integer("tenant_id").references(() => tenants.id, { onDelete: "cascade" }),
+  textInputs: jsonb("text_inputs"),
+  dropdowns: jsonb("dropdowns"),
+  createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type PricingFieldTemplate = typeof pricingFieldTemplates.$inferSelect;
+
 // Program Document Templates - documents required for each program
 export const programDocumentTemplates = pgTable("program_document_templates", {
   id: serial("id").primaryKey(),

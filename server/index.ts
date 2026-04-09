@@ -218,6 +218,21 @@ app.use((req, res, next) => {
     // Columns may already exist
   }
 
+  try {
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS pricing_field_templates (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
+      text_inputs JSONB,
+      dropdowns JSONB,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`);
+  } catch (e) {
+    // Table may already exist
+  }
+
   const { backfillTenantIds } = await import('./utils/backfill-tenants');
   await backfillTenantIds();
 

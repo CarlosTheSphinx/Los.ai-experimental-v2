@@ -15,7 +15,8 @@ import {
   creditPolicies,
   documentReviewResults,
   programReviewRules,
-  documentReviewRules
+  documentReviewRules,
+  pricingFieldTemplates
 } from '@shared/schema';
 
 export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
@@ -1574,6 +1575,60 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
     } catch (error) {
       console.error('Get quote fields error:', error);
       res.status(500).json({ error: 'Failed to get quote fields' });
+    }
+  });
+
+  // ==================== PRICING FIELD TEMPLATES ====================
+
+  app.get('/api/admin/pricing-templates', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const tenantId = await resolveUserTenantId(req.user!.id);
+      const templates = await db.select()
+        .from(pricingFieldTemplates)
+        .where(eq(pricingFieldTemplates.tenantId, tenantId!))
+        .orderBy(pricingFieldTemplates.name);
+      res.json({ templates });
+    } catch (error) {
+      console.error('List pricing templates error:', error);
+      res.status(500).json({ error: 'Failed to list pricing templates' });
+    }
+  });
+
+  app.post('/api/admin/pricing-templates', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { name, textInputs, dropdowns } = req.body;
+      if (!name || typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({ error: 'Template name is required' });
+      }
+      const tenantId = await resolveUserTenantId(req.user!.id);
+      const [template] = await db.insert(pricingFieldTemplates).values({
+        name: name.trim(),
+        tenantId,
+        textInputs: textInputs || [],
+        dropdowns: dropdowns || [],
+        createdBy: req.user!.id,
+      }).returning();
+      res.json({ template });
+    } catch (error) {
+      console.error('Create pricing template error:', error);
+      res.status(500).json({ error: 'Failed to create pricing template' });
+    }
+  });
+
+  app.delete('/api/admin/pricing-templates/:id', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const templateId = parseInt(req.params.id);
+      const tenantId = await resolveUserTenantId(req.user!.id);
+      const [existing] = await db.select().from(pricingFieldTemplates)
+        .where(and(eq(pricingFieldTemplates.id, templateId), eq(pricingFieldTemplates.tenantId, tenantId!)));
+      if (!existing) {
+        return res.status(404).json({ error: 'Template not found' });
+      }
+      await db.delete(pricingFieldTemplates).where(and(eq(pricingFieldTemplates.id, templateId), eq(pricingFieldTemplates.tenantId, tenantId!)));
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Delete pricing template error:', error);
+      res.status(500).json({ error: 'Failed to delete pricing template' });
     }
   });
 }
