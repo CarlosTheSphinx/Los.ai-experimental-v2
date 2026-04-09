@@ -255,7 +255,7 @@ export async function generateLoiPdf(data: QuotePdfData, loiDefaults?: LoiDefaul
   const propertyType = fv(resolveField(allData, 'propertyType', 'property_type'));
   const loanPurpose = fv(resolveField(allData, 'loanPurpose', 'loan_purpose', 'purpose'));
   const prepaymentPenalty = fv(resolveField(allData, 'prepaymentPenalty', 'prepayment_penalty', 'prepayPenalty'));
-  const dscr = fv(resolveField(allData, 'dscr', 'dscrRatio', 'estimatedDscr'));
+  const dscr = fv(resolveField(allData, 'calculatedDscr', 'dscr', 'dscrRatio', 'estimatedDscr'));
   const entityName = fv(resolveField(allData, 'customerCompanyName', 'entityName', 'borrowingEntity', 'companyName'));
   const borrowerName = fv(resolveField(allData, 'customerName', 'borrowerName'));
   const address = fv(data.propertyAddress || resolveField(allData, 'propertyAddress', 'property_address'));

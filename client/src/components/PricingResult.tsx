@@ -148,7 +148,10 @@ export function PricingResult({ result, formData, onReset, programId, programCon
         customerLastName,
         customerCompanyName,
         propertyAddress,
-        loanData: result.loanData || formData,
+        loanData: {
+          ...(result.loanData || formData || {}),
+          ...(formData?.calculatedDscr ? { calculatedDscr: formData.calculatedDscr } : {}),
+        },
         interestRate: formattedRate,
         pointsCharged: totalPointsCharged,
         programId: programId || null,
