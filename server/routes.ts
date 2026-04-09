@@ -514,15 +514,16 @@ export async function registerRoutes(
       };
 
       const resolveFieldValue = (fieldKey: string, sourceType?: string, defaultValue?: string, formula?: string, options?: string[], conditionalRules?: any[], fallbackOption?: string) => {
-        if (sourceType === 'default' && defaultValue) return defaultValue;
-
         const exactVal = (loanData as any)[fieldKey];
-        if (exactVal !== undefined && exactVal !== null && exactVal !== '') return String(exactVal);
-
         const normalizedVal = loanDataNormalized[normalizeKey(fieldKey)];
-        if (normalizedVal !== undefined && normalizedVal !== null && normalizedVal !== '') return String(normalizedVal);
 
-        if (sourceType === 'calculated') {
+        if (sourceType === 'borrower') {
+          if (exactVal !== undefined && exactVal !== null && exactVal !== '') return String(exactVal);
+          if (normalizedVal !== undefined && normalizedVal !== null && normalizedVal !== '') return String(normalizedVal);
+          return defaultValue || '';
+        }
+
+        if (sourceType === 'calculated' || (options && options.length > 0)) {
           if (!formula && normalizeKey(fieldKey) === 'ltv') {
             const la = Number(loanDataNormalized['loanamount'] || 0);
             const pv = Number(loanDataNormalized['estvaluepurchaseprice'] || loanDataNormalized['propertyvalue'] || loanDataNormalized['asIsvalue'] || loanDataNormalized['purchaseprice'] || 0);
@@ -550,7 +551,7 @@ export async function registerRoutes(
             }
           }
         }
-        if (sourceType === 'calculated' && formula) {
+        if (formula) {
           try {
             const evaluated = formula.replace(/\{([^}]+)\}/g, (_: string, varName: string) => {
               const v = (loanData as any)[varName] ?? loanDataNormalized[normalizeKey(varName)] ?? 0;
@@ -558,40 +559,67 @@ export async function registerRoutes(
             });
             const result = Function('"use strict"; return (' + evaluated + ')')();
             const numResult = Number(result);
-            if (conditionalRules && conditionalRules.length > 0) {
-              const matched = matchConditionalRules(numResult, conditionalRules, fallbackOption);
-              if (matched) return matched;
-            }
-            if (options && options.length > 0) {
-              for (const opt of options) {
-                const rangeMatch = opt.match(/([\d.]+)%?\s*[-–]\s*([\d.]+)%?/);
-                if (rangeMatch) {
-                  const low = parseFloat(rangeMatch[1]);
-                  const high = parseFloat(rangeMatch[2]);
-                  if (numResult >= low && numResult <= high) return opt;
-                }
-                const lteMatch = opt.match(/[≤<]=?\s*([\d.]+)%?/);
-                if (lteMatch && numResult <= parseFloat(lteMatch[1])) return opt;
-                const gteMatch = opt.match(/[≥>]=?\s*([\d.]+)%?/);
-                if (gteMatch && numResult >= parseFloat(gteMatch[1])) return opt;
+            if (!isNaN(numResult) && isFinite(numResult)) {
+              if (conditionalRules && conditionalRules.length > 0) {
+                const matched = matchConditionalRules(numResult, conditionalRules, fallbackOption);
+                if (matched) return matched;
               }
-              const closest = options.reduce((best, opt) => {
-                const nums = opt.match(/[\d.]+/g);
-                if (!nums) return best;
-                const optNum = parseFloat(nums[nums.length - 1]);
-                const bestNums = best.match(/[\d.]+/g);
-                const bestNum = bestNums ? parseFloat(bestNums[bestNums.length - 1]) : Infinity;
-                return Math.abs(optNum - numResult) < Math.abs(bestNum - numResult) ? opt : best;
-              }, options[0]);
-              return closest;
+              if (options && options.length > 0) {
+                for (const opt of options) {
+                  const rangeMatch = opt.match(/([\d.]+)%?\s*[-–]\s*([\d.]+)%?/);
+                  if (rangeMatch) {
+                    const low = parseFloat(rangeMatch[1]);
+                    const high = parseFloat(rangeMatch[2]);
+                    if (numResult >= low && numResult <= high) return opt;
+                  }
+                  const lteMatch = opt.match(/[≤<]=?\s*([\d.]+)%?/);
+                  if (lteMatch && numResult <= parseFloat(lteMatch[1])) return opt;
+                  const gteMatch = opt.match(/[≥>]=?\s*([\d.]+)%?/);
+                  if (gteMatch && numResult >= parseFloat(gteMatch[1])) return opt;
+                }
+                const closest = options.reduce((best, opt) => {
+                  const nums = opt.match(/[\d.]+/g);
+                  if (!nums) return best;
+                  const optNum = parseFloat(nums[nums.length - 1]);
+                  const bestNums = best.match(/[\d.]+/g);
+                  const bestNum = bestNums ? parseFloat(bestNums[bestNums.length - 1]) : Infinity;
+                  return Math.abs(optNum - numResult) < Math.abs(bestNum - numResult) ? opt : best;
+                }, options[0]);
+                return closest;
+              }
+              return String(result);
             }
-            return String(result);
           } catch (e) {
             console.warn('Formula evaluation failed for', fieldKey, ':', e);
           }
         }
 
-        return '';
+        if (exactVal !== undefined && exactVal !== null && exactVal !== '') {
+          if (options && options.length > 0) {
+            const valStr = String(exactVal).toLowerCase().trim();
+            const match = options.find(opt => opt.toLowerCase().trim() === valStr);
+            if (match) return match;
+            const containsMatch = options.find(opt =>
+              opt.toLowerCase().includes(valStr) || valStr.includes(opt.toLowerCase())
+            );
+            if (containsMatch) return containsMatch;
+          }
+          return String(exactVal);
+        }
+        if (normalizedVal !== undefined && normalizedVal !== null && normalizedVal !== '') {
+          if (options && options.length > 0) {
+            const valStr = String(normalizedVal).toLowerCase().trim();
+            const match = options.find(opt => opt.toLowerCase().trim() === valStr);
+            if (match) return match;
+            const containsMatch = options.find(opt =>
+              opt.toLowerCase().includes(valStr) || valStr.includes(opt.toLowerCase())
+            );
+            if (containsMatch) return containsMatch;
+          }
+          return String(normalizedVal);
+        }
+
+        return defaultValue || '';
       };
 
       const dynamicTextInputs = configTextInputs.map((ti: any) => ({
@@ -643,8 +671,16 @@ export async function registerRoutes(
           
           try {
             log.info('Page loaded, waiting for React to render form...');
-            // Smart wait: Wait for form elements to be ready instead of fixed 12s delay
-            await page.waitForSelector('input[placeholder="LTV"]', { timeout: 15000 });
+            // Dynamic wait: use first configured text input ID if available, otherwise check for form elements
+            const readinessId = ${JSON.stringify(configTextInputs[0]?.id || '')};
+            if (readinessId) {
+              await page.waitForSelector('[id="' + readinessId + '"]', { timeout: 15000 });
+            } else {
+              await page.waitForFunction(() => {
+                const inputs = document.querySelectorAll('input[type="text"], input:not([type]), [role="combobox"]');
+                return inputs.length >= 2;
+              }, { timeout: 15000 });
+            }
             log.info('✅ Form loaded and ready!');
             
             // STEP 1: Fill text inputs using page.type() for proper React event handling
