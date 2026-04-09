@@ -5,6 +5,7 @@ import {
   ArrowLeft, Building2, User, DollarSign, FileText, CheckSquare,
   Upload, Loader2, CheckCircle2, Clock, AlertCircle, ChevronDown, ChevronUp,
   Eye, ClipboardEdit, HelpCircle, ClipboardList, Percent, Phone, Mail,
+  Send, Copy, Link2, Check,
 } from "lucide-react";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -238,6 +239,27 @@ export default function BrokerDealDetail() {
   const { toast } = useToast();
   const [uploadingDocId, setUploadingDocId] = useState<number | null>(null);
   const [expandedDocs, setExpandedDocs] = useState<Set<number>>(new Set());
+  const [borrowerLink, setBorrowerLink] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const sendBorrowerInviteMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/projects/${dealId}/send-borrower-invite`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setBorrowerLink(data.borrowerLink);
+      if (data.emailSent) {
+        toast({ title: "Portal invite sent!", description: `Email sent to ${data.borrowerEmail}` });
+      } else {
+        toast({ title: "Link generated", description: "Link created but email could not be sent. Copy the link below.", variant: "destructive" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/deals", dealId] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to send invite", description: err.message || "Please try again.", variant: "destructive" });
+    },
+  });
 
   const { data: dealData, isLoading, error: dealError } = useQuery<{
     project: any;
@@ -498,15 +520,54 @@ export default function BrokerDealDetail() {
                 </div>
               </div>
               <div className="border-t pt-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <User className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-[13px] sm:text-[14px] font-bold uppercase tracking-wider text-muted-foreground">Borrower Info</span>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-[13px] sm:text-[14px] font-bold uppercase tracking-wider text-muted-foreground">Borrower Info</span>
+                  </div>
+                  {(deal.borrowerEmail || deal.customerEmail) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1.5"
+                      onClick={() => sendBorrowerInviteMutation.mutate()}
+                      disabled={sendBorrowerInviteMutation.isPending}
+                      data-testid="button-send-borrower-invite"
+                    >
+                      {sendBorrowerInviteMutation.isPending ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Send className="h-3 w-3" />
+                      )}
+                      {sendBorrowerInviteMutation.isPending ? "Sending..." : "Send Portal Link"}
+                    </Button>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
                   <Field label="Name" value={deal.borrowerName || `${deal.customerFirstName || ""} ${deal.customerLastName || ""}`.trim() || "—"} />
                   <Field label="Email" value={deal.borrowerEmail || deal.customerEmail || "—"} />
                   <Field label="Phone" value={deal.borrowerPhone || deal.customerPhone || "—"} />
                 </div>
+                {borrowerLink && (
+                  <div className="mt-3 flex items-center gap-2 p-2 rounded-md bg-muted/50 border" data-testid="borrower-link-display">
+                    <Link2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <span className="text-xs truncate flex-1 text-muted-foreground">{borrowerLink}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 flex-shrink-0"
+                      onClick={() => {
+                        navigator.clipboard.writeText(borrowerLink);
+                        setLinkCopied(true);
+                        toast({ title: "Link copied!" });
+                        setTimeout(() => setLinkCopied(false), 2000);
+                      }}
+                      data-testid="button-copy-borrower-link"
+                    >
+                      {linkCopied ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3" />}
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </CardContent>

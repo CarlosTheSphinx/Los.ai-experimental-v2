@@ -4625,6 +4625,77 @@ export async function registerRoutes(
     }
   });
 
+  app.post('/api/projects/:id/send-borrower-invite', authenticateUser, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const projectId = parseInt(req.params.id);
+
+      const project = await getProjectWithTenantAccess(projectId, userId, req.user!.role, req.user!.tenantId);
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+
+      const borrowerEmail = project.borrowerEmail || (project as any).customerEmail;
+      if (!borrowerEmail) {
+        return res.status(400).json({ error: 'No borrower email on this deal' });
+      }
+
+      if (!project.borrowerEmail && borrowerEmail) {
+        await db.update(projects).set({ borrowerEmail: borrowerEmail }).where(eq(projects.id, projectId));
+      }
+
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+      let user = await storage.getUserByEmail(borrowerEmail.toLowerCase().trim());
+      let inviteToken: string;
+
+      if (user && user.inviteToken) {
+        inviteToken = user.inviteToken;
+      } else {
+        inviteToken = generateRandomToken();
+        const fullNameForUser = project.borrowerName || `${(project as any).customerFirstName || ''} ${(project as any).customerLastName || ''}`.trim() || null;
+        if (!user) {
+          user = await storage.createUser({
+            email: borrowerEmail.toLowerCase().trim(),
+            fullName: fullNameForUser,
+            phone: project.borrowerPhone || (project as any).customerPhone || null,
+            role: 'borrower',
+            userType: 'borrower',
+            isActive: true,
+            emailVerified: true,
+            inviteToken,
+            inviteStatus: 'none',
+            tenantId: project.tenantId || req.user!.tenantId || 1,
+          } as any);
+        } else {
+          await db.update(users).set({ inviteToken, inviteStatus: user.inviteStatus || 'none' }).where(eq(users.id, user.id));
+        }
+      }
+
+      if (!project.borrowerPortalEnabled) {
+        await db.update(projects).set({ borrowerPortalEnabled: true }).where(eq(projects.id, projectId));
+      }
+
+      const portalLink = `${baseUrl}/join/personal/${inviteToken}`;
+      const borrowerName = project.borrowerName || `${(project as any).customerFirstName || ''} ${(project as any).customerLastName || ''}`.trim() || 'Borrower';
+
+      const emailResult = await sendMagicLinkEmail(borrowerEmail, borrowerName, portalLink);
+
+      if (user) {
+        await db.update(users).set({ inviteStatus: 'sent', inviteTokenSentAt: new Date() }).where(eq(users.id, user.id));
+      }
+
+      res.json({
+        success: true,
+        borrowerLink: portalLink,
+        emailSent: emailResult.success,
+        borrowerEmail,
+      });
+    } catch (error) {
+      console.error('Send borrower invite error:', error);
+      res.status(500).json({ error: 'Failed to send borrower invite' });
+    }
+  });
+
   // Toggle borrower portal
   app.patch('/api/projects/:id/toggle-portal', authenticateUser, async (req: AuthRequest, res) => {
     try {
