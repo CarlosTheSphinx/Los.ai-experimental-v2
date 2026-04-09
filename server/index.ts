@@ -8,6 +8,7 @@ import { apiLimiter, authLimiter, pricingLimiter, uploadLimiter } from "./middle
 import { validateConfig } from "./utils/validateConfig";
 import { seedDefaultAgentConfigs } from "./routes/agents";
 import { db } from "./db";
+import { sql } from "drizzle-orm";
 import { seedSuperAdmins } from "./seedAdmins";
 import { seedInquiryFormTemplates, registerInquiryFormRoutes } from "./routes/inquiryForms";
 import { initializePIIContext, autoDecryptResponseMiddleware } from "./middleware/piiDecryption";
@@ -209,7 +210,13 @@ app.use((req, res, next) => {
   }
 
   await seedSuperAdmins();
-  
+
+  try {
+    await db.execute(sql`ALTER TABLE workflow_step_definitions ADD COLUMN IF NOT EXISTS color VARCHAR(50) DEFAULT '#6366f1'`);
+  } catch (e) {
+    // Column may already exist
+  }
+
   const { backfillTenantIds } = await import('./utils/backfill-tenants');
   await backfillTenantIds();
 

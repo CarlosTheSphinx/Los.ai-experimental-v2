@@ -1023,6 +1023,23 @@ export function ProgramCreationWizard({
                 </Button>
               )}
 
+              {wizardStep !== 'summary' && (
+                <Button
+                  variant="outline"
+                  onClick={handleSaveAsDraft}
+                  disabled={createProgramMutation.isPending || !programName.trim()}
+                  className="text-[16px]"
+                  data-testid="button-wizard-save-progress"
+                >
+                  {createProgramMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                  )}
+                  {isEditMode ? 'Save Changes' : 'Save Progress'}
+                </Button>
+              )}
+
               {wizardStep === 'summary' ? (
                 <div className="flex items-center gap-3">
                   <Button
