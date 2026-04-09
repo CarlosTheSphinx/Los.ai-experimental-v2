@@ -1242,6 +1242,7 @@ export default function AdminPrograms() {
                         <Switch
                           checked={program.isActive}
                           onCheckedChange={() => toggleProgram.mutate(program.id)}
+                          disabled={toggleProgram.isPending}
                           data-testid={`switch-program-${program.id}`}
                         />
                         <Button
