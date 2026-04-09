@@ -213,8 +213,9 @@ app.use((req, res, next) => {
 
   try {
     await db.execute(sql`ALTER TABLE workflow_step_definitions ADD COLUMN IF NOT EXISTS color VARCHAR(50) DEFAULT '#6366f1'`);
+    await db.execute(sql`ALTER TABLE program_workflow_steps ADD COLUMN IF NOT EXISTS color TEXT`);
   } catch (e) {
-    // Column may already exist
+    // Columns may already exist
   }
 
   const { backfillTenantIds } = await import('./utils/backfill-tenants');
