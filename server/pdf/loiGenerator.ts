@@ -255,7 +255,34 @@ export async function generateLoiPdf(data: QuotePdfData, loiDefaults?: LoiDefaul
   const propertyType = fv(resolveField(allData, 'propertyType', 'property_type'));
   const loanPurpose = fv(resolveField(allData, 'loanPurpose', 'loan_purpose', 'purpose'));
   const prepaymentPenalty = fv(resolveField(allData, 'prepaymentPenalty', 'prepayment_penalty', 'prepayPenalty'));
-  const dscr = fv(resolveField(allData, 'calculatedDscr', 'dscr', 'dscrRatio', 'estimatedDscr'));
+  let dscr = fv(resolveField(allData, 'calculatedDscr', 'dscr', 'dscrRatio', 'estimatedDscr'));
+  if (!dscr) {
+    const rent = safeNumber(resolveField(allData, 'grossMonthlyRent', 'gross_monthly_rent', 'monthlyRent'));
+    const annTaxes = safeNumber(resolveField(allData, 'annualTaxes', 'annual_taxes'));
+    const annInsurance = safeNumber(resolveField(allData, 'annualInsurance', 'annual_insurance'));
+    const annHOA = safeNumber(resolveField(allData, 'annualHOA', 'annual_hoa'));
+    const mTaxes = annTaxes > 0 ? annTaxes / 12 : safeNumber(resolveField(allData, 'monthlyTaxes', 'monthly_taxes'));
+    const mInsurance = annInsurance > 0 ? annInsurance / 12 : safeNumber(resolveField(allData, 'monthlyInsurance', 'monthly_insurance'));
+    const mHOA = annHOA > 0 ? annHOA / 12 : safeNumber(resolveField(allData, 'monthlyHOA', 'monthly_hoa'));
+    const la = safeNumber(loanAmount);
+    const rateStr = String(data.interestRate || resolveField(allData, 'interestRate', 'interest_rate') || '');
+    const annualRate = safeNumber(rateStr) / 100;
+    let termMonths = 360;
+    const termStr = String(resolveField(allData, 'loanTerm', 'loan_term', 'amortizationTerm') || data.loanData?.loanType || '');
+    const moMatch = termStr.match(/(\d+)\s*months?/i);
+    const yrMatch = termStr.match(/(\d+)\s*(?:yr|year)/i);
+    if (moMatch) termMonths = parseInt(moMatch[1]);
+    else if (yrMatch) termMonths = parseInt(yrMatch[1]) * 12;
+
+    if (rent > 0 && la > 0 && annualRate > 0) {
+      const mr = annualRate / 12;
+      const monthlyPI = la * mr / (1 - Math.pow(1 + mr, -termMonths));
+      const totalMonthly = monthlyPI + mTaxes + mInsurance + mHOA;
+      if (totalMonthly > 0) {
+        dscr = (rent / totalMonthly).toFixed(2);
+      }
+    }
+  }
   const entityName = fv(resolveField(allData, 'customerCompanyName', 'entityName', 'borrowingEntity', 'companyName'));
   const borrowerName = fv(resolveField(allData, 'customerName', 'borrowerName'));
   const address = fv(data.propertyAddress || resolveField(allData, 'propertyAddress', 'property_address'));
