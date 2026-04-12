@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useLocation, Link, useRoute } from 'wouter';
+import { useLocation, useRoute } from 'wouter';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -8,8 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
-import { apiRequest } from '@/lib/queryClient';
-import { Loader2, CheckCircle, AlertCircle, Mail } from 'lucide-react';
+import { apiRequest, queryClient } from '@/lib/queryClient';
+import { Loader2, AlertCircle, Mail } from 'lucide-react';
 import { SiGoogle } from 'react-icons/si';
 
 const acceptInviteSchema = z.object({
@@ -28,7 +28,6 @@ export default function AcceptInvitePage() {
   const token = params?.token;
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [setupComplete, setSetupComplete] = useState(false);
   const [validating, setValidating] = useState(true);
   const [inviteData, setInviteData] = useState<{ email: string; fullName: string } | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -72,11 +71,13 @@ export default function AcceptInvitePage() {
 
     setIsLoading(true);
     try {
-      await apiRequest('POST', '/api/auth/accept-invite', {
+      const res = await apiRequest('POST', '/api/auth/accept-invite', {
         token,
         password: data.password,
       });
-      setSetupComplete(true);
+      const result = await res.json();
+      await queryClient.invalidateQueries({ queryKey: ['/api/user'] });
+      setLocation(result.redirectTo || '/quotes');
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -95,37 +96,6 @@ export default function AcceptInvitePage() {
           <Card className="w-full max-w-md">
             <CardContent className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
-  if (setupComplete) {
-    return (
-      <div className="min-h-screen flex bg-background">
-        <div className="flex items-center justify-center w-full p-4">
-          <Card className="w-full max-w-md">
-            <CardHeader className="text-center">
-              <div className="flex justify-center mb-6">
-                <span className="text-3xl font-bold text-foreground">Lendry.</span>
-                <span className="text-3xl font-bold text-blue-500">AI</span>
-              </div>
-              <div className="flex justify-center mb-4">
-                <CheckCircle className="h-12 w-12 text-green-500" />
-              </div>
-              <CardTitle className="text-2xl font-bold tracking-tight" data-testid="text-setup-complete">Account Ready</CardTitle>
-              <CardDescription>
-                Your account has been set up successfully. You can now sign in with your email and password.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Link href="/login">
-                <Button className="w-full" data-testid="button-go-to-login">
-                  Sign In
-                </Button>
-              </Link>
             </CardContent>
           </Card>
         </div>
@@ -153,11 +123,9 @@ export default function AcceptInvitePage() {
               <p className="text-sm text-muted-foreground text-center">
                 Please contact your admin to request a new invitation.
               </p>
-              <Link href="/login">
-                <Button variant="outline" className="w-full" data-testid="button-back-to-login">
-                  Back to Sign In
-                </Button>
-              </Link>
+              <Button variant="outline" className="w-full" onClick={() => setLocation('/login')} data-testid="button-back-to-login">
+                Back to Sign In
+              </Button>
             </CardContent>
           </Card>
         </div>

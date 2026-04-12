@@ -6931,8 +6931,11 @@ export async function registerRoutes(
           console.error('Failed to send broker welcome email (invite accept):', err);
         });
       }
+
+      const authToken = generateToken(user.id, user.email, user.tokenVersion ?? 0);
+      setAuthCookie(res, authToken);
       
-      res.json({ success: true, message: 'Account setup complete. You can now sign in.' });
+      res.json({ success: true, redirectTo: '/quotes' });
     } catch (error) {
       console.error('Accept invite error:', error);
       res.status(500).json({ error: 'Failed to set up account' });
