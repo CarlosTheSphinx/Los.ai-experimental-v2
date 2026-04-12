@@ -7,7 +7,7 @@ import { CurrencyInput } from "@/components/ui/currency-input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Calculator, DollarSign, Building, Percent } from "lucide-react";
+import { Calculator, DollarSign, Building, Percent } from "lucide-react";
 import { useEffect } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -518,14 +518,7 @@ export function LoanForm({ onSubmit, isLoading, defaultData, visibleFields }: Lo
               disabled={isLoading} 
               className="w-full h-14 text-lg font-semibold shadow-lg shadow-primary/20 bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-600/90 transition-all duration-300"
             >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  Calculating Rate...
-                </>
-              ) : (
-                "Get Pricing Quote"
-              )}
+              {isLoading ? "Calculating Rate..." : "Get Pricing Quote"}
             </Button>
           </form>
         </Form>
