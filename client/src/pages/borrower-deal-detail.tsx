@@ -393,9 +393,11 @@ export default function BorrowerDealDetail() {
     const hoa = Number(deal?.loanData?.annualHOA || appData.annualHOA || 0);
     const noi = (rent * 12) - taxes - insurance - hoa;
 
-    if (noi > 0 && loan > 0) {
+    if (noi > 0) {
       fields.push({ key: 'noi', label: "NOI", value: fmt(noi) });
+    }
 
+    if (noi > 0 && loan > 0) {
       const rateStr = String(interestRate || "").replace("%", "");
       const annualRate = Number(rateStr) || 0;
       if (annualRate > 0) {
