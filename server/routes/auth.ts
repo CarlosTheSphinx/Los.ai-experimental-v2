@@ -2,8 +2,8 @@ import type { Express, Request, Response } from 'express';
 import type { AuthRequest } from '../auth';
 import type { RouteDeps } from './types';
 import { OAuth2Client } from 'google-auth-library';
-import { eq } from 'drizzle-orm';
-import { users, auditLogs, loginAttempts } from '@shared/schema';
+import { eq, and, or } from 'drizzle-orm';
+import { users, auditLogs, loginAttempts, notifications } from '@shared/schema';
 import {
   hashPassword,
   comparePassword,
@@ -81,6 +81,35 @@ async function recordLoginAttempt(
     });
   } catch (err) {
     console.error('Login attempt log failed:', err);
+  }
+}
+
+async function notifyLenderStaffOfNewUser(
+  db: any,
+  role: string,
+  newUser: { id: number; fullName: string | null; email: string; tenantId: number | null }
+): Promise<void> {
+  if (role !== 'broker' && role !== 'borrower') return;
+  try {
+    const label = role === 'broker' ? 'Broker' : 'Borrower';
+    const displayName = newUser.fullName || newUser.email;
+    const tenantId = newUser.tenantId;
+    const conditions: any[] = [or(eq(users.role, 'super_admin'), eq(users.role, 'lender'))];
+    if (tenantId != null) conditions.push(eq(users.tenantId, tenantId));
+    const admins = await db.select({ id: users.id }).from(users).where(and(...conditions));
+    for (const admin of admins) {
+      if (admin.id === newUser.id) continue;
+      await db.insert(notifications).values({
+        userId: admin.id,
+        type: `new_${role}`,
+        title: `New ${label} Joined`,
+        message: `${displayName} has joined the platform as a ${label.toLowerCase()}.`,
+        link: `/admin/users`,
+        isRead: false,
+      }).catch(() => {});
+    }
+  } catch (err) {
+    console.error(`Failed to notify staff of new ${role}:`, err);
   }
 }
 
@@ -263,6 +292,8 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         tenantId: resolvedTenantId || 1,
         ...(resolvedInvitedBy ? { invitedBy: resolvedInvitedBy } : {}),
       });
+
+      notifyLenderStaffOfNewUser(db, userRole, user).catch(() => {});
 
       await logAudit(db, {
         userId: user.id,
@@ -794,6 +825,8 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
           tenantId: oauthTenantId || 1,
           ...(oauthInvitedById ? { invitedBy: oauthInvitedById } : {}),
         });
+
+        notifyLenderStaffOfNewUser(db, assignedRole || 'broker', user).catch(() => {});
 
         if ((assignedRole || 'broker') === 'broker') {
           const link = `${process.env.BASE_URL || `${req.protocol}://${req.get('host')}`}/broker-portal`;
