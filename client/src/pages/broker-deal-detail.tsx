@@ -429,19 +429,23 @@ export default function BrokerDealDetail() {
         contentType: file.type,
       });
       const urlData = await urlRes.json();
+      let objectPath = urlData.objectPath;
       if (urlData.uploadURL) {
-        let uploadRes: Response;
         if (urlData.useDirectUpload || urlData.uploadURL.startsWith('/api/')) {
           const formData = new FormData();
           formData.append('file', file);
-          uploadRes = await fetch(urlData.uploadURL, { method: 'POST', body: formData, credentials: 'include' });
+          const uploadRes = await fetch(urlData.uploadURL, { method: 'POST', body: formData, credentials: 'include' });
+          if (!uploadRes.ok) throw new Error('File upload failed');
+          const directData = await uploadRes.json();
+          if (!directData?.objectPath) throw new Error('Direct upload response missing objectPath');
+          objectPath = directData.objectPath;
         } else {
-          uploadRes = await fetch(urlData.uploadURL, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });
+          const uploadRes = await fetch(urlData.uploadURL, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });
+          if (!uploadRes.ok) throw new Error('File upload failed');
         }
-        if (!uploadRes.ok) throw new Error('File upload failed');
       }
       await apiRequest("POST", `/api/deals/${dealId}/deal-documents/${docId}/upload-complete`, {
-        objectPath: urlData.objectPath,
+        objectPath,
         fileName: file.name,
         fileSize: file.size,
         mimeType: file.type,
