@@ -252,7 +252,7 @@ function UserDetailPanel({ userId, onClose }: { userId: number; onClose: () => v
   const user = data?.user;
   const deals = data?.deals || [];
   const programs = data?.programs || [];
-  const settings: BrokerSettings = (user?.brokerSettings as BrokerSettings) || {};
+  const settings: BrokerSettings = (user?.brokerSettings as BrokerSettings) || { brokerPointsEnabled: true };
 
   const siteBaseUrl = import.meta.env.VITE_BASE_URL || window.location.origin;
   const inviteLink = generatedLink || (user?.inviteToken ? `${siteBaseUrl}/join/personal/${user.inviteToken}` : null);

@@ -2,6 +2,17 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 
+interface BrokerSettings {
+  yspEnabled?: boolean;
+  yspMaxPercent?: number;
+  brokerPointsEnabled?: boolean;
+  brokerPointsMaxPercent?: number;
+  programOverrides?: Record<string, {
+    yspMaxPercent?: number;
+    brokerPointsMaxPercent?: number;
+  }>;
+}
+
 interface User {
   id: number;
   email: string;
@@ -11,6 +22,7 @@ interface User {
   role?: string;
   userType?: string;
   onboardingCompleted?: boolean;
+  brokerSettings?: BrokerSettings | null;
 }
 
 interface AuthContextType {

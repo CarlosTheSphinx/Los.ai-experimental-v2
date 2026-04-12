@@ -1267,6 +1267,7 @@ export default function QuotesUnified() {
                   formData={dscrFormData}
                   onReset={handleReset}
                   programId={selectedProgramId}
+                  brokerSettings={user?.brokerSettings}
                 />
               )}
               {loanProductType === "rtl" && rtlResult && (
@@ -1275,6 +1276,7 @@ export default function QuotesUnified() {
                   formData={rtlFormData}
                   onReset={handleReset}
                   programId={selectedProgramId}
+                  brokerSettings={user?.brokerSettings}
                 />
               )}
               <PricingDisclaimer />

@@ -891,7 +891,8 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
           role: user.role,
           userType: user.role,
           onboardingCompleted: user.onboardingCompleted,
-          createdAt: user.createdAt
+          createdAt: user.createdAt,
+          brokerSettings: user.role === 'broker' ? (user.brokerSettings || null) : undefined,
         }
       });
     } catch (error) {

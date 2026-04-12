@@ -595,6 +595,7 @@ export default function Home() {
                   onEdit={handleRTLEdit}
                   programId={selectedQuoteProgramId}
                   programConfig={allActivePrograms.find(p => p.id === selectedQuoteProgramId) || null}
+                  brokerSettings={user?.brokerSettings}
                 />
               ) : (
                 <RTLLoanForm 
@@ -625,6 +626,7 @@ export default function Home() {
                 onReset={handleReset}
                 programId={selectedQuoteProgramId}
                 programConfig={allActivePrograms.find(p => p.id === selectedQuoteProgramId) || null}
+                brokerSettings={user?.brokerSettings}
               />
             </motion.div>
           )}

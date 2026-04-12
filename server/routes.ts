@@ -1252,6 +1252,22 @@ export async function registerRoutes(
   app.post(api.quotes.save.path, authenticateUser, async (req: AuthRequest, res) => {
     try {
       const quoteData = api.quotes.save.input.parse(req.body);
+
+      // Enforce per-broker max broker points
+      if (req.user) {
+        const brokerUser = await storage.getUserById(req.user.id);
+        if (brokerUser && brokerUser.role === 'broker' && quoteData.brokerPointsCharged > 0) {
+          const bs = (brokerUser.brokerSettings as any) || {};
+          const programKey = quoteData.programId ? String(quoteData.programId) : null;
+          const override = programKey ? bs.programOverrides?.[programKey] : undefined;
+          const brokerMax = override?.brokerPointsMaxPercent ?? bs.brokerPointsMaxPercent;
+          if (brokerMax != null && quoteData.brokerPointsCharged > brokerMax) {
+            return res.status(400).json({
+              error: `Broker points charged (${quoteData.brokerPointsCharged}) exceeds your maximum allowed (${brokerMax})`,
+            });
+          }
+        }
+      }
       
       // Detect if this is an RTL quote
       const isRTLQuote = quoteData.loanData?.asIsValue || quoteData.loanData?.arv || quoteData.loanData?.rehabBudget !== undefined;

@@ -502,8 +502,6 @@ export default function BrokerDealDetail() {
   const brokerPoints = deal?.brokerOriginationPoints;
   const ysp = deal?.ysp;
   const loanAmount = deal?.loanAmount || deal?.loanData?.loanAmount;
-  const brokerFee = brokerPoints && loanAmount ? (Number(brokerPoints) / 100 * Number(loanAmount)) : null;
-  const yspFee = ysp && loanAmount ? (Number(ysp) / 100 * Number(loanAmount)) : null;
 
   return (
     <div className="max-w-5xl mx-auto py-4 sm:py-6 px-3 sm:px-4 space-y-4 sm:space-y-5">
