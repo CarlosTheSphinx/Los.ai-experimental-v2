@@ -578,6 +578,17 @@ export default function BrokerDealDetail() {
                   {loanFields.map(f => <Field key={f.key} label={f.label} value={f.value} />)}
                 </div>
               </div>
+              {calculatedFields.length > 0 && (
+                <div className="border-t pt-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Calculator className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-[13px] sm:text-[14px] font-bold uppercase tracking-wider text-muted-foreground" data-testid="header-calculated-fields">Calculated Fields</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+                    {calculatedFields.map(f => <Field key={f.key} label={f.label} value={f.value} />)}
+                  </div>
+                </div>
+              )}
               <div className="border-t pt-4">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
