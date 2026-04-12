@@ -498,7 +498,10 @@ export default function TabOverview({
   ]);
 
   const buildPropertyFields = (): { label: string; value: string; key: string; tooltip?: string }[] => {
-    const baseFields: { label: string; value: string; key: string; tooltip?: string }[] = [];
+    const propAddr = [primaryProp?.address, primaryProp?.city, primaryProp?.state, primaryProp?.zip].filter(Boolean).join(", ") || deal.propertyAddress || "—";
+    const baseFields: { label: string; value: string; key: string; tooltip?: string }[] = [
+      { key: 'address', label: "Property Address", value: propAddr },
+    ];
 
     if (hasProgram) {
       const programPropertyFields = getFieldsByGroup('property_details');
