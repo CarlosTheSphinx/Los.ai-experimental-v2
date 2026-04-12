@@ -159,7 +159,7 @@ const BROKER_DEFAULT_STEPS: OnboardingStep[] = [
         { id: "submit-deal", icon: "Send", title: "Submit a Deal", description: "Fill out a quick form with your deal details. Our AI instantly analyzes it and matches it to our lending programs.", enabled: true },
         { id: "track-status", icon: "Eye", title: "Track Deal Status", description: "See real-time updates on every deal — from submission through approval, with AI analysis results included.", enabled: true },
         { id: "upload-docs", icon: "Upload", title: "Upload Documents", description: "Securely upload required documents for each deal. We'll tell you exactly what's needed based on the deal type.", enabled: true },
-        { id: "commissions", icon: "BadgeDollarSign", title: "View Commissions", description: "Track your earnings, broker points, and YSP for every closed deal.", enabled: true },
+        { id: "commissions", icon: "BadgeDollarSign", title: "View Commissions", description: "Track your earnings and broker points for every closed deal.", enabled: true },
         { id: "messaging", icon: "MessageSquare", title: "Message Our Team", description: "Communicate directly with loan officers and processors through your portal inbox.", enabled: true },
       ],
     },

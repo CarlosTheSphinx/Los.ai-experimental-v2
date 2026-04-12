@@ -359,7 +359,7 @@ export default function BrokerDealDetail() {
     ];
 
     if (hasProgram) {
-      const lockedKeys = new Set(['ltv', 'ysp', 'lenderOriginationPoints', 'brokerOriginationPoints', 'interestRate', 'brokerName', 'holdbackAmount', 'loanTermMonths', 'term', 'targetCloseDate', 'originationPoints']);
+      const lockedKeys = new Set(['ltv', 'dscr', 'ysp', 'lenderOriginationPoints', 'brokerOriginationPoints', 'interestRate', 'brokerName', 'holdbackAmount', 'loanTermMonths', 'term', 'targetCloseDate', 'originationPoints']);
       const contactKeys = new Set(['firstName', 'lastName', 'email', 'phone', 'address']);
       getFieldsByGroup('loan_details')
         .filter((f: any) => !lockedKeys.has(f.fieldKey) && !contactKeys.has(f.fieldKey) && f.fieldKey !== 'loanAmount')
@@ -376,7 +376,6 @@ export default function BrokerDealDetail() {
     const interestRate = deal?.interestRate;
     const lenderPts = deal?.lenderOriginationPoints ?? appData.originationPoints;
     const brokerPts = deal?.brokerOriginationPoints ?? appData.brokerPointsCharged;
-    const ysp = deal?.ysp;
 
     const fields: { key: string; label: string; value: string }[] = [];
 
@@ -414,9 +413,6 @@ export default function BrokerDealDetail() {
 
     if (brokerPts != null && loan > 0) {
       fields.push({ key: 'brokerFee', label: "Broker Fee ($)", value: fmt(Number(brokerPts) / 100 * loan) });
-    }
-    if (ysp != null && loan > 0) {
-      fields.push({ key: 'yspFee', label: "YSP Fee ($)", value: fmt(Number(ysp) / 100 * loan) });
     }
 
     return fields;
@@ -498,8 +494,8 @@ export default function BrokerDealDetail() {
   const pendingDocs = documents.filter((d: any) => d.status === 'pending' || d.status === 'rejected');
 
   const brokerPoints = deal?.brokerOriginationPoints;
-  const ysp = deal?.ysp;
   const loanAmount = deal?.loanAmount || deal?.loanData?.loanAmount;
+  const brokerFee = brokerPoints && loanAmount ? (Number(brokerPoints) / 100 * Number(loanAmount)) : null;
 
   return (
     <div className="max-w-5xl mx-auto py-4 sm:py-6 px-3 sm:px-4 space-y-4 sm:space-y-5">
@@ -548,6 +544,7 @@ export default function BrokerDealDetail() {
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-4">
         <Card className="overflow-hidden" data-testid="card-loan-overview">
           <div className="w-full flex items-center justify-between px-3 sm:px-5 py-3" data-testid="header-overview">
             <CardTitle className="text-[16px] sm:text-[18px] flex items-center gap-2">
@@ -657,6 +654,31 @@ export default function BrokerDealDetail() {
             </CardContent>
           </Card>
         )}
+
+        {brokerPoints != null && (
+            <Card className="overflow-hidden" data-testid="card-commission">
+              <div className="w-full flex items-center justify-between px-3 sm:px-5 py-3">
+                <CardTitle className="text-[16px] sm:text-[18px] flex items-center gap-2">
+                  <Percent className="h-4 w-4 text-muted-foreground" />
+                  Commission Summary
+                </CardTitle>
+              </div>
+              <CardContent className="pt-0 pb-4 sm:pb-5 px-3 sm:px-6">
+                <div className="border-t mb-4" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                  <Field label="Broker Points" value={`${Number(brokerPoints).toFixed(2)}%`} />
+                  {brokerFee != null && <Field label="Broker Fee" value={fmt(brokerFee)} />}
+                  {brokerFee != null && (
+                    <Field
+                      label="Total Compensation"
+                      value={fmt(brokerFee)}
+                    />
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
 
         <div className="space-y-4">
           <Card className="overflow-hidden" data-testid="card-broker-checklist">
@@ -824,40 +846,6 @@ export default function BrokerDealDetail() {
               )}
             </CardContent>
           </Card>
-
-          {(brokerPoints != null || ysp != null) && (
-            <Card className="overflow-hidden" data-testid="card-commission">
-              <div className="w-full flex items-center justify-between px-3 sm:px-5 py-3">
-                <CardTitle className="text-[16px] sm:text-[18px] flex items-center gap-2">
-                  <Percent className="h-4 w-4 text-muted-foreground" />
-                  Commission Summary
-                </CardTitle>
-              </div>
-              <CardContent className="pt-0 pb-4 sm:pb-5 px-3 sm:px-6">
-                <div className="border-t mb-4" />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
-                  {brokerPoints != null && (
-                    <>
-                      <Field label="Broker Points" value={`${Number(brokerPoints).toFixed(2)}%`} />
-                      {brokerFee != null && <Field label="Broker Fee" value={fmt(brokerFee)} />}
-                    </>
-                  )}
-                  {ysp != null && (
-                    <>
-                      <Field label="YSP" value={`${Number(ysp).toFixed(2)}%`} />
-                      {yspFee != null && <Field label="YSP Amount" value={fmt(yspFee)} />}
-                    </>
-                  )}
-                  {brokerPoints != null && ysp != null && (
-                    <Field
-                      label="Total Compensation"
-                      value={fmt((brokerFee || 0) + (yspFee || 0))}
-                    />
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </div>
       </div>
     </div>
