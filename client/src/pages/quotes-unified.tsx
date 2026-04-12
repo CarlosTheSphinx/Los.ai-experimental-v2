@@ -7,7 +7,7 @@ import {
   Search,
   Send,
   Trash2,
-  Edit,
+  Copy,
   Calculator,
   MessageSquare,
   Eye,
@@ -596,7 +596,7 @@ export default function QuotesUnified() {
   };
 
 
-  const handleEditQuote = (quote: SavedQuote) => {
+  const handleDuplicateQuote = (quote: SavedQuote) => {
     const loanData = quote.loanData as Record<string, any>;
     const isRTLQuote = !!(loanData?.asIsValue || loanData?.arv || (loanData?.rehabBudget !== undefined && loanData?.rehabBudget !== null));
 
@@ -620,8 +620,8 @@ export default function QuotesUnified() {
     setActiveView("create");
 
     toast({
-      title: "Editing Quote",
-      description: `${quote.loanNumber || 'Quote'} loaded — make changes and resubmit.`,
+      title: "Quote Duplicated",
+      description: `${quote.loanNumber || 'Quote'} loaded — adjust fields and reprice.`,
     });
   };
 
@@ -1070,8 +1070,8 @@ export default function QuotesUnified() {
                             <div className="flex items-center gap-2 pt-3 border-t border-border/50" onClick={(e) => e.stopPropagation()}>
                               {!isBorrower && (
                                 <>
-                                  <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleEditQuote(quote); }} className="h-8 rounded-full text-[14px] gap-1.5 px-3" data-testid={`button-edit-${quote.id}`}>
-                                    <Edit className="h-3.5 w-3.5" /> Edit
+                                  <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleDuplicateQuote(quote); }} className="h-8 rounded-full text-[14px] gap-1.5 px-3" data-testid={`button-duplicate-${quote.id}`}>
+                                    <Copy className="h-3.5 w-3.5" /> Duplicate
                                   </Button>
                                   <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); navigate(`/messages?dealId=${quote.id}&new=true`); }} className="h-8 rounded-full text-[14px] gap-1.5 px-3" data-testid={`button-message-${quote.id}`}>
                                     <MessageSquare className="h-3.5 w-3.5" /> Message
@@ -1125,7 +1125,7 @@ export default function QuotesUnified() {
                   isBorrower={isBorrower}
                   latestEnvelope={envelopeMap.get(quote.id) || null}
                   internalDoc={internalDocMap.get(quote.id) || null}
-                  onEdit={() => handleEditQuote(quote)}
+                  onEdit={() => handleDuplicateQuote(quote)}
                   onDelete={() => deleteMutation.mutate(quote.id)}
                   onSendTermSheet={() => navigate(`/quotes/${quote.id}/documents`)}
                   onResendTermSheet={() => handleOpenResendDialog(quote, internalDocMap.get(quote.id)?.documentId)}
@@ -1543,10 +1543,10 @@ function QuoteCard({
                   size="sm"
                   onClick={onEdit}
                   className="h-8 rounded-full text-[14px] gap-1.5 px-3"
-                  data-testid={`button-edit-quote-${quote.id}`}
+                  data-testid={`button-duplicate-quote-${quote.id}`}
                 >
-                  <Edit className="h-3.5 w-3.5" />
-                  Edit
+                  <Copy className="h-3.5 w-3.5" />
+                  Duplicate
                 </Button>
                 <Button
                   variant="outline"
