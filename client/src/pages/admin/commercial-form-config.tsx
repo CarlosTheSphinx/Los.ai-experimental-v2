@@ -994,17 +994,15 @@ export default function CommercialFormConfigPage() {
                                 </Select>
                               </div>
                               <div className="flex justify-center">
-                                {f.isCustom ? (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 w-6 p-0 text-muted-foreground hover:text-red-400"
-                                    onClick={() => { if (confirm("Remove this custom field?")) deleteFieldMut.mutate(field.id); }}
-                                    data-testid={`field-delete-${field.fieldKey}`}
-                                  >
-                                    <Trash2 size={12} />
-                                  </Button>
-                                ) : null}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 text-muted-foreground hover:text-red-400"
+                                  onClick={() => { if (confirm("Remove this field?")) deleteFieldMut.mutate(field.id); }}
+                                  data-testid={`field-delete-${field.fieldKey}`}
+                                >
+                                  <Trash2 size={12} />
+                                </Button>
                               </div>
                             </div>
                           );

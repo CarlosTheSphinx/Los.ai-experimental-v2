@@ -5,7 +5,7 @@ import {
   funds, intakeDeals, intakeDealDocuments, intakeDocumentRules,
   intakeAiAnalysis, intakeDealStatusHistory, intakeDealFundSubmissions,
   insertFundSchema, insertIntakeDealSchema, insertIntakeDocumentRuleSchema,
-  commercialFormConfig,
+  commercialFormConfig, tenants,
   fundDocuments, fundKnowledgeEntries,
   intakeDealTasks,
   projects, users, notifications,
@@ -1258,46 +1258,47 @@ const DEFAULT_FORM_FIELDS = [
   { fieldKey: "occupancyPct", fieldLabel: "Occupancy %", section: "Property Metrics", fieldType: "number", isRequired: false, sortOrder: 22 },
 ];
 
+export async function seedCommercialFormConfig(): Promise<void> {
+  try {
+    const allTenants = await db.select({ id: tenants.id }).from(tenants);
+    const tenantIds: (number | null)[] = allTenants.map(t => t.id);
+    tenantIds.push(null);
+
+    for (const tenantId of tenantIds) {
+      const conditions = tenantId !== null
+        ? [eq(commercialFormConfig.tenantId, tenantId)]
+        : [];
+      const existing = await db.select({ id: commercialFormConfig.id })
+        .from(commercialFormConfig)
+        .where(conditions.length ? and(...conditions) : undefined)
+        .limit(1);
+
+      if (existing.length === 0) {
+        for (const field of DEFAULT_FORM_FIELDS) {
+          await db.insert(commercialFormConfig).values({
+            ...field,
+            tenantId: tenantId ?? null,
+            isVisible: true,
+            isRequired: field.isRequired,
+            options: field.options || null,
+          } as any);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[seedCommercialFormConfig] Error:', err);
+  }
+}
+
 router.get("/api/commercial/form-config", async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantId(req);
     const conditions = [];
     if (tenantId) conditions.push(eq(commercialFormConfig.tenantId, tenantId));
 
-    let fields = await db.select().from(commercialFormConfig)
+    const fields = await db.select().from(commercialFormConfig)
       .where(conditions.length ? and(...conditions) : undefined)
       .orderBy(commercialFormConfig.sortOrder);
-
-    if (fields.length === 0) {
-      const inserted = [];
-      for (const field of DEFAULT_FORM_FIELDS) {
-        const [row] = await db.insert(commercialFormConfig).values({
-          ...field,
-          tenantId,
-          isVisible: true,
-          isRequired: field.isRequired,
-          options: field.options || null,
-        } as any).returning();
-        inserted.push(row);
-      }
-      fields = inserted;
-    } else {
-      const existingKeys = new Set(fields.map(f => f.fieldKey));
-      const missingFields = DEFAULT_FORM_FIELDS.filter(f => !existingKeys.has(f.fieldKey));
-      if (missingFields.length > 0) {
-        for (const field of missingFields) {
-          const [row] = await db.insert(commercialFormConfig).values({
-            ...field,
-            tenantId,
-            isVisible: true,
-            isRequired: field.isRequired,
-            options: field.options || null,
-          } as any).returning();
-          fields.push(row);
-        }
-        fields.sort((a, b) => a.sortOrder - b.sortOrder);
-      }
-    }
 
     res.json(fields);
   } catch (error: any) {
@@ -1457,14 +1458,14 @@ router.delete("/api/commercial/form-config/:id", async (req: Request, res: Respo
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid field id" });
 
-    const conditions = [eq(commercialFormConfig.id, id), eq(commercialFormConfig.isCustom, true)];
+    const conditions = [eq(commercialFormConfig.id, id)];
     if (tenantId) conditions.push(eq(commercialFormConfig.tenantId, tenantId));
 
     const [deleted] = await db.delete(commercialFormConfig)
       .where(and(...conditions))
       .returning();
 
-    if (!deleted) return res.status(404).json({ error: "Field not found or cannot be deleted (system fields cannot be removed)" });
+    if (!deleted) return res.status(404).json({ error: "Field not found" });
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

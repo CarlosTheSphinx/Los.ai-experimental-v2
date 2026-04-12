@@ -2649,17 +2649,15 @@ function QuoteFormBuilderStep({
               <Settings2 className="h-3.5 w-3.5" />
             </Button>
 
-            {!field.isDefault && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => removeField(field.fieldKey)}
-                data-testid={`button-remove-field-${field.fieldKey}`}
-              >
-                <X className="h-3.5 w-3.5 text-muted-foreground" />
-              </Button>
-            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => removeField(field.fieldKey)}
+              data-testid={`button-remove-field-${field.fieldKey}`}
+            >
+              <X className="h-3.5 w-3.5 text-muted-foreground" />
+            </Button>
           </div>
         </div>
 

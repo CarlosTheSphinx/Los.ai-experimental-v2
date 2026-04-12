@@ -7,6 +7,7 @@ import { apiLimiter, authLimiter, pricingLimiter, uploadLimiter } from "./middle
 
 import { validateConfig } from "./utils/validateConfig";
 import { seedDefaultAgentConfigs } from "./routes/agents";
+import { seedCommercialFormConfig } from "./routes/commercialIntake";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { seedSuperAdmins } from "./seedAdmins";
@@ -171,6 +172,13 @@ app.use((req, res, next) => {
     await seedDefaultAgentConfigs(db);
   } catch (err) {
     console.error('⚠️ Failed to auto-seed agent configs:', err);
+  }
+
+  // Seed commercial form config defaults for tenants that don't have any fields yet
+  try {
+    await seedCommercialFormConfig();
+  } catch (err) {
+    console.error('⚠️ Failed to seed commercial form config:', err);
   }
 
   // Register inquiry form routes and seed templates
