@@ -856,6 +856,8 @@ function UsersTab() {
 
   const { data, isLoading, refetch } = useQuery<{ users: AdminUser[] }>({
     queryKey: ["/api/admin/users"],
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: true,
   });
 
   const getDefaultDraft = (name: string, email: string) => ({
@@ -1557,6 +1559,8 @@ function TeamTab() {
 
   const { data, isLoading, refetch } = useQuery<{ users: AdminUser[] }>({
     queryKey: ["/api/admin/users"],
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: true,
   });
 
   const inviteMemberMutation = useMutation({
