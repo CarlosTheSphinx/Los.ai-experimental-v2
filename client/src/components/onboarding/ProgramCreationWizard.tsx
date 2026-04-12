@@ -2359,6 +2359,7 @@ function QuoteFormBuilderStep({
   const [newFieldType, setNewFieldType] = useState<QuoteFormField['fieldType']>('text');
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [configuringIndex, setConfiguringIndex] = useState<string | null>(null);
+  const [addingOptionFor, setAddingOptionFor] = useState<Record<string, string>>({});
 
   const contactFields = quoteFormFields.filter((f) => CONTACT_FIELD_KEYS.has(f.fieldKey));
   const programFieldsUnsorted = quoteFormFields.filter((f) => !CONTACT_FIELD_KEYS.has(f.fieldKey));
@@ -2676,10 +2677,19 @@ function QuoteFormBuilderStep({
                 <Label className="text-xs">Field Type</Label>
                 <Select
                   value={field.fieldType}
-                  onValueChange={(v) => updateField(field.fieldKey, {
-                    fieldType: v as QuoteFormField['fieldType'],
-                    options: v === 'select' ? (field.options?.length ? field.options : ['Option 1']) : undefined,
-                  })}
+                  onValueChange={(v) => {
+                    updateField(field.fieldKey, {
+                      fieldType: v as QuoteFormField['fieldType'],
+                      options: v === 'select' ? (field.options?.length ? field.options : ['Option 1']) : undefined,
+                    });
+                    if (v !== 'select') {
+                      setAddingOptionFor((prev) => {
+                        const next = { ...prev };
+                        delete next[field.fieldKey];
+                        return next;
+                      });
+                    }
+                  }}
                 >
                   <SelectTrigger data-testid={`select-field-type-${field.fieldKey}`}>
                     <SelectValue />
@@ -2694,15 +2704,98 @@ function QuoteFormBuilderStep({
             </div>
 
             {field.fieldType === 'select' && (
-              <div className="space-y-1">
-                <Label className="text-xs">Dropdown Options (one per line)</Label>
-                <Textarea
-                  value={(field.options || []).join('\n')}
-                  onChange={(e) => updateField(field.fieldKey, { options: e.target.value.split('\n').filter(Boolean) })}
-                  rows={3}
-                  placeholder="Option 1&#10;Option 2&#10;Option 3"
-                  data-testid={`textarea-options-${field.fieldKey}`}
-                />
+              <div className="space-y-2">
+                <Label className="text-xs">Dropdown Options</Label>
+                <div className="flex flex-wrap gap-1.5" data-testid={`options-list-${field.fieldKey}`}>
+                  {(field.options || []).map((opt, idx) => (
+                    <Badge
+                      key={`${opt}-${idx}`}
+                      variant="secondary"
+                      className="flex items-center gap-1 px-2 py-1 text-xs"
+                      data-testid={`option-chip-${field.fieldKey}-${idx}`}
+                    >
+                      {opt}
+                      <button
+                        type="button"
+                        className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
+                        onClick={() => updateField(field.fieldKey, { options: (field.options || []).filter((_, i) => i !== idx) })}
+                        data-testid={`btn-remove-option-${field.fieldKey}-${idx}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+                {addingOptionFor[field.fieldKey] !== undefined ? (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      autoFocus
+                      value={addingOptionFor[field.fieldKey]}
+                      onChange={(e) => setAddingOptionFor((prev) => ({ ...prev, [field.fieldKey]: e.target.value }))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const val = addingOptionFor[field.fieldKey].trim();
+                          if (val) {
+                            updateField(field.fieldKey, { options: [...(field.options || []), val] });
+                            setAddingOptionFor((prev) => ({ ...prev, [field.fieldKey]: '' }));
+                          }
+                        } else if (e.key === 'Escape') {
+                          setAddingOptionFor((prev) => {
+                            const next = { ...prev };
+                            delete next[field.fieldKey];
+                            return next;
+                          });
+                        }
+                      }}
+                      placeholder="Type option text…"
+                      className="h-8 text-xs"
+                      data-testid={`input-new-option-${field.fieldKey}`}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-xs"
+                      onClick={() => {
+                        const val = addingOptionFor[field.fieldKey].trim();
+                        if (val) {
+                          updateField(field.fieldKey, { options: [...(field.options || []), val] });
+                          setAddingOptionFor((prev) => ({ ...prev, [field.fieldKey]: '' }));
+                        }
+                      }}
+                      data-testid={`btn-confirm-option-${field.fieldKey}`}
+                    >
+                      Add
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 text-xs"
+                      onClick={() => setAddingOptionFor((prev) => {
+                        const next = { ...prev };
+                        delete next[field.fieldKey];
+                        return next;
+                      })}
+                      data-testid={`btn-cancel-option-${field.fieldKey}`}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs"
+                    onClick={() => setAddingOptionFor((prev) => ({ ...prev, [field.fieldKey]: '' }))}
+                    data-testid={`btn-add-option-${field.fieldKey}`}
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Add Option
+                  </Button>
+                )}
               </div>
             )}
 
