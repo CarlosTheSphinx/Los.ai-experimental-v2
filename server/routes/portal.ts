@@ -518,7 +518,11 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
       const [doc] = await db.select().from(dealDocuments).where(eq(dealDocuments.id, file.documentId)).limit(1);
       if (!doc || doc.dealId !== project.id) return res.status(403).json({ error: 'Access denied' });
 
-      const objectFile = await objectStorageService.getObjectEntityFile(file.filePath);
+      let filePath = file.filePath;
+      if (!filePath.startsWith('/objects/') && filePath.startsWith('https://')) {
+        filePath = objectStorageService.normalizeObjectEntityPath(filePath);
+      }
+      const objectFile = await objectStorageService.getObjectEntityFile(filePath);
       res.set('X-Frame-Options', 'SAMEORIGIN');
       res.removeHeader('Content-Security-Policy');
       const safeFileName = file.fileName ? file.fileName.replace(/[^\x20-\x7E]/g, '_').replace(/\\/g, '_').replace(/"/g, "'") : null;
@@ -533,7 +537,7 @@ export function registerPortalRoutes(app: Express, deps: RouteDeps) {
       await objectStorageService.downloadObject(objectFile, res);
     } catch (error: any) {
       if (error?.name === 'ObjectNotFoundError') {
-        console.error(`Portal file not found in storage: fileId=${req.params.fileId}`);
+        console.error(`Portal file not found in storage: fileId=${req.params.fileId}, filePath=${file?.filePath}`);
         return res.status(404).json({ error: 'File not found in storage. The file may not have been uploaded successfully.' });
       }
       console.error('Portal file download error:', error);

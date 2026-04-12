@@ -5143,7 +5143,12 @@ export async function registerRoutes(
         }
       }
 
-      const objectFile = await objectStorageService.getObjectEntityFile(doc.filePath);
+      let filePath = doc.filePath;
+      if (!filePath.startsWith('/objects/') && filePath.startsWith('https://')) {
+        filePath = objectStorageService.normalizeObjectEntityPath(filePath);
+      }
+
+      const objectFile = await objectStorageService.getObjectEntityFile(filePath);
 
       res.set('X-Frame-Options', 'SAMEORIGIN');
       res.removeHeader('Content-Security-Policy');
@@ -5162,7 +5167,7 @@ export async function registerRoutes(
       await objectStorageService.downloadObject(objectFile, res);
     } catch (error: any) {
       if (error?.name === 'ObjectNotFoundError') {
-        console.error(`Document file not found in storage: docId=${req.params.docId}, projectId=${req.params.id}`);
+        console.error(`Document file not found in storage: docId=${req.params.docId}, projectId=${req.params.id}, filePath=${doc?.filePath}`);
         return res.status(404).json({ error: 'Document file not found in storage. The file may not have been uploaded successfully.' });
       }
       console.error('Document download error:', error);
@@ -10733,8 +10738,12 @@ export async function registerRoutes(
         return res.status(404).json({ error: 'Document file not found' });
       }
       
-      // Get the file and stream it
-      const objectFile = await objectStorageService.getObjectEntityFile(doc.filePath);
+      let filePath = doc.filePath;
+      if (!filePath.startsWith('/objects/') && filePath.startsWith('https://')) {
+        filePath = objectStorageService.normalizeObjectEntityPath(filePath);
+      }
+
+      const objectFile = await objectStorageService.getObjectEntityFile(filePath);
       
       res.set('X-Frame-Options', 'SAMEORIGIN');
       res.removeHeader('Content-Security-Policy');
@@ -10753,7 +10762,7 @@ export async function registerRoutes(
       await objectStorageService.downloadObject(objectFile, res);
     } catch (error: any) {
       if (error?.name === 'ObjectNotFoundError') {
-        console.error(`Admin document file not found in storage: docId=${req.params.docId}`);
+        console.error(`Admin document file not found in storage: docId=${req.params.docId}, filePath=${doc?.filePath}`);
         return res.status(404).json({ error: 'Document file not found in storage. The file may not have been uploaded successfully.' });
       }
       console.error('Admin document download error:', error);
@@ -10769,7 +10778,11 @@ export async function registerRoutes(
       if (!file || !file.filePath) {
         return res.status(404).json({ error: 'File not found' });
       }
-      const objectFile = await objectStorageService.getObjectEntityFile(file.filePath);
+      let filePath = file.filePath;
+      if (!filePath.startsWith('/objects/') && filePath.startsWith('https://')) {
+        filePath = objectStorageService.normalizeObjectEntityPath(filePath);
+      }
+      const objectFile = await objectStorageService.getObjectEntityFile(filePath);
       res.set('X-Frame-Options', 'SAMEORIGIN');
       res.removeHeader('Content-Security-Policy');
       const safeFileName = file.fileName ? file.fileName.replace(/[^\x20-\x7E]/g, '_').replace(/\\/g, '_').replace(/"/g, "'") : null;
@@ -10784,7 +10797,7 @@ export async function registerRoutes(
       await objectStorageService.downloadObject(objectFile, res);
     } catch (error: any) {
       if (error?.name === 'ObjectNotFoundError') {
-        console.error(`Admin file not found in storage: fileId=${req.params.fileId}`);
+        console.error(`Admin file not found in storage: fileId=${req.params.fileId}, filePath=${file?.filePath}`);
         return res.status(404).json({ error: 'File not found in storage. The file may not have been uploaded successfully.' });
       }
       console.error('Admin file download error:', error);
