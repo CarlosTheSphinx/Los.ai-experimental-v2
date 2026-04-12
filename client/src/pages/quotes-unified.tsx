@@ -1067,28 +1067,29 @@ export default function QuotesUnified() {
                                 </div>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 pt-3 border-t border-border/50">
+                            <div className="flex items-center gap-2 pt-3 border-t border-border/50" onClick={(e) => e.stopPropagation()}>
                               {!isBorrower && (
                                 <>
-                                  <Button variant="outline" size="sm" onClick={() => handleEditQuote(quote)} className="h-8 rounded-full text-[14px] gap-1.5 px-3" data-testid={`button-edit-${quote.id}`}>
+                                  <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleEditQuote(quote); }} className="h-8 rounded-full text-[14px] gap-1.5 px-3" data-testid={`button-edit-${quote.id}`}>
                                     <Edit className="h-3.5 w-3.5" /> Edit
                                   </Button>
-                                  <Button variant="outline" size="sm" onClick={() => navigate(`/messages?dealId=${quote.id}&new=true`)} className="h-8 rounded-full text-[14px] gap-1.5 px-3" data-testid={`button-message-${quote.id}`}>
+                                  <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); navigate(`/messages?dealId=${quote.id}&new=true`); }} className="h-8 rounded-full text-[14px] gap-1.5 px-3" data-testid={`button-message-${quote.id}`}>
                                     <MessageSquare className="h-3.5 w-3.5" /> Message
                                   </Button>
                                   {!hasAnyTermSheet && (
-                                    <Button size="sm" onClick={() => navigate(`/quotes/${quote.id}/documents`)} className="h-8 rounded-full text-[14px] gap-1.5 px-3 shadow-md" data-testid={`button-send-${quote.id}`}>
+                                    <Button size="sm" onClick={(e) => { e.stopPropagation(); navigate(`/quotes/${quote.id}/documents`); }} className="h-8 rounded-full text-[14px] gap-1.5 px-3 shadow-md" data-testid={`button-send-${quote.id}`}>
                                       <Send className="h-3.5 w-3.5" /> Send Term Sheet
                                     </Button>
                                   )}
                                   {hasAnyTermSheet && !(internalSignerStatus === 'signed' || intDoc?.status === 'completed') && !(envelopeStatus === 'completed') && (
-                                    <Button variant="outline" size="sm" onClick={() => handleOpenResendDialog(quote, intDoc?.documentId)} className="h-8 rounded-full text-[14px] gap-1.5 px-3" data-testid={`button-resend-${quote.id}`}>
+                                    <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleOpenResendDialog(quote, intDoc?.documentId); }} className="h-8 rounded-full text-[14px] gap-1.5 px-3" data-testid={`button-resend-${quote.id}`}>
                                       <Send className="h-3.5 w-3.5" /> Resend
                                     </Button>
                                   )}
                                 </>
                               )}
-                              <Button variant="outline" size="sm" onClick={async () => {
+                              <Button variant="outline" size="sm" onClick={async (e) => {
+                                e.stopPropagation();
                                 try {
                                   const res = await fetch(`/api/quotes/${quote.id}/pdf`, { credentials: 'include' });
                                   if (!res.ok) throw new Error('Failed');
@@ -1102,7 +1103,7 @@ export default function QuotesUnified() {
                                 <Download className="h-3.5 w-3.5" /> PDF
                               </Button>
                               {!isBorrower && (
-                                <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(quote.id)} disabled={deleteMutation.isPending} className="h-8 rounded-full text-[14px] gap-1.5 px-3 text-muted-foreground hover:text-destructive ml-auto" data-testid={`button-delete-${quote.id}`}>
+                                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(quote.id); }} disabled={deleteMutation.isPending} className="h-8 rounded-full text-[14px] gap-1.5 px-3 text-muted-foreground hover:text-destructive ml-auto" data-testid={`button-delete-${quote.id}`}>
                                   <Trash2 className="h-3.5 w-3.5" /> Delete
                                 </Button>
                               )}

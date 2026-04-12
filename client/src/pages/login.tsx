@@ -70,8 +70,12 @@ export default function LoginPage() {
     setIsLoading(true);
     clearError();
     try {
-      await login(data.email, data.password);
-      setLocation('/');
+      const loggedInUser = await login(data.email, data.password);
+      if (loggedInUser?.role === 'broker') {
+        setLocation('/quotes');
+      } else {
+        setLocation('/');
+      }
     } catch (error: any) {
       const msg = error?.message || 'Invalid email or password';
       _persistedLoginError = msg;
