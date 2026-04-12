@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { formatPhoneNumber, isValidPhone } from "@/lib/validation";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
+import { PricingDisclaimer } from "@/components/PricingDisclaimer";
 
 interface ProgramWithPricing {
   id: number;
@@ -258,6 +259,8 @@ export default function BorrowerQuote() {
                 onReset={handleReset}
               />
             )}
+
+            <PricingDisclaimer />
 
             {((loanProductType === "dscr" && dscrResult?.success) ||
               (loanProductType === "rtl" && rtlResult?.eligible)) && (

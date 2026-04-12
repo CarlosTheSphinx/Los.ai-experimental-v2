@@ -44,6 +44,7 @@ import { RTLLoanForm } from "@/components/RTLLoanForm";
 import { DynamicQuoteForm } from "@/components/DynamicQuoteForm";
 import { PricingResult } from "@/components/PricingResult";
 import { RTLPricingResult } from "@/components/RTLPricingResult";
+import { PricingDisclaimer } from "@/components/PricingDisclaimer";
 import { usePricing } from "@/hooks/use-pricing";
 import { type LoanPricingFormData, type PricingResponse, type RTLPricingFormData, type RTLPricingResponse } from "@shared/schema";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -1277,6 +1278,7 @@ export default function QuotesUnified() {
                   programId={selectedProgramId}
                 />
               )}
+              <PricingDisclaimer />
               {scraperDebug && (
                 <div className="border rounded-[10px] overflow-hidden bg-card" data-testid="scraper-debug-panel">
                   <button
