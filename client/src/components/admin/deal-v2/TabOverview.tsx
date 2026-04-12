@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Pencil, Building2, User, Plus, DollarSign, Clock, CalendarDays
+  Pencil, Building2, User, Plus, DollarSign, Clock, CalendarDays, Calculator
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -451,26 +451,20 @@ export default function TabOverview({
     return null;
   };
 
+  const isFieldBlank = (v: any) => v === null || v === undefined || v === "" || v === "—";
+  const ANCHOR_FIELD_KEYS = new Set(['fullName', 'email', 'phone', 'address', 'loanAmount']);
+  const filterBlankFields = <T extends { key: string; value: string }>(fields: T[]) =>
+    fields.filter(f => ANCHOR_FIELD_KEYS.has(f.key) || !isFieldBlank(f.value));
+
   const buildLockedLoanFields = (): { label: string; value: string; tooltip?: string; key: string }[] => {
     const fields: { label: string; value: string; tooltip?: string; key: string }[] = [];
 
     fields.push({ key: 'interestRate', label: "Interest Rate", value: rateDisplay });
-    const storedLtv = deal.ltv ?? appData.ltv ?? deal.loanData?.ltv;
-    fields.push({ key: 'ltv', label: "LTV", value: storedLtv != null ? `${storedLtv}%` : "—" });
-    fields.push({ key: 'dscr', label: "DSCR", value: calculatedDscr ? `${calculatedDscr}x` : "—", tooltip: "Auto-calculated: NOI ÷ Annual Debt Service (30yr amortization)" });
 
     if (isAdmin) {
       fields.push({ key: 'ysp', label: "YSP", value: yspValue != null ? `${yspValue}%` : "—", tooltip: "Yield Spread Premium — visible to lender admins only" });
       fields.push({ key: 'lenderOriginationPoints', label: "Lender Origination Points", value: lenderPts != null ? `${lenderPts}%` : "—" });
       fields.push({ key: 'brokerOriginationPoints', label: "Broker Origination Points", value: brokerPts != null ? `${brokerPts}%` : "—" });
-    } else {
-      fields.push({
-        key: 'originationPoints',
-        label: "Origination Points",
-        value: (lenderPts != null || brokerPts != null)
-          ? `${((Number(lenderPts) || 0) + (Number(brokerPts) || 0)).toFixed(2)}%`
-          : "—"
-      });
     }
 
     fields.push({ key: 'brokerName', label: "Broker Name", value: brokerNameVal || "—" });
@@ -497,11 +491,11 @@ export default function TabOverview({
       }));
   };
 
-  const allLoanFields = [
+  const allLoanFields = filterBlankFields([
     ...buildDynamicLoanFields(),
     ...buildLockedLoanFields(),
     { key: 'targetCloseDate', label: "Estimated Closing Date", value: fmtDate(deal.targetCloseDate) },
-  ];
+  ]);
 
   const buildPropertyFields = (): { label: string; value: string; key: string; tooltip?: string }[] => {
     const baseFields: { label: string; value: string; key: string; tooltip?: string }[] = [];
@@ -525,8 +519,6 @@ export default function TabOverview({
             value: formatFieldValue(val, f.fieldType),
           });
         });
-      const primaryDscrProgram = primaryProp ? calcPropertyDscr(primaryProp) : null;
-      baseFields.push({ key: 'propertyDscr', label: "Property DSCR", value: primaryDscrProgram ? `${primaryDscrProgram}x` : "—", tooltip: "DSCR based on this property's proportional loan share" });
     } else {
       const meta = primaryProp?.metadata || {};
       baseFields.push(
@@ -540,16 +532,9 @@ export default function TabOverview({
         { key: 'annualInsurance', label: "Annual Insurance", value: fmt(primaryProp?.annualInsurance) },
         { key: 'annualHOA', label: "Annual HOA", value: fmt(meta.annualHOA) },
       );
-      const annualHOA = Number(meta.annualHOA) || 0;
-      const noi = primaryProp
-        ? ((primaryProp.monthlyRent || 0) * 12 - (primaryProp.annualTaxes || 0) - (primaryProp.annualInsurance || 0) - annualHOA)
-        : null;
-      baseFields.push({ key: 'noi', label: "NOI", value: noi !== null && noi !== 0 ? fmt(noi) : "—", tooltip: "Net Operating Income" });
-      const primaryDscr = primaryProp ? calcPropertyDscr(primaryProp) : null;
-      baseFields.push({ key: 'propertyDscr', label: "Property DSCR", value: primaryDscr ? `${primaryDscr}x` : "—", tooltip: "DSCR based on this property's proportional loan share" });
     }
 
-    return baseFields;
+    return filterBlankFields(baseFields);
   };
 
   const buildBorrowerFields = (): { label: string; value: string; key: string }[] => {
@@ -599,11 +584,44 @@ export default function TabOverview({
       );
     }
 
-    return baseFields;
+    return filterBlankFields(baseFields);
+  };
+
+  const buildCalculatedFields = (): { label: string; value: string; key: string; tooltip?: string }[] => {
+    const fields: { label: string; value: string; key: string; tooltip?: string }[] = [];
+
+    const calculatedLtv = (loanAmount && propertyValue && Number(propertyValue) > 0)
+      ? ((Number(loanAmount) / Number(propertyValue)) * 100).toFixed(1) : null;
+    if (calculatedLtv) fields.push({ key: 'ltv', label: "LTV", value: `${calculatedLtv}%` });
+
+    if (calculatedDscr) fields.push({ key: 'dscr', label: "DSCR", value: `${calculatedDscr}x`, tooltip: "Auto-calculated: NOI ÷ Annual Debt Service (30yr amortization)" });
+
+    const noi = (totalMonthlyRent * 12) - totalAnnualTaxes - totalAnnualInsurance - totalAnnualHOA;
+    if (noi > 0) fields.push({ key: 'noi', label: "NOI", value: fmt(noi), tooltip: "Net Operating Income" });
+
+    if (lenderPts != null || brokerPts != null) {
+      const total = ((Number(lenderPts) || 0) + (Number(brokerPts) || 0)).toFixed(2);
+      fields.push({ key: 'totalPoints', label: "Total Origination Points", value: `${total}%` });
+    }
+
+    const primaryDscr = primaryProp ? calcPropertyDscr(primaryProp) : null;
+    if (primaryDscr) fields.push({ key: 'propertyDscr', label: "Property DSCR", value: `${primaryDscr}x`, tooltip: "DSCR based on this property's proportional loan share" });
+
+    const additionalProps = allProps.filter((p: any) => p.id !== primaryProp?.id);
+    additionalProps.forEach((prop: any) => {
+      const propDscr = calcPropertyDscr(prop);
+      if (propDscr) {
+        const propLabel = prop.address ? `DSCR — ${prop.address}` : `Property ${prop.id} DSCR`;
+        fields.push({ key: `propertyDscr-${prop.id}`, label: propLabel, value: `${propDscr}x`, tooltip: "DSCR based on this property's proportional loan share" });
+      }
+    });
+
+    return fields;
   };
 
   const propertyFields = buildPropertyFields();
   const borrowerFields = buildBorrowerFields();
+  const calculatedFields = buildCalculatedFields();
 
   const startEditLoan = () => {
     const form: Record<string, string> = {
@@ -1141,37 +1159,15 @@ export default function TabOverview({
                 })() : (
                   <EditField label="Loan Amount" value={loanForm.loanAmount} onChange={(v) => setLoanForm({ ...loanForm, loanAmount: v })} type="number" />
                 )}
-                <Field label="LTV" value={(() => {
-                  const storedLtvEdit = deal.ltv ?? appData.ltv ?? deal.loanData?.ltv;
-                  return storedLtvEdit != null ? `${storedLtvEdit}%` : "—";
-                })()} />
-                <Field label="DSCR" value={(() => {
-                  const loan = Number(loanForm.loanAmount) || Number(loanAmount) || 0;
-                  if (loan <= 0) return calculatedDscr ? `${calculatedDscr}x` : "—";
-                  const noi = (totalMonthlyRent * 12) - totalAnnualTaxes - totalAnnualInsurance - totalAnnualHOA;
-                  if (noi <= 0) return "—";
-                  const rateStr = String(loanForm.interestRate || interestRate || "").replace("%", "");
-                  const annualRate = Number(rateStr) || 0;
-                  if (annualRate <= 0) return "—";
-                  const monthlyRate = annualRate / 100 / 12;
-                  const mp = loan * (monthlyRate * Math.pow(1 + monthlyRate, 360)) / (Math.pow(1 + monthlyRate, 360) - 1);
-                  return mp > 0 ? `${(noi / (mp * 12)).toFixed(2)}x` : "—";
-                })()} tooltip="Auto-calculated: NOI ÷ Annual Debt Service (30yr amortization)" />
                 <EditField label="Interest Rate %" value={loanForm.interestRate} onChange={(v) => setLoanForm({ ...loanForm, interestRate: v })} type="number" />
                 {isAdmin && (
                   <EditField label="YSP %" value={loanForm.ysp} onChange={(v) => setLoanForm({ ...loanForm, ysp: v })} type="number" />
                 )}
-                {isAdmin ? (
+                {isAdmin && (
                   <>
                     <EditField label="Lender Origination Points %" value={loanForm.lenderOriginationPoints} onChange={(v) => setLoanForm({ ...loanForm, lenderOriginationPoints: v })} type="number" />
                     <EditField label="Broker Origination Points %" value={loanForm.brokerOriginationPoints} onChange={(v) => setLoanForm({ ...loanForm, brokerOriginationPoints: v })} type="number" />
                   </>
-                ) : (
-                  <Field label="Origination Points" value={
-                    (lenderPts != null || brokerPts != null)
-                      ? `${((Number(lenderPts) || 0) + (Number(brokerPts) || 0)).toFixed(2)}%`
-                      : "—"
-                  } />
                 )}
                 <EditField label="Broker Name" value={loanForm.brokerName} onChange={(v) => setLoanForm({ ...loanForm, brokerName: v })} />
                 <SelectField label="Term" value={loanForm.loanTermMonths} onChange={(v) => setLoanForm({ ...loanForm, loanTermMonths: v })} options={termOptions} />
@@ -1186,6 +1182,25 @@ export default function TabOverview({
             )}
           </CardContent>
         </Card>
+
+        {calculatedFields.length > 0 && (
+          <Card data-testid="card-calculated-fields">
+            <CardHeader className="pb-0">
+              <CardTitle className="text-[22px] flex items-center gap-2">
+                <Calculator className="h-5 w-5 text-muted-foreground" />
+                Calculated Fields
+              </CardTitle>
+            </CardHeader>
+            <div className="mx-6 mt-2 mb-3 border-b border-muted" />
+            <CardContent>
+              <div className="grid grid-cols-2 gap-x-8 gap-y-2.5">
+                {calculatedFields.map(f => (
+                  <Field key={f.key} label={f.label} value={f.value} tooltip={f.tooltip} />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader className="pb-0">

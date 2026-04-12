@@ -4,7 +4,7 @@ import { useState, type ChangeEvent } from "react";
 import {
   ArrowLeft, Building2, User, DollarSign, FileText, CheckSquare,
   Upload, Loader2, CheckCircle2, Clock, AlertCircle, ChevronDown, ChevronUp,
-  Eye, ClipboardEdit, HelpCircle, ClipboardList,
+  Eye, ClipboardEdit, HelpCircle, ClipboardList, Calculator,
 } from "lucide-react";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -303,6 +303,11 @@ export default function BorrowerDealDetail() {
       return false;
     });
 
+  const isBlank = (v: any) => v === null || v === undefined || v === "" || v === "—";
+  const ANCHOR_KEYS = new Set(['fullName', 'email', 'phone', 'address', 'loanAmount']);
+  const filterBlanks = (fields: { key: string; label: string; value: string }[]) =>
+    fields.filter(f => ANCHOR_KEYS.has(f.key) || !isBlank(f.value));
+
   const buildBorrowerFields = () => {
     const fields = [
       { key: 'fullName', label: "Full Name", value: deal?.borrowerName || `${deal?.customerFirstName || ""} ${deal?.customerLastName || ""}`.trim() || "—" },
@@ -323,7 +328,7 @@ export default function BorrowerDealDetail() {
         { key: 'entityType', label: "Entity Type", value: appData.entityType || "—" },
       );
     }
-    return fields;
+    return filterBlanks(fields);
   };
 
   const buildPropertyFields = () => {
@@ -339,34 +344,25 @@ export default function BorrowerDealDetail() {
           fields.push({ key: f.fieldKey, label: f.label, value: formatFieldValue(getFieldValue(f.fieldKey), f.fieldType) });
         });
     }
-    return fields;
+    return filterBlanks(fields);
   };
 
   const buildLoanFields = () => {
     const loanAmount = deal?.loanAmount || deal?.loanData?.loanAmount;
     const interestRate = deal?.interestRate;
     const termMonths = deal?.termMonths || deal?.loanTermMonths || deal?.loanData?.loanTerm;
-    const propertyValue = deal?.propertyValue || appData.propertyValue || deal?.loanData?.propertyValue;
-    const calculatedLtv = (loanAmount && propertyValue && Number(propertyValue) > 0)
-      ? ((Number(loanAmount) / Number(propertyValue)) * 100).toFixed(1) : null;
     const rateDisplay = interestRate && interestRate !== "—"
       ? (String(interestRate).includes("%") ? interestRate : `${Number(interestRate).toFixed(3)}%`) : "—";
-    const lenderPts = deal?.lenderOriginationPoints ?? appData.originationPoints;
-    const brokerPts = deal?.brokerOriginationPoints ?? appData.brokerPointsCharged;
-    const totalPts = (lenderPts != null || brokerPts != null)
-      ? `${((Number(lenderPts) || 0) + (Number(brokerPts) || 0)).toFixed(2)}%` : "—";
 
     const fields = [
       { key: 'loanAmount', label: "Loan Amount", value: fmt(loanAmount) },
       { key: 'interestRate', label: "Interest Rate", value: rateDisplay },
-      { key: 'ltv', label: "LTV", value: calculatedLtv ? `${calculatedLtv}%` : "—" },
-      { key: 'originationPoints', label: "Origination Points", value: totalPts },
       { key: 'term', label: "Term", value: termMonths ? `${termMonths} months` : "—" },
       { key: 'targetCloseDate', label: "Estimated Closing", value: fmtDate(deal?.targetCloseDate) },
     ];
 
     if (hasProgram) {
-      const lockedKeys = new Set(['ltv', 'ysp', 'lenderOriginationPoints', 'brokerOriginationPoints', 'interestRate', 'brokerName', 'holdbackAmount', 'loanTermMonths', 'term', 'targetCloseDate']);
+      const lockedKeys = new Set(['ltv', 'ysp', 'lenderOriginationPoints', 'brokerOriginationPoints', 'interestRate', 'brokerName', 'holdbackAmount', 'loanTermMonths', 'term', 'targetCloseDate', 'originationPoints']);
       const contactKeys = new Set(['firstName', 'lastName', 'email', 'phone', 'address']);
       getFieldsByGroup('loan_details')
         .filter((f: any) => !lockedKeys.has(f.fieldKey) && !contactKeys.has(f.fieldKey) && f.fieldKey !== 'loanAmount')
@@ -374,6 +370,50 @@ export default function BorrowerDealDetail() {
           fields.push({ key: f.fieldKey, label: f.label, value: formatFieldValue(getFieldValue(f.fieldKey), f.fieldType) });
         });
     }
+    return filterBlanks(fields);
+  };
+
+  const buildCalculatedFields = () => {
+    const loanAmount = deal?.loanAmount || deal?.loanData?.loanAmount;
+    const propertyValue = deal?.propertyValue || appData.propertyValue || deal?.loanData?.propertyValue;
+    const interestRate = deal?.interestRate;
+    const lenderPts = deal?.lenderOriginationPoints ?? appData.originationPoints;
+    const brokerPts = deal?.brokerOriginationPoints ?? appData.brokerPointsCharged;
+
+    const fields: { key: string; label: string; value: string }[] = [];
+
+    const calculatedLtv = (loanAmount && propertyValue && Number(propertyValue) > 0)
+      ? ((Number(loanAmount) / Number(propertyValue)) * 100).toFixed(1) : null;
+    if (calculatedLtv) fields.push({ key: 'ltv', label: "LTV", value: `${calculatedLtv}%` });
+
+    const loan = Number(loanAmount) || 0;
+    const rent = Number(deal?.loanData?.grossMonthlyRent || appData.grossMonthlyRent || 0);
+    const taxes = Number(deal?.loanData?.annualTaxes || appData.annualTaxes || 0);
+    const insurance = Number(deal?.loanData?.annualInsurance || appData.annualInsurance || 0);
+    const hoa = Number(deal?.loanData?.annualHOA || appData.annualHOA || 0);
+    const noi = (rent * 12) - taxes - insurance - hoa;
+
+    if (noi > 0 && loan > 0) {
+      fields.push({ key: 'noi', label: "NOI", value: fmt(noi) });
+
+      const rateStr = String(interestRate || "").replace("%", "");
+      const annualRate = Number(rateStr) || 0;
+      if (annualRate > 0) {
+        const monthlyRate = annualRate / 100 / 12;
+        const n = 360;
+        const monthlyPayment = loan * (monthlyRate * Math.pow(1 + monthlyRate, n)) / (Math.pow(1 + monthlyRate, n) - 1);
+        const annualDebtService = monthlyPayment * 12;
+        if (annualDebtService > 0) {
+          fields.push({ key: 'dscr', label: "DSCR", value: `${(noi / annualDebtService).toFixed(2)}x` });
+        }
+      }
+    }
+
+    if (lenderPts != null || brokerPts != null) {
+      const total = ((Number(lenderPts) || 0) + (Number(brokerPts) || 0)).toFixed(2);
+      fields.push({ key: 'originationPoints', label: "Total Origination Points", value: `${total}%` });
+    }
+
     return fields;
   };
 
@@ -449,6 +489,7 @@ export default function BorrowerDealDetail() {
   const borrowerFields = buildBorrowerFields();
   const propertyFields = buildPropertyFields();
   const loanFields = buildLoanFields();
+  const calculatedFields = buildCalculatedFields();
   const borrowerTasks = allTasks.filter((t: any) => t.borrowerActionRequired || t.assignedTo === 'borrower');
   const pendingDocs = documents.filter((d: any) => d.status === 'pending' || d.status === 'rejected');
 
@@ -527,6 +568,17 @@ export default function BorrowerDealDetail() {
                     {loanFields.map(f => <Field key={f.key} label={f.label} value={f.value} />)}
                   </div>
                 </div>
+                {calculatedFields.length > 0 && (
+                  <div className="border-t pt-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Calculator className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-[13px] sm:text-[14px] font-bold uppercase tracking-wider text-muted-foreground" data-testid="header-calculated-fields">Calculated Fields</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+                      {calculatedFields.map(f => <Field key={f.key} label={f.label} value={f.value} />)}
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
         </Card>
