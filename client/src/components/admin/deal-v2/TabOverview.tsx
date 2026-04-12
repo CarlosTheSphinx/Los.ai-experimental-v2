@@ -452,7 +452,7 @@ export default function TabOverview({
   };
 
   const isFieldBlank = (v: any) => v === null || v === undefined || v === "" || v === "—";
-  const ANCHOR_FIELD_KEYS = new Set(['fullName', 'email', 'phone', 'address', 'loanAmount']);
+  const ANCHOR_FIELD_KEYS = new Set(['fullName', 'email', 'phone', 'address', 'loanAmount', 'propertyType']);
   const filterBlankFields = <T extends { key: string; value: string }>(fields: T[]) =>
     fields.filter(f => ANCHOR_FIELD_KEYS.has(f.key) || !isFieldBlank(f.value));
 
@@ -979,9 +979,6 @@ export default function TabOverview({
                 return additionalProps.map((prop: any, idx: number) => {
                   const meta = prop.metadata || {};
                   const isEditing = editAdditionalProp === prop.id;
-                  const propDscr = calcPropertyDscr(prop);
-                  const propHOA = Number(meta.annualHOA) || 0;
-                  const propNoi = ((Number(prop.monthlyRent) || 0) * 12) - (Number(prop.annualTaxes) || 0) - (Number(prop.annualInsurance) || 0) - propHOA;
                   return (
                     <div key={prop.id || idx} data-testid={`additional-property-${prop.id || idx}`}>
                       <div className="border-t border-muted my-4" />
@@ -1014,8 +1011,6 @@ export default function TabOverview({
                           <Field label="Annual Taxes" value={fmt(prop.annualTaxes)} />
                           <Field label="Annual Insurance" value={fmt(prop.annualInsurance)} />
                           <Field label="Annual HOA" value={fmt(meta.annualHOA)} />
-                          <Field label="NOI" value={propNoi !== 0 ? fmt(propNoi) : "—"} tooltip="Net Operating Income" />
-                          <Field label="Property DSCR" value={propDscr ? `${propDscr}x` : "—"} tooltip="DSCR based on this property's proportional loan share" />
                         </div>
                       ) : (
                         <div className="grid grid-cols-2 gap-x-8 gap-y-2.5">

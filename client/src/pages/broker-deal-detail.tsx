@@ -324,7 +324,7 @@ export default function BrokerDealDetail() {
     });
 
   const isBlank = (v: any) => v === null || v === undefined || v === "" || v === "—";
-  const ANCHOR_KEYS = new Set(['fullName', 'email', 'phone', 'address', 'loanAmount']);
+  const ANCHOR_KEYS = new Set(['fullName', 'email', 'phone', 'address', 'loanAmount', 'propertyType']);
   const filterBlanks = (fields: { key: string; label: string; value: string }[]) =>
     fields.filter(f => ANCHOR_KEYS.has(f.key) || !isBlank(f.value));
 
@@ -359,7 +359,7 @@ export default function BrokerDealDetail() {
     ];
 
     if (hasProgram) {
-      const lockedKeys = new Set(['ltv', 'ysp', 'lenderOriginationPoints', 'brokerOriginationPoints', 'interestRate', 'brokerName', 'holdbackAmount', 'loanTermMonths', 'term', 'targetCloseDate', 'originationPoints']);
+      const lockedKeys = new Set(['ltv', 'dscr', 'ysp', 'lenderOriginationPoints', 'brokerOriginationPoints', 'interestRate', 'brokerName', 'holdbackAmount', 'loanTermMonths', 'term', 'targetCloseDate', 'originationPoints']);
       const contactKeys = new Set(['firstName', 'lastName', 'email', 'phone', 'address']);
       getFieldsByGroup('loan_details')
         .filter((f: any) => !lockedKeys.has(f.fieldKey) && !contactKeys.has(f.fieldKey) && f.fieldKey !== 'loanAmount')
