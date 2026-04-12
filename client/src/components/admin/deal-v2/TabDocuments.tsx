@@ -27,45 +27,45 @@ function statusDisplay(status: string, aiReviewStatus?: string, driveStatus?: st
   const drive = driveStatus?.toLowerCase();
 
   if (s === "approved" || s === "accepted") {
-    return { dot: "bg-emerald-500", label: "Approved", step: 4 };
+    return { dot: "bg-emerald-500", pill: "bg-emerald-500 text-white", label: "Approved", step: 4 };
   }
   if (s === "rejected" || s === "denied") {
-    return { dot: "bg-red-500", label: s === "denied" ? "Denied" : "Rejected", step: 4 };
+    return { dot: "bg-red-500", pill: "bg-red-500 text-white", label: s === "denied" ? "Denied" : "Rejected", step: 4 };
   }
   if (s === "update_needed") {
-    return { dot: "bg-amber-500", label: "Update Needed", step: 4 };
+    return { dot: "bg-amber-500", pill: "bg-amber-500 text-gray-900", label: "Update Needed", step: 4 };
   }
   if (s === "conditional") {
-    return { dot: "bg-amber-500", label: "Conditional", step: 4 };
+    return { dot: "bg-amber-500", pill: "bg-amber-500 text-gray-900", label: "Conditional", step: 4 };
   }
   if (s === "at_risk") {
-    return { dot: "bg-orange-500", label: "At Risk", step: 4 };
+    return { dot: "bg-orange-500", pill: "bg-orange-500 text-white", label: "At Risk", step: 4 };
   }
   if (ai === "approved") {
-    return { dot: "bg-blue-500", label: "AI Approved", step: 3 };
+    return { dot: "bg-blue-500", pill: "bg-blue-500 text-white", label: "AI Approved", step: 3 };
   }
   if (ai === "denied") {
-    return { dot: "bg-red-400", label: "AI Rejected", step: 3 };
+    return { dot: "bg-red-400", pill: "bg-red-400 text-white", label: "AI Rejected", step: 3 };
   }
   if (s === "ai_reviewed" || ai === "reviewed") {
-    return { dot: "bg-blue-500", label: "AI Reviewed", step: 3 };
+    return { dot: "bg-blue-500", pill: "bg-blue-500 text-white", label: "AI Reviewed", step: 3 };
   }
   if (ai === "reviewing") {
-    return { dot: "bg-blue-400 animate-pulse", label: "Reviewing...", step: 2.5 };
+    return { dot: "bg-blue-400 animate-pulse", pill: "bg-blue-400 text-white animate-pulse", label: "Reviewing...", step: 2.5 };
   }
   if (ai === "pending") {
-    return { dot: "bg-amber-400", label: "Queued for Review", step: 2.5 };
+    return { dot: "bg-amber-400", pill: "bg-amber-400 text-gray-900", label: "Queued for Review", step: 2.5 };
   }
   if (s === "uploaded") {
-    return { dot: "bg-blue-400", label: "Uploaded", step: 2 };
+    return { dot: "bg-blue-400", pill: "bg-blue-400 text-white", label: "Uploaded", step: 2 };
   }
   if (s === "waived") {
-    return { dot: "bg-gray-400", label: "Waived", step: 0 };
+    return { dot: "bg-gray-400", pill: "bg-gray-400 text-gray-900", label: "Waived", step: 0 };
   }
   if (s === "not_applicable") {
-    return { dot: "bg-gray-400", label: "N/A", step: 0 };
+    return { dot: "bg-gray-400", pill: "bg-gray-400 text-gray-900", label: "N/A", step: 0 };
   }
-  return { dot: "bg-gray-300", label: "Outstanding", step: 1 };
+  return { dot: "bg-gray-300", pill: "bg-gray-300 text-gray-900", label: "Outstanding", step: 1 };
 }
 
 function fileCountLabel(doc: any) {
@@ -753,7 +753,7 @@ function DocumentRow({
   const [showNotePrompt, setShowNotePrompt] = useState(false);
   const [updateNote, setUpdateNote] = useState("");
 
-  const { dot, label } = statusDisplay(doc.status, doc.aiReviewStatus, doc.driveUploadStatus);
+  const { dot, pill, label } = statusDisplay(doc.status, doc.aiReviewStatus, doc.driveUploadStatus);
   const downloadUrl = `/api/admin/deals/${dealId}/documents/${doc.id}/download`;
   const hasFile = doc.filePath || doc.fileName;
   const canReview = hasFile && (doc.aiReviewStatus === "not_reviewed" || doc.aiReviewStatus === "pending" || !doc.aiReviewStatus);
@@ -933,10 +933,9 @@ function DocumentRow({
           )}
         </td>
         <td className="px-4 py-2.5">
-          <div className="flex items-center gap-1.5">
-            <span className={cn("w-2 h-2 rounded-full shrink-0", dot)} />
-            <span className="text-[14px] font-medium">{label}</span>
-          </div>
+          <span data-testid={`status-pill-${doc.id}`} className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold", pill)}>
+            {label}
+          </span>
         </td>
         <td className="px-4 py-2.5 text-muted-foreground text-[14px]">
           {fileCount === 0 ? "0 files" : fileCount === 1 ? "1 file" : `${fileCount} files`}
