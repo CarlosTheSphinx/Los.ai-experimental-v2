@@ -33,9 +33,11 @@ function formatAmount(value: number): string {
   return `$${value.toLocaleString()}`;
 }
 
-function getRelativeTime(date: string | Date): string {
+function getRelativeTime(date: string | Date | null | undefined): string {
+  if (date == null || date === '') return '—';
   const now = new Date();
-  const d = new Date(date);
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return '—';
   const diffMs = now.getTime() - d.getTime();
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMs / 3600000);

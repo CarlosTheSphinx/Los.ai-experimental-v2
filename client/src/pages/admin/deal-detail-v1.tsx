@@ -1,7 +1,6 @@
 import { useRef, useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
-import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -85,7 +84,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
+import { cn, safeFormat } from "@/lib/utils";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { DigestConfigPanel } from "@/components/DigestConfigPanel";
@@ -1938,7 +1937,7 @@ export default function AdminDealDetail() {
                 <CalendarDays className="h-4 w-4 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">Target Close</span>
                 <span className="font-semibold text-sm" data-testid="text-target-close-date">
-                  {deal.targetCloseDate ? format(new Date(deal.targetCloseDate), 'MMM d, yyyy') : '\u2014'}
+                  {safeFormat(deal.targetCloseDate, 'MMM d, yyyy')}
                 </span>
                 <Button
                   variant="ghost"

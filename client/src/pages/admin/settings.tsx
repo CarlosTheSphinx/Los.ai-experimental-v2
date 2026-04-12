@@ -18,10 +18,9 @@ import {
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
 import { PERMISSION_CATEGORIES, type PermissionKey } from "@shared/schema";
 import { useAuth } from "@/hooks/use-auth";
-import { cn } from "@/lib/utils";
+import { cn, safeFormat } from "@/lib/utils";
 import {
   DndContext,
   closestCenter,
@@ -864,9 +863,9 @@ export default function AdminSettings() {
           <Label htmlFor={key} className="font-medium">
             {config.label}
           </Label>
-          {setting?.updatedAt && !isNaN(new Date(setting.updatedAt).getTime()) && (
+          {setting?.updatedAt && (
             <span className="text-xs text-muted-foreground">
-              Updated {format(new Date(setting.updatedAt), "MMM d, yyyy")}
+              Updated {safeFormat(setting.updatedAt, "MMM d, yyyy", "")}
             </span>
           )}
         </div>

@@ -29,11 +29,10 @@ import {
   TrendingUp,
   Percent,
 } from "lucide-react";
-import { format } from "date-fns";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { sortByActionPriority, docActionPriority } from "@/lib/utils";
+import { sortByActionPriority, docActionPriority, safeFormat } from "@/lib/utils";
 import { PortalOnboarding, hasCompletedOnboarding } from "@/components/portal/PortalOnboarding";
 import { PortalSidebar, type PortalView } from "@/components/portal/PortalSidebar";
 
@@ -437,7 +436,7 @@ function BrokerPortalContent({ token }: { token: string }) {
                     {deal.targetCloseDate && (
                       <div className="flex justify-between">
                         <span className="text-gray-600">Target Close</span>
-                        <span className="font-medium">{format(new Date(deal.targetCloseDate), "MMM dd, yyyy")}</span>
+                        <span className="font-medium">{safeFormat(deal.targetCloseDate, "MMM dd, yyyy")}</span>
                       </div>
                     )}
                   </div>
@@ -553,7 +552,7 @@ function BrokerPortalContent({ token }: { token: string }) {
                               <div className="mt-2 text-xs text-gray-600">
                                 <p>{doc.files.length} file(s) uploaded</p>
                                 {doc.uploadedAt && (
-                                  <p className="text-gray-500">Uploaded: {format(new Date(doc.uploadedAt), "MMM dd, yyyy")}</p>
+                                  <p className="text-gray-500">Uploaded: {safeFormat(doc.uploadedAt, "MMM dd, yyyy")}</p>
                                 )}
                               </div>
                             )}

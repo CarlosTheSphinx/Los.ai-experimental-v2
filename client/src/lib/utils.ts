@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import { format as dateFnsFormat, formatDistanceToNow } from "date-fns"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -42,6 +43,20 @@ export function formatTimestamp(value: string | number | Date | null | undefined
   if (!d) return fallback;
   return d.toLocaleString('en-US');
 }
+
+export function safeFormat(value: string | number | Date | null | undefined, fmt: string, fallback = '—'): string {
+  const d = safeDate(value);
+  if (!d) return fallback;
+  return dateFnsFormat(d, fmt);
+}
+
+export function safeRelativeTime(value: string | number | Date | null | undefined, fallback = '—'): string {
+  const d = safeDate(value);
+  if (!d) return fallback;
+  return formatDistanceToNow(d, { addSuffix: true });
+}
+
+export { safeDate };
 
 export function docActionPriority(status: string | null | undefined): number {
   switch (status) {

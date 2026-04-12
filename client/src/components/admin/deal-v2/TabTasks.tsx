@@ -15,7 +15,7 @@ import { EmptyState } from "@/components/ui/phase1/empty-state";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format } from "date-fns";
-import { cn, sortByActionPriority, taskActionPriority } from "@/lib/utils";
+import { cn, sortByActionPriority, taskActionPriority, safeFormat } from "@/lib/utils";
 
 function getPriorityColor(priority: string): string {
   switch (priority?.toLowerCase()) {
@@ -217,8 +217,8 @@ export default function TabTasks({
             {assignee && (
               <p className="text-[13px] text-muted-foreground">Assigned to: {assignee}</p>
             )}
-            {task.dueDate && !isNaN(new Date(task.dueDate).getTime()) && (
-              <p className="text-[13px] text-muted-foreground">Due: {format(new Date(task.dueDate), "MMM d, yyyy")}</p>
+            {task.dueDate && (
+              <p className="text-[13px] text-muted-foreground">Due: {safeFormat(task.dueDate, "MMM d, yyyy", "")}</p>
             )}
           </div>
         </div>

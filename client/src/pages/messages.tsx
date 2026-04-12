@@ -62,15 +62,8 @@ import {
   type Message
 } from "@/lib/messagesApi";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, safeFormat } from "@/lib/utils";
 import { format } from "date-fns";
-
-function safeFormat(dateVal: any, fmt: string): string {
-  if (!dateVal) return '';
-  const d = new Date(dateVal);
-  if (isNaN(d.getTime())) return '';
-  return format(d, fmt);
-}
 import {
   Dialog,
   DialogContent,

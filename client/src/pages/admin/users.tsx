@@ -18,14 +18,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Search, MoreHorizontal, UserCog, Shield, User as UserIcon, Plus, Users, Briefcase, Pencil, Mail, CheckCircle, Clock, Link2, Send, Phone, Copy, ChevronDown, ChevronRight, ExternalLink, MessageSquare, Check, X, KeyRound, Trash2, Wand2, AlertCircle, Bell, Eye, Tags } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { format } from "date-fns";
-
-function safeFormat(dateVal: any, fmt: string): string {
-  if (!dateVal) return '';
-  const d = new Date(dateVal);
-  if (isNaN(d.getTime())) return '';
-  return format(d, fmt);
-}
+import { safeFormat } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -1313,7 +1306,7 @@ function UsersTab() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {safeFormat(user.lastLoginAt, "MMM d, yyyy") || "Never"}
+                          {safeFormat(user.lastLoginAt, "MMM d, yyyy", "Never")}
                         </TableCell>
                         <TableCell>
                           <Switch
@@ -2109,7 +2102,7 @@ function BetaWaitlistTab() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {safeFormat(signup.createdAt, "MMM d, yyyy") || "-"}
+                        {safeFormat(signup.createdAt, "MMM d, yyyy", "-")}
                       </TableCell>
                       <TableCell>
                         <Button
