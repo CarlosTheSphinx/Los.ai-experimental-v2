@@ -7249,6 +7249,128 @@ export async function registerRoutes(
     }
   });
 
+  app.post('/api/admin/users/broadcast', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const broadcastSchema = z.object({
+        userIds: z.array(z.number().int().positive()).min(1, 'At least one user must be selected'),
+        subject: z.string().optional().default(''),
+        body: z.string().min(1, 'Message body is required'),
+        channels: z.enum(['email', 'inapp', 'both']),
+      });
+
+      const parsed = broadcastSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors[0]?.message || 'Invalid request' });
+      }
+
+      const { userIds, subject, body, channels } = parsed.data;
+
+      const sendEmail = channels === 'email' || channels === 'both';
+      const sendInApp = channels === 'inapp' || channels === 'both';
+
+      if (sendEmail && (!subject || !subject.trim())) {
+        return res.status(400).json({ error: 'Subject is required for email delivery' });
+      }
+
+      const adminTenantId = getTenantId(req.user!);
+      let tenantFilter = inArray(users.id, userIds);
+      if (adminTenantId) {
+        tenantFilter = and(inArray(users.id, userIds), eq(users.tenantId, adminTenantId))!;
+      }
+      const targetUsers = await db.select().from(users).where(tenantFilter);
+      if (targetUsers.length === 0) {
+        return res.status(400).json({ error: 'No valid users found' });
+      }
+
+      const stats = { emailsSent: 0, emailsFailed: 0, inAppSent: 0, inAppFailed: 0 };
+
+      function parseName(fullName: string): { firstName: string; lastName: string } {
+        const parts = fullName.trim().split(' ');
+        if (parts.length === 1) return { firstName: parts[0], lastName: '' };
+        return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
+      }
+
+      function personalizeText(template: string, data: { firstName: string; lastName: string; companyName: string; email: string; role: string }): string {
+        return template
+          .replace(/\{\{firstName\}\}/gi, data.firstName)
+          .replace(/\{\{lastName\}\}/gi, data.lastName)
+          .replace(/\{\{companyName\}\}/gi, data.companyName)
+          .replace(/\{\{email\}\}/gi, data.email)
+          .replace(/\{\{role\}\}/gi, data.role);
+      }
+
+      if (sendEmail) {
+        const { getResendClient } = await import('./email');
+        const { client: resend, fromEmail } = await getResendClient();
+
+        for (const user of targetUsers) {
+          const { firstName, lastName } = parseName(user.fullName || user.email);
+          const mergeData = {
+            firstName,
+            lastName,
+            companyName: user.companyName || '',
+            email: user.email,
+            role: user.role || 'user'
+          };
+
+          const personalizedSubject = personalizeText(subject, mergeData);
+          const personalizedBody = personalizeText(body, mergeData);
+
+          try {
+            await resend.emails.send({
+              from: fromEmail || 'Lendry.AI <info@lendry.ai>',
+              to: user.email,
+              subject: personalizedSubject,
+              html: `<!DOCTYPE html><html><head><style>body{font-family:Arial,sans-serif;line-height:1.6;color:#333}.container{max-width:600px;margin:0 auto;padding:20px}.header{background-color:#1e40af;color:white;padding:20px;text-align:center;border-radius:8px 8px 0 0}.content{background-color:#f8fafc;padding:30px;border-radius:0 0 8px 8px}.footer{text-align:center;color:#64748b;font-size:12px;margin-top:20px;padding:20px}</style></head><body><div class="container"><div class="header"><h1>Lendry.AI</h1></div><div class="content">${personalizedBody.replace(/\n/g, '<br/>')}</div><div class="footer"><p>Lendry.AI</p></div></div></body></html>`
+            });
+            stats.emailsSent++;
+          } catch (error: any) {
+            console.error(`Failed to send broadcast email to ${user.email}:`, error);
+            stats.emailsFailed++;
+          }
+        }
+      }
+
+      if (sendInApp) {
+        for (const user of targetUsers) {
+          const { firstName, lastName } = parseName(user.fullName || user.email);
+          const mergeData = {
+            firstName,
+            lastName,
+            companyName: user.companyName || '',
+            email: user.email,
+            role: user.role || 'user'
+          };
+
+          const personalizedBody = personalizeText(body, mergeData);
+
+          try {
+            await db.insert(notifications).values({
+              userId: user.id,
+              type: 'admin_broadcast',
+              title: subject ? personalizeText(subject, mergeData) : 'Message from Admin',
+              message: personalizedBody,
+              isRead: false
+            });
+            stats.inAppSent++;
+          } catch (error: any) {
+            console.error(`Failed to create in-app notification for user ${user.id}:`, error);
+            stats.inAppFailed++;
+          }
+        }
+      }
+
+      res.json({
+        success: true,
+        stats,
+        message: `Message sent to ${targetUsers.length} user(s)`
+      });
+    } catch (error) {
+      console.error('User broadcast error:', error);
+      res.status(500).json({ error: 'Failed to send broadcast' });
+    }
+  });
+
   // Team Permissions - Get all permissions (super_admin only)
   app.get('/api/admin/permissions', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
     try {

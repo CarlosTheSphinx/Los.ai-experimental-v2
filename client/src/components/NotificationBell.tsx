@@ -81,6 +81,8 @@ export function NotificationBell() {
         return <Paperclip className="h-4 w-4 text-amber-500" />;
       case "term_sheet_signed":
         return <FileCheck className="h-4 w-4 text-emerald-500" />;
+      case "admin_broadcast":
+        return <Mail className="h-4 w-4 text-blue-600" />;
       default:
         return <Bell className="h-4 w-4 text-muted-foreground" />;
     }

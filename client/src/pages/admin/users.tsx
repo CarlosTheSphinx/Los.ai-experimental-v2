@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Slider } from "@/components/ui/slider";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Search, MoreHorizontal, UserCog, Shield, User as UserIcon, Plus, Users, Briefcase, Pencil, Mail, CheckCircle, Clock, Link2, Send, Phone, Copy, ChevronDown, ChevronRight, ExternalLink, MessageSquare, Check, X, KeyRound, Trash2, Wand2, AlertCircle } from "lucide-react";
+import { Search, MoreHorizontal, UserCog, Shield, User as UserIcon, Plus, Users, Briefcase, Pencil, Mail, CheckCircle, Clock, Link2, Send, Phone, Copy, ChevronDown, ChevronRight, ExternalLink, MessageSquare, Check, X, KeyRound, Trash2, Wand2, AlertCircle, Bell, Eye, Tags } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { format } from "date-fns";
@@ -837,6 +837,13 @@ function UsersTab() {
   const [draftSubject, setDraftSubject] = useState("");
   const [draftBody, setDraftBody] = useState("");
   const [pendingInvite, setPendingInvite] = useState<{ subject: string; body: string } | null>(null);
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<number>>(new Set());
+  const [isComposeOpen, setIsComposeOpen] = useState(false);
+  const [composeChannel, setComposeChannel] = useState<"email" | "inapp" | "both">("email");
+  const [composeSubject, setComposeSubject] = useState("");
+  const [composeBody, setComposeBody] = useState("");
+  const [showPreview, setShowPreview] = useState(false);
+  const composeBodyRef = useRef<HTMLTextAreaElement>(null);
   const [newUser, setNewUser] = useState({
     email: "",
     fullName: "",
@@ -925,6 +932,90 @@ function UsersTab() {
 
   const handleActiveToggle = (userId: number, isActive: boolean) => {
     updateUserMutation.mutate({ id: userId, updates: { isActive } });
+  };
+
+  const broadcastMutation = useMutation({
+    mutationFn: async (payload: { userIds: number[]; subject: string; body: string; channels: string }) => {
+      const res = await apiRequest("POST", "/api/admin/users/broadcast", payload);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      const stats = data.stats || {};
+      const totalSent = (stats.emailsSent || 0) + (stats.inAppSent || 0);
+      const totalFailed = (stats.emailsFailed || 0) + (stats.inAppFailed || 0);
+      if (totalSent === 0 && totalFailed > 0) {
+        toast({ title: "Message delivery failed", description: `${totalFailed} message(s) failed to send`, variant: "destructive" });
+        return;
+      }
+      const parts: string[] = [];
+      if (stats.emailsSent) parts.push(`${stats.emailsSent} email(s)`);
+      if (stats.inAppSent) parts.push(`${stats.inAppSent} notification(s)`);
+      const failPart = totalFailed > 0 ? ` (${totalFailed} failed)` : '';
+      toast({ title: `Sent ${parts.join(" and ")} successfully${failPart}` });
+      setIsComposeOpen(false);
+      setComposeSubject("");
+      setComposeBody("");
+      setShowPreview(false);
+      setSelectedUserIds(new Set());
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to send message", description: error?.message || "Please try again", variant: "destructive" });
+    },
+  });
+
+  const toggleUserSelection = useCallback((userId: number) => {
+    setSelectedUserIds(prev => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  }, []);
+
+  const insertMergeField = useCallback((field: string) => {
+    const textarea = composeBodyRef.current;
+    if (!textarea) {
+      setComposeBody(prev => prev + `{{${field}}}`);
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const tag = `{{${field}}}`;
+    const newVal = composeBody.substring(0, start) + tag + composeBody.substring(end);
+    setComposeBody(newVal);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.selectionStart = textarea.selectionEnd = start + tag.length;
+    }, 0);
+  }, [composeBody]);
+
+  const getPreviewMessage = useCallback((user: AdminUser) => {
+    const parts = (user.fullName || user.email).trim().split(' ');
+    const firstName = parts[0];
+    const lastName = parts.length > 1 ? parts.slice(1).join(' ') : '';
+    return composeBody
+      .replace(/\{\{firstName\}\}/gi, firstName)
+      .replace(/\{\{lastName\}\}/gi, lastName)
+      .replace(/\{\{companyName\}\}/gi, user.companyName || '')
+      .replace(/\{\{email\}\}/gi, user.email)
+      .replace(/\{\{role\}\}/gi, user.role || 'user');
+  }, [composeBody]);
+
+  const handleSendBroadcast = () => {
+    if (!composeBody.trim()) {
+      toast({ title: "Message body is required", variant: "destructive" });
+      return;
+    }
+    if ((composeChannel === 'email' || composeChannel === 'both') && !composeSubject.trim()) {
+      toast({ title: "Subject is required for email delivery", variant: "destructive" });
+      return;
+    }
+    broadcastMutation.mutate({
+      userIds: Array.from(selectedUserIds),
+      subject: composeSubject,
+      body: composeBody,
+      channels: composeChannel,
+    });
   };
 
   const allUsers = data?.users || [];
@@ -1159,6 +1250,19 @@ function UsersTab() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[40px]">
+                      <Checkbox
+                        checked={filteredUsers.length > 0 && filteredUsers.every(u => selectedUserIds.has(u.id))}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedUserIds(new Set(filteredUsers.map(u => u.id)));
+                          } else {
+                            setSelectedUserIds(new Set());
+                          }
+                        }}
+                        data-testid="checkbox-select-all-users"
+                      />
+                    </TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Type</TableHead>
@@ -1175,10 +1279,18 @@ function UsersTab() {
                     return (
                       <TableRow
                         key={user.id}
-                        className="cursor-pointer hover:bg-muted/50"
+                        className={`cursor-pointer hover:bg-muted/50 ${selectedUserIds.has(user.id) ? "bg-primary/5" : ""}`}
                         onClick={() => setSelectedUserId(user.id)}
                         data-testid={`row-user-${user.id}`}
                       >
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedUserIds.has(user.id)}
+                            onCheckedChange={() => toggleUserSelection(user.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            data-testid={`checkbox-user-${user.id}`}
+                          />
+                        </TableCell>
                         <TableCell>
                           <p className="font-medium">{user.fullName || "No name"}</p>
                         </TableCell>
@@ -1231,6 +1343,187 @@ function UsersTab() {
           )}
         </CardContent>
       </Card>
+
+      {selectedUserIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-primary text-primary-foreground px-5 py-3 rounded-full shadow-lg" data-testid="floating-action-bar">
+          <span className="text-sm font-medium" data-testid="text-selected-count">{selectedUserIds.size} user{selectedUserIds.size > 1 ? "s" : ""} selected</span>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setIsComposeOpen(true)}
+            data-testid="button-send-message"
+          >
+            <Send className="h-3.5 w-3.5 mr-1.5" />
+            Send Message
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-primary-foreground hover:text-primary-foreground/80 hover:bg-primary/80 h-7 w-7 p-0"
+            onClick={() => setSelectedUserIds(new Set())}
+            data-testid="button-clear-selection"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
+      <Dialog open={isComposeOpen} onOpenChange={(open) => { if (!open) { setIsComposeOpen(false); setShowPreview(false); } }}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Send Message to {selectedUserIds.size} User{selectedUserIds.size > 1 ? "s" : ""}</DialogTitle>
+            <DialogDescription>Compose a personalized message using merge fields</DialogDescription>
+          </DialogHeader>
+
+          {!showPreview ? (
+            <div className="space-y-4 mt-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Delivery Channel</Label>
+                <Select value={composeChannel} onValueChange={(v) => setComposeChannel(v as "email" | "inapp" | "both")}>
+                  <SelectTrigger data-testid="select-compose-channel">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="email">
+                      <span className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> Email</span>
+                    </SelectItem>
+                    <SelectItem value="inapp">
+                      <span className="flex items-center gap-1.5"><Bell className="h-3.5 w-3.5" /> In-App Notification</span>
+                    </SelectItem>
+                    <SelectItem value="both">
+                      <span className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" /> Email + In-App</span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {(composeChannel === "email" || composeChannel === "both") && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Subject</Label>
+                  <Input
+                    value={composeSubject}
+                    onChange={(e) => setComposeSubject(e.target.value)}
+                    placeholder="Message subject..."
+                    data-testid="input-compose-subject"
+                  />
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Message Body</Label>
+                <Textarea
+                  ref={composeBodyRef}
+                  value={composeBody}
+                  onChange={(e) => setComposeBody(e.target.value)}
+                  placeholder="Write your message here..."
+                  rows={8}
+                  className="resize-none"
+                  data-testid="input-compose-body"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium flex items-center gap-1.5">
+                  <Tags className="h-3.5 w-3.5" />
+                  Insert Merge Field
+                </Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { label: "firstName", field: "firstName" },
+                    { label: "lastName", field: "lastName" },
+                    { label: "companyName", field: "companyName" },
+                    { label: "email", field: "email" },
+                    { label: "role", field: "role" },
+                  ].map(({ label, field }) => (
+                    <Button
+                      key={field}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs font-mono"
+                      onClick={() => insertMergeField(field)}
+                      data-testid={`button-merge-${field}`}
+                    >
+                      {`{{${label}}}`}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setShowPreview(true)}
+                  disabled={!composeBody.trim()}
+                  data-testid="button-preview-message"
+                >
+                  <Eye className="h-3.5 w-3.5 mr-1.5" />
+                  Preview
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={handleSendBroadcast}
+                  disabled={broadcastMutation.isPending || !composeBody.trim()}
+                  data-testid="button-send-broadcast"
+                >
+                  <Send className="h-3.5 w-3.5 mr-1.5" />
+                  {broadcastMutation.isPending ? "Sending..." : "Send"}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4 mt-2">
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <p className="text-xs font-medium text-muted-foreground mb-2">Preview for: {(() => {
+                  const previewUser = externalUsers.find(u => selectedUserIds.has(u.id));
+                  return previewUser ? (previewUser.fullName || previewUser.email) : "Selected User";
+                })()}</p>
+                {(composeChannel === "email" || composeChannel === "both") && composeSubject && (
+                  <p className="text-sm font-semibold mb-2" data-testid="text-preview-subject">
+                    Subject: {(() => {
+                      const previewUser = externalUsers.find(u => selectedUserIds.has(u.id));
+                      if (!previewUser) return composeSubject;
+                      const parts = (previewUser.fullName || previewUser.email).trim().split(' ');
+                      return composeSubject
+                        .replace(/\{\{firstName\}\}/gi, parts[0])
+                        .replace(/\{\{lastName\}\}/gi, parts.length > 1 ? parts.slice(1).join(' ') : '')
+                        .replace(/\{\{companyName\}\}/gi, previewUser.companyName || '')
+                        .replace(/\{\{email\}\}/gi, previewUser.email)
+                        .replace(/\{\{role\}\}/gi, previewUser.role || 'user');
+                    })()}
+                  </p>
+                )}
+                <div className="text-sm whitespace-pre-wrap" data-testid="text-preview-body">
+                  {(() => {
+                    const previewUser = externalUsers.find(u => selectedUserIds.has(u.id));
+                    return previewUser ? getPreviewMessage(previewUser) : composeBody;
+                  })()}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setShowPreview(false)}
+                  data-testid="button-back-to-compose"
+                >
+                  Back to Edit
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={handleSendBroadcast}
+                  disabled={broadcastMutation.isPending}
+                  data-testid="button-send-broadcast-preview"
+                >
+                  <Send className="h-3.5 w-3.5 mr-1.5" />
+                  {broadcastMutation.isPending ? "Sending..." : "Send"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Sheet open={selectedUserId !== null} onOpenChange={(open) => { if (!open) setSelectedUserId(null); }}>
         <SheetContent side="right" className="sm:max-w-md w-full overflow-y-auto">
