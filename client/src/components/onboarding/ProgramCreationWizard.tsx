@@ -514,8 +514,14 @@ export function ProgramCreationWizard({
     enabled: !!editProgram?.id,
   });
 
-  const { data: editReviewRulesData } = useQuery<any[]>({
-    queryKey: [`/api/admin/programs/${editProgram?.id}/review-rules`],
+  const { data: editReviewRulesData } = useQuery<any>({
+    queryKey: ['/api/admin/programs', editProgram?.id, 'review-rules'],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/programs/${editProgram?.id}/review-rules`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch review rules');
+      const data = await res.json();
+      return data.rules ?? [];
+    },
     enabled: !!editProgram?.id,
   });
 
@@ -585,11 +591,11 @@ export function ProgramCreationWizard({
   useEffect(() => {
     if (!editProgram?.id || editRulesLoaded) return;
     if (editReviewRulesData === undefined) return;
-    if (editReviewRulesData && editReviewRulesData.length > 0) {
+    if (Array.isArray(editReviewRulesData) && editReviewRulesData.length > 0) {
       setReviewRules(editReviewRulesData.map((r: any) => ({
         ruleTitle: r.ruleTitle || '',
         documentType: r.documentType || 'General',
-        severity: 'fail',
+        severity: r.severity || 'fail',
         stepIndex: null,
       })));
     } else {
@@ -617,12 +623,20 @@ export function ProgramCreationWizard({
       const res = await apiRequest('POST', '/api/admin/programs', payload);
       return res.json();
     },
-    onSuccess: (data: any) => {
+    onSuccess: async (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/programs'] });
       queryClient.invalidateQueries({ queryKey: ['/api/programs-with-pricing'] });
       const programId = isEditMode ? editProgram?.id : data.program?.id;
       if (reviewRules.length > 0 && programId) {
-        saveReviewRules(programId);
+        try {
+          await saveReviewRules(programId);
+        } catch (err: any) {
+          toast({
+            title: 'Failed to save review rules',
+            description: err?.message || 'Your program was saved but review rules could not be updated.',
+            variant: 'destructive',
+          });
+        }
       }
       toast({ title: isEditMode ? 'Program updated successfully!' : 'Program created successfully!' });
       onComplete();
@@ -637,19 +651,15 @@ export function ProgramCreationWizard({
   });
 
   const saveReviewRules = async (programId: number) => {
-    try {
-      const rules = reviewRules.map((rule, i) => ({
-        ruleTitle: rule.ruleTitle,
-        documentType: rule.documentType || 'General',
-        severity: rule.severity,
-        ruleType: 'general',
-        isActive: true,
-        sortOrder: i,
-      }));
-      await apiRequest('POST', `/api/admin/programs/${programId}/review-rules`, { rules });
-    } catch {
-      // Don't block program creation if rules fail
-    }
+    const rules = reviewRules.map((rule, i) => ({
+      ruleTitle: rule.ruleTitle,
+      documentType: rule.documentType || 'General',
+      severity: rule.severity || 'fail',
+      ruleType: 'general',
+      isActive: true,
+      sortOrder: i,
+    }));
+    await apiRequest('POST', `/api/admin/programs/${programId}/review-rules`, { rules });
   };
 
   // Update quote fields when loan type changes

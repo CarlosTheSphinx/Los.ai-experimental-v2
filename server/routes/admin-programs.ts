@@ -1470,20 +1470,26 @@ export function registerAdminProgramsRoutes(app: Express, deps: RouteDeps) {
       if (!Array.isArray(rules)) {
         return res.status(400).json({ error: 'rules must be an array' });
       }
-      await storage.deleteReviewRulesByProgramId(programId);
-      const created = await storage.createReviewRules(
-        rules.map((r: any, idx: number) => ({
+      const created = await db.transaction(async (tx) => {
+        await tx.delete(programReviewRules).where(eq(programReviewRules.programId, programId));
+        const ruleValues = rules.map((r: any, idx: number) => ({
           programId,
           documentType: r.documentType || 'General',
           ruleTitle: r.ruleTitle,
           ruleDescription: r.ruleDescription || null,
+          ruleType: r.ruleType || 'general',
+          severity: r.severity || 'fail',
           category: r.category || null,
           isActive: r.isActive !== false,
           sortOrder: idx,
-        }))
-      );
-      const guidelinesText = created.map(r => `[${r.documentType}] ${r.ruleTitle}: ${r.ruleDescription || ''}`).join('\n');
-      await db.update(loanPrograms).set({ reviewGuidelines: guidelinesText }).where(eq(loanPrograms.id, programId));
+        }));
+        const inserted = ruleValues.length > 0
+          ? await tx.insert(programReviewRules).values(ruleValues).returning()
+          : [];
+        const guidelinesText = inserted.map(r => `[${r.documentType}] ${r.ruleTitle}: ${r.ruleDescription || ''}`).join('\n');
+        await tx.update(loanPrograms).set({ reviewGuidelines: guidelinesText }).where(eq(loanPrograms.id, programId));
+        return inserted;
+      });
       res.json({ rules: created });
     } catch (error: any) {
       console.error('Save review rules error:', error);
