@@ -278,7 +278,20 @@ export default function BorrowerPortal({ token: propToken, isPreview }: Borrower
 
   const updateProfileMutation = useMutation({
     mutationFn: async (data: Partial<BorrowerProfile>) => {
-      const res = await apiRequest('PUT', `/api/portal/${token}/borrower-profile`, data);
+      const editableFields = ['firstName', 'lastName', 'phone', 'dateOfBirth', 'streetAddress', 'city', 'state', 'zipCode', 'ssnLast4', 'idType', 'idNumber', 'idExpirationDate', 'employerName', 'employmentTitle', 'annualIncome', 'employmentType', 'entityName', 'entityType', 'einNumber'] as const;
+      const payload: Record<string, any> = {};
+      for (const key of editableFields) {
+        if (key in data) {
+          const val = data[key as keyof BorrowerProfile];
+          if (key === 'annualIncome') {
+            const parsed = val != null && val !== '' ? parseFloat(String(val)) : NaN;
+            payload[key] = Number.isNaN(parsed) ? null : parsed;
+          } else {
+            payload[key] = val === '' ? null : val;
+          }
+        }
+      }
+      const res = await apiRequest('PUT', `/api/portal/${token}/borrower-profile`, payload);
       return res.json();
     },
     onSuccess: () => {

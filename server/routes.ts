@@ -5568,8 +5568,16 @@ export async function registerRoutes(
 
       const updates = req.body;
       delete updates.id;
-      delete updates.email; // can't change email
+      delete updates.email;
       delete updates.createdAt;
+      delete updates.updatedAt;
+      delete updates.profileData;
+      if (updates.annualIncome === '' || updates.annualIncome === undefined) {
+        updates.annualIncome = null;
+      } else if (updates.annualIncome != null) {
+        const parsed = parseFloat(updates.annualIncome);
+        updates.annualIncome = Number.isNaN(parsed) ? null : parsed;
+      }
       updates.updatedAt = new Date();
 
       const [updated] = await db.update(borrowerProfiles)
@@ -5754,6 +5762,14 @@ export async function registerRoutes(
       delete updates.id;
       delete updates.email;
       delete updates.createdAt;
+      delete updates.updatedAt;
+      delete updates.profileData;
+      if (updates.annualIncome === '' || updates.annualIncome === undefined) {
+        updates.annualIncome = null;
+      } else if (updates.annualIncome != null) {
+        const parsed = parseFloat(updates.annualIncome);
+        updates.annualIncome = Number.isNaN(parsed) ? null : parsed;
+      }
       updates.updatedAt = new Date();
 
       let [profile] = await db.select().from(borrowerProfiles).where(eq(borrowerProfiles.email, email));
