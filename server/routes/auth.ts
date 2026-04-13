@@ -553,8 +553,8 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
     if (host) {
       return `${proto}://${host}`;
     }
-    if (process.env.REPLIT_DEV_DOMAIN) {
-      return `https://${process.env.REPLIT_DEV_DOMAIN}`;
+    if (process.env.BASE_URL) {
+      return process.env.BASE_URL;
     }
     return `https://${host}`;
   }

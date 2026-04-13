@@ -88,7 +88,7 @@ export function ProcessorAssistant({ isOpen: externalOpen, onOpenChange }: Proce
   const [recordingTime, setRecordingTime] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recordingIntervalRef = useRef<number | null>(null);
-  const { state: recordingState, startRecording, stopRecording } = useVoiceRecorder();
+  const { isRecording: recordingState, startRecording, stopRecording } = useVoiceRecorder();
   const { toast } = useToast();
 
   // Fetch conversations
@@ -467,7 +467,7 @@ export function ProcessorAssistant({ isOpen: externalOpen, onOpenChange }: Proce
 
                 {/* Input Area */}
                 <div className="border-t p-3 space-y-2">
-                  {recordingState === "recording" && (
+                  {recordingState && (
                     <div className="flex items-center justify-between bg-red-50 rounded p-2">
                       <div className="flex items-center gap-2">
                         <motion.div
@@ -513,17 +513,17 @@ export function ProcessorAssistant({ isOpen: externalOpen, onOpenChange }: Proce
                       }}
                       disabled={
                         sendMessageMutation.isPending ||
-                        recordingState === "recording"
+                        recordingState
                       }
                       className="text-sm"
                     />
                     <Button
                       size="sm"
                       variant={
-                        recordingState === "recording" ? "destructive" : "default"
+                        recordingState ? "destructive" : "default"
                       }
                       onClick={
-                        recordingState === "recording"
+                        recordingState
                           ? handleStopRecording
                           : handleStartRecording
                       }

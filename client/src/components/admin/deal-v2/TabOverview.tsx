@@ -334,7 +334,7 @@ export default function TabOverview({
     return fields;
   };
 
-  const buildDynamicLoanFields = (): { label: string; value: string; key: string }[] => {
+  const buildDynamicLoanFields = (): { label: string; value: string; key: string; tooltip?: string }[] => {
     if (!hasProgram) {
       return [
         { key: 'loanAmount', label: "Loan Amount", value: fmt(loanAmount) },

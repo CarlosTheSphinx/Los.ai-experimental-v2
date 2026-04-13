@@ -41,7 +41,7 @@ export function RTLLoanForm({ onSubmit, isLoading, defaultData, visibleFields }:
       asIsValue: 0,
       arv: 0,
       rehabBudget: 0,
-      propertyType: "sfr_1_4",
+      propertyType: "single-family-residence",
       propertyAddress: "",
       isMidstream: false,
       borrowingEntityType: "llc",

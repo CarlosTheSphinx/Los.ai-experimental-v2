@@ -1548,9 +1548,7 @@ export async function registerRoutes(
 
       await storage.updateDocument(document.id, { sentAt: new Date(), status: 'sent' });
 
-      const baseUrl = process.env.REPLIT_DEV_DOMAIN
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-        : (process.env.REPL_SLUG ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` : 'http://localhost:5000');
+      const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
       const signingLink = `${baseUrl}/sign/${token}`;
 
       const { sendSigningInvitation } = await import('./email');
@@ -6845,7 +6843,7 @@ export async function registerRoutes(
               .join(', ');
 
             const portalUrl = stageProj.borrowerPortalToken
-              ? `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : ''}/portal/${stageProj.borrowerPortalToken}`
+              ? `${process.env.BASE_URL || 'http://localhost:5000'}/portal/${stageProj.borrowerPortalToken}`
               : null;
 
             const [borrowerUser] = await db.select({ id: users.id }).from(users)

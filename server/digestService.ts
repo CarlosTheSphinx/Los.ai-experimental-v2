@@ -23,9 +23,7 @@ import { eq, and, lte, isNull, or, gt, inArray, sql } from 'drizzle-orm';
 import { getResendClient } from './email';
 
 // Base URL for generating links
-const BASE_URL = process.env.BASE_URL || process.env.REPLIT_DEV_DOMAIN 
-  ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
-  : 'http://localhost:5000';
+const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
 
 interface OutstandingDocument {
   id: number;

@@ -374,9 +374,7 @@ async function compileContextForAgent(
       .where(eq(projects.id, projectId))
       .then(rows => rows[0]);
 
-    const baseUrl = process.env.REPLIT_DEV_DOMAIN
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : (process.env.BASE_URL || 'https://app.sphinxcap.com');
+    const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
 
     if (project?.borrowerPortalToken) {
       context.borrower_portal_url = `${baseUrl}/portal/${project.borrowerPortalToken}`;

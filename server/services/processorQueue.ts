@@ -47,9 +47,7 @@ export interface ExecutionResult {
   details?: Record<string, any>;
 }
 
-const BASE_URL = process.env.BASE_URL || (process.env.REPLIT_DEV_DOMAIN
-  ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-  : 'http://localhost:5000');
+const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
 
 /**
  * Generate daily queue for a processor

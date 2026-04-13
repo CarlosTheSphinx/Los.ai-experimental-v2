@@ -101,8 +101,11 @@ if (siteMode === 'landing') {
   });
 }
 
-// Health check endpoint (no auth required)
+// Health check endpoint (no auth required) — matches railway.json healthcheckPath
 app.get('/health', (_req: Request, res: Response) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+app.get('/api/health', (_req: Request, res: Response) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
