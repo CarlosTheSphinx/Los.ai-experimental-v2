@@ -2590,6 +2590,8 @@ export const commercialSubmissions = pgTable("commercial_submissions", {
   driveFolderId: varchar("drive_folder_id", { length: 255 }),
   driveFolderUrl: text("drive_folder_url"),
 
+  emailThreadId: integer("email_thread_id"),
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

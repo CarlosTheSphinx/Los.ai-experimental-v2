@@ -65,6 +65,7 @@ import SuperAdminDashboard from "@/pages/admin/super-admin-dashboard";
 import TenantDetailPage from "@/pages/admin/tenant-detail";
 import AdminCreditPolicies from "@/pages/admin/credit-policies";
 import EmailInboxPage from "@/pages/admin/email-inbox";
+import LenderInboxPage from "@/pages/lender/InboxPage";
 import IntegrationsPage from "@/pages/admin/integrations";
 import OnboardingConfigPage from "@/pages/admin/onboarding-config";
 
@@ -239,6 +240,32 @@ function SuperAdminProtectedRoute({ component: Component }: { component: React.C
   );
 }
 
+function LenderProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+  const { isAuthenticated, isLoading, user } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect to="/login" />;
+  }
+
+  if (user?.role !== 'lender') {
+    return <Redirect to="/" />;
+  }
+
+  return (
+    <RouteErrorBoundary routeName={Component.displayName || Component.name || 'Lender Route'}>
+      <Component />
+    </RouteErrorBoundary>
+  );
+}
+
 function AuthRoute({ component: Component }: { component: React.ComponentType }) {
   const { isAuthenticated, isLoading } = useAuth();
 
@@ -296,6 +323,9 @@ function MainRoutes() {
           <Route path="/commercial-deals/:id/edit" component={() => <ProtectedRoute component={BrokerDealForm} />} />
           <Route path="/commercial-deals/:id" component={() => <ProtectedRoute component={BrokerDealDetail} />} />
           <Route path="/commercial-deals" component={() => <ProtectedRoute component={BrokerCommercialDeals} />} />
+
+          {/* Lender Routes */}
+          <Route path="/lender/inbox" component={() => <LenderProtectedRoute component={LenderInboxPage} />} />
 
           {/* Broker Routes */}
           <Route path="/broker/documents" component={() => <ProtectedRoute component={BrokerDocumentsPage} />} />

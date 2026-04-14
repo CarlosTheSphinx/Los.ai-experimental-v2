@@ -2,7 +2,7 @@ import type { Express, Response } from 'express';
 import type { AuthRequest } from '../auth';
 import type { RouteDeps } from './types';
 import { eq, desc, and, sql, ilike, or, inArray } from 'drizzle-orm';
-import { emailAccounts, emailThreads, emailMessages, emailThreadDealLinks, projects, users } from '@shared/schema';
+import { emailAccounts, emailThreads, emailMessages, emailThreadDealLinks, projects, users, commercialSubmissions } from '@shared/schema';
 import { getGmailAuthUrl, exchangeGmailCode, syncEmails, getAttachment, checkLinkedThreadsForNewEmails, sendReply, sendNewEmail } from '../services/gmail';
 import { encryptToken } from '../utils/encryption';
 
@@ -607,6 +607,86 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
     } catch (error: any) {
       console.error('Error suggesting deals:', error);
       res.status(500).json({ error: 'Failed to suggest deals' });
+    }
+  });
+
+  // POST /api/email/threads/:threadId/pin-to-pipeline
+  // Lender-only: creates a draft commercial submission linked to this email thread
+  app.post('/api/email/threads/:threadId/pin-to-pipeline', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      if (req.user?.role !== 'lender') {
+        return res.status(403).json({ error: 'Lender access required' });
+      }
+
+      const threadId = parseInt(req.params.threadId);
+      if (isNaN(threadId)) {
+        return res.status(400).json({ error: 'Invalid thread ID' });
+      }
+
+      // Verify the thread belongs to this user's email account
+      const [thread] = await db.select().from(emailThreads).where(eq(emailThreads.id, threadId));
+      if (!thread) {
+        return res.status(404).json({ error: 'Thread not found' });
+      }
+
+      const [account] = await db.select().from(emailAccounts)
+        .where(and(
+          eq(emailAccounts.id, thread.accountId),
+          eq(emailAccounts.userId, req.user!.id)
+        ));
+      if (!account) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      // Check if already pinned
+      const [existing] = await db.select({ id: commercialSubmissions.id })
+        .from(commercialSubmissions)
+        .where(eq(commercialSubmissions.emailThreadId, threadId))
+        .limit(1);
+      if (existing) {
+        return res.json({ submissionId: existing.id, message: 'Already pinned', alreadyPinned: true });
+      }
+
+      // Create a draft commercial submission with email_intake status
+      const fromName = thread.fromName || thread.fromAddress || 'Unknown';
+      const subject = thread.subject || 'Email Thread';
+
+      const [submission] = await db.insert(commercialSubmissions).values({
+        userId: req.user!.id,
+        status: 'email_intake',
+        submitterType: 'broker',
+        brokerOrDeveloperName: fromName,
+        companyName: 'Pending',
+        email: thread.fromAddress || account.emailAddress,
+        phone: 'Pending',
+        roleOnDeal: 'broker',
+        loanType: 'commercial',
+        requestedLoanAmount: 0,
+        interestOnly: false,
+        desiredCloseDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days out
+        propertyName: subject,
+        propertyAddress: 'Pending',
+        city: 'Pending',
+        state: 'CA',
+        zip: '00000',
+        propertyType: 'other',
+        occupancyType: 'other',
+        unitsOrSqft: 0,
+        asIsValue: 0,
+        capexBudgetTotal: 0,
+        businessPlanSummary: `Intake from email thread: ${subject}`,
+        primarySponsorName: fromName,
+        primarySponsorExperienceYears: 0,
+        numberOfSimilarProjects: 0,
+        netWorth: 0,
+        liquidity: 0,
+        emailThreadId: threadId,
+      }).returning({ id: commercialSubmissions.id });
+
+      res.json({ submissionId: submission.id, message: 'Deal pinned — AI will process this shortly' });
+    } catch (error: any) {
+      console.error('Error pinning thread to pipeline:', error);
+      res.status(500).json({ error: 'Failed to pin to pipeline' });
     }
   });
 }
