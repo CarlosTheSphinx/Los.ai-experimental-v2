@@ -1,20 +1,10 @@
-import OpenAI from "openai";
 import { ObjectStorageService } from "../replit_integrations/object_storage/objectStorage";
 const objectStorageService = new ObjectStorageService();
 import { storage } from "../storage";
 import { db } from "../db";
 import { loanPrograms, dealDocuments, dealDocumentFiles, dealProperties, projects, savedQuotes, programReviewRules, programDocumentTemplates, documentReviewRules } from "@shared/schema";
 import { eq, and, or, asc } from "drizzle-orm";
-
-const aiApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-if (!aiApiKey) {
-  console.warn('⚠️  AI_INTEGRATIONS_OPENAI_API_KEY not set. Document AI review features will be disabled.');
-}
-
-const openai = new OpenAI({
-  apiKey: aiApiKey || 'disabled',
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+import { openai } from "../lib/openai";
 
 const SUPPORTED_IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
@@ -176,7 +166,7 @@ export async function reviewDocument(
   userId: number
 ): Promise<{ success: boolean; result?: any; error?: string }> {
   if (!aiApiKey) {
-    throw new Error('AI document review is not available. AI_INTEGRATIONS_OPENAI_API_KEY is not configured.');
+    throw new Error('AI document review is not available. No OpenAI API key configured (OPENAI_API_KEY).');
   }
 
   try {
@@ -566,7 +556,7 @@ export async function reviewDocumentWithRules(
   if (!aiApiKey) {
     return {
       status: 'error',
-      reason: 'AI document review is not available. AI_INTEGRATIONS_OPENAI_API_KEY is not configured.',
+      reason: 'AI document review is not available. No OpenAI API key configured (OPENAI_API_KEY).',
       confidence: 0
     };
   }

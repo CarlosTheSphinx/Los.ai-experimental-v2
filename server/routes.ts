@@ -28,6 +28,7 @@ import {
 } from './auth';
 import { getTenantId } from './utils/tenant';
 import { isNotificationEnabled } from './services/notificationHelper';
+import { getOpenAIClient, OPENAI_API_KEY as RESOLVED_OPENAI_API_KEY, OPENAI_BASE_URL as RESOLVED_OPENAI_BASE_URL } from './lib/openai';
 import {
   runDigestJob,
   sendTestDigest,
@@ -13326,11 +13327,10 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'Could not transcribe audio. Please try again.' });
       }
 
-      const OpenAI = (await import('openai')).default;
-      const openai = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || 'placeholder',
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-      });
+      const openai = getOpenAIClient();
+      if (!openai) {
+        return res.status(503).json({ error: 'OpenAI not configured' });
+      }
 
       const completion = await openai.chat.completions.create({
         model: 'gpt-4.1',
@@ -13579,13 +13579,13 @@ export async function registerRoutes(
     totalChunks: number
   ): Promise<any[]> {
     try {
-      const OpenAI = (await import('openai')).default;
-      const openai = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-      });
+      const openai = getOpenAIClient();
+      if (!openai) {
+        console.error(`[CreditPolicy] Chunk ${chunkNum}/${totalChunks}: OpenAI not configured`);
+        return [];
+      }
 
-      const chunkContext = totalChunks > 1 
+      const chunkContext = totalChunks > 1
         ? `This is section ${chunkNum} of ${totalChunks} from a larger document. ` 
         : '';
 
@@ -14021,11 +14021,10 @@ export async function registerRoutes(
         return res.status(400).json({ error: 'messages array is required' });
       }
 
-      const OpenAI = (await import('openai')).default;
-      const openai = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-      });
+      const openai = getOpenAIClient();
+      if (!openai) {
+        return res.status(503).json({ error: 'OpenAI not configured' });
+      }
 
       const existingRulesContext = existingRules && existingRules.length > 0
         ? `\n\nThe policy already has these rules extracted:\n${existingRules.map((r: any, i: number) => `${i + 1}. [${r.documentType}] ${r.ruleTitle}: ${r.ruleDescription}`).join('\n')}`
@@ -18656,7 +18655,7 @@ If the user provides specific criteria, extract as many rules as you can from th
   // OpenAI API key status
   app.get('/api/admin/openai/status', authenticateUser, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
-      let apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+      let apiKey = RESOLVED_OPENAI_API_KEY;
       if (!apiKey) {
         const setting = await storage.getSettingByKey('openai_api_key');
         apiKey = setting?.settingValue || '';
@@ -18666,7 +18665,7 @@ If the user provides specific criteria, extract as many rules as you can from th
         const result: any = { connected: true };
         if (isSuperAdmin) {
           result.maskedKey = apiKey.substring(0, 7) + '...' + apiKey.substring(apiKey.length - 4);
-          result.source = process.env.AI_INTEGRATIONS_OPENAI_API_KEY ? 'integration' : 'manual';
+          result.source = RESOLVED_OPENAI_API_KEY ? 'integration' : 'manual';
         }
         return res.json(result);
       }
@@ -18680,7 +18679,7 @@ If the user provides specific criteria, extract as many rules as you can from th
   // OpenAI API key test
   app.get('/api/admin/openai/test', authenticateUser, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
     try {
-      let apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+      let apiKey = RESOLVED_OPENAI_API_KEY;
       if (!apiKey) {
         const setting = await storage.getSettingByKey('openai_api_key');
         apiKey = setting?.settingValue || '';
@@ -18688,11 +18687,7 @@ If the user provides specific criteria, extract as many rules as you can from th
       if (!apiKey) {
         return res.json({ connected: false, error: 'No API key configured' });
       }
-      const OpenAI = (await import('openai')).default;
-      const openai = new OpenAI({
-        apiKey,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-      });
+      const openai = getOpenAIClient(apiKey);
       const models = await openai.models.list();
       const modelCount = models.data?.length || 0;
       res.json({
@@ -19622,11 +19617,8 @@ If the user provides specific criteria, extract as many rules as you can from th
       }
 
       try {
-        const OpenAI = (await import('openai')).default;
-        const openai = new OpenAI({
-          apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-          baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-        });
+        const openai = getOpenAIClient();
+        if (!openai) throw new Error('OpenAI not configured');
 
         const prompt = `Review this pre-screener data:
 Loan Amount: ${loanAmount}

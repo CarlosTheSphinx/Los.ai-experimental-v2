@@ -4,7 +4,6 @@
  * for loan processors.
  */
 
-import OpenAI from "openai";
 import { db } from "../db";
 import {
   aiAssistantConversations,
@@ -34,30 +33,13 @@ import {
 } from "@shared/schema";
 import { eq, and, or, desc, asc, lte, gte, isNull, ilike, sql } from "drizzle-orm";
 import { getOpenAIApiKey } from "../utils/getOpenAIKey";
+import { openai, getOpenAIClient } from "../lib/openai";
 
-const aiApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-if (!aiApiKey) {
-  console.warn(
-    "⚠️  AI_INTEGRATIONS_OPENAI_API_KEY not set. Will check system settings for manual key."
-  );
-}
-
-let _openai: OpenAI | null = null;
-async function getOpenAI(): Promise<OpenAI> {
+async function getOpenAI() {
+  // Fall back to a user-configured DB key if no env key is set
   const key = await getOpenAIApiKey();
-  if (!_openai || (!aiApiKey && key)) {
-    _openai = new OpenAI({
-      apiKey: key || "disabled",
-      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-    });
-  }
-  return _openai;
+  return getOpenAIClient(key || undefined) || openai;
 }
-
-const openai = new OpenAI({
-  apiKey: aiApiKey || "disabled",
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
 
 const MODEL = "gpt-4o";
 

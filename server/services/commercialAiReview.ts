@@ -1,4 +1,5 @@
 import { storage } from "../storage";
+import { getOpenAIClient } from "../lib/openai";
 
 export async function reviewCommercialSubmission(submissionId: number): Promise<{
   decision: 'auto_approved' | 'needs_review' | 'auto_declined';
@@ -161,11 +162,8 @@ Analyze this deal and return ONLY valid JSON (no markdown, no code blocks):
   "score": 0-100
 }`;
 
-    const OpenAI = (await import('openai')).default;
-    const openai = new OpenAI({
-      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-    });
+    const openai = getOpenAIClient();
+    if (!openai) return fallback;
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',

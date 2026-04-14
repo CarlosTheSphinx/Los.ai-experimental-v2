@@ -6,14 +6,8 @@ import { brokerContacts, brokerOutreachMessages, insertBrokerOutreachMessageSche
 import { eq, and, desc, gt, lt, inArray } from 'drizzle-orm';
 import { sendSms } from '../smsService';
 import { getResendClient } from '../email';
-import OpenAI from 'openai';
 import { differenceInDays } from 'date-fns';
-
-const aiApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-const openai = new OpenAI({
-  apiKey: aiApiKey || 'disabled',
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+import { openai } from '../lib/openai';
 
 
 interface GenerateOutreachRequest {

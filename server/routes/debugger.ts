@@ -4,6 +4,7 @@ import { OrchestrationTracer } from '../services/orchestrationTracing';
 import { db } from '../db';
 import { agentConfigurations, systemSettings } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
+import { getOpenAIClient } from '../lib/openai';
 
 const AGENT_SEQUENCE: AgentType[] = ['document_intelligence', 'processor', 'communication'];
 
@@ -121,11 +122,11 @@ async function extractSingleChunk(
   totalChunks: number
 ): Promise<any[]> {
   try {
-    const OpenAI = (await import('openai')).default;
-    const openai = new OpenAI({
-      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-    });
+    const openai = getOpenAIClient();
+    if (!openai) {
+      console.error(`[Debugger] Chunk ${chunkNum}/${totalChunks}: OpenAI not configured`);
+      return [];
+    }
     const chunkContext = totalChunks > 1 ? `This is section ${chunkNum} of ${totalChunks} from a larger document. ` : '';
     const aiPromise = openai.chat.completions.create({
       model: settings.model,
