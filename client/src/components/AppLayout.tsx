@@ -153,10 +153,16 @@ const borrowerViewNavItems: NavItem[] = [
 const lenderNavItems: NavItem[] = [
   { href: "/admin/overview", label: "Dashboard", icon: Gauge },
   { href: "/admin", label: "Pipeline", icon: LayoutDashboard },
-  { href: "/admin/commercial-pipeline", label: "Commercial Pipeline", icon: Building2 },
   { href: "/lender/inbox", label: "Email Inbox", icon: Inbox },
   { href: "/inbox", label: "Messages", icon: MessageSquare },
   { href: "/admin/settings", label: "Settings", icon: Settings },
+];
+
+const lenderCommercialNavItems: NavItem[] = [
+  { href: "/admin/commercial-pipeline", label: "Commercial Pipeline", icon: Building2 },
+  { href: "/admin/commercial-form-config", label: "Form Builder", icon: SlidersHorizontal },
+  { href: "/admin/commercial/funds", label: "Fund Management", icon: DollarSign },
+  { href: "/admin/commercial/document-rules", label: "Document Rules", icon: FolderOpen },
 ];
 
 // Lendry admin items — only visible to super_admin role (Lendry platform team)
@@ -365,7 +371,7 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
         <SidebarContent className="font-ui font-normal">
           <SidebarGroup>
             <SidebarGroupLabel className="text-[12px] uppercase tracking-[0.15em] text-muted-foreground/60 px-0 pb-2">
-              {(effectiveViewAsBorrower || isBorrower) ? 'My Loans' : 'Broker View'}
+              {(effectiveViewAsBorrower || isBorrower) ? 'My Loans' : isLenderView ? 'Lender View' : 'Broker View'}
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
@@ -405,7 +411,45 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
-          
+
+          {isLenderView && (
+            <SidebarGroup className="mt-4 pt-4 border-t border-sidebar-border">
+              <SidebarGroupLabel className="text-[12px] uppercase tracking-[0.15em] text-muted-foreground/60 px-0 pb-2">
+                Commercial
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {lenderCommercialNavItems.map((item) => {
+                    const isActive = location === item.href ||
+                      (item.href !== "/admin" && location.startsWith(item.href));
+                    const Icon = item.icon;
+                    return (
+                      <SidebarMenuItem key={item.href} className="group relative">
+                        <SidebarMenuButton
+                          asChild
+                          isActive={isActive}
+                          tooltip={item.label}
+                          className={isActive ? "border-l-2 border-primary bg-sidebar-accent" : ""}
+                        >
+                          <Link
+                            href={item.href}
+                            data-testid={`nav-lender-commercial-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+                            onClick={handleNavClick}
+                          >
+                            <NavIcon icon={Icon} isActive={isActive} />
+                            <span className="flex items-center gap-1 flex-1 text-[15px] group-data-[collapsible=icon]:hidden">
+                              {item.label}
+                            </span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
+
           {showAdminSection && (
             <SidebarGroup className="mt-4 pt-4 border-t border-sidebar-border">
               <SidebarGroupLabel className="text-[12px] uppercase tracking-[0.15em] text-muted-foreground/60 px-0 pb-2">
