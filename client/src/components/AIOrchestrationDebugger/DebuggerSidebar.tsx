@@ -10,7 +10,7 @@ import type { OrchestrationEvent, OrchestrationSession } from '@/types/orchestra
 import { X, Bug, Wifi, WifiOff, Clock, Trash2, FileText, ChevronDown, Upload, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-type TabType = 'sessions' | 'credit_policy' | 'intake' | 'log';
+type TabType = 'sessions' | 'credit_policy' | 'intake' | 'underwriting' | 'log';
 
 export function AIOrchestrationDebugger() {
   const [isOpen, setIsOpen] = useState(false);
@@ -236,6 +236,17 @@ export function AIOrchestrationDebugger() {
           </button>
           <button
             className={`flex-1 px-3 py-2 text-[11px] font-medium transition-colors ${
+              activeTab === 'underwriting'
+                ? 'text-indigo-400 border-b-2 border-indigo-500'
+                : 'text-slate-400 hover:text-white'
+            }`}
+            onClick={() => setActiveTab('underwriting')}
+            data-testid="debugger-tab-underwriting"
+          >
+            U/W AI
+          </button>
+          <button
+            className={`flex-1 px-3 py-2 text-[11px] font-medium transition-colors ${
               activeTab === 'log'
                 ? 'text-cyan-400 border-b-2 border-cyan-500'
                 : 'text-slate-400 hover:text-white'
@@ -262,6 +273,9 @@ export function AIOrchestrationDebugger() {
                 setActiveTab('sessions');
               }}
             />
+
+          ) : activeTab === 'underwriting' ? (
+            <UnderwritingTab />
 
           ) : activeTab === 'credit_policy' ? (
             <CreditPolicyTab
@@ -605,6 +619,131 @@ function CreditPolicyTab({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function UnderwritingTab() {
+  const [configs, setConfigs] = useState<Record<string, any>>({});
+  const [prompts, setPrompts] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const AGENTS = [
+    { key: 'underwriting_extractor', label: 'Underwriting Extractor', color: 'indigo', desc: 'Compiles a comprehensive Deal Summary from all available data.' },
+    { key: 'underwriting_analyst', label: 'Underwriting Analyst', color: 'violet', desc: 'Evaluates Deal Summary against credit policy → produces scored Underwriting Report.' },
+  ];
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    Promise.all(
+      AGENTS.map(a =>
+        fetch(`/api/admin/agents/configurations?type=${a.key}`, { credentials: 'include' })
+          .then(r => r.ok ? r.json() : null)
+          .catch(() => null)
+      )
+    ).then(results => {
+      const newConfigs: Record<string, any> = {};
+      const newPrompts: Record<string, string> = {};
+      results.forEach((result, i) => {
+        const agentKey = AGENTS[i].key;
+        const config = Array.isArray(result) ? result[0] : result;
+        newConfigs[agentKey] = config;
+        newPrompts[agentKey] = config?.systemPrompt || '';
+      });
+      setConfigs(newConfigs);
+      setPrompts(newPrompts);
+    }).catch(err => {
+      setError(err.message || 'Failed to load configs');
+    }).finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async (agentKey: string) => {
+    const config = configs[agentKey];
+    if (!config?.id) return;
+    setSaving(agentKey);
+    try {
+      const res = await fetch(`/api/admin/agents/configurations/${config.id}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ systemPrompt: prompts[agentKey] }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      setSaved(agentKey);
+      setTimeout(() => setSaved(null), 2000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to save');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="text-center py-12">
+        <div className="animate-spin h-6 w-6 border-2 border-indigo-500 border-t-transparent rounded-full mx-auto mb-3" />
+        <p className="text-[12px] text-slate-400">Loading underwriting prompts...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-[13px] text-red-400 mb-2">{error}</p>
+        <button onClick={() => { setError(null); setLoading(true); }} className="text-[11px] text-slate-400 hover:text-white underline">Retry</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-indigo-900/30 rounded-lg border border-indigo-700/40 p-3">
+        <div className="flex items-center gap-2 mb-1">
+          <FileText className="h-4 w-4 text-indigo-400" />
+          <h3 className="text-[13px] font-semibold text-indigo-300">Underwriting Orchestration</h3>
+        </div>
+        <p className="text-[11px] text-slate-400">
+          Two-agent pipeline: Extractor compiles the Deal Summary → Analyst scores against credit policy.
+        </p>
+      </div>
+
+      {AGENTS.map(agent => (
+        <div key={agent.key} className="bg-slate-800/60 rounded-lg border border-slate-700/50">
+          <div className="px-3 py-2.5 border-b border-slate-700/40">
+            <p className="text-[12px] font-semibold text-slate-200">{agent.label}</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">{agent.desc}</p>
+          </div>
+          <div className="p-2">
+            <textarea
+              value={prompts[agent.key] || ''}
+              onChange={e => setPrompts(prev => ({ ...prev, [agent.key]: e.target.value }))}
+              className="w-full h-48 bg-slate-900/80 text-[11px] text-slate-300 font-mono rounded border border-slate-700/50 p-2 outline-none resize-none focus:border-indigo-500/50"
+              placeholder="System prompt..."
+              spellCheck={false}
+            />
+            <div className="flex justify-end mt-1.5">
+              <button
+                onClick={() => handleSave(agent.key)}
+                disabled={saving === agent.key || !configs[agent.key]?.id}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[11px] font-medium bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white transition-colors"
+              >
+                {saving === agent.key ? (
+                  <><div className="h-3 w-3 border border-white/50 border-t-transparent rounded-full animate-spin" /> Saving...</>
+                ) : saved === agent.key ? (
+                  <>&#10003; Saved</>
+                ) : (
+                  <>Save Prompt</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

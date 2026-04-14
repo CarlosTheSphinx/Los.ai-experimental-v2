@@ -293,6 +293,26 @@ app.use((req, res, next) => {
     // Table may already exist
   }
 
+  // Ensure underwriting_reports table exists
+  try {
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS underwriting_reports (
+      id SERIAL PRIMARY KEY,
+      project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      status VARCHAR(50) NOT NULL DEFAULT 'pending',
+      deal_summary JSONB,
+      report JSONB,
+      overall_likelihood VARCHAR(20),
+      score INTEGER,
+      pdf_data TEXT,
+      error_message TEXT,
+      triggered_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`);
+  } catch (e) {
+    // Table may already exist
+  }
+
   try {
     const { backfillTenantIds } = await import('./utils/backfill-tenants');
     await backfillTenantIds();

@@ -27,6 +27,8 @@ import {
   ChevronDown,
   ChevronRight,
   Sparkles,
+  ClipboardList,
+  Download,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -710,6 +712,21 @@ export default function TabAIInsights({
     onError: () => toast({ title: "Failed to approve documents", variant: "destructive" }),
   });
 
+  const { data: underwritingReports } = useQuery<any[]>({
+    queryKey: [`/api/projects/${projectId}/underwriting/reports`],
+    queryFn: async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}/underwriting/reports`, { credentials: "include" });
+        if (!res.ok) return [];
+        return res.json();
+      } catch {
+        return [];
+      }
+    },
+    enabled: !!projectId,
+  });
+  const uwReports = Array.isArray(underwritingReports) ? underwritingReports : [];
+
   const isLoading = docsLoading || insightsLoading || commsLoading || findingsLoading;
   const commsList = Array.isArray(communications) ? communications : [];
   const allDocuments = docsData?.documents ?? [];
@@ -722,7 +739,7 @@ export default function TabAIInsights({
   const risks = insightsList.filter((i) => i.severity === "warning" || i.type === "risk");
   const recommendations = insightsList.filter((i) => i.severity !== "warning" && i.type !== "risk");
 
-  const hasAnyContent = allDocuments.length > 0 || insightsList.length > 0 || commsList.length > 0 || findings.length > 0;
+  const hasAnyContent = allDocuments.length > 0 || insightsList.length > 0 || commsList.length > 0 || findings.length > 0 || uwReports.length > 0;
 
   if (isLoading) {
     return (
@@ -922,6 +939,72 @@ export default function TabAIInsights({
             {unmatchedComms.map(comm => (
               <InlineCommunicationCard key={comm.id} comm={comm} dealId={dealId} />
             ))}
+          </div>
+        </div>
+      )}
+
+      {uwReports.length > 0 && (
+        <div data-testid="section-underwriting-reports">
+          <div className="flex items-center gap-2 mb-3">
+            <ClipboardList className="h-4 w-4 text-indigo-600" />
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Underwriting Reports</h3>
+            <Badge variant="secondary" className="text-[11px]">{uwReports.length}</Badge>
+          </div>
+          <div className="space-y-3">
+            {uwReports.map((report: any) => {
+              const score = report.score;
+              const likelihood = report.overallLikelihood;
+              const scoreColor = score != null
+                ? score >= 70 ? "text-emerald-600 bg-emerald-50 border-emerald-200"
+                : score >= 40 ? "text-amber-600 bg-amber-50 border-amber-200"
+                : "text-red-600 bg-red-50 border-red-200"
+                : "text-slate-500 bg-slate-50 border-slate-200";
+              const likelihoodColor = likelihood === "high" ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                : likelihood === "medium" ? "bg-amber-100 text-amber-800 border-amber-200"
+                : likelihood === "low" ? "bg-red-100 text-red-800 border-red-200"
+                : "bg-slate-100 text-slate-700 border-slate-200";
+              const isRunning = report.status === "running";
+              return (
+                <div key={report.id} className="flex items-center justify-between p-4 rounded-xl border bg-card gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className={`rounded-lg border px-3 py-2 text-center min-w-[60px] ${scoreColor}`}>
+                      <div className="text-2xl font-bold leading-none">{score != null ? score : "—"}</div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wide mt-0.5 opacity-70">Score</div>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        {isRunning ? (
+                          <Badge variant="secondary" className="text-[11px] flex items-center gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" /> Generating
+                          </Badge>
+                        ) : report.status === "failed" ? (
+                          <Badge variant="secondary" className="text-[11px] text-red-600 bg-red-50 border-red-200">Failed</Badge>
+                        ) : likelihood ? (
+                          <Badge variant="outline" className={`text-[11px] capitalize ${likelihoodColor}`}>{likelihood} likelihood</Badge>
+                        ) : null}
+                        <span className="text-[11px] text-muted-foreground">
+                          {report.createdAt ? formatDateTime(report.createdAt) : ""}
+                        </span>
+                      </div>
+                      {report.status === "failed" && report.errorMessage && (
+                        <p className="text-xs text-red-600">{report.errorMessage}</p>
+                      )}
+                    </div>
+                  </div>
+                  {report.status === "complete" && (
+                    <a
+                      href={`/api/projects/${projectId}/underwriting/reports/${report.id}/pdf`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[13px] font-medium text-indigo-700 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 transition-colors shrink-0"
+                      data-testid={`download-underwriting-report-${report.id}`}
+                    >
+                      <Download className="h-3.5 w-3.5" /> Download PDF
+                    </a>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

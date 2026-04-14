@@ -9,7 +9,7 @@ import {
   ArrowLeft, FolderOpen, RefreshCw, ExternalLink,
   LayoutDashboard, FileText, CheckSquare, Users, MessageCircle, Sparkles,
   DollarSign, Calendar, Percent,
-  Loader2,
+  Loader2, ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -379,7 +379,9 @@ export default function DealDetailV2() {
   const [emailGenerating, setEmailGenerating] = useState(false);
   const [activeCommRunId, setActiveCommRunId] = useState<number | null>(null);
   const [generatedComms, setGeneratedComms] = useState<any[]>([]);
-  
+  const [underwritingRunning, setUnderwritingRunning] = useState(false);
+  const [activeUnderwritingReportId, setActiveUnderwritingReportId] = useState<number | null>(null);
+
   const { toast } = useToast();
 
   const apiBase = isAdmin ? `/api/admin/deals` : `/api/deals`;
@@ -498,6 +500,59 @@ export default function DealDetailV2() {
       toast({ title: "Error", description: error?.message || "Failed to generate email", variant: "destructive" });
     },
   });
+
+  const generateUnderwriting = useMutation({
+    mutationFn: async (projectId: number) => {
+      const res = await apiRequest("POST", `/api/projects/${projectId}/underwriting/generate`, {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Underwriting Started", description: "Generating underwriting report..." });
+      setActiveUnderwritingReportId(data.reportId || null);
+      setUnderwritingRunning(true);
+    },
+    onError: (error: any) => {
+      toast({ title: "Underwriting Error", description: error?.message || "Failed to start underwriting", variant: "destructive" });
+    },
+  });
+
+  const { data: underwritingStatus } = useQuery<{ id: number; status: string }>({
+    queryKey: ["/api/projects", pipelineProjectId, "underwriting", "status", activeUnderwritingReportId],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${pipelineProjectId}/underwriting/reports`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      const reports = await res.json();
+      const report = Array.isArray(reports) ? reports.find((r: any) => r.id === activeUnderwritingReportId) : null;
+      return report || null;
+    },
+    enabled: underwritingRunning && !!pipelineProjectId && !!activeUnderwritingReportId,
+    refetchInterval: underwritingRunning ? 3000 : false,
+  });
+
+  useEffect(() => {
+    if (!underwritingRunning || !underwritingStatus) return;
+    if (underwritingStatus.status === "complete") {
+      setUnderwritingRunning(false);
+      setActiveUnderwritingReportId(null);
+      toast({ title: "Underwriting Report Ready", description: "View it in the AI Reviews tab." });
+      setActiveTab("ai-reviews");
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", pipelineProjectId, "underwriting"] });
+    } else if (underwritingStatus.status === "failed") {
+      setUnderwritingRunning(false);
+      setActiveUnderwritingReportId(null);
+      toast({ title: "Underwriting Failed", description: "The underwriting report encountered an error.", variant: "destructive" });
+    }
+  }, [underwritingStatus?.status, underwritingRunning]);
+
+  const handleUnderwritingReport = () => {
+    const projectId = deal?.projectId || deal?.project_id || deal?.id;
+    if (!projectId) {
+      toast({ title: "No Project", description: "This deal has no associated project.", variant: "destructive" });
+      return;
+    }
+    setPipelineProjectId(projectId);
+    generateUnderwriting.mutate(projectId);
+  };
 
   const { data: commPipelineStatus } = useQuery<{ hasRun: boolean; latestRun: any }>({
     queryKey: ["/api/projects", pipelineProjectId, "pipeline", "status", "comm"],
@@ -727,6 +782,20 @@ export default function DealDetailV2() {
               }}
             >
               <FolderOpen className="h-3.5 w-3.5 mr-1.5" /> Drive
+            </Button>
+            <Button
+              size="sm"
+              className="h-9 px-4 text-[13px] font-medium bg-indigo-600 hover:bg-indigo-700 text-white border-0"
+              data-testid="button-underwriting-report"
+              disabled={underwritingRunning || generateUnderwriting.isPending}
+              onClick={handleUnderwritingReport}
+            >
+              {(underwritingRunning || generateUnderwriting.isPending) ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <ClipboardList className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              {underwritingRunning ? "Generating..." : "Underwriting Report"}
             </Button>
             <Button
               size="sm"

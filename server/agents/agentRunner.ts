@@ -31,7 +31,7 @@ const openai = OPENAI_API_KEY
     })
   : null;
 
-export type AgentType = "document_intelligence" | "processor" | "communication" | "email_doc_classifier" | "intake_validator" | "intake_fund_matcher" | "intake_feedback_generator";
+export type AgentType = "document_intelligence" | "processor" | "communication" | "email_doc_classifier" | "intake_validator" | "intake_fund_matcher" | "intake_feedback_generator" | "underwriting_extractor" | "underwriting_analyst";
 
 export interface ExecuteAgentParams {
   agentType: AgentType;

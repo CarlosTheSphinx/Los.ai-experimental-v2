@@ -32,6 +32,8 @@ import {
 import { asc, gte, lte, sql } from 'drizzle-orm';
 import { startPipeline, getPipelineStatus, getPipelineHistory } from '../agents/orchestrator';
 import { getSettings as getEmailDocCheckSettings, updateSettings as updateEmailDocCheckSettings, runEmailDocCheck, restartEmailDocCheckPolling } from '../services/emailDocCheck';
+import { startUnderwritingOrchestration } from '../agents/underwritingOrchestrator';
+import { underwritingReports } from '@shared/schema';
 
 // ==================== DEFAULT AGENT PROMPTS ====================
 
@@ -193,6 +195,135 @@ export async function seedDefaultAgentConfigs(db: RouteDeps['db']): Promise<void
       name: 'Feedback Generator',
       systemPrompt: INTAKE_AGENT_PROMPTS.FEEDBACK_GENERATOR,
       toolDefinitions: ['feedback_generation', 'verdict_calculation'],
+      modelProvider: 'openai',
+      modelName: 'gpt-4o',
+      maxTokens: 4096,
+      temperature: 0.3
+    },
+    {
+      agentType: 'underwriting_extractor',
+      name: 'Underwriting Data Extractor',
+      systemPrompt: `You are an Underwriting Data Extractor for a commercial real estate lending platform. Your job is to compile a comprehensive, exhaustive Deal Summary from all available sources.
+
+You will receive:
+- Deal fields (loan amount, borrower info, property info, program details, status, dates, notes)
+- Deal notes added by the lender
+- Extracted text from uploaded borrower documents
+
+Your task is to produce a structured, comprehensive Deal Summary that captures ALL available data. Be exhaustive — include every piece of information you can find. If data is missing or unclear, note it explicitly in the dataQuality section.
+
+Return ONLY a valid JSON object (no markdown, no code blocks) with this exact structure:
+{
+  "dealSummary": {
+    "overview": {
+      "dealName": "...",
+      "dealNumber": "...",
+      "currentStage": "...",
+      "applicationDate": "...",
+      "targetCloseDate": "...",
+      "programName": "...",
+      "loanType": "..."
+    },
+    "borrower": {
+      "name": "...",
+      "email": "...",
+      "phone": "...",
+      "entityType": "...",
+      "creditScore": "...",
+      "experience": "...",
+      "completedProjects": "...",
+      "netWorth": "...",
+      "liquidity": "..."
+    },
+    "property": {
+      "address": "...",
+      "type": "...",
+      "state": "...",
+      "asIsValue": "...",
+      "afterRepairValue": "...",
+      "units": "...",
+      "yearBuilt": "...",
+      "condition": "...",
+      "occupancy": "..."
+    },
+    "loan": {
+      "amount": "...",
+      "interestRate": "...",
+      "term": "...",
+      "ltv": "...",
+      "arltv": "...",
+      "purpose": "...",
+      "prepaymentPenalty": "..."
+    },
+    "financials": {
+      "grossMonthlyRent": "...",
+      "annualNOI": "...",
+      "dscr": "...",
+      "annualTaxes": "...",
+      "annualInsurance": "...",
+      "rehabBudget": "...",
+      "totalProjectCost": "..."
+    },
+    "documents": {
+      "uploaded": [],
+      "keyFindings": []
+    },
+    "notes": [],
+    "dataQuality": {
+      "complete": [],
+      "missing": [],
+      "unclear": []
+    }
+  }
+}`,
+      toolDefinitions: ['document_extraction', 'data_compilation'],
+      modelProvider: 'openai',
+      modelName: 'gpt-4o',
+      maxTokens: 4096,
+      temperature: 0.2
+    },
+    {
+      agentType: 'underwriting_analyst',
+      name: 'Underwriting Policy Analyst',
+      systemPrompt: `You are an expert Underwriting Policy Analyst for a commercial real estate lending platform. Your job is to analyze a Deal Summary against credit policy rules and program parameters, then produce a detailed Underwriting Report.
+
+You will receive:
+- A comprehensive Deal Summary (compiled from deal data and documents)
+- Program parameters (min/max LTV, FICO, DSCR, loan amounts, eligible property types, etc.)
+- Credit policy rules (specific rules with title, description, severity, category)
+- Review guidelines from the program
+
+Your task:
+1. Check each credit policy rule against the available deal data — be specific and cite exact values
+2. Check all program parameters (LTV, FICO, DSCR, loan size, property type eligibility, etc.)
+3. Identify strengths, conditions, and deal-breakers
+4. Score the deal 0–100 (100 = perfect policy match, 0 = complete fail)
+5. Assess overall likelihood: "high" (≥75), "medium" (50–74), "low" (25–49), "unlikely" (<25)
+6. Provide a clear recommendation and actionable next steps
+
+Return ONLY a valid JSON object (no markdown, no code blocks) with this exact structure:
+{
+  "underwritingReport": {
+    "overallLikelihood": "high|medium|low|unlikely",
+    "score": 0-100,
+    "summary": "2-3 sentence executive summary of the deal",
+    "policyChecks": [
+      {
+        "rule": "Rule name or parameter being checked",
+        "status": "pass|fail|warning|insufficient_data",
+        "detail": "Specific finding with actual values from the deal",
+        "severity": "critical|major|minor"
+      }
+    ],
+    "strengths": ["..."],
+    "conditions": ["Specific conditions that must be met before approval"],
+    "dealBreakers": ["Critical issues that prevent approval as-is"],
+    "missingData": ["Data needed to complete underwriting"],
+    "recommendation": "Clear underwriter recommendation paragraph",
+    "nextSteps": ["Ordered list of specific next steps"]
+  }
+}`,
+      toolDefinitions: ['policy_analysis', 'risk_assessment'],
       modelProvider: 'openai',
       modelName: 'gpt-4o',
       maxTokens: 4096,
@@ -2038,6 +2169,108 @@ export function registerAgentRoutes(app: Express, deps: RouteDeps): void {
       } catch (error) {
         console.error('Error getting email doc check runs:', error);
         res.status(500).json({ error: 'Failed to get runs' });
+      }
+    }
+  );
+
+  // ==================== UNDERWRITING ORCHESTRATION ====================
+
+  /**
+   * POST /api/projects/:id/underwriting/generate
+   * Start the two-agent underwriting orchestration for a deal
+   */
+  app.post(
+    '/api/projects/:id/underwriting/generate',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const projectId = parseInt(req.params.id);
+        if (isNaN(projectId)) return res.status(400).json({ error: 'Invalid project ID' });
+
+        const { reportId } = await startUnderwritingOrchestration({
+          projectId,
+          triggeredBy: req.user?.id,
+        });
+
+        res.json({ success: true, reportId, message: 'Underwriting report generation started' });
+      } catch (error: any) {
+        console.error('Error starting underwriting orchestration:', error);
+        res.status(500).json({ error: error?.message || 'Failed to start underwriting generation' });
+      }
+    }
+  );
+
+  /**
+   * GET /api/projects/:id/underwriting/reports
+   * List all underwriting reports for a project
+   */
+  app.get(
+    '/api/projects/:id/underwriting/reports',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const projectId = parseInt(req.params.id);
+        if (isNaN(projectId)) return res.status(400).json({ error: 'Invalid project ID' });
+
+        const reports = await db
+          .select({
+            id: underwritingReports.id,
+            projectId: underwritingReports.projectId,
+            status: underwritingReports.status,
+            overallLikelihood: underwritingReports.overallLikelihood,
+            score: underwritingReports.score,
+            errorMessage: underwritingReports.errorMessage,
+            triggeredBy: underwritingReports.triggeredBy,
+            createdAt: underwritingReports.createdAt,
+            updatedAt: underwritingReports.updatedAt,
+            // Exclude heavy pdfData and full report from list view
+          })
+          .from(underwritingReports)
+          .where(eq(underwritingReports.projectId, projectId))
+          .orderBy(desc(underwritingReports.createdAt));
+
+        res.json(reports);
+      } catch (error) {
+        console.error('Error fetching underwriting reports:', error);
+        res.status(500).json({ error: 'Failed to fetch underwriting reports' });
+      }
+    }
+  );
+
+  /**
+   * GET /api/projects/:id/underwriting/reports/:reportId/pdf
+   * Download PDF for a specific underwriting report
+   */
+  app.get(
+    '/api/projects/:id/underwriting/reports/:reportId/pdf',
+    authenticateUser,
+    requireAdmin,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const reportId = parseInt(req.params.reportId);
+        if (isNaN(reportId)) return res.status(400).json({ error: 'Invalid report ID' });
+
+        const [report] = await db
+          .select()
+          .from(underwritingReports)
+          .where(eq(underwritingReports.id, reportId));
+
+        if (!report) return res.status(404).json({ error: 'Report not found' });
+        if (report.status !== 'complete') return res.status(400).json({ error: 'Report is not yet complete' });
+        if (!report.pdfData) return res.status(404).json({ error: 'PDF not available for this report' });
+
+        const pdfBuffer = Buffer.from(report.pdfData, 'base64');
+        const filename = `underwriting-report-${reportId}.pdf`;
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Length', pdfBuffer.length);
+        res.send(pdfBuffer);
+      } catch (error) {
+        console.error('Error downloading underwriting report PDF:', error);
+        res.status(500).json({ error: 'Failed to download PDF' });
       }
     }
   );
