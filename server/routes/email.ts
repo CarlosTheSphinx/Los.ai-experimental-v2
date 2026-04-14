@@ -61,12 +61,18 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
       }
 
       const returnTo = (req.query.returnTo as string) || '/admin/email';
-      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
-      const host = req.headers['x-forwarded-host'] || req.headers['host'] || '';
-      const baseUrl = `${protocol}://${host}`;
-      const redirectUri = `${baseUrl}/api/email/callback`;
+      // Prefer explicit env var (set in Railway) to avoid redirect_uri_mismatch errors.
+      // Falls back to dynamic construction from request headers.
+      let redirectUri: string;
+      if (process.env.GOOGLE_OAUTH_REDIRECT_URI) {
+        redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI;
+      } else {
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+        const host = req.headers['x-forwarded-host'] || req.headers['host'] || '';
+        redirectUri = `${protocol}://${host}/api/email/callback`;
+      }
       const state = Buffer.from(JSON.stringify({ userId: req.user!.id, returnTo })).toString('base64url');
-      
+
       const authUrl = getGmailAuthUrl(redirectUri, state);
       res.redirect(authUrl);
     } catch (error: any) {
@@ -90,10 +96,14 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
       const userId = stateData.userId;
       returnTo = stateData.returnTo || '/admin/email';
       
-      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
-      const host = req.headers['x-forwarded-host'] || req.headers['host'] || '';
-      const baseUrl = `${protocol}://${host}`;
-      const redirectUri = `${baseUrl}/api/email/callback`;
+      let redirectUri: string;
+      if (process.env.GOOGLE_OAUTH_REDIRECT_URI) {
+        redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI;
+      } else {
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+        const host = req.headers['x-forwarded-host'] || req.headers['host'] || '';
+        redirectUri = `${protocol}://${host}/api/email/callback`;
+      }
 
       const tokens = await exchangeGmailCode(code as string, redirectUri);
       
