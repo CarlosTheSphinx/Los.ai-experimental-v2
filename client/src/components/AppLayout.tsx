@@ -150,6 +150,15 @@ const borrowerViewNavItems: NavItem[] = [
   { href: "/borrower-preview", label: "Borrower Dashboard", icon: Home },
 ];
 
+const lenderNavItems: NavItem[] = [
+  { href: "/admin/overview", label: "Dashboard", icon: Gauge },
+  { href: "/admin", label: "Pipeline", icon: LayoutDashboard },
+  { href: "/admin/commercial-pipeline", label: "Commercial Pipeline", icon: Building2 },
+  { href: "/lender/inbox", label: "Email Inbox", icon: Inbox },
+  { href: "/inbox", label: "Messages", icon: MessageSquare },
+  { href: "/admin/settings", label: "Settings", icon: Settings },
+];
+
 // Lendry admin items — only visible to super_admin role (Lendry platform team)
 const lendryAdminNavItems: NavItem[] = [
   { href: "/admin/platform", label: "Platform Overview", icon: Globe },
@@ -240,7 +249,9 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
   const effectiveViewAsBorrower = canViewAs && viewAsMode === "borrower";
   const effectiveViewAsLender = canViewAs && viewAsMode === "lender";
 
-  const navItems = (effectiveViewAsBorrower || isBorrower) ? borrowerNavItems : brokerNavItems;
+  const isLenderView = user?.role === 'lender' || effectiveViewAsLender;
+  const navItems = (effectiveViewAsBorrower || isBorrower) ? borrowerNavItems :
+    isLenderView ? lenderNavItems : brokerNavItems;
 
   const showAdminSection = isAdmin && !isBroker && !isBorrower && !effectiveViewAsBorrower && !effectiveViewAsLender;
 

@@ -255,7 +255,7 @@ function LenderProtectedRoute({ component: Component }: { component: React.Compo
     return <Redirect to="/login" />;
   }
 
-  if (user?.role !== 'lender') {
+  if (user?.role !== 'lender' && user?.role !== 'super_admin') {
     return <Redirect to="/" />;
   }
 
