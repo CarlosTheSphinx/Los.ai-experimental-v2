@@ -118,7 +118,7 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
       await db.update(emailAccounts).set({ isActive: false })
         .where(eq(emailAccounts.userId, userId));
 
-      await db.insert(emailAccounts).values({
+      const [newAccount] = await db.insert(emailAccounts).values({
         userId,
         emailAddress,
         provider: 'gmail',
@@ -127,7 +127,14 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
         tokenExpiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
         isActive: true,
         syncStatus: 'idle',
-      });
+      }).returning();
+
+      // Kick off an initial sync in the background so threads appear immediately.
+      if (newAccount?.id) {
+        syncEmails(newAccount.id).catch((err) =>
+          console.error('Initial email sync error:', err)
+        );
+      }
 
       const separator = returnTo.includes('?') ? '&' : '?';
       res.redirect(`${returnTo}${separator}success=email_connected`);

@@ -28,6 +28,7 @@ export default function LenderInboxPage() {
     urlThreadId ? parseInt(urlThreadId) : null
   );
   const [filterUnread, setFilterUnread] = useState<string>("all");
+  const justConnected = searchParams.get("success") === "email_connected";
 
   // Fetch email account
   const { data: accountData } = useQuery<{ account: { emailAddress: string; isActive: boolean } | null }>({
@@ -77,6 +78,17 @@ export default function LenderInboxPage() {
       toast({ title: "Sync failed", variant: "destructive" });
     },
   });
+
+  // When the user returns from Google OAuth, auto-sync and then refetch.
+  useEffect(() => {
+    if (!justConnected || !accountData?.account) return;
+    syncMutation.mutate(undefined, {
+      onSettled: () => {
+        refetchThreads();
+      },
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [justConnected, accountData?.account?.emailAddress]);
 
   function handleSelectThread(threadId: number) {
     setActiveThreadId(threadId);
@@ -182,9 +194,12 @@ export default function LenderInboxPage() {
 
           {/* List */}
           <div className="flex-1 overflow-hidden">
-            {threadsLoading ? (
-              <div className="flex items-center justify-center h-32">
+            {threadsLoading || syncMutation.isPending ? (
+              <div className="flex flex-col items-center justify-center h-32 gap-2">
                 <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                {syncMutation.isPending && (
+                  <p className="text-xs text-gray-500">Syncing emails…</p>
+                )}
               </div>
             ) : (
               <ThreadList
