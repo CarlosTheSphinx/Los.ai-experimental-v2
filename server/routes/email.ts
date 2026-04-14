@@ -439,6 +439,13 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
       const threadId = parseInt(req.params.id);
       const dealId = parseInt(req.params.dealId);
 
+      const [thread] = await db.select().from(emailThreads).where(eq(emailThreads.id, threadId));
+      if (!thread) return res.status(404).json({ error: 'Thread not found' });
+
+      const [account] = await db.select().from(emailAccounts)
+        .where(and(eq(emailAccounts.id, thread.accountId), eq(emailAccounts.userId, req.user!.id)));
+      if (!account) return res.status(403).json({ error: 'Access denied' });
+
       await db.delete(emailThreadDealLinks)
         .where(and(
           eq(emailThreadDealLinks.emailThreadId, threadId),
@@ -528,13 +535,13 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
       }
 
       const links = await db.select({
-        threadId: emailThreadDealLinks.threadId,
+        emailThreadId: emailThreadDealLinks.emailThreadId,
       }).from(emailThreadDealLinks)
         .where(eq(emailThreadDealLinks.dealId, dealId));
 
       if (links.length === 0) return res.json({ threads: [] });
 
-      const threadIds = links.map(l => l.threadId);
+      const threadIds = links.map(l => l.emailThreadId);
       const threads = await db.select()
         .from(emailThreads)
         .where(sql`${emailThreads.id} = ANY(${threadIds})`)
