@@ -199,8 +199,8 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
         return res.json({ threads: [], total: 0 });
       }
 
-      const { search, limit = '50', offset = '0', linked, dealId } = req.query;
-      const limitNum = Math.min(parseInt(limit as string) || 50, 100);
+      const { search, limit = '100', offset = '0', linked, dealId } = req.query;
+      const limitNum = Math.min(parseInt(limit as string) || 100, 500);
       const offsetNum = parseInt(offset as string) || 0;
 
       let query = db.select().from(emailThreads)
@@ -473,6 +473,31 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
     } catch (error: any) {
       console.error('Error unlinking thread from deal:', error);
       res.status(500).json({ error: 'Failed to unlink thread from deal' });
+    }
+  });
+
+  // DELETE /api/email/threads/:id - Delete an email thread and all its messages
+  app.delete('/api/email/threads/:id', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const threadId = parseInt(req.params.id);
+      if (isNaN(threadId)) return res.status(400).json({ error: 'Invalid thread id' });
+
+      const [thread] = await db.select().from(emailThreads).where(eq(emailThreads.id, threadId));
+      if (!thread) return res.status(404).json({ error: 'Thread not found' });
+
+      const [account] = await db.select().from(emailAccounts)
+        .where(and(eq(emailAccounts.id, thread.accountId), eq(emailAccounts.userId, req.user!.id)));
+      if (!account) return res.status(403).json({ error: 'Access denied' });
+
+      // Remove deal links, messages, then the thread itself
+      await db.delete(emailThreadDealLinks).where(eq(emailThreadDealLinks.emailThreadId, threadId));
+      await db.delete(emailMessages).where(eq(emailMessages.threadId, threadId));
+      await db.delete(emailThreads).where(eq(emailThreads.id, threadId));
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error deleting email thread:', error);
+      res.status(500).json({ error: 'Failed to delete thread' });
     }
   });
 

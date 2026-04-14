@@ -28,6 +28,8 @@ export default function LenderInboxPage() {
     urlThreadId ? parseInt(urlThreadId) : null
   );
   const [filterUnread, setFilterUnread] = useState<string>("all");
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 100;
   const justConnected = searchParams.get("success") === "email_connected";
 
   // Fetch email account
@@ -35,12 +37,16 @@ export default function LenderInboxPage() {
     queryKey: ["/api/email/account"],
   });
 
-  // Fetch threads
+  // Fetch threads with pagination
   const { data: threadsData, isLoading: threadsLoading, refetch: refetchThreads } = useQuery<{
     threads: EmailThread[];
     total: number;
   }>({
-    queryKey: ["/api/email/threads"],
+    queryKey: ["/api/email/threads", page],
+    queryFn: async () => {
+      const res = await fetch(`/api/email/threads?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`, { credentials: "include" });
+      return res.json();
+    },
     enabled: !!accountData?.account,
     refetchInterval: 30_000,
   });
@@ -89,6 +95,10 @@ export default function LenderInboxPage() {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [justConnected, accountData?.account?.emailAddress]);
+
+  function handleThreadDeleted(threadId: number) {
+    if (activeThreadId === threadId) setActiveThreadId(null);
+  }
 
   function handleSelectThread(threadId: number) {
     setActiveThreadId(threadId);
@@ -193,20 +203,33 @@ export default function LenderInboxPage() {
           </div>
 
           {/* List */}
-          <div className="flex-1 overflow-hidden">
-            {threadsLoading || syncMutation.isPending ? (
-              <div className="flex flex-col items-center justify-center h-32 gap-2">
-                <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-                {syncMutation.isPending && (
-                  <p className="text-xs text-gray-500">Syncing emails…</p>
-                )}
+          <div className="flex-1 overflow-hidden flex flex-col">
+            <div className="flex-1 overflow-hidden">
+              {threadsLoading || syncMutation.isPending ? (
+                <div className="flex flex-col items-center justify-center h-32 gap-2">
+                  <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                  {syncMutation.isPending && (
+                    <p className="text-xs text-gray-500">Syncing emails…</p>
+                  )}
+                </div>
+              ) : (
+                <ThreadList
+                  threads={filtered}
+                  activeThreadId={activeThreadId}
+                  onSelectThread={handleSelectThread}
+                  onThreadDeleted={handleThreadDeleted}
+                />
+              )}
+            </div>
+            {/* Pagination */}
+            {threadsData && threadsData.total > PAGE_SIZE && (
+              <div className="flex items-center justify-between px-3 py-2 border-t border-gray-700 text-xs text-gray-500 flex-shrink-0">
+                <span>{page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, threadsData.total)} of {threadsData.total}</span>
+                <div className="flex gap-1">
+                  <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-gray-400" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</Button>
+                  <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-gray-400" disabled={(page + 1) * PAGE_SIZE >= threadsData.total} onClick={() => setPage(p => p + 1)}>Next →</Button>
+                </div>
               </div>
-            ) : (
-              <ThreadList
-                threads={filtered}
-                activeThreadId={activeThreadId}
-                onSelectThread={handleSelectThread}
-              />
             )}
           </div>
         </div>

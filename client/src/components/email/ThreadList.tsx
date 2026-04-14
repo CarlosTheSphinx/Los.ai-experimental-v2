@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Mail, Paperclip, Pin, CheckCircle2 } from "lucide-react";
+import { Loader2, Mail, Paperclip, Pin, CheckCircle2, Trash2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { safeRelativeTime } from "@/lib/utils";
@@ -29,10 +29,27 @@ interface ThreadListProps {
   threads: EmailThread[];
   activeThreadId: number | null;
   onSelectThread: (threadId: number) => void;
+  onThreadDeleted?: (threadId: number) => void;
 }
 
-export function ThreadList({ threads, activeThreadId, onSelectThread }: ThreadListProps) {
+export function ThreadList({ threads, activeThreadId, onSelectThread, onThreadDeleted }: ThreadListProps) {
   const { toast } = useToast();
+
+  const deleteMutation = useMutation({
+    mutationFn: async (threadId: number) => {
+      const res = await apiRequest("DELETE", `/api/email/threads/${threadId}`);
+      if (!res.ok) throw new Error("Failed to delete");
+      return threadId;
+    },
+    onSuccess: (threadId) => {
+      toast({ title: "Thread deleted" });
+      queryClient.invalidateQueries({ queryKey: ["/api/email/threads"] });
+      onThreadDeleted?.(threadId);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete thread.", variant: "destructive" });
+    },
+  });
 
   const pinMutation = useMutation({
     mutationFn: async (threadId: number) => {
@@ -111,7 +128,7 @@ export function ThreadList({ threads, activeThreadId, onSelectThread }: ThreadLi
                   </div>
                 </div>
               </div>
-              <div className="mt-2 flex justify-end">
+              <div className="mt-2 flex items-center justify-between gap-2">
                 {isPinned ? (
                   <Button
                     size="sm"
@@ -144,6 +161,25 @@ export function ThreadList({ threads, activeThreadId, onSelectThread }: ThreadLi
                     )}
                   </Button>
                 )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 w-6 p-0 text-gray-500 hover:text-red-400 hover:bg-red-400/10"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm("Delete this thread? This cannot be undone.")) {
+                      deleteMutation.mutate(thread.id);
+                    }
+                  }}
+                  disabled={deleteMutation.isPending}
+                  title="Delete thread"
+                >
+                  {deleteMutation.isPending ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3 w-3" />
+                  )}
+                </Button>
               </div>
             </div>
           );
