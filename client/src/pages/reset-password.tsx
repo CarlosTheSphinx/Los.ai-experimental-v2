@@ -52,7 +52,7 @@ export default function ResetPasswordPage() {
     try {
       await apiRequest('POST', '/api/auth/reset-password', {
         token,
-        newPassword: data.password,
+        password: data.password,
       });
       setResetComplete(true);
     } catch (error: any) {
