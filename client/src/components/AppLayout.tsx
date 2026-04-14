@@ -121,11 +121,10 @@ const borrowerNavItems: NavItem[] = [
 const adminNavItems: NavItem[] = [
   { href: "/admin/overview", label: "Dashboard", icon: Gauge },
   { href: "/admin", label: "Pipeline", icon: LayoutDashboard, shortcut: "⌘1" },
-  { href: "/admin/commercial-pipeline", label: "Commercial Pipeline", icon: Building2 },
-  { href: "/admin/commercial-form-config", label: "Form Builder", icon: SlidersHorizontal },
+  { href: "/lender/inbox", label: "Email Inbox", icon: Inbox },
   { href: "/admin/programs", label: "Programs", icon: Settings2, requiredPermission: "programs.view" },
   { href: "/quotes", label: "Quotes", icon: FileText },
-  { href: "/inbox", label: "Messages", icon: Inbox, requiredPermission: "messages.view" },
+  { href: "/inbox", label: "Messages", icon: MessageSquare, requiredPermission: "messages.view" },
   { href: "/admin/users", label: "Users", icon: Users, requiredPermission: "users.view", shortcut: "⌘2" },
   { href: "/admin/onboarding", label: "Onboarding", icon: BookOpen, requiredPermission: "onboarding.view" },
   { href: "/admin/settings", label: "Settings", icon: Settings, requiredPermission: "settings.view" },
@@ -135,15 +134,22 @@ const adminNavItems: NavItem[] = [
 const adminNavItemsV2: NavItem[] = [
   { href: "/admin/overview", label: "Dashboard", icon: Gauge },
   { href: "/admin", label: "Pipeline", icon: LayoutDashboard, shortcut: "⌘1" },
-  { href: "/admin/commercial-pipeline", label: "Commercial Pipeline", icon: Building2 },
-  { href: "/admin/commercial-form-config", label: "Form Builder", icon: SlidersHorizontal },
+  { href: "/lender/inbox", label: "Email Inbox", icon: Inbox },
   { href: "/admin/programs", label: "Programs", icon: Settings2, requiredPermission: "programs.view" },
   { href: "/quotes", label: "Quotes", icon: FileText },
-  { href: "/inbox", label: "Messages", icon: Inbox, requiredPermission: "messages.view" },
+  { href: "/inbox", label: "Messages", icon: MessageSquare, requiredPermission: "messages.view" },
   { href: "/admin/users", label: "Users", icon: Users, requiredPermission: "users.view", shortcut: "⌘2" },
   { href: "/admin/onboarding", label: "Onboarding", icon: BookOpen, requiredPermission: "onboarding.view" },
   { href: "/admin/settings", label: "Settings", icon: Settings, requiredPermission: "settings.view" },
   { href: "/admin/integrations", label: "Integrations", icon: Blocks, requiredPermission: "settings.view" },
+];
+
+// Commercial items — shown as a dedicated section for admin/super_admin
+const adminCommercialNavItems: NavItem[] = [
+  { href: "/admin/commercial-pipeline", label: "Commercial Pipeline", icon: Building2 },
+  { href: "/admin/commercial-form-config", label: "Form Builder", icon: SlidersHorizontal },
+  { href: "/admin/commercial/funds", label: "Fund Management", icon: DollarSign },
+  { href: "/admin/commercial/document-rules", label: "Document Rules", icon: FolderOpen },
 ];
 
 const borrowerViewNavItems: NavItem[] = [
@@ -485,6 +491,44 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
                                 {item.shortcut}
                               </span>
                             )}
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
+
+          {showAdminSection && (
+            <SidebarGroup className="mt-4 pt-4 border-t border-sidebar-border">
+              <SidebarGroupLabel className="text-[12px] uppercase tracking-[0.15em] text-muted-foreground/60 px-0 pb-2">
+                Commercial
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {adminCommercialNavItems.map((item) => {
+                    const isActive = location === item.href ||
+                      (item.href !== "/admin" && location.startsWith(item.href));
+                    const Icon = item.icon;
+                    return (
+                      <SidebarMenuItem key={item.href} className="group relative">
+                        <SidebarMenuButton
+                          asChild
+                          isActive={isActive}
+                          tooltip={item.label}
+                          className={isActive ? "border-l-2 border-primary bg-sidebar-accent" : ""}
+                        >
+                          <Link
+                            href={item.href}
+                            data-testid={`nav-commercial-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+                            onClick={handleNavClick}
+                          >
+                            <NavIcon icon={Icon} isActive={isActive} />
+                            <span className="flex items-center gap-1 flex-1 text-[15px] group-data-[collapsible=icon]:hidden">
+                              {item.label}
+                            </span>
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
