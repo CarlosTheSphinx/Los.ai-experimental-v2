@@ -167,6 +167,18 @@ const AGENT_CONFIGS: Record<string, AgentCardConfig> = {
     icon: <Paperclip className="w-6 h-6" />,
     description: "Classifies email attachments into lending document types",
   },
+  underwriting_extractor: {
+    type: "underwriting_extractor",
+    name: "Underwriting Extractor",
+    icon: <FileText className="w-6 h-6" />,
+    description: "Compiles a comprehensive Deal Summary from all available deal data, notes, and documents.",
+  },
+  underwriting_analyst: {
+    type: "underwriting_analyst",
+    name: "Underwriting Analyst",
+    icon: <Shield className="w-6 h-6" />,
+    description: "Scores the Deal Summary against credit policy rules and generates a detailed Underwriting Report with PDF.",
+  },
 };
 
 const MODEL_PROVIDERS = ["openai", "anthropic"];
@@ -1150,7 +1162,7 @@ function PipelineOrchestrationEditor({
   );
 }
 
-type OrchestationType = "processor" | "email_doc_check" | "credit_policy";
+type OrchestationType = "processor" | "email_doc_check" | "credit_policy" | "underwriting";
 
 const ORCHESTRATION_DESCRIPTIONS: Record<OrchestationType, { title: string; description: string }> = {
   processor: {
@@ -1160,6 +1172,10 @@ const ORCHESTRATION_DESCRIPTIONS: Record<OrchestationType, { title: string; desc
   email_doc_check: {
     title: "Email Doc Check Orchestration",
     description: "The Email Doc Check monitors your linked email threads for new attachments. Every hour (configurable), it scans for new documents, uses AI to classify them (pay stubs, tax returns, bank statements, etc.), and sends you a notification with the classification. Configure the classifier\u2019s AI prompt, polling interval, and review recent classifications below.",
+  },
+  underwriting: {
+    title: "Underwriting Orchestration",
+    description: "The Underwriting Orchestration runs a two-agent pipeline on demand from any deal. The Underwriting Extractor compiles a comprehensive Deal Summary from all available deal data, notes, and documents. The Underwriting Analyst then scores the deal against your credit policy rules and generates a detailed report with strengths, conditions, deal breakers, and a recommendation — delivered as a downloadable PDF.",
   },
   credit_policy: {
     title: "Credit Policy Extraction",
@@ -1670,6 +1686,7 @@ export default function AIAgentsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="processor">Processor Orchestration</SelectItem>
+            <SelectItem value="underwriting">Underwriting Orchestration</SelectItem>
             <SelectItem value="credit_policy">Credit Policy Extraction</SelectItem>
             <SelectItem value="email_doc_check">Email Doc Check Orchestration</SelectItem>
           </SelectContent>
@@ -2429,6 +2446,76 @@ export default function AIAgentsPage() {
               </CardContent>
             </Card>
           </div>
+        </>
+      )}
+
+      {/* ==================== UNDERWRITING ORCHESTRATION ==================== */}
+      {selectedOrchestration === "underwriting" && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <AgentCard
+              config={AGENT_CONFIGS.underwriting_extractor}
+              configuration={getConfigurationForAgent("underwriting_extractor")}
+              stats={getAgentStats("underwriting_extractor")}
+              onConfigure={() => {
+                setSelectedAgentType("underwriting_extractor");
+                setConfigDialogOpen(true);
+              }}
+              onViewRuns={() => {}}
+            />
+            <AgentCard
+              config={AGENT_CONFIGS.underwriting_analyst}
+              configuration={getConfigurationForAgent("underwriting_analyst")}
+              stats={getAgentStats("underwriting_analyst")}
+              onConfigure={() => {
+                setSelectedAgentType("underwriting_analyst");
+                setConfigDialogOpen(true);
+              }}
+              onViewRuns={() => {}}
+            />
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <GitBranch className="w-4 h-4" /> Pipeline Flow
+              </CardTitle>
+              <CardDescription>
+                Triggered on demand from the deal page — runs the two agents in sequence.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-2 px-4 py-2 bg-indigo-50 border border-indigo-200 rounded-lg">
+                  <FileText className="w-4 h-4 text-indigo-600" />
+                  <div>
+                    <p className="text-xs font-semibold text-indigo-900">Step 1 — Extractor</p>
+                    <p className="text-xs text-indigo-600">Compiles Deal Summary</p>
+                  </div>
+                </div>
+                <ArrowRight className="w-5 h-5 text-muted-foreground shrink-0" />
+                <div className="flex items-center gap-2 px-4 py-2 bg-violet-50 border border-violet-200 rounded-lg">
+                  <Shield className="w-4 h-4 text-violet-600" />
+                  <div>
+                    <p className="text-xs font-semibold text-violet-900">Step 2 — Analyst</p>
+                    <p className="text-xs text-violet-600">Scores vs. Credit Policy → PDF</p>
+                  </div>
+                </div>
+                <ArrowRight className="w-5 h-5 text-muted-foreground shrink-0" />
+                <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg">
+                  <FileSearch className="w-4 h-4 text-slate-600" />
+                  <div>
+                    <p className="text-xs font-semibold text-slate-900">Output</p>
+                    <p className="text-xs text-slate-600">Downloadable PDF in AI Reviews</p>
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-4">
+                To generate a report, open any deal and click the <strong>Underwriting Report</strong> button in the header.
+                Reports appear in the deal's <strong>AI Reviews</strong> tab as downloadable PDFs.
+              </p>
+            </CardContent>
+          </Card>
         </>
       )}
 

@@ -16,18 +16,39 @@ import {
 } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 
-const OPENAI_API_KEY = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+// Support both the integration-specific key and the standard OPENAI_API_KEY fallback.
+// Also skip the base URL if it points to localhost (e.g. a local model proxy not available in production).
+const AI_INTEGRATIONS_BASE_URL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+const isLocalhostBaseUrl = AI_INTEGRATIONS_BASE_URL
+  ? /localhost|127\.0\.0\.1/.test(AI_INTEGRATIONS_BASE_URL)
+  : false;
+
+const INTEGRATION_API_KEY = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+const isDummyKey = !INTEGRATION_API_KEY || INTEGRATION_API_KEY === '_DUMMY_API_KEY_';
+
+// Use the real OpenAI key if the integration key is a dummy or base URL is localhost
+const OPENAI_API_KEY = (!isDummyKey && !isLocalhostBaseUrl)
+  ? INTEGRATION_API_KEY
+  : process.env.OPENAI_API_KEY;
 
 if (!OPENAI_API_KEY) {
   console.warn(
-    "⚠️ AI_INTEGRATIONS_OPENAI_API_KEY not set. Agent execution will be disabled."
+    "⚠️ No OpenAI API key found. Set OPENAI_API_KEY or AI_INTEGRATIONS_OPENAI_API_KEY. Agent execution will be disabled."
   );
+}
+
+const openaiBaseURL = (!isLocalhostBaseUrl && !isDummyKey && AI_INTEGRATIONS_BASE_URL)
+  ? AI_INTEGRATIONS_BASE_URL
+  : undefined;
+
+if (isLocalhostBaseUrl) {
+  console.log("ℹ️ AI_INTEGRATIONS_OPENAI_BASE_URL points to localhost — using standard OpenAI endpoint instead.");
 }
 
 const openai = OPENAI_API_KEY
   ? new OpenAI({
       apiKey: OPENAI_API_KEY,
-      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      baseURL: openaiBaseURL,
     })
   : null;
 
