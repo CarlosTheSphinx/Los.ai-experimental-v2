@@ -43,7 +43,7 @@ export function validatePassword(password: string): PasswordValidationResult {
 
   if (
     PASSWORD_POLICY.requireSpecialChar &&
-    !new RegExp(`[${PASSWORD_POLICY.specialChars}]`).test(password)
+    !password.split('').some(c => PASSWORD_POLICY.specialChars.includes(c))
   ) {
     errors.push(
       `Password must contain at least one special character: ${PASSWORD_POLICY.specialChars}`
