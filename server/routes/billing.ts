@@ -131,6 +131,11 @@ async function syncSubscription(sub: any, db: any) {
   const tier = resolveSubscriptionTier(sub);
   const period = sub.items?.data?.[0]?.price?.recurring?.interval === 'year' ? 'annual' : 'monthly';
 
+  // Only stamp convertedAt on first activation — plan changes must not overwrite the original date
+  const [existing] = await db.select({ convertedAt: users.convertedAt })
+    .from(users)
+    .where(eq(users.stripeCustomerId, sub.customer as string));
+
   await db.update(users)
     .set({
       stripeSubscriptionId: sub.id,
@@ -138,7 +143,7 @@ async function syncSubscription(sub: any, db: any) {
       subscriptionTier: tier,
       billingPeriod: period,
       ...(sub.trial_end ? { trialEndsAt: new Date(sub.trial_end * 1000) } : {}),
-      ...(sub.status === 'active' ? { convertedAt: new Date() } : {}),
+      ...(sub.status === 'active' && !existing?.convertedAt ? { convertedAt: new Date() } : {}),
     })
     .where(eq(users.stripeCustomerId, sub.customer as string));
 }
