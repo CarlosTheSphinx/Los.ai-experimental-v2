@@ -992,7 +992,7 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
 
       await sendPasswordResetEmail(user.email, user.fullName || 'User', resetUrl);
 
-      res.json({ success: true, message: 'Password reset email sent' });
+      res.json({ success: true, message: 'If email exists, reset link sent' });
     } catch (error) {
       console.error('Password reset error:', error);
       res.status(500).json({ error: 'Failed to process request' });

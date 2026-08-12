@@ -2590,7 +2590,9 @@ export const commercialSubmissions = pgTable("commercial_submissions", {
   driveFolderId: varchar("drive_folder_id", { length: 255 }),
   driveFolderUrl: text("drive_folder_url"),
 
-  emailThreadId: integer("email_thread_id"),
+  emailThreadId: integer("email_thread_id").references(() => emailThreads.id, {
+    onDelete: "set null",
+  }),
 
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
