@@ -31,6 +31,15 @@ export function registerPilotSurveyRoutes(
         return res.status(400).json({ error: 'surveyType is required' });
       }
 
+      // Validate notificationId belongs to the requesting user (prevents cross-user FK in survey responses)
+      if (notificationId) {
+        const [notif] = await db.select({ id: notifications.id })
+          .from(notifications)
+          .where(and(eq(notifications.id, notificationId), eq(notifications.userId, userId)))
+          .limit(1);
+        if (!notif) return res.status(403).json({ error: 'Notification not found' });
+      }
+
       await db.insert(pilotSurveyResponses).values({
         userId,
         surveyType,
