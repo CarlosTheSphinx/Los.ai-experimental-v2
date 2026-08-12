@@ -5,12 +5,17 @@ import { notifications, pilotSurveyResponses } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { getPendingSurveysForUser } from '../services/pilotSurveyService';
 
+const VALID_SURVEY_TYPES = ['day7', 'day30', 'day60'] as const;
+
 export function registerPilotSurveyRoutes(
   app: Express,
   authenticateUser: (req: AuthRequest, res: Response, next: Function) => void
 ) {
   // GET /api/pilot/surveys/pending — returns unresponded surveys due for the authenticated broker
   app.get('/api/pilot/surveys/pending', authenticateUser, async (req: AuthRequest, res: Response) => {
+    if (req.user!.role !== 'broker') {
+      return res.status(403).json({ error: 'Pilot surveys are for broker users only' });
+    }
     try {
       const userId = req.user!.id;
       const pending = await getPendingSurveysForUser(userId);
@@ -23,12 +28,19 @@ export function registerPilotSurveyRoutes(
 
   // POST /api/pilot/surveys/respond — store a survey response and mark notification as read
   app.post('/api/pilot/surveys/respond', authenticateUser, async (req: AuthRequest, res: Response) => {
+    if (req.user!.role !== 'broker') {
+      return res.status(403).json({ error: 'Pilot surveys are for broker users only' });
+    }
     try {
       const userId = req.user!.id;
       const { surveyType, notificationId, responses, dismissed } = req.body;
 
       if (!surveyType) {
         return res.status(400).json({ error: 'surveyType is required' });
+      }
+
+      if (!VALID_SURVEY_TYPES.includes(surveyType)) {
+        return res.status(400).json({ error: 'Invalid surveyType' });
       }
 
       // Validate notificationId belongs to the requesting user (prevents cross-user FK in survey responses)
