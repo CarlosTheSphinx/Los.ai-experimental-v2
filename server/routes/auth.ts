@@ -990,7 +990,9 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
       const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
       const resetUrl = `${baseUrl}/reset-password/${resetToken}`;
 
-      await sendPasswordResetEmail(user.email, user.fullName || 'User', resetUrl);
+      // Fire-and-forget: don't await so both code paths respond in ~equal time,
+      // preventing timing-based user enumeration.
+      void sendPasswordResetEmail(user.email, user.fullName || 'User', resetUrl);
 
       res.json({ success: true, message: 'If email exists, reset link sent' });
     } catch (error) {
