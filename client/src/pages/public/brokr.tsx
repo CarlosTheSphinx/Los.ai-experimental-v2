@@ -368,10 +368,10 @@ export default function BrokrLandingPage() {
           >
             <div>
               <h2 className="text-4xl md:text-5xl font-bold mb-6">
-                Be one of 10 founding brokers.
+                Be one of 12 founding brokers.
               </h2>
               <p className="text-lg text-white/70 leading-relaxed mb-8">
-                We&apos;re running a free pilot with 10 commercial mortgage brokers this quarter. No forms,
+                We&apos;re running a free pilot with 12 commercial mortgage brokers this quarter. No forms,
                 no contracts, no setup fees. Bring your existing deal flow — we bring the AI that turns it
                 into structured lender submissions.
               </p>
