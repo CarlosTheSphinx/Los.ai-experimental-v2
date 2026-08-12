@@ -62,6 +62,7 @@ export function registerBillingRoutes(
         foundingDiscountRate: users.foundingDiscountRate,
         trialEndsAt: users.trialEndsAt,
         convertedAt: users.convertedAt,
+        pilotActivatedAt: users.pilotActivatedAt,
       }).from(users).where(eq(users.id, userId));
 
       if (!user) return res.status(404).json({ error: 'User not found' });

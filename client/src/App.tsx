@@ -312,6 +312,7 @@ function MainRoutes() {
           <Route path="/messages" component={() => <Redirect to="/inbox" />} />
           <Route path="/resources" component={() => <ProtectedRoute component={ResourcesPage} />} />
           <Route path="/settings" component={() => <ProtectedRoute component={SettingsPage} />} />
+          <Route path="/settings/billing" component={() => <Redirect to="/settings?tab=billing" />} />
           <Route path="/documents" component={() => <ProtectedRoute component={BorrowerDocumentsPage} />} />
           <Route path="/borrower-quote" component={() => <Redirect to="/quotes" />} />
           <Route path="/borrower-quotes" component={() => <Redirect to="/quotes" />} />

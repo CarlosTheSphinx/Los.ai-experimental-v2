@@ -64,6 +64,7 @@ import { InboxBadge } from "@/components/InboxBadge";
 import { NotificationBell } from "@/components/NotificationBell";
 import { CommandPalette } from "@/components/CommandPalette";
 import { PilotSurveyModal } from "@/components/PilotSurveyModal";
+import { PilotConversionBanner } from "@/components/PilotConversionBanner";
 import { ProcessorAssistant } from "@/components/admin/ProcessorAssistant";
 import { AIOrchestrationDebugger } from "@/components/AIOrchestrationDebugger/DebuggerSidebar";
 import { TrainingChecklist } from "@/components/TrainingChecklist";
@@ -697,6 +698,7 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
             </Button>
           </div>
         )}
+        <PilotConversionBanner />
         <div className="flex items-center justify-end gap-2 px-4 py-2 border-b shrink-0">
           <Button size="icon" className="relative h-7 w-7 rounded-full bg-primary hover:bg-primary/90 text-white" data-testid="button-header-messages" onClick={() => setMessagesOpen(!messagesOpen)}>
             <MessageSquare className="!h-3.5 !w-3.5" />

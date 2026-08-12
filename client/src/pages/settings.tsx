@@ -29,7 +29,214 @@ import {
   CreditCard,
   FileText,
   Calendar,
+  AlertCircle,
+  Star,
+  ExternalLink,
 } from "lucide-react";
+
+const BILLING_TIERS = {
+  starter: { name: "Starter", monthly: 99, annual: 79 },
+  pro: { name: "Pro", monthly: 199, annual: 159 },
+  team: { name: "Team", monthly: 399, annual: 319 },
+} as const;
+
+type BillingTier = keyof typeof BILLING_TIERS;
+
+interface SubscriptionState {
+  subscriptionStatus: string | null;
+  subscriptionTier: string | null;
+  billingPeriod: string | null;
+  foundingBroker: boolean;
+  foundingDiscountRate: number | null;
+  trialEndsAt: string | null;
+  convertedAt: string | null;
+}
+
+function BillingTab() {
+  const { toast } = useToast();
+
+  const { data: subscription, isLoading } = useQuery<SubscriptionState>({
+    queryKey: ["/api/billing/subscription"],
+  });
+
+  const portalMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/billing/portal");
+      return res.json();
+    },
+    onSuccess: (data: { url: string }) => {
+      window.location.href = data.url;
+    },
+    onError: () => {
+      toast({ title: "Failed to open billing portal", variant: "destructive" });
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const status = subscription?.subscriptionStatus;
+  const tier = subscription?.subscriptionTier as BillingTier | null;
+  const period = subscription?.billingPeriod;
+  const isFoundingBroker = subscription?.foundingBroker ?? false;
+  const trialEndsAt = subscription?.trialEndsAt ? new Date(subscription.trialEndsAt) : null;
+
+  const tierData = tier && BILLING_TIERS[tier] ? BILLING_TIERS[tier] : null;
+  const priceKey = period === "annual" ? "annual" : "monthly";
+  const basePrice = tierData ? tierData[priceKey] : null;
+  const effectivePrice = basePrice && isFoundingBroker ? Math.round(basePrice * 0.8) : basePrice;
+
+  const daysLeft = trialEndsAt
+    ? Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / 86400000))
+    : null;
+
+  const statusBadge = () => {
+    if (status === "trialing") return <Badge variant="secondary">Trial</Badge>;
+    if (status === "active") return <Badge className="bg-green-100 text-green-800 border-green-200">Active</Badge>;
+    if (status === "past_due") return <Badge variant="destructive">Past Due</Badge>;
+    if (status === "canceled") return <Badge variant="outline">Canceled</Badge>;
+    return <Badge variant="outline">Free Trial</Badge>;
+  };
+
+  return (
+    <div className="space-y-4">
+      {status === "past_due" && (
+        <Card className="border-destructive bg-destructive/5">
+          <CardContent className="pt-4 pb-4 flex items-start gap-3">
+            <AlertCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-destructive">Payment failed — update your payment method to keep your account active.</p>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="mt-2"
+                onClick={() => portalMutation.mutate()}
+                disabled={portalMutation.isPending}
+              >
+                {portalMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+                Update Payment Method
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg">Current Plan</CardTitle>
+            {statusBadge()}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {status === "trialing" && daysLeft !== null && (
+            <div className="p-3 bg-muted rounded-md text-sm">
+              <p className="font-medium">{daysLeft} days remaining in your free trial</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                You'll be invited to subscribe when your pilot reaches Day 75.
+              </p>
+            </div>
+          )}
+
+          {tierData ? (
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="text-xl font-bold">{tierData.name}</p>
+                {isFoundingBroker && (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                    <Star className="h-3 w-3" />
+                    Founding Broker
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">
+                {period === "annual" ? "Annual" : "Monthly"} billing
+                {effectivePrice !== null && (
+                  <>
+                    {" · "}
+                    <span className="font-medium text-foreground">${effectivePrice}/mo</span>
+                    {isFoundingBroker && basePrice !== null && basePrice !== effectivePrice && (
+                      <span className="ml-1 line-through text-muted-foreground">${basePrice}/mo</span>
+                    )}
+                  </>
+                )}
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {status === "canceled"
+                ? "Your subscription has been canceled. Resubscribe to regain access."
+                : "You're on a free trial."}
+            </p>
+          )}
+
+          <Button
+            onClick={() => portalMutation.mutate()}
+            disabled={portalMutation.isPending}
+            variant={status === "canceled" ? "default" : "outline"}
+            size="sm"
+          >
+            {portalMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+            <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+            {status === "canceled" ? "Resubscribe" : "Manage Billing"}
+          </Button>
+          <p className="text-xs text-muted-foreground">Manage payment methods and invoices in the Stripe billing portal.</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Plans</CardTitle>
+          <CardDescription>
+            All plans include AI deal intake, broker inbox, and deal pipeline.
+            Upgrade or downgrade anytime via the billing portal.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {(Object.entries(BILLING_TIERS) as [BillingTier, { name: string; monthly: number; annual: number }][]).map(
+              ([key, t]) => {
+                const effMonthly = isFoundingBroker ? Math.round(t.monthly * 0.8) : t.monthly;
+                const effAnnual = isFoundingBroker ? Math.round(t.annual * 0.8) : t.annual;
+                const isCurrent = tier === key;
+                return (
+                  <div
+                    key={key}
+                    className={`p-3 rounded-lg border ${isCurrent ? "border-primary bg-primary/5" : "border-border"}`}
+                  >
+                    <p className="font-semibold text-sm">{t.name}</p>
+                    <p className="text-lg font-bold mt-1">
+                      ${effMonthly}
+                      <span className="text-xs font-normal text-muted-foreground">/mo</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">or ${effAnnual}/mo billed annually</p>
+                    {isCurrent && (
+                      <Badge className="mt-2 text-xs" variant="secondary">
+                        Current plan
+                      </Badge>
+                    )}
+                  </div>
+                );
+              }
+            )}
+          </div>
+          {isFoundingBroker && (
+            <p className="text-xs text-amber-700 flex items-center gap-1">
+              <Star className="h-3 w-3" />
+              Founding Broker 20% discount applied — locked in permanently.
+            </p>
+          )}
+          <p className="text-xs text-muted-foreground">Annual billing saves 20%. To change plans, use the billing portal above.</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 function BorrowerProfileTab() {
   const { user } = useAuth();
@@ -433,7 +640,8 @@ function BrokerProfileTab() {
 export default function SettingsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("profile");
+  const initialTab = new URLSearchParams(window.location.search).get("tab") ?? "profile";
+  const [activeTab, setActiveTab] = useState(initialTab);
   const isBorrower = user?.role === "borrower";
 
   const [passwordForm, setPasswordForm] = useState({
@@ -495,6 +703,12 @@ export default function SettingsPage() {
             <Bell className="h-3.5 w-3.5 mr-1.5" />
             Notifications
           </TabsTrigger>
+          {!isBorrower && (
+            <TabsTrigger value="billing" data-testid="tab-billing">
+              <CreditCard className="h-3.5 w-3.5 mr-1.5" />
+              Billing
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="profile" className="mt-4 space-y-4">
@@ -574,6 +788,12 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {!isBorrower && (
+          <TabsContent value="billing" className="mt-4 space-y-4">
+            <BillingTab />
+          </TabsContent>
+        )}
 
         <TabsContent value="notifications" className="mt-4 space-y-4">
           <Card>
