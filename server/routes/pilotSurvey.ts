@@ -8,6 +8,13 @@ import { getPendingSurveysForUser } from '../services/pilotSurveyService';
 const VALID_SURVEY_TYPES = ['day7', 'day30', 'day60'] as const;
 const ADMIN_ROLES = ['super_admin', 'lender', 'processor', 'admin', 'staff'];
 
+// Mirrors the non-optional fields from client SURVEY_QUESTIONS; day7 has no required fields
+const REQUIRED_FIELDS_BY_SURVEY_TYPE: Record<typeof VALID_SURVEY_TYPES[number], string[]> = {
+  day7: [],
+  day30: ['dealsSubmitted', 'workflowImprovement'],
+  day60: ['totalDeals', 'timeSaved', 'biggestBenefit', 'biggestFriction', 'npsScore'],
+};
+
 export function registerPilotSurveyRoutes(
   app: Express,
   authenticateUser: (req: AuthRequest, res: Response, next: Function) => void
@@ -51,6 +58,18 @@ export function registerPilotSurveyRoutes(
           .where(and(eq(notifications.id, notificationId), eq(notifications.userId, userId)))
           .limit(1);
         if (!notif) return res.status(403).json({ error: 'Notification not found' });
+      }
+
+      // Server-side required-field validation (mirrors client SURVEY_QUESTIONS optional flags)
+      if (!dismissed) {
+        const requiredFields = REQUIRED_FIELDS_BY_SURVEY_TYPE[surveyType as typeof VALID_SURVEY_TYPES[number]];
+        const safeResponses = responses && typeof responses === 'object' ? responses : {};
+        const missingFields = requiredFields.filter(
+          (field) => safeResponses[field] === undefined || safeResponses[field] === null || safeResponses[field] === ''
+        );
+        if (missingFields.length > 0) {
+          return res.status(400).json({ error: `Missing required survey fields: ${missingFields.join(', ')}` });
+        }
       }
 
       await db.insert(pilotSurveyResponses).values({
