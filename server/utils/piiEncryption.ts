@@ -423,6 +423,52 @@ export function isSensitiveField(field: string): boolean {
   return getSensitiveFields().includes(field);
 }
 
+/**
+ * Mask a PII value for display/logging (not encryption — value is irreversibly obscured)
+ *
+ * @param value - PII value to mask
+ * @param type - Type of PII field for type-appropriate masking
+ * @returns Masked value, or null if input is null
+ */
+export function maskPII(
+  value: string | null,
+  type: 'email' | 'phone' | 'ssn' | 'name' | 'generic'
+): string | null {
+  if (value === null || value === undefined) return null;
+
+  switch (type) {
+    case 'email': {
+      const atIndex = value.indexOf('@');
+      if (atIndex > 0) {
+        return `***${value.substring(atIndex)}`;
+      }
+      return '***';
+    }
+    case 'phone': {
+      // Mask all digits — no safe partial to show without leaking identity
+      return '***-***-****';
+    }
+    case 'ssn': {
+      // Show first two groups (area + group), mask serial: 123-45-****
+      const parts = value.split('-');
+      if (parts.length >= 3) {
+        return `${parts[0]}-${parts[1]}-****`;
+      }
+      return '***-**-****';
+    }
+    case 'name': {
+      // Show first name only, mask surname
+      const spaceIndex = value.indexOf(' ');
+      if (spaceIndex > 0) {
+        return `${value.substring(0, spaceIndex)} ***`;
+      }
+      return `${value.charAt(0)}***`;
+    }
+    default:
+      return '***';
+  }
+}
+
 // Export types
 export type PIIFieldConfig = typeof PII_FIELD_CONFIG;
 export type PIITable = keyof PIIFieldConfig;
