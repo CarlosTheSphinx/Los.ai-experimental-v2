@@ -2,9 +2,11 @@ import type { Express, Response } from 'express';
 import type { AuthRequest } from '../auth';
 import type { RouteDeps } from './types';
 import { eq, desc, and, sql, ilike, or, inArray } from 'drizzle-orm';
-import { emailAccounts, emailThreads, emailMessages, emailThreadDealLinks, projects, users, commercialSubmissions } from '@shared/schema';
+import crypto from 'crypto';
+import { emailAccounts, emailThreads, emailMessages, emailThreadDealLinks, projects, commercialSubmissions } from '@shared/schema';
 import { getGmailAuthUrl, exchangeGmailCode, syncEmails, getAttachment, checkLinkedThreadsForNewEmails, sendReply, sendNewEmail } from '../services/gmail';
 import { encryptToken } from '../utils/encryption';
+import { runDealIntakeAgent } from '../agents/dealIntakeAgent';
 
 export function registerEmailRoutes(app: Express, deps: RouteDeps) {
   const { db, authenticateUser, requireAdmin } = deps;
@@ -71,7 +73,11 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
         const host = req.headers['x-forwarded-host'] || req.headers['host'] || '';
         redirectUri = `${protocol}://${host}/api/email/callback`;
       }
-      const state = Buffer.from(JSON.stringify({ userId: req.user!.id, returnTo })).toString('base64url');
+      const hmacSecret = process.env.JWT_SECRET || process.env.SESSION_SECRET || '';
+      const nonce = crypto.randomBytes(16).toString('hex');
+      const statePayload = JSON.stringify({ userId: req.user!.id, returnTo, nonce });
+      const stateSig = crypto.createHmac('sha256', hmacSecret).update(statePayload).digest('hex');
+      const state = Buffer.from(JSON.stringify({ payload: statePayload, sig: stateSig })).toString('base64url');
 
       const authUrl = getGmailAuthUrl(redirectUri, state);
       res.redirect(authUrl);
@@ -92,7 +98,20 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
         return res.redirect('/admin/email?error=email_auth_failed');
       }
 
-      const stateData = JSON.parse(Buffer.from(state as string, 'base64url').toString());
+      const rawState = JSON.parse(Buffer.from(state as string, 'base64url').toString());
+      const { payload: statePayload, sig: stateSig } = rawState;
+      if (!statePayload || !stateSig) {
+        return res.redirect('/admin/email?error=email_auth_failed');
+      }
+      const hmacSecret = process.env.JWT_SECRET || process.env.SESSION_SECRET || '';
+      const expectedSig = crypto.createHmac('sha256', hmacSecret).update(statePayload).digest('hex');
+      const sigBuf = Buffer.from(stateSig, 'hex');
+      const expBuf = Buffer.from(expectedSig, 'hex');
+      if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+        console.warn('OAuth state HMAC mismatch — possible CSRF attempt');
+        return res.redirect('/admin/email?error=email_auth_failed');
+      }
+      const stateData = JSON.parse(statePayload);
       const userId = stateData.userId;
       returnTo = stateData.returnTo || '/admin/email';
       
@@ -505,7 +524,15 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
   app.get('/api/email/deals/:dealId/threads', authenticateUser, async (req: AuthRequest, res: Response) => {
     try {
       const dealId = parseInt(req.params.dealId);
-      
+      if (isNaN(dealId)) return res.status(400).json({ error: 'Invalid deal ID' });
+
+      const isAdminUser = req.user!.role && ['admin', 'staff', 'super_admin', 'lender', 'processor'].includes(req.user!.role);
+      if (!isAdminUser) {
+        const [deal] = await db.select({ id: projects.id }).from(projects)
+          .where(and(eq(projects.id, dealId), eq(projects.userId, req.user!.id)));
+        if (!deal) return res.status(403).json({ error: 'Access denied' });
+      }
+
       const linkedThreads = await db.select({
         thread: emailThreads,
         linkedAt: emailThreadDealLinks.linkedAt,
@@ -633,14 +660,7 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
       if (!participants) return res.json({ deals: [] });
       
       const emailList = (participants as string).split(',').map(e => e.trim().toLowerCase());
-      
-      const matchedUsers = await db.select({ id: users.id, email: users.email })
-        .from(users)
-        .where(sql`LOWER(${users.email}) = ANY(${emailList})`);
-      
-      if (matchedUsers.length === 0) return res.json({ deals: [] });
-      
-      const userIds = matchedUsers.map(u => u.id);
+
       const deals = await db.select({
         id: projects.id,
         borrowerName: projects.borrowerName,
@@ -648,7 +668,10 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
         status: projects.status,
         loanNumber: projects.loanNumber,
       }).from(projects)
-        .where(sql`${projects.userId} = ANY(${userIds})`)
+        .where(and(
+          eq(projects.userId, req.user!.id),
+          sql`LOWER(${projects.borrowerEmail}) = ANY(${emailList})`
+        ))
         .orderBy(desc(projects.createdAt))
         .limit(10);
       
@@ -732,10 +755,66 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
         emailThreadId: threadId,
       }).returning({ id: commercialSubmissions.id });
 
-      res.json({ submissionId: submission.id, message: 'Deal pinned — AI will process this shortly' });
+      // Auto-trigger the deal intake agent (fire-and-forget)
+      const userId = req.user!.id;
+      const submId = submission.id;
+      setImmediate(() => {
+        runDealIntakeAgent(submId, userId).catch(err => {
+          console.error('[pin-to-pipeline] Deal intake agent error:', err);
+        });
+      });
+
+      res.json({ submissionId: submission.id, message: 'Deal pinned — AI is processing this now' });
     } catch (error: any) {
       console.error('Error pinning thread to pipeline:', error);
       res.status(500).json({ error: 'Failed to pin to pipeline' });
+    }
+  });
+
+  // POST /api/commercial/submissions/:id/process-email-intake
+  // Lender-only: manually trigger deal intake agent on an existing submission
+  app.post('/api/commercial/submissions/:id/process-email-intake', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      if (req.user?.role !== 'lender') {
+        return res.status(403).json({ error: 'Lender access required' });
+      }
+
+      const submissionId = parseInt(req.params.id);
+      if (isNaN(submissionId)) {
+        return res.status(400).json({ error: 'Invalid submission ID' });
+      }
+
+      const [submission] = await db.select({
+        id: commercialSubmissions.id,
+        emailThreadId: commercialSubmissions.emailThreadId,
+        userId: commercialSubmissions.userId,
+      }).from(commercialSubmissions)
+        .where(and(
+          eq(commercialSubmissions.id, submissionId),
+          eq(commercialSubmissions.userId, req.user!.id),
+        ));
+
+      if (!submission) {
+        return res.status(404).json({ error: 'Submission not found' });
+      }
+      if (!submission.emailThreadId) {
+        return res.status(400).json({ error: 'Submission has no linked email thread' });
+      }
+
+      const jobId = `intake-${submissionId}-${Date.now()}`;
+      const userId = req.user!.id;
+
+      // Run async — return immediately with jobId
+      setImmediate(() => {
+        runDealIntakeAgent(submissionId, userId).catch(err => {
+          console.error(`[process-email-intake] Error for submission ${submissionId}:`, err);
+        });
+      });
+
+      res.json({ jobId, submissionId, message: 'AI deal intake agent triggered' });
+    } catch (error: any) {
+      console.error('Error triggering deal intake agent:', error);
+      res.status(500).json({ error: 'Failed to trigger deal intake agent' });
     }
   });
 }
