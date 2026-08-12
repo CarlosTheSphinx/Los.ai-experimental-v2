@@ -50,10 +50,12 @@ interface SubscriptionState {
   foundingDiscountRate: number | null;
   trialEndsAt: string | null;
   convertedAt: string | null;
+  pilotActivatedAt: string | null;
 }
 
 function BillingTab() {
   const { toast } = useToast();
+  const [checkoutPeriod, setCheckoutPeriod] = useState<"monthly" | "annual">("monthly");
 
   const { data: subscription, isLoading } = useQuery<SubscriptionState>({
     queryKey: ["/api/billing/subscription"],
@@ -69,6 +71,23 @@ function BillingTab() {
     },
     onError: () => {
       toast({ title: "Failed to open billing portal", variant: "destructive" });
+    },
+  });
+
+  const checkoutMutation = useMutation({
+    mutationFn: async ({ tier, period }: { tier: string; period: string }) => {
+      const res = await apiRequest("POST", "/api/billing/checkout", { tier, period });
+      if (!res.ok) {
+        const body = await res.json();
+        throw new Error(body.error || "Checkout failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data: { url: string }) => {
+      window.location.href = data.url;
+    },
+    onError: (err: Error) => {
+      toast({ title: err.message, variant: "destructive" });
     },
   });
 
@@ -191,11 +210,31 @@ function BillingTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Plans</CardTitle>
-          <CardDescription>
-            All plans include AI deal intake, broker inbox, and deal pipeline.
-            Upgrade or downgrade anytime via the billing portal.
-          </CardDescription>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <CardTitle className="text-lg">Plans</CardTitle>
+              <CardDescription className="mt-0.5">
+                All plans include AI deal intake, broker inbox, and deal pipeline.
+                {status !== "trialing" && " Upgrade or downgrade anytime via the billing portal."}
+              </CardDescription>
+            </div>
+            {status === "trialing" && (
+              <div className="flex items-center rounded-md border p-0.5 bg-muted text-sm">
+                <button
+                  className={`px-3 py-1 rounded-sm transition-colors ${checkoutPeriod === "monthly" ? "bg-background shadow-sm font-medium" : "text-muted-foreground"}`}
+                  onClick={() => setCheckoutPeriod("monthly")}
+                >
+                  Monthly
+                </button>
+                <button
+                  className={`px-3 py-1 rounded-sm transition-colors ${checkoutPeriod === "annual" ? "bg-background shadow-sm font-medium" : "text-muted-foreground"}`}
+                  onClick={() => setCheckoutPeriod("annual")}
+                >
+                  Annual <span className="text-xs text-green-600 font-medium">−20%</span>
+                </button>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-3">
@@ -203,7 +242,9 @@ function BillingTab() {
               ([key, t]) => {
                 const effMonthly = isFoundingBroker ? Math.round(t.monthly * 0.8) : t.monthly;
                 const effAnnual = isFoundingBroker ? Math.round(t.annual * 0.8) : t.annual;
+                const displayPrice = checkoutPeriod === "annual" ? effAnnual : effMonthly;
                 const isCurrent = tier === key;
+                const isCheckingOut = checkoutMutation.isPending && (checkoutMutation.variables as any)?.tier === key;
                 return (
                   <div
                     key={key}
@@ -211,15 +252,30 @@ function BillingTab() {
                   >
                     <p className="font-semibold text-sm">{t.name}</p>
                     <p className="text-lg font-bold mt-1">
-                      ${effMonthly}
+                      ${displayPrice}
                       <span className="text-xs font-normal text-muted-foreground">/mo</span>
                     </p>
-                    <p className="text-xs text-muted-foreground">or ${effAnnual}/mo billed annually</p>
-                    {isCurrent && (
+                    {checkoutPeriod === "annual" ? (
+                      <p className="text-xs text-muted-foreground">billed annually</p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">or ${effAnnual}/mo billed annually</p>
+                    )}
+                    {isCurrent ? (
                       <Badge className="mt-2 text-xs" variant="secondary">
                         Current plan
                       </Badge>
-                    )}
+                    ) : status === "trialing" ? (
+                      <Button
+                        size="sm"
+                        className="mt-2 w-full text-xs h-7"
+                        onClick={() => checkoutMutation.mutate({ tier: key, period: checkoutPeriod })}
+                        disabled={checkoutMutation.isPending}
+                        data-testid={`button-subscribe-${key}`}
+                      >
+                        {isCheckingOut && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                        Subscribe
+                      </Button>
+                    ) : null}
                   </div>
                 );
               }
@@ -231,7 +287,9 @@ function BillingTab() {
               Founding Broker 20% discount applied — locked in permanently.
             </p>
           )}
-          <p className="text-xs text-muted-foreground">Annual billing saves 20%. To change plans, use the billing portal above.</p>
+          {status !== "trialing" && (
+            <p className="text-xs text-muted-foreground">Annual billing saves 20%. To change plans, use the billing portal above.</p>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -703,7 +761,7 @@ export default function SettingsPage() {
             <Bell className="h-3.5 w-3.5 mr-1.5" />
             Notifications
           </TabsTrigger>
-          {!isBorrower && (
+          {user?.role === "broker" && (
             <TabsTrigger value="billing" data-testid="tab-billing">
               <CreditCard className="h-3.5 w-3.5 mr-1.5" />
               Billing
@@ -789,7 +847,7 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        {!isBorrower && (
+        {user?.role === "broker" && (
           <TabsContent value="billing" className="mt-4 space-y-4">
             <BillingTab />
           </TabsContent>

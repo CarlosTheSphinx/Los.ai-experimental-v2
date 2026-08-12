@@ -117,6 +117,7 @@ export const users = pgTable("users", {
   foundingDiscountRate: numeric("founding_discount_rate", { precision: 5, scale: 4 }).default("0"),
   trialEndsAt: timestamp("trial_ends_at"),
   convertedAt: timestamp("converted_at"),
+  day75EmailSentAt: timestamp("day75_email_sent_at"),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({

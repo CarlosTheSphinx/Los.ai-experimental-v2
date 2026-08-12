@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { syncSubscription, resolveSubscriptionTier } from '../billing';
+import { syncSubscription, resolveSubscriptionTier, lookupCheckoutPriceId } from '../billing';
 
 function makeMockDb(existingUser: { convertedAt: Date | null } | null = null) {
   const whereUpdate = vi.fn().mockResolvedValue(undefined);
@@ -139,5 +139,36 @@ describe('syncSubscription', () => {
 
     const setCall = setMock.mock.calls[0][0];
     expect(setCall.billingPeriod).toBe('monthly');
+  });
+});
+
+describe('lookupCheckoutPriceId', () => {
+  afterEach(() => {
+    for (const key of Object.keys(process.env).filter(k => k.startsWith('STRIPE_PRICE_ID_'))) {
+      delete process.env[key];
+    }
+  });
+
+  it('returns the env var value for a standard monthly tier', () => {
+    process.env.STRIPE_PRICE_ID_STARTER_MONTHLY = 'price_starter_mo_test';
+    expect(lookupCheckoutPriceId('starter', 'monthly', false)).toBe('price_starter_mo_test');
+  });
+
+  it('returns the founding variant when foundingBroker is true', () => {
+    process.env.STRIPE_PRICE_ID_PRO_ANNUAL_FOUNDING = 'price_pro_ann_founding_test';
+    expect(lookupCheckoutPriceId('pro', 'annual', true)).toBe('price_pro_ann_founding_test');
+  });
+
+  it('returns null when the env var is not set', () => {
+    expect(lookupCheckoutPriceId('team', 'monthly', false)).toBeNull();
+  });
+
+  it('returns null for an unknown tier/period combination', () => {
+    expect(lookupCheckoutPriceId('enterprise', 'monthly', false)).toBeNull();
+  });
+
+  it('uses standard price when foundingBroker=true but founding env var is not set', () => {
+    // founding var not set, standard var also not set — should return null
+    expect(lookupCheckoutPriceId('starter', 'annual', true)).toBeNull();
   });
 });

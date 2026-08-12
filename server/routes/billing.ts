@@ -1,10 +1,37 @@
 import type { Express, Request, Response } from 'express';
-import { eq } from 'drizzle-orm';
+import { eq, and, isNull, isNotNull, lt } from 'drizzle-orm';
 import { users } from '@shared/schema';
 import { getStripeClient } from '../lib/stripe';
+import { getResendClient } from '../email';
 
 interface AuthRequest extends Request {
   user?: any;
+}
+
+// Price ID lookup for Stripe Checkout — populated from env vars set after ORC-47 approval + ORC-85 product creation.
+// Env var naming: STRIPE_PRICE_ID_{TIER}_{PERIOD}[_FOUNDING]
+// e.g. STRIPE_PRICE_ID_STARTER_MONTHLY, STRIPE_PRICE_ID_PRO_ANNUAL_FOUNDING
+const TIER_PERIOD_ENV: Record<string, string> = {
+  'starter_monthly':          'STRIPE_PRICE_ID_STARTER_MONTHLY',
+  'starter_annual':           'STRIPE_PRICE_ID_STARTER_ANNUAL',
+  'pro_monthly':              'STRIPE_PRICE_ID_PRO_MONTHLY',
+  'pro_annual':               'STRIPE_PRICE_ID_PRO_ANNUAL',
+  'team_monthly':             'STRIPE_PRICE_ID_TEAM_MONTHLY',
+  'team_annual':              'STRIPE_PRICE_ID_TEAM_ANNUAL',
+  'starter_monthly_founding': 'STRIPE_PRICE_ID_STARTER_MONTHLY_FOUNDING',
+  'starter_annual_founding':  'STRIPE_PRICE_ID_STARTER_ANNUAL_FOUNDING',
+  'pro_monthly_founding':     'STRIPE_PRICE_ID_PRO_MONTHLY_FOUNDING',
+  'pro_annual_founding':      'STRIPE_PRICE_ID_PRO_ANNUAL_FOUNDING',
+  'team_monthly_founding':    'STRIPE_PRICE_ID_TEAM_MONTHLY_FOUNDING',
+  'team_annual_founding':     'STRIPE_PRICE_ID_TEAM_ANNUAL_FOUNDING',
+};
+
+export function lookupCheckoutPriceId(tier: string, period: string, foundingBroker: boolean): string | null {
+  const suffix = foundingBroker ? '_founding' : '';
+  const key = `${tier}_${period}${suffix}`;
+  const envVar = TIER_PERIOD_ENV[key];
+  if (!envVar) return null;
+  return process.env[envVar] ?? null;
 }
 
 export function registerBillingRoutes(
@@ -86,7 +113,7 @@ export function registerBillingRoutes(
       }
 
       const stripe = getStripeClient();
-      const returnUrl = `${process.env.APP_URL || ''}/settings/billing`;
+      const returnUrl = `${process.env.APP_URL || ''}/settings?tab=billing`;
       const session = await stripe.billingPortal.sessions.create({
         customer: user.stripeCustomerId,
         return_url: returnUrl,
@@ -97,6 +124,192 @@ export function registerBillingRoutes(
       console.error('[billing/portal] error:', err);
       res.status(500).json({ error: 'Failed to create billing portal session' });
     }
+  });
+
+  // POST /api/billing/checkout — create a Stripe Checkout session for new subscriptions
+  // Requires: STRIPE_PRICE_ID_* env vars to be set (configured after ORC-47 approval + ORC-85 product creation)
+  app.post('/api/billing/checkout', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const { tier, period } = req.body;
+
+      if (!tier || !period) {
+        return res.status(400).json({ error: 'tier and period are required' });
+      }
+
+      const validTiers = ['starter', 'pro', 'team'];
+      const validPeriods = ['monthly', 'annual'];
+      if (!validTiers.includes(tier)) return res.status(400).json({ error: 'Invalid tier' });
+      if (!validPeriods.includes(period)) return res.status(400).json({ error: 'Invalid period' });
+
+      const [user] = await db.select({
+        email: users.email,
+        foundingBroker: users.foundingBroker,
+        stripeCustomerId: users.stripeCustomerId,
+        subscriptionStatus: users.subscriptionStatus,
+      }).from(users).where(eq(users.id, userId));
+
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
+      // Block if already actively subscribed
+      if (user.subscriptionStatus === 'active') {
+        return res.status(400).json({ error: 'Already subscribed. Use the billing portal to manage your plan.' });
+      }
+
+      const priceId = lookupCheckoutPriceId(tier, period, user.foundingBroker ?? false);
+      if (!priceId) {
+        console.warn(`[billing/checkout] Price ID not configured for tier=${tier} period=${period} founding=${user.foundingBroker}`);
+        return res.status(503).json({
+          error: 'Billing is not yet fully configured. Subscription pricing will be available shortly.',
+          code: 'PRICE_NOT_CONFIGURED',
+        });
+      }
+
+      const stripe = getStripeClient();
+      const appUrl = process.env.APP_URL || '';
+
+      const sessionParams: any = {
+        mode: 'subscription',
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: `${appUrl}/settings?tab=billing&checkout=success`,
+        cancel_url: `${appUrl}/settings?tab=billing&checkout=cancel`,
+        client_reference_id: String(userId),
+        metadata: { userId: String(userId), tier, period },
+      };
+
+      // Attach existing Stripe customer or pre-fill email for new customers
+      if (user.stripeCustomerId) {
+        sessionParams.customer = user.stripeCustomerId;
+      } else {
+        sessionParams.customer_email = user.email;
+      }
+
+      const session = await stripe.checkout.sessions.create(sessionParams);
+      res.json({ url: session.url });
+    } catch (err: any) {
+      console.error('[billing/checkout] error:', err);
+      res.status(500).json({ error: 'Failed to create checkout session' });
+    }
+  });
+
+  // POST /api/cron/pilot-conversion — send Day-75 conversion emails to eligible pilot brokers
+  // Called daily by external cron; authenticated via x-cron-key header
+  app.post('/api/cron/pilot-conversion', async (req: Request, res: Response) => {
+    const cronKey = req.headers['x-cron-key'];
+    const expectedKey = process.env.CRON_SECRET_KEY;
+    if (!expectedKey) {
+      console.error('[cron/pilot-conversion] CRON_SECRET_KEY not set');
+      return res.status(503).json({ error: 'Cron endpoint not configured' });
+    }
+    if (cronKey !== expectedKey) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    try {
+      const sent: number[] = [];
+      const skipped: number[] = [];
+
+      // Find pilot brokers who hit Day 75 but haven't received the conversion email yet
+      const DAY75_MS = 75 * 24 * 60 * 60 * 1000;
+      const cutoff = new Date(Date.now() - DAY75_MS);
+
+      const candidates = await db.select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        foundingBroker: users.foundingBroker,
+        subscriptionStatus: users.subscriptionStatus,
+        pilotActivatedAt: users.pilotActivatedAt,
+      })
+        .from(users)
+        .where(
+          and(
+            eq(users.isPilotBroker, true),
+            isNotNull(users.pilotActivatedAt),
+            lt(users.pilotActivatedAt, cutoff),
+            isNull(users.day75EmailSentAt)
+          )
+        );
+
+      for (const candidate of candidates) {
+        // Skip users who already converted
+        if (candidate.subscriptionStatus === 'active') {
+          await db.update(users).set({ day75EmailSentAt: new Date() }).where(eq(users.id, candidate.id));
+          skipped.push(candidate.id);
+          continue;
+        }
+
+        try {
+          await sendDay75ConversionEmail(candidate);
+          await db.update(users).set({ day75EmailSentAt: new Date() }).where(eq(users.id, candidate.id));
+          sent.push(candidate.id);
+        } catch (emailErr: any) {
+          console.error(`[cron/pilot-conversion] Email failed for user ${candidate.id}:`, emailErr.message);
+        }
+      }
+
+      console.log(`[cron/pilot-conversion] sent=${sent.length} skipped=${skipped.length}`);
+      res.json({ sent: sent.length, skipped: skipped.length });
+    } catch (err: any) {
+      console.error('[cron/pilot-conversion] error:', err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+}
+
+async function sendDay75ConversionEmail(user: {
+  email: string;
+  firstName?: string | null;
+  foundingBroker: boolean;
+}) {
+  const { client, fromEmail } = await getResendClient();
+  const appUrl = process.env.APP_URL || '';
+  const billingUrl = `${appUrl}/settings?tab=billing`;
+  const name = user.firstName || 'there';
+
+  const foundingCallout = user.foundingBroker
+    ? `<p style="background:#fef3c7;border:1px solid #fde68a;padding:12px 16px;border-radius:6px;margin:16px 0;">
+        ⭐ <strong>Your Founding Broker discount is still reserved.</strong>
+        Subscribe before Day 104 to lock in 20% off — permanently.
+      </p>`
+    : '';
+
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><style>
+  body{font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px}
+  h1{color:#1a1a1a;font-size:22px}
+  .cta{display:inline-block;background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;margin:16px 0}
+  .footer{margin-top:32px;font-size:12px;color:#888}
+</style></head>
+<body>
+  <h1>Your Brokr.AI pilot is at Day 75 🎉</h1>
+  <p>Hi ${name},</p>
+  <p>You've hit <strong>Day 75</strong> of your Brokr.AI pilot — congratulations on making it this far! Your free trial window is coming to a close, and we'd love to keep you on board.</p>
+  ${foundingCallout}
+  <p>Choose a plan that fits how you work:</p>
+  <ul>
+    <li><strong>Starter</strong> — $99/mo · Solo brokers</li>
+    <li><strong>Pro</strong> — $199/mo · Growing teams</li>
+    <li><strong>Team</strong> — $399/mo · Full organizations</li>
+  </ul>
+  <p>Annual billing saves an additional 20%.</p>
+  <a href="${billingUrl}" class="cta">Subscribe Now →</a>
+  <p>You have until <strong>Day 104</strong> to subscribe before your account enters read-only mode.</p>
+  <div class="footer">
+    <p>Questions? Reply to this email or visit <a href="${appUrl}">${appUrl.replace('https://', '')}</a></p>
+    <p>Brokr.AI · Commercial Lending Made Simple</p>
+  </div>
+</body>
+</html>`;
+
+  await client.emails.send({
+    from: fromEmail || 'Brokr.AI <info@brokr.ai>',
+    to: user.email,
+    subject: user.foundingBroker
+      ? '⭐ Day 75: Lock in your Founding Broker discount before it expires'
+      : 'Your Brokr.AI pilot is at Day 75 — subscribe to keep access',
+    html,
   });
 }
 
@@ -122,8 +335,20 @@ async function handleStripeEvent(event: any, db: any) {
         .where(eq(users.stripeCustomerId, invoice.customer as string));
       break;
     }
+    // checkout.session.completed — link Stripe customer ID to user account on first checkout
+    case 'checkout.session.completed': {
+      const session = event.data.object;
+      if (session.client_reference_id && session.customer) {
+        const userId = parseInt(session.client_reference_id, 10);
+        if (!isNaN(userId)) {
+          await db.update(users)
+            .set({ stripeCustomerId: session.customer as string })
+            .where(and(eq(users.id, userId), isNull(users.stripeCustomerId)));
+        }
+      }
+      break;
+    }
     default:
-      // Unhandled event — log and ignore
       console.log(`[billing/webhook] Unhandled event: ${event.type}`);
   }
 }
