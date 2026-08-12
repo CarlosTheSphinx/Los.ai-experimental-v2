@@ -46,7 +46,7 @@ import {
   quotePdfTemplates,
   type QuotePdfTemplate, type InsertQuotePdfTemplate,
 } from "@shared/schema";
-import { desc, eq, and, gt, like, sql, asc, or, isNull, count, inArray } from "drizzle-orm";
+import { desc, eq, and, ne, gt, like, sql, asc, or, isNull, count, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // User methods
@@ -108,6 +108,7 @@ export interface IStorage {
   getCommercialSubmissionsByUser(userId: number): Promise<CommercialSubmission[]>;
   getAllCommercialSubmissions(status?: string): Promise<CommercialSubmission[]>;
   updateCommercialSubmissionStatus(id: number, status: string, adminNotes?: string): Promise<CommercialSubmission | undefined>;
+  claimDocsReceived(id: number): Promise<boolean>;
   addCommercialSubmissionDocument(doc: InsertCommercialSubmissionDocument): Promise<CommercialSubmissionDocument>;
   getCommercialSubmissionDocuments(submissionId: number): Promise<CommercialSubmissionDocument[]>;
   getCommercialSubmissionDocumentById(id: number): Promise<CommercialSubmissionDocument | undefined>;
@@ -1403,6 +1404,17 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db.update(commercialSubmissions).set(updates)
       .where(eq(commercialSubmissions.id, id)).returning();
     return updated;
+  }
+
+  async claimDocsReceived(id: number): Promise<boolean> {
+    const result = await db.update(commercialSubmissions)
+      .set({ status: 'docs_received', updatedAt: new Date() })
+      .where(and(
+        eq(commercialSubmissions.id, id),
+        ne(commercialSubmissions.status, 'docs_received'),
+      ))
+      .returning({ id: commercialSubmissions.id });
+    return result.length > 0;
   }
 
   async addCommercialSubmissionDocument(doc: InsertCommercialSubmissionDocument): Promise<CommercialSubmissionDocument> {

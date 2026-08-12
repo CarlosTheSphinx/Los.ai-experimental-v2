@@ -19844,14 +19844,17 @@ Return JSON only:
       if (submission.emailThreadId) {
         sendBrokerNotification('document_uploaded', submissionId, { documentName: originalFileName }).catch(() => {});
 
-        // Check if all core required docs are now present; if so, notify and update status
+        // Check if all core required docs are now present; if so, atomically claim
+        // the status transition so only one concurrent request fires the notification.
         const CORE_REQUIRED = ['SREO', 'PFS', 'BUDGET'];
         const allDocs = await storage.getCommercialSubmissionDocuments(submissionId);
         const uploadedTypes = new Set(allDocs.map(d => d.docType));
         const allCorePresent = CORE_REQUIRED.every(t => uploadedTypes.has(t));
-        if (allCorePresent && submission.status !== 'docs_received') {
-          storage.updateCommercialSubmissionStatus(submissionId, 'docs_received').catch(() => {});
-          sendBrokerNotification('all_docs_received', submissionId).catch(() => {});
+        if (allCorePresent) {
+          const claimed = await storage.claimDocsReceived(submissionId);
+          if (claimed) {
+            sendBrokerNotification('all_docs_received', submissionId).catch(() => {});
+          }
         }
       }
 
