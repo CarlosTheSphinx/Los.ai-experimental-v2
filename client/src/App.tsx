@@ -92,6 +92,7 @@ import PublicUseCasesPage from "@/pages/public/use-cases";
 import PublicContactPage from "@/pages/public/contact";
 import PublicApplyPage from "@/pages/public/apply";
 import ComingSoonPage from "@/pages/public/coming-soon";
+import BrokrLandingPage from "@/pages/public/brokr";
 import { Loader2 } from "lucide-react";
 
 const SITE_MODE = import.meta.env.VITE_SITE_MODE || 'full';
@@ -496,11 +497,12 @@ function FullAppContent() {
   const [isPublicApplyPage] = useRoute("/apply");
   const [isPublicApplyProgramPage] = useRoute("/apply/:programId");
   const [isHomePage] = useRoute("/");
+  const [isBrokrPage] = useRoute("/brokr");
 
   const { isAuthenticated, isLoading } = useAuth();
 
   const isPublicAuthPage = isLoginPage || isRegisterPage || isForgotPasswordPage || isResetPasswordPage || isAcceptInvitePage;
-  const isPublicMarketingPage = !isLoading && !isAuthenticated && (isHomePage || isPublicPricingPage || isPublicUseCasesPage || isPublicContactPage);
+  const isPublicMarketingPage = !isLoading && !isAuthenticated && (isHomePage || isPublicPricingPage || isPublicUseCasesPage || isPublicContactPage || isBrokrPage);
 
   if (isMagicLinkPage) {
     return <Switch><Route path="/auth/magic/:token" component={AuthMagicPage} /></Switch>;
@@ -597,6 +599,7 @@ function FullAppContent() {
         <Route path="/pricing" component={PublicPricingPage} />
         <Route path="/use-cases" component={PublicUseCasesPage} />
         <Route path="/contact" component={PublicContactPage} />
+        <Route path="/brokr" component={BrokrLandingPage} />
       </Switch>
     );
   }
