@@ -3,7 +3,7 @@ import type { AuthRequest } from '../auth';
 import type { RouteDeps } from './types';
 import { eq, desc, and, sql, ilike, or, inArray } from 'drizzle-orm';
 import crypto from 'crypto';
-import { emailAccounts, emailThreads, emailMessages, emailThreadDealLinks, projects, commercialSubmissions } from '@shared/schema';
+import { emailAccounts, emailThreads, emailMessages, emailThreadDealLinks, projects, commercialSubmissions, users } from '@shared/schema';
 import { getGmailAuthUrl, exchangeGmailCode, syncEmails, getAttachment, checkLinkedThreadsForNewEmails, sendReply, sendNewEmail } from '../services/gmail';
 import { encryptToken } from '../utils/encryption';
 import { runDealIntakeAgent } from '../agents/dealIntakeAgent';
@@ -153,6 +153,18 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
         syncEmails(newAccount.id).catch((err) =>
           console.error('Initial email sync error:', err)
         );
+      }
+
+      // Set pilot activation fields for broker users on first Gmail connect (ORC-55)
+      const [existingUser] = await db.select({
+        role: users.role,
+        pilotActivatedAt: users.pilotActivatedAt,
+      }).from(users).where(eq(users.id, userId)).limit(1);
+
+      if (existingUser?.role === 'broker' && !existingUser.pilotActivatedAt) {
+        await db.update(users)
+          .set({ pilotActivatedAt: new Date(), isPilotBroker: true })
+          .where(eq(users.id, userId));
       }
 
       const separator = returnTo.includes('?') ? '&' : '?';

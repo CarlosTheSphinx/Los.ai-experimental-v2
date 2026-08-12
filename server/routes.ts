@@ -66,6 +66,7 @@ import { cacheReplayContext, getCreditExtractionDefaultPrompt, getActiveCreditEx
 import { registerEmailRoutes } from './routes/email';
 import { registerGoogleConnectRoutes } from './routes/googleConnect';
 import { registerMicrosoftConnectRoutes } from './routes/microsoftConnect';
+import { registerPilotSurveyRoutes } from './routes/pilotSurvey';
 import commercialIntakeRouter from './routes/commercialIntake';
 
 
@@ -5976,6 +5977,9 @@ export async function registerRoutes(
 
   // ==================== EMAIL INTEGRATION ROUTES ====================
   registerEmailRoutes(app, { storage, db, authenticateUser, requireAdmin, requireOnboarding, requirePermission, objectStorageService });
+
+  // ==================== BROKER PILOT SURVEY ROUTES (ORC-56) ====================
+  registerPilotSurveyRoutes(app, authenticateUser);
 
 
   // ==================== ADMIN ROUTES ====================

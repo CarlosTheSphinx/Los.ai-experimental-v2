@@ -102,6 +102,11 @@ export const users = pgTable("users", {
   passwordExpiresAt: timestamp("password_expires_at"),
   tokenVersion: integer("token_version").default(0).notNull(),
   tenantId: integer("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
+  // Broker pilot tracking (ORC-55)
+  pilotActivatedAt: timestamp("pilot_activated_at"),
+  pilotCohortId: varchar("pilot_cohort_id", { length: 50 }),
+  isPilotBroker: boolean("is_pilot_broker").default(false).notNull(),
+  foundingBroker: boolean("founding_broker").default(false).notNull(),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({
@@ -4384,3 +4389,20 @@ export const underwritingReports = pgTable("underwriting_reports", {
 export const insertUnderwritingReportSchema = createInsertSchema(underwritingReports).omit({ id: true, createdAt: true, updatedAt: true });
 export type UnderwritingReport = typeof underwritingReports.$inferSelect;
 export type InsertUnderwritingReport = z.infer<typeof insertUnderwritingReportSchema>;
+
+// ==================== BROKER PILOT SURVEY RESPONSES (ORC-56) ====================
+export const pilotSurveyResponses = pgTable("pilot_survey_responses", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
+  surveyType: varchar("survey_type", { length: 50 }).notNull(), // day7 | day30 | day60
+  notificationId: integer("notification_id").references(() => notifications.id, { onDelete: "set null" }),
+  responses: jsonb("responses").$type<Record<string, string | number>>().notNull(),
+  dismissed: boolean("dismissed").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertPilotSurveyResponseSchema = createInsertSchema(pilotSurveyResponses).omit({ id: true, createdAt: true });
+export type PilotSurveyResponse = typeof pilotSurveyResponses.$inferSelect;
+export type InsertPilotSurveyResponse = z.infer<typeof insertPilotSurveyResponseSchema>;

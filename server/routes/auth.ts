@@ -15,6 +15,7 @@ import {
   verifyToken
 } from '../auth';
 import { sendPasswordResetEmail, sendBrokerWelcomeEmail } from '../email';
+import { checkAndQueuePilotSurveys } from '../services/pilotSurveyService';
 import {
   isAccountLocked,
   calculateLockoutUntil,
@@ -474,6 +475,8 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
         failedLoginAttempts: 0,
         accountLockedUntil: null,
       });
+      // Queue any due pilot surveys fire-and-forget
+      checkAndQueuePilotSurveys(user.id).catch(() => {});
       await recordLoginAttempt(db, normalizedEmail, clientIp, true, ua);
       await logAudit(db, {
         userId: user.id,

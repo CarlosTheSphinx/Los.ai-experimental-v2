@@ -83,6 +83,10 @@ export function NotificationBell() {
         return <FileCheck className="h-4 w-4 text-emerald-500" />;
       case "admin_broadcast":
         return <Mail className="h-4 w-4 text-blue-600" />;
+      case "pilot_survey_day7":
+      case "pilot_survey_day30":
+      case "pilot_survey_day60":
+        return <ClipboardList className="h-4 w-4 text-violet-500" />;
       default:
         return <Bell className="h-4 w-4 text-muted-foreground" />;
     }

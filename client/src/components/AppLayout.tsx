@@ -63,6 +63,7 @@ import { useBranding } from "@/hooks/use-branding";
 import { InboxBadge } from "@/components/InboxBadge";
 import { NotificationBell } from "@/components/NotificationBell";
 import { CommandPalette } from "@/components/CommandPalette";
+import { PilotSurveyModal } from "@/components/PilotSurveyModal";
 import { ProcessorAssistant } from "@/components/admin/ProcessorAssistant";
 import { AIOrchestrationDebugger } from "@/components/AIOrchestrationDebugger/DebuggerSidebar";
 import { TrainingChecklist } from "@/components/TrainingChecklist";
@@ -709,6 +710,8 @@ function AppLayoutContent({ children, sidebarPinnedProp, setSidebarPinnedProp }:
       </div>
 
       <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} />
+
+      <PilotSurveyModal />
 
       {messagesOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" data-testid="messages-modal-overlay">
