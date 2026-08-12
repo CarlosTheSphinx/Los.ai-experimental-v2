@@ -1,11 +1,12 @@
 import { Express, Response } from 'express';
 import { AuthRequest } from '../auth';
 import { db } from '../db';
-import { notifications, pilotSurveyResponses } from '@shared/schema';
-import { eq, and } from 'drizzle-orm';
+import { notifications, pilotSurveyResponses, users } from '@shared/schema';
+import { eq, and, desc } from 'drizzle-orm';
 import { getPendingSurveysForUser } from '../services/pilotSurveyService';
 
 const VALID_SURVEY_TYPES = ['day7', 'day30', 'day60'] as const;
+const ADMIN_ROLES = ['super_admin', 'lender', 'processor', 'admin', 'staff'];
 
 export function registerPilotSurveyRoutes(
   app: Express,
@@ -71,6 +72,45 @@ export function registerPilotSurveyRoutes(
     } catch (error: any) {
       console.error('Error saving pilot survey response:', error);
       res.status(500).json({ error: 'Failed to save response' });
+    }
+  });
+
+  // GET /api/admin/pilot-surveys — aggregated survey responses for CMO/admin
+  app.get('/api/admin/pilot-surveys', authenticateUser, async (req: AuthRequest, res: Response) => {
+    if (!req.user?.role || !ADMIN_ROLES.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    try {
+      const surveyType = req.query.surveyType as string | undefined;
+
+      const validatedType = surveyType && VALID_SURVEY_TYPES.includes(surveyType as any)
+        ? (surveyType as typeof VALID_SURVEY_TYPES[number])
+        : null;
+
+      const whereClause = validatedType
+        ? eq(pilotSurveyResponses.surveyType, validatedType)
+        : undefined;
+
+      const rows = await db.select({
+        id: pilotSurveyResponses.id,
+        userId: pilotSurveyResponses.userId,
+        surveyType: pilotSurveyResponses.surveyType,
+        responses: pilotSurveyResponses.responses,
+        dismissed: pilotSurveyResponses.dismissed,
+        createdAt: pilotSurveyResponses.createdAt,
+        userName: users.fullName,
+        userEmail: users.email,
+      })
+        .from(pilotSurveyResponses)
+        .leftJoin(users, eq(pilotSurveyResponses.userId, users.id))
+        .where(whereClause)
+        .orderBy(desc(pilotSurveyResponses.createdAt))
+        .limit(500);
+
+      res.json({ responses: rows });
+    } catch (error: any) {
+      console.error('Error fetching admin pilot survey responses:', error);
+      res.status(500).json({ error: 'Failed to fetch survey responses' });
     }
   });
 }

@@ -78,6 +78,7 @@ import FundManagementPage from "@/pages/admin/fund-management";
 import DocumentRulesPage from "@/pages/admin/document-rules";
 import BrokerCommercialDeals, { DealForm as BrokerDealForm, DealDetail as BrokerDealDetail } from "@/pages/broker-commercial-deals";
 import DealInboxPage from "@/pages/admin/DealInboxPage";
+import PilotSurveysPage from "@/pages/admin/pilot-surveys";
 import SettingsPage from "@/pages/settings";
 import BorrowerDocumentsPage from "@/pages/borrower-documents";
 import BrokerDocumentsPage from "@/pages/broker-documents";
@@ -372,6 +373,7 @@ function MainRoutes() {
           <Route path="/admin/email" component={() => <AdminProtectedRoute component={EmailInboxPage} />} />
           <Route path="/admin/platform-integrations" component={() => <SuperAdminProtectedRoute component={IntegrationsPage} />} />
           <Route path="/admin/onboarding-config" component={() => <SuperAdminProtectedRoute component={OnboardingConfigPage} />} />
+          <Route path="/admin/pilot-surveys" component={() => <AdminProtectedRoute component={PilotSurveysPage} />} />
 
 
           <Route component={NotFound} />
