@@ -19843,6 +19843,16 @@ Return JSON only:
       // Notify broker if this is an email-intake submission
       if (submission.emailThreadId) {
         sendBrokerNotification('document_uploaded', submissionId, { documentName: originalFileName }).catch(() => {});
+
+        // Check if all core required docs are now present; if so, notify and update status
+        const CORE_REQUIRED = ['SREO', 'PFS', 'BUDGET'];
+        const allDocs = await storage.getCommercialSubmissionDocuments(submissionId);
+        const uploadedTypes = new Set(allDocs.map(d => d.docType));
+        const allCorePresent = CORE_REQUIRED.every(t => uploadedTypes.has(t));
+        if (allCorePresent && submission.status !== 'docs_received') {
+          storage.updateCommercialSubmissionStatus(submissionId, 'docs_received').catch(() => {});
+          sendBrokerNotification('all_docs_received', submissionId).catch(() => {});
+        }
       }
 
       res.json({ success: true, document: doc });
