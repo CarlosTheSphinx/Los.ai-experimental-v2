@@ -160,6 +160,7 @@ const lenderNavItems: NavItem[] = [
   { href: "/admin/overview", label: "Dashboard", icon: Gauge },
   { href: "/admin", label: "Pipeline", icon: LayoutDashboard },
   { href: "/lender/inbox", label: "Email Inbox", icon: Inbox },
+  { href: "/admin/deal-inbox", label: "Deal Inbox", icon: Building2 },
   { href: "/inbox", label: "Messages", icon: MessageSquare },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];

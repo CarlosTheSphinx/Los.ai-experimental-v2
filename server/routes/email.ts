@@ -817,4 +817,42 @@ export function registerEmailRoutes(app: Express, deps: RouteDeps) {
       res.status(500).json({ error: 'Failed to trigger deal intake agent' });
     }
   });
+
+  // GET /api/email/deal-inbox
+  // Lender-only: returns all email-sourced commercial submissions (emailThreadId != null)
+  // with enriched doc counts for the deal inbox dashboard
+  app.get('/api/email/deal-inbox', authenticateUser, async (req: AuthRequest, res: Response) => {
+    try {
+      if (req.user?.role !== 'lender') {
+        return res.status(403).json({ error: 'Lender access required' });
+      }
+
+      const submissions = await db.select({
+        id: commercialSubmissions.id,
+        propertyName: commercialSubmissions.propertyName,
+        propertyAddress: commercialSubmissions.propertyAddress,
+        brokerOrDeveloperName: commercialSubmissions.brokerOrDeveloperName,
+        email: commercialSubmissions.email,
+        status: commercialSubmissions.status,
+        requestedLoanAmount: commercialSubmissions.requestedLoanAmount,
+        propertyType: commercialSubmissions.propertyType,
+        createdAt: commercialSubmissions.createdAt,
+        updatedAt: commercialSubmissions.updatedAt,
+        emailThreadId: commercialSubmissions.emailThreadId,
+        userId: commercialSubmissions.userId,
+      }).from(commercialSubmissions)
+        .where(
+          and(
+            eq(commercialSubmissions.userId, req.user!.id),
+            sql`${commercialSubmissions.emailThreadId} IS NOT NULL`,
+          )
+        )
+        .orderBy(desc(commercialSubmissions.updatedAt));
+
+      res.json(submissions);
+    } catch (error: any) {
+      console.error('Error fetching deal inbox:', error);
+      res.status(500).json({ error: 'Failed to fetch deal inbox' });
+    }
+  });
 }

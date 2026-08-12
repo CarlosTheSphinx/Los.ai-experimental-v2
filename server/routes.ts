@@ -16,6 +16,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { sendCompletedDocument, sendVoidNotification, sendPasswordResetEmail, sendTeamInviteEmail, sendMagicLinkEmail, sendBrokerWelcomeEmail } from './email';
 import { sendCommercialNotification, checkExpiredSubmissions } from './services/commercialNotifications';
+import { sendBrokerNotification } from './services/brokerNotificationService';
 import { 
   hashPassword, 
   comparePassword, 
@@ -19839,6 +19840,11 @@ Return JSON only:
         fileSize,
       });
 
+      // Notify broker if this is an email-intake submission
+      if (submission.emailThreadId) {
+        sendBrokerNotification('document_uploaded', submissionId, { documentName: originalFileName }).catch(() => {});
+      }
+
       res.json({ success: true, document: doc });
     } catch (error: any) {
       console.error("Error uploading commercial submission document:", error);
@@ -20062,8 +20068,14 @@ Return JSON only:
       // Send notification based on status change (fire and forget)
       if (status === 'APPROVED') {
         sendCommercialNotification('submission_approved', updated, { adminNotes }).catch(() => {});
+        if (updated.emailThreadId) {
+          sendBrokerNotification('deal_approved', updated.id, { message: adminNotes }).catch(() => {});
+        }
       } else if (status === 'DECLINED') {
         sendCommercialNotification('submission_declined', updated, { reason: adminNotes, adminNotes }).catch(() => {});
+        if (updated.emailThreadId) {
+          sendBrokerNotification('deal_declined', updated.id, { reason: adminNotes }).catch(() => {});
+        }
       } else if (status === 'NEEDS_INFO') {
         sendCommercialNotification('info_needed', updated, { message: adminNotes, adminNotes }).catch(() => {});
       }

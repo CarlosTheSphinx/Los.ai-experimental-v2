@@ -77,6 +77,7 @@ import CommercialPipelineDetailPage from "@/pages/admin/commercial-pipeline-deta
 import FundManagementPage from "@/pages/admin/fund-management";
 import DocumentRulesPage from "@/pages/admin/document-rules";
 import BrokerCommercialDeals, { DealForm as BrokerDealForm, DealDetail as BrokerDealDetail } from "@/pages/broker-commercial-deals";
+import DealInboxPage from "@/pages/admin/DealInboxPage";
 import SettingsPage from "@/pages/settings";
 import BorrowerDocumentsPage from "@/pages/borrower-documents";
 import BrokerDocumentsPage from "@/pages/broker-documents";
@@ -326,6 +327,7 @@ function MainRoutes() {
 
           {/* Lender Routes */}
           <Route path="/lender/inbox" component={() => <LenderProtectedRoute component={LenderInboxPage} />} />
+          <Route path="/admin/deal-inbox" component={() => <LenderProtectedRoute component={DealInboxPage} />} />
 
           {/* Broker Routes */}
           <Route path="/broker/documents" component={() => <ProtectedRoute component={BrokerDocumentsPage} />} />
