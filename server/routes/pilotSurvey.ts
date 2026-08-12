@@ -8,9 +8,9 @@ import { getPendingSurveysForUser } from '../services/pilotSurveyService';
 const VALID_SURVEY_TYPES = ['day7', 'day30', 'day60'] as const;
 const ADMIN_ROLES = ['super_admin', 'lender', 'processor', 'admin', 'staff'];
 
-// Mirrors the non-optional fields from client SURVEY_QUESTIONS; day7 has no required fields
+// Mirrors the non-optional fields from client SURVEY_QUESTIONS
 const REQUIRED_FIELDS_BY_SURVEY_TYPE: Record<typeof VALID_SURVEY_TYPES[number], string[]> = {
-  day7: [],
+  day7: ['dealExtractionRating', 'biggestBlocker', 'payingCustomerReason'],
   day30: ['dealsSubmitted', 'workflowImprovement'],
   day60: ['totalDeals', 'timeSaved', 'biggestBenefit', 'biggestFriction', 'npsScore'],
 };
