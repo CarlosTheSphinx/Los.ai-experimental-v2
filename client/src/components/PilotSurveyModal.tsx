@@ -64,6 +64,7 @@ export function PilotSurveyModal() {
   const queryClient = useQueryClient();
   const [responses, setResponses] = useState<Record<string, string | number>>({});
   const [dismissed, setDismissed] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<{ surveys: PendingSurvey[] }>({
     queryKey: ["/api/pilot/surveys/pending"],
@@ -89,6 +90,15 @@ export function PilotSurveyModal() {
   const questions = SURVEY_QUESTIONS[survey.surveyType] ?? [];
 
   function handleSubmit() {
+    const requiredKeys = questions.filter((q) => !q.optional).map((q) => q.key);
+    const allFilled = requiredKeys.every(
+      (k) => responses[k] !== undefined && responses[k] !== ""
+    );
+    if (!allFilled) {
+      setValidationError("Please answer all required questions before submitting.");
+      return;
+    }
+    setValidationError(null);
     respondMutation.mutate({
       surveyType: survey.surveyType,
       notificationId: survey.notificationId,
@@ -209,6 +219,10 @@ export function PilotSurveyModal() {
             </div>
           ))}
         </div>
+
+        {validationError && (
+          <p className="text-sm text-destructive mt-2">{validationError}</p>
+        )}
 
         <div className="flex gap-3 mt-4">
           <Button
