@@ -127,7 +127,7 @@ async function handleStripeEvent(event: any, db: any) {
   }
 }
 
-async function syncSubscription(sub: any, db: any) {
+export async function syncSubscription(sub: any, db: any) {
   const tier = resolveSubscriptionTier(sub);
   const period = sub.items?.data?.[0]?.price?.recurring?.interval === 'year' ? 'annual' : 'monthly';
 
@@ -148,7 +148,7 @@ async function syncSubscription(sub: any, db: any) {
     .where(eq(users.stripeCustomerId, sub.customer as string));
 }
 
-function resolveSubscriptionTier(sub: any): string | null {
+export function resolveSubscriptionTier(sub: any): string | null {
   const priceId = sub.items?.data?.[0]?.price?.id;
   if (!priceId) return null;
 
@@ -159,5 +159,6 @@ function resolveSubscriptionTier(sub: any): string | null {
   if (starterPrices.includes(priceId)) return 'starter';
   if (proPrices.includes(priceId)) return 'pro';
   if (teamPrices.includes(priceId)) return 'team';
+  console.warn(`[billing] Unrecognized Stripe price ID: ${priceId} — tier set to null`);
   return null;
 }
