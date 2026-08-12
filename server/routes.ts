@@ -67,6 +67,7 @@ import { registerEmailRoutes } from './routes/email';
 import { registerGoogleConnectRoutes } from './routes/googleConnect';
 import { registerMicrosoftConnectRoutes } from './routes/microsoftConnect';
 import { registerPilotSurveyRoutes } from './routes/pilotSurvey';
+import { registerBillingRoutes } from './routes/billing';
 import commercialIntakeRouter from './routes/commercialIntake';
 
 
@@ -5980,6 +5981,9 @@ export async function registerRoutes(
 
   // ==================== BROKER PILOT SURVEY ROUTES (ORC-56) ====================
   registerPilotSurveyRoutes(app, authenticateUser);
+
+  // ==================== STRIPE BILLING ROUTES (ORC-51) ====================
+  registerBillingRoutes(app, { db, authenticateUser });
 
 
   // ==================== ADMIN ROUTES ====================

@@ -13,6 +13,7 @@ import {
   uuid,
   smallint,
   customType,
+  numeric,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -107,6 +108,15 @@ export const users = pgTable("users", {
   pilotCohortId: varchar("pilot_cohort_id", { length: 50 }),
   isPilotBroker: boolean("is_pilot_broker").default(false).notNull(),
   foundingBroker: boolean("founding_broker").default(false).notNull(),
+  // Stripe billing (ORC-51)
+  stripeCustomerId: varchar("stripe_customer_id", { length: 255 }).unique(),
+  subscriptionStatus: varchar("subscription_status", { length: 50 }), // trialing, active, past_due, canceled, incomplete
+  subscriptionTier: varchar("subscription_tier", { length: 50 }), // starter, pro, team
+  billingPeriod: varchar("billing_period", { length: 20 }), // monthly, annual
+  stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 }),
+  foundingDiscountRate: numeric("founding_discount_rate", { precision: 5, scale: 4 }).default("0"),
+  trialEndsAt: timestamp("trial_ends_at"),
+  convertedAt: timestamp("converted_at"),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({
