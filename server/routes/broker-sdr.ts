@@ -7,7 +7,7 @@ import {
   brokerOutreachMessages,
   users,
 } from '@shared/schema';
-import { eq, and, or, ilike, desc, asc, inArray } from 'drizzle-orm';
+import { eq, and, or, ilike, desc, asc, inArray, gte, isNotNull } from 'drizzle-orm';
 import * as sdrService from '../services/brokerSdr';
 
 /**
@@ -488,8 +488,8 @@ export function registerBrokerSdrRoutes(app: Express) {
         where: (m) =>
           and(
             eq(m.brokerId, brokerId),
-            eq(m.status, 'sent')
-            // TODO: Add date filtering when Drizzle supports it better
+            eq(m.status, 'sent'),
+            gte(m.sentAt, thisWeek)
           ),
       });
 
@@ -497,31 +497,28 @@ export function registerBrokerSdrRoutes(app: Express) {
         where: (m) =>
           and(
             eq(m.brokerId, brokerId),
-            eq(m.status, 'sent')
+            eq(m.status, 'sent'),
+            gte(m.sentAt, thisMonth)
           ),
       });
 
-      const opened = await db.query.brokerOutreachMessages.findMany({
+      const openedThisMonth = await db.query.brokerOutreachMessages.findMany({
         where: (m) =>
           and(
             eq(m.brokerId, brokerId),
-            eq(m.status, 'sent')
-            // TODO: Filter by opened emails
+            isNotNull(m.openedAt),
+            gte(m.sentAt, thisMonth)
           ),
       });
 
       res.json({
         totalContacts: allContacts.length,
         activeContacts: allContacts.filter((c) => c.isActive).length,
-        messagesSentThisWeek: sentThisWeek.filter(
-          (m) => new Date(m.sentAt!) > thisWeek
-        ).length,
-        messagesSentThisMonth: sentThisMonth.filter(
-          (m) => new Date(m.sentAt!) > thisMonth
-        ).length,
+        messagesSentThisWeek: sentThisWeek.length,
+        messagesSentThisMonth: sentThisMonth.length,
         openRate:
           sentThisMonth.length > 0
-            ? (opened.length / sentThisMonth.length) * 100
+            ? (openedThisMonth.length / sentThisMonth.length) * 100
             : 0,
         lastActivityDate: allContacts.length
           ? allContacts
