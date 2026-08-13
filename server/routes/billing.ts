@@ -192,6 +192,29 @@ export function registerBillingRoutes(
     }
   });
 
+  // POST /api/cron/referral-qualify — run daily referral qualification check
+  // Called daily by external cron; authenticated via x-cron-key header
+  app.post('/api/cron/referral-qualify', async (req: Request, res: Response) => {
+    const cronKey = req.headers['x-cron-key'];
+    const expectedKey = process.env.CRON_SECRET_KEY;
+    if (!expectedKey) {
+      console.error('[cron/referral-qualify] CRON_SECRET_KEY not set');
+      return res.status(503).json({ error: 'Cron endpoint not configured' });
+    }
+    if (cronKey !== expectedKey) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    try {
+      const { runReferralQualificationCron } = await import('../services/referral');
+      await runReferralQualificationCron();
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.error('[cron/referral-qualify] error:', err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
   // POST /api/cron/pilot-conversion — send Day-75 conversion emails to eligible pilot brokers
   // Called daily by external cron; authenticated via x-cron-key header
   app.post('/api/cron/pilot-conversion', async (req: Request, res: Response) => {
