@@ -28,12 +28,17 @@ import { registerBillingRoutes } from '../billing';
 function buildApp(opts: { authed?: boolean; userId?: number } = {}) {
   const app = express();
   app.use((req: any, _res, next) => {
-    // Capture rawBody for webhook tests
+    // Capture rawBody for webhook tests; also parse JSON for routes that use req.body
     let data = '';
     req.on('data', (chunk: Buffer) => { data += chunk; });
-    req.on('end', () => { (req as any).rawBody = data; next(); });
+    req.on('end', () => {
+      (req as any).rawBody = data;
+      if (data && (req.headers['content-type'] ?? '').includes('application/json')) {
+        try { req.body = JSON.parse(data); } catch { /* ignore malformed */ }
+      }
+      next();
+    });
   });
-  app.use(express.json());
 
   const authenticateUser = vi.fn((req: any, res: any, next: any) => {
     if (opts.authed) {
@@ -111,6 +116,109 @@ describe('POST /api/billing/portal — auth gating', () => {
   });
 });
 
+describe('POST /api/billing/checkout — auth and validation', () => {
+  afterEach(() => {
+    delete process.env.STRIPE_PRICE_STARTER_MONTHLY;
+  });
+
+  it('returns 401 when unauthenticated', async () => {
+    const { app } = buildApp({ authed: false });
+    const res = await request(app)
+      .post('/api/billing/checkout')
+      .send({ tier: 'starter', period: 'monthly' });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 400 when tier and period are missing', async () => {
+    const { app } = buildApp({ authed: true });
+    const res = await request(app).post('/api/billing/checkout').send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/tier and period are required/);
+  });
+
+  it('returns 400 when tier is invalid', async () => {
+    const { app } = buildApp({ authed: true });
+    const res = await request(app)
+      .post('/api/billing/checkout')
+      .send({ tier: 'enterprise', period: 'monthly' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/Invalid tier/);
+  });
+
+  it('returns 400 when user is already active', async () => {
+    const { app, db } = buildApp({ authed: true, userId: 1 });
+    db.select.mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([{
+          email: 'broker@example.com',
+          foundingBroker: false,
+          stripeCustomerId: 'cus_existing',
+          subscriptionStatus: 'active',
+        }]),
+      }),
+    });
+    const res = await request(app)
+      .post('/api/billing/checkout')
+      .send({ tier: 'starter', period: 'monthly' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/Already subscribed/);
+  });
+
+  it('returns 503 with PRICE_NOT_CONFIGURED when env vars are not set', async () => {
+    const { app, db } = buildApp({ authed: true, userId: 1 });
+    db.select.mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([{
+          email: 'broker@example.com',
+          foundingBroker: false,
+          stripeCustomerId: null,
+          subscriptionStatus: 'trialing',
+        }]),
+      }),
+    });
+    // STRIPE_PRICE_STARTER_MONTHLY intentionally not set
+    delete process.env.STRIPE_PRICE_STARTER_MONTHLY;
+    const res = await request(app)
+      .post('/api/billing/checkout')
+      .send({ tier: 'starter', period: 'monthly' });
+    expect(res.status).toBe(503);
+    expect(res.body.code).toBe('PRICE_NOT_CONFIGURED');
+  });
+});
+
+describe('POST /api/cron/pilot-conversion — key auth', () => {
+  afterEach(() => {
+    delete process.env.CRON_SECRET_KEY;
+  });
+
+  it('returns 503 when CRON_SECRET_KEY is not set', async () => {
+    delete process.env.CRON_SECRET_KEY;
+    const { app } = buildApp();
+    const res = await request(app).post('/api/cron/pilot-conversion');
+    expect(res.status).toBe(503);
+    expect(res.body.error).toMatch(/not configured/);
+  });
+
+  it('returns 401 when x-cron-key is wrong', async () => {
+    process.env.CRON_SECRET_KEY = 'secret-abc-123';
+    const { app } = buildApp();
+    const res = await request(app)
+      .post('/api/cron/pilot-conversion')
+      .set('x-cron-key', 'wrongkey');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 200 with sent/skipped counts when correct key and no eligible candidates', async () => {
+    process.env.CRON_SECRET_KEY = 'secret-abc-123';
+    const { app } = buildApp(); // db.select returns [] by default
+    const res = await request(app)
+      .post('/api/cron/pilot-conversion')
+      .set('x-cron-key', 'secret-abc-123');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ sent: 0, skipped: 0 });
+  });
+});
+
 describe('POST /api/billing/webhook — signature enforcement', () => {
   beforeEach(() => {
     process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test_secret';
@@ -150,5 +258,111 @@ describe('POST /api/billing/webhook — signature enforcement', () => {
       .send('{}');
     expect(res.status).toBe(500);
     expect(res.body.error).toMatch(/not configured/);
+  });
+});
+
+describe('POST /api/billing/checkout — auth gating and validation', () => {
+  afterEach(() => {
+    delete process.env.STRIPE_PRICE_ID_STARTER_MONTHLY;
+  });
+
+  it('returns 401 when unauthenticated', async () => {
+    const { app } = buildApp({ authed: false });
+    const res = await request(app)
+      .post('/api/billing/checkout')
+      .send({ tier: 'starter', period: 'monthly' });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 400 when tier and period are missing', async () => {
+    const { app } = buildApp({ authed: true });
+    const res = await request(app).post('/api/billing/checkout').send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/tier and period are required/);
+  });
+
+  it('returns 400 when tier is invalid', async () => {
+    const { app } = buildApp({ authed: true });
+    const res = await request(app)
+      .post('/api/billing/checkout')
+      .send({ tier: 'enterprise', period: 'monthly' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/Invalid tier/);
+  });
+
+  it('returns 400 when user is already active', async () => {
+    const { app, db } = buildApp({ authed: true, userId: 1 });
+    db.select.mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([{
+          email: 'test@example.com',
+          foundingBroker: false,
+          stripeCustomerId: 'cus_existing',
+          subscriptionStatus: 'active',
+        }]),
+      }),
+    });
+    const res = await request(app)
+      .post('/api/billing/checkout')
+      .send({ tier: 'starter', period: 'monthly' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/Already subscribed/);
+  });
+
+  it('returns 503 with PRICE_NOT_CONFIGURED when env var is not set', async () => {
+    delete process.env.STRIPE_PRICE_ID_STARTER_MONTHLY;
+    const { app, db } = buildApp({ authed: true, userId: 1 });
+    db.select.mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([{
+          email: 'test@example.com',
+          foundingBroker: false,
+          stripeCustomerId: null,
+          subscriptionStatus: 'trialing',
+        }]),
+      }),
+    });
+    const res = await request(app)
+      .post('/api/billing/checkout')
+      .send({ tier: 'starter', period: 'monthly' });
+    expect(res.status).toBe(503);
+    expect(res.body.code).toBe('PRICE_NOT_CONFIGURED');
+  });
+});
+
+describe('POST /api/cron/pilot-conversion — key authentication', () => {
+  afterEach(() => {
+    delete process.env.CRON_SECRET_KEY;
+  });
+
+  it('returns 503 when CRON_SECRET_KEY is not set', async () => {
+    delete process.env.CRON_SECRET_KEY;
+    const { app } = buildApp();
+    const res = await request(app)
+      .post('/api/cron/pilot-conversion')
+      .set('x-cron-key', 'any-key');
+    expect(res.status).toBe(503);
+    expect(res.body.error).toMatch(/not configured/);
+  });
+
+  it('returns 401 when x-cron-key is wrong', async () => {
+    process.env.CRON_SECRET_KEY = 'correct-secret';
+    const { app } = buildApp();
+    const res = await request(app)
+      .post('/api/cron/pilot-conversion')
+      .set('x-cron-key', 'wrong-key');
+    expect(res.status).toBe(401);
+    expect(res.body.error).toMatch(/Unauthorized/);
+  });
+
+  it('returns 200 with zero counts when correct key and no eligible candidates', async () => {
+    process.env.CRON_SECRET_KEY = 'correct-secret';
+    const { app } = buildApp();
+    const res = await request(app)
+      .post('/api/cron/pilot-conversion')
+      .set('x-cron-key', 'correct-secret');
+    expect(res.status).toBe(200);
+    expect(res.body.sent).toBe(0);
+    expect(res.body.skipped).toBe(0);
   });
 });
