@@ -39,7 +39,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Sparkles, Send, Mail, MessageSquare, Copy, Check } from 'lucide-react';
+import { Sparkles, Send, Mail, MessageSquare, Copy, Check, TrendingUp, Users, BarChart2 } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 
 interface Contact {
   id: number;
@@ -125,6 +126,16 @@ export default function BrokerOutreachPage() {
   });
 
   const suggestions: Suggestion[] = suggestionsData || [];
+
+  // Fetch outreach stats
+  const { data: statsData } = useQuery({
+    queryKey: ['broker-outreach-stats'],
+    queryFn: async () => {
+      const response = await fetch('/api/broker/stats', { credentials: 'include' });
+      if (!response.ok) return null;
+      return response.json();
+    },
+  });
 
   // Fetch outreach messages
   const { data: messagesData, refetch: refetchMessages } = useQuery({
@@ -319,6 +330,43 @@ export default function BrokerOutreachPage() {
             AI-powered outreach to find and engage your next borrower
           </p>
         </div>
+
+        {/* Outreach Stats */}
+        {statsData && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Card>
+              <CardContent className="flex items-center gap-4 p-5">
+                <Send className="w-8 h-8 text-primary shrink-0" />
+                <div>
+                  <p className="text-2xl font-bold">{statsData.messagesSentThisMonth}</p>
+                  <p className="text-sm text-muted-foreground">Sent this month</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex items-center gap-4 p-5">
+                <TrendingUp className="w-8 h-8 text-primary shrink-0" />
+                <div>
+                  <p className="text-2xl font-bold">
+                    {statsData.messagesSentThisMonth > 0
+                      ? `${Math.round(statsData.openRate)}%`
+                      : '—'}
+                  </p>
+                  <p className="text-sm text-muted-foreground">Open rate (30 days)</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex items-center gap-4 p-5">
+                <Users className="w-8 h-8 text-primary shrink-0" />
+                <div>
+                  <p className="text-2xl font-bold">{statsData.activeContacts}</p>
+                  <p className="text-sm text-muted-foreground">Active contacts</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* AI Suggestions Section */}
         {suggestions.length > 0 && messageStatus === 'idle' && (
