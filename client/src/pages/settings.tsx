@@ -32,6 +32,9 @@ import {
   AlertCircle,
   Star,
   ExternalLink,
+  Copy,
+  Gift,
+  Users,
 } from "lucide-react";
 
 const BILLING_TIERS = {
@@ -51,6 +54,90 @@ interface SubscriptionState {
   trialEndsAt: string | null;
   convertedAt: string | null;
   pilotActivatedAt: string | null;
+}
+
+interface ReferralStats {
+  referralLink: string;
+  code: string;
+  totalReferrals: number;
+  qualifiedReferrals: number;
+  pendingReferrals: number;
+}
+
+function ReferralProgramCard() {
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery<ReferralStats>({
+    queryKey: ["/api/settings/referral"],
+  });
+
+  function copyLink() {
+    if (!data?.referralLink) return;
+    navigator.clipboard.writeText(data.referralLink).then(() => {
+      toast({ title: "Referral link copied!" });
+    });
+  }
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="pt-6 flex justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Gift className="h-5 w-5 text-primary" />
+          Refer a Broker
+        </CardTitle>
+        <CardDescription>
+          Earn a $25 account credit for every broker you refer who becomes a paying subscriber for 30+ days.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Your referral link</Label>
+          <div className="flex gap-2">
+            <Input
+              readOnly
+              value={data?.referralLink ?? ""}
+              className="font-mono text-sm"
+              data-testid="referral-link-input"
+            />
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={copyLink}
+              data-testid="button-copy-referral-link"
+              title="Copy link"
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">Code: <span className="font-mono font-medium">{data?.code}</span></p>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 pt-2">
+          <div className="text-center p-3 rounded-lg bg-muted">
+            <p className="text-2xl font-bold">{data?.totalReferrals ?? 0}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Total referred</p>
+          </div>
+          <div className="text-center p-3 rounded-lg bg-muted">
+            <p className="text-2xl font-bold text-amber-500">{data?.pendingReferrals ?? 0}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Pending</p>
+          </div>
+          <div className="text-center p-3 rounded-lg bg-muted">
+            <p className="text-2xl font-bold text-green-600">{data?.qualifiedReferrals ?? 0}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Earned credits</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 function BillingTab() {
@@ -767,6 +854,12 @@ export default function SettingsPage() {
               Billing
             </TabsTrigger>
           )}
+          {user?.role === "broker" && (
+            <TabsTrigger value="referral" data-testid="tab-referral">
+              <Gift className="h-3.5 w-3.5 mr-1.5" />
+              Referral
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="profile" className="mt-4 space-y-4">
@@ -850,6 +943,12 @@ export default function SettingsPage() {
         {user?.role === "broker" && (
           <TabsContent value="billing" className="mt-4 space-y-4">
             <BillingTab />
+          </TabsContent>
+        )}
+
+        {user?.role === "broker" && (
+          <TabsContent value="referral" className="mt-4 space-y-4">
+            <ReferralProgramCard />
           </TabsContent>
         )}
 

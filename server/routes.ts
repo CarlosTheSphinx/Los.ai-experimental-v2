@@ -68,6 +68,7 @@ import { registerGoogleConnectRoutes } from './routes/googleConnect';
 import { registerMicrosoftConnectRoutes } from './routes/microsoftConnect';
 import { registerPilotSurveyRoutes } from './routes/pilotSurvey';
 import { registerBillingRoutes } from './routes/billing';
+import { registerReferralRoutes } from './routes/referral';
 import commercialIntakeRouter from './routes/commercialIntake';
 
 
@@ -5984,6 +5985,9 @@ export async function registerRoutes(
 
   // ==================== STRIPE BILLING ROUTES (ORC-51) ====================
   registerBillingRoutes(app, { db, authenticateUser });
+
+  // ==================== REFERRAL PROGRAM ROUTES (ORC-168) ====================
+  registerReferralRoutes(app, authenticateUser);
 
 
   // ==================== ADMIN ROUTES ====================

@@ -118,6 +118,8 @@ export const users = pgTable("users", {
   trialEndsAt: timestamp("trial_ends_at"),
   convertedAt: timestamp("converted_at"),
   day75EmailSentAt: timestamp("day75_email_sent_at"),
+  // Referral program (ORC-168)
+  referralCode: varchar("referral_code", { length: 12 }).unique(),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({
@@ -4417,3 +4419,41 @@ export const pilotSurveyResponses = pgTable("pilot_survey_responses", {
 export const insertPilotSurveyResponseSchema = createInsertSchema(pilotSurveyResponses).omit({ id: true, createdAt: true });
 export type PilotSurveyResponse = typeof pilotSurveyResponses.$inferSelect;
 export type InsertPilotSurveyResponse = z.infer<typeof insertPilotSurveyResponseSchema>;
+
+// ==================== BROKER REFERRAL PROGRAM (ORC-168) ====================
+
+// referral_codes — one row per user, maps short code to referrer
+export const referralCodes = pgTable("referral_codes", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull()
+    .unique(),
+  code: varchar("code", { length: 12 }).notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertReferralCodeSchema = createInsertSchema(referralCodes).omit({ id: true, createdAt: true });
+export type ReferralCode = typeof referralCodes.$inferSelect;
+export type InsertReferralCode = z.infer<typeof insertReferralCodeSchema>;
+
+// referral_events — one row per completed referral signup
+export const referralEvents = pgTable("referral_events", {
+  id: serial("id").primaryKey(),
+  referrerUserId: integer("referrer_user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
+  referredUserId: integer("referred_user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull()
+    .unique(),
+  status: varchar("status", { length: 20 }).default("pending").notNull(), // pending | qualified | credited | disqualified
+  qualifiedAt: timestamp("qualified_at"),
+  creditAmount: integer("credit_amount"), // cents
+  creditedAt: timestamp("credited_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertReferralEventSchema = createInsertSchema(referralEvents).omit({ id: true, createdAt: true });
+export type ReferralEvent = typeof referralEvents.$inferSelect;
+export type InsertReferralEvent = z.infer<typeof insertReferralEventSchema>;

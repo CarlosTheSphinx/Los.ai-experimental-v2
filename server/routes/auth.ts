@@ -16,6 +16,7 @@ import {
 } from '../auth';
 import { sendPasswordResetEmail, sendBrokerWelcomeEmail } from '../email';
 import { checkAndQueuePilotSurveys } from '../services/pilotSurveyService';
+import { captureReferral } from '../services/referral';
 import {
   isAccountLocked,
   calculateLockoutUntil,
@@ -295,6 +296,15 @@ export function registerAuthRoutes(app: Express, deps: RouteDeps) {
       });
 
       notifyLenderStaffOfNewUser(db, userRole, user).catch(() => {});
+
+      // Capture referral if the user arrived via a /ref/:code link
+      const brokrRef = req.cookies?.brokr_ref;
+      if (brokrRef) {
+        captureReferral(user.id, brokrRef).catch(err =>
+          console.error('[referral] captureReferral failed:', err)
+        );
+        res.clearCookie('brokr_ref');
+      }
 
       await logAudit(db, {
         userId: user.id,
