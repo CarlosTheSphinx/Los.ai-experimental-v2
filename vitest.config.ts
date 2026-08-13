@@ -10,6 +10,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
+    // Use forks pool to isolate process.env between test files; prevents ECONNRESET
+    // flakiness in supertest HTTP tests when vitest runs files in parallel threads.
+    pool: 'forks',
     // Run DB-free unit tests only. Tests that import server/db.ts (directly or
     // transitively) need DATABASE_URL and are excluded from `npm test`.
     include: ['server/**/*.test.ts'],
