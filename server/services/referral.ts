@@ -1,4 +1,4 @@
-import { eq, and, count } from 'drizzle-orm';
+import { eq, and, or, isNull, count } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 import { db } from '../db';
 import { users, referralCodes, referralEvents } from '@shared/schema';
@@ -84,51 +84,59 @@ export async function getReferralStats(userId: string | number): Promise<{
 
 // Daily qualification cron: mark referral_events as qualified when referred user has been
 // a paying subscriber for 30+ days. Issues Stripe credit and sends email notification.
+// Also retries credit for events stuck in 'qualified' with creditedAt=null (ORC-197).
 export async function runReferralQualificationCron(): Promise<void> {
-  const pending = await db
+  const candidates = await db
     .select()
     .from(referralEvents)
-    .where(eq(referralEvents.status, 'pending'));
+    .where(
+      or(
+        eq(referralEvents.status, 'pending'),
+        and(eq(referralEvents.status, 'qualified'), isNull(referralEvents.creditedAt))
+      )
+    );
 
-  for (const event of pending) {
+  for (const event of candidates) {
     try {
-      const [referred] = await db
-        .select({
-          subscriptionStatus: users.subscriptionStatus,
-          convertedAt: users.convertedAt,
-          stripeCustomerId: users.stripeCustomerId,
-        })
-        .from(users)
-        .where(eq(users.id, event.referredUserId));
+      if (event.status === 'pending') {
+        const [referred] = await db
+          .select({
+            subscriptionStatus: users.subscriptionStatus,
+            convertedAt: users.convertedAt,
+            stripeCustomerId: users.stripeCustomerId,
+          })
+          .from(users)
+          .where(eq(users.id, event.referredUserId));
 
-      if (!referred) {
-        // Referred user deleted — cascade handles DB cleanup; skip
-        continue;
-      }
+        if (!referred) {
+          // Referred user deleted — cascade handles DB cleanup; skip
+          continue;
+        }
 
-      // Cancelled accounts can never qualify — mark permanently disqualified
-      if (referred.subscriptionStatus === 'canceled') {
+        // Cancelled accounts can never qualify — mark permanently disqualified
+        if (referred.subscriptionStatus === 'canceled') {
+          await db
+            .update(referralEvents)
+            .set({ status: 'disqualified' })
+            .where(eq(referralEvents.id, event.id));
+          continue;
+        }
+
+        const isActive = referred.subscriptionStatus === 'active';
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const hasBeenPayingThirtyDays =
+          referred.convertedAt && referred.convertedAt < thirtyDaysAgo;
+
+        if (!isActive || !hasBeenPayingThirtyDays) continue;
+
+        // Mark qualified
         await db
           .update(referralEvents)
-          .set({ status: 'disqualified' })
+          .set({ status: 'qualified', qualifiedAt: new Date() })
           .where(eq(referralEvents.id, event.id));
-        continue;
       }
 
-      const isActive = referred.subscriptionStatus === 'active';
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      const hasBeenPayingThirtyDays =
-        referred.convertedAt && referred.convertedAt < thirtyDaysAgo;
-
-      if (!isActive || !hasBeenPayingThirtyDays) continue;
-
-      // Mark qualified
-      await db
-        .update(referralEvents)
-        .set({ status: 'qualified', qualifiedAt: new Date() })
-        .where(eq(referralEvents.id, event.id));
-
-      // Issue Stripe credit if Stripe is configured
+      // Issue Stripe credit — runs for both newly qualified and retry cases
       const stripeKey = process.env.STRIPE_SECRET_KEY;
       const [referrer] = await db
         .select({ stripeCustomerId: users.stripeCustomerId, email: users.email, fullName: users.fullName })
