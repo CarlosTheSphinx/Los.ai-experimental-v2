@@ -23,7 +23,13 @@ vi.mock('@shared/schema', () => ({
   users: { id: 'id', stripeCustomerId: 'stripeCustomerId' },
 }));
 
+// Mock Resend email client so cron tests don't hit external APIs
+vi.mock('../../email', () => ({
+  getResendClient: vi.fn(),
+}));
+
 import { registerBillingRoutes } from '../billing';
+import { getResendClient } from '../../email';
 
 function buildApp(opts: { authed?: boolean; userId?: number } = {}) {
   const app = express();
@@ -261,5 +267,115 @@ describe('POST /api/cron/pilot-conversion — key authentication', () => {
     expect(res.status).toBe(200);
     expect(res.body.sent).toBe(0);
     expect(res.body.skipped).toBe(0);
+  });
+});
+
+describe('POST /api/cron/pilot-conversion — email send path', () => {
+  const EIGHTY_DAYS_AGO = new Date(Date.now() - 80 * 24 * 60 * 60 * 1000);
+
+  beforeEach(() => {
+    process.env.CRON_SECRET_KEY = 'test-cron-secret';
+  });
+
+  afterEach(() => {
+    delete process.env.CRON_SECRET_KEY;
+    vi.clearAllMocks();
+  });
+
+  it('sends Day-75 email to eligible pilot broker and returns sent: 1', async () => {
+    const emailSend = vi.fn().mockResolvedValue({ id: 'email-id-123' });
+    vi.mocked(getResendClient).mockResolvedValue({
+      client: { emails: { send: emailSend } } as any,
+      fromEmail: 'noreply@brokr.ai',
+    });
+
+    const { app, db } = buildApp();
+    db.select.mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([{
+          id: 100,
+          email: 'jane@brokerage.com',
+          fullName: 'Jane Broker',
+          foundingBroker: false,
+          subscriptionStatus: 'trialing',
+          pilotActivatedAt: EIGHTY_DAYS_AGO,
+        }]),
+      }),
+    });
+
+    const res = await request(app)
+      .post('/api/cron/pilot-conversion')
+      .set('x-cron-key', 'test-cron-secret');
+
+    expect(res.status).toBe(200);
+    expect(res.body.sent).toBe(1);
+    expect(res.body.skipped).toBe(0);
+    expect(emailSend).toHaveBeenCalledOnce();
+    expect(emailSend).toHaveBeenCalledWith(expect.objectContaining({
+      to: 'jane@brokerage.com',
+    }));
+  });
+
+  it('includes founding broker callout for founding brokers', async () => {
+    const emailSend = vi.fn().mockResolvedValue({ id: 'email-id-456' });
+    vi.mocked(getResendClient).mockResolvedValue({
+      client: { emails: { send: emailSend } } as any,
+      fromEmail: 'noreply@brokr.ai',
+    });
+
+    const { app, db } = buildApp();
+    db.select.mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([{
+          id: 101,
+          email: 'founder@brokerage.com',
+          fullName: 'Founding Frank',
+          foundingBroker: true,
+          subscriptionStatus: 'trialing',
+          pilotActivatedAt: EIGHTY_DAYS_AGO,
+        }]),
+      }),
+    });
+
+    const res = await request(app)
+      .post('/api/cron/pilot-conversion')
+      .set('x-cron-key', 'test-cron-secret');
+
+    expect(res.status).toBe(200);
+    expect(res.body.sent).toBe(1);
+    const callArgs = emailSend.mock.calls[0][0];
+    expect(callArgs.subject).toContain('Founding Broker');
+    expect(callArgs.html).toContain('Founding Broker discount');
+  });
+
+  it('skips already-active broker and returns skipped: 1 without sending email', async () => {
+    const emailSend = vi.fn();
+    vi.mocked(getResendClient).mockResolvedValue({
+      client: { emails: { send: emailSend } } as any,
+      fromEmail: 'noreply@brokr.ai',
+    });
+
+    const { app, db } = buildApp();
+    db.select.mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([{
+          id: 102,
+          email: 'active@brokerage.com',
+          fullName: 'Active Bob',
+          foundingBroker: true,
+          subscriptionStatus: 'active',
+          pilotActivatedAt: EIGHTY_DAYS_AGO,
+        }]),
+      }),
+    });
+
+    const res = await request(app)
+      .post('/api/cron/pilot-conversion')
+      .set('x-cron-key', 'test-cron-secret');
+
+    expect(res.status).toBe(200);
+    expect(res.body.sent).toBe(0);
+    expect(res.body.skipped).toBe(1);
+    expect(emailSend).not.toHaveBeenCalled();
   });
 });
