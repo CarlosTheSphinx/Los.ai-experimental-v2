@@ -220,9 +220,11 @@ describe('PII Encryption', () => {
       const plaintext = 'sensitive-data';
       const encrypted = encryptPII(plaintext);
 
-      // Corrupt the ciphertext
+      // Corrupt the ciphertext: XOR the last byte so the change is always non-zero
       const parts = encrypted.split(':');
-      parts[4] = parts[4].substring(0, parts[4].length - 2) + 'ff';
+      const lastByte = parseInt(parts[4].slice(-2), 16);
+      const corruptedByte = ((lastByte ^ 0x01) & 0xff).toString(16).padStart(2, '0');
+      parts[4] = parts[4].substring(0, parts[4].length - 2) + corruptedByte;
       const corrupted = parts.join(':');
 
       expect(() => {
