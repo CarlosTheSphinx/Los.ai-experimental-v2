@@ -106,6 +106,15 @@ export async function runReferralQualificationCron(): Promise<void> {
         continue;
       }
 
+      // Cancelled accounts can never qualify — mark permanently disqualified
+      if (referred.subscriptionStatus === 'canceled') {
+        await db
+          .update(referralEvents)
+          .set({ status: 'disqualified' })
+          .where(eq(referralEvents.id, event.id));
+        continue;
+      }
+
       const isActive = referred.subscriptionStatus === 'active';
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const hasBeenPayingThirtyDays =
