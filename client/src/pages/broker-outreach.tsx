@@ -113,7 +113,7 @@ export default function BrokerOutreachPage() {
     },
   });
 
-  const allContacts = contactsData?.contacts || [];
+  const allContacts: Array<{ id: number; firstName: string; lastName: string; isActive: boolean }> = contactsData?.contacts || [];
 
   // Fetch suggestions
   const { data: suggestionsData } = useQuery({

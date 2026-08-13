@@ -216,7 +216,7 @@ export function registerBillingRoutes(
       const candidates = await db.select({
         id: users.id,
         email: users.email,
-        firstName: users.firstName,
+        fullName: users.fullName,
         foundingBroker: users.foundingBroker,
         subscriptionStatus: users.subscriptionStatus,
         pilotActivatedAt: users.pilotActivatedAt,
@@ -259,13 +259,13 @@ export function registerBillingRoutes(
 
 async function sendDay75ConversionEmail(user: {
   email: string;
-  firstName?: string | null;
+  fullName?: string | null;
   foundingBroker: boolean;
 }) {
   const { client, fromEmail } = await getResendClient();
   const appUrl = process.env.APP_URL || '';
   const billingUrl = `${appUrl}/settings?tab=billing`;
-  const name = user.firstName || 'there';
+  const name = user.fullName?.split(' ')[0] || 'there';
 
   const foundingCallout = user.foundingBroker
     ? `<p style="background:#fef3c7;border:1px solid #fde68a;padding:12px 16px;border-radius:6px;margin:16px 0;">
