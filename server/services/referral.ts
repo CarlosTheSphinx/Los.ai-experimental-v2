@@ -6,8 +6,11 @@ import { getResendClient } from '../email';
 
 const REFERRAL_CREDIT_CENTS = 2500; // $25 Stripe credit per qualified referral
 
+const CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
 function generateShortCode(): string {
-  return randomBytes(6).toString('base64url').slice(0, 8).toUpperCase();
+  // Use only alphanumeric chars so codes always pass /^[A-Z0-9]{6,12}$/ validation
+  return Array.from(randomBytes(8), b => CHARSET[b % CHARSET.length]).join('');
 }
 
 export async function getOrCreateReferralCode(userId: number): Promise<string> {
