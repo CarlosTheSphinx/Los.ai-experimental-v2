@@ -28,8 +28,14 @@ vi.mock('../../email', () => ({
   getResendClient: vi.fn(),
 }));
 
+// Mock referral service so cron/referral-qualify doesn't hit the DB
+vi.mock('../../services/referral', () => ({
+  runReferralQualificationCron: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { registerBillingRoutes } from '../billing';
 import { getResendClient } from '../../email';
+import { runReferralQualificationCron } from '../../services/referral';
 
 function buildApp(opts: { authed?: boolean; userId?: number } = {}) {
   const app = express();
@@ -377,5 +383,55 @@ describe('POST /api/cron/pilot-conversion — email send path', () => {
     expect(res.body.sent).toBe(0);
     expect(res.body.skipped).toBe(1);
     expect(emailSend).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/cron/referral-qualify — key authentication', () => {
+  afterEach(() => {
+    delete process.env.CRON_SECRET_KEY;
+    vi.clearAllMocks();
+  });
+
+  it('returns 503 when CRON_SECRET_KEY is not set', async () => {
+    delete process.env.CRON_SECRET_KEY;
+    const { app } = buildApp();
+    const res = await request(app)
+      .post('/api/cron/referral-qualify')
+      .set('x-cron-key', 'any-key');
+    expect(res.status).toBe(503);
+    expect(res.body.error).toMatch(/not configured/);
+  });
+
+  it('returns 401 when x-cron-key is wrong', async () => {
+    process.env.CRON_SECRET_KEY = 'correct-secret';
+    const { app } = buildApp();
+    const res = await request(app)
+      .post('/api/cron/referral-qualify')
+      .set('x-cron-key', 'wrong-key');
+    expect(res.status).toBe(401);
+    expect(res.body.error).toMatch(/Unauthorized/);
+  });
+
+  it('returns 200 and invokes runReferralQualificationCron when key is correct', async () => {
+    process.env.CRON_SECRET_KEY = 'correct-secret';
+    vi.mocked(runReferralQualificationCron).mockResolvedValue(undefined);
+    const { app } = buildApp();
+    const res = await request(app)
+      .post('/api/cron/referral-qualify')
+      .set('x-cron-key', 'correct-secret');
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(runReferralQualificationCron).toHaveBeenCalledOnce();
+  });
+
+  it('returns 500 when runReferralQualificationCron throws', async () => {
+    process.env.CRON_SECRET_KEY = 'correct-secret';
+    vi.mocked(runReferralQualificationCron).mockRejectedValue(new Error('DB error'));
+    const { app } = buildApp();
+    const res = await request(app)
+      .post('/api/cron/referral-qualify')
+      .set('x-cron-key', 'correct-secret');
+    expect(res.status).toBe(500);
+    expect(res.body.error).toMatch(/Internal server error/);
   });
 });
