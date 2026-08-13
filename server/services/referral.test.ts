@@ -370,4 +370,10 @@ describe('runReferralQualificationCron', () => {
 
     expect(mockDb.update).not.toHaveBeenCalled();
   });
+
+  // ORC-194: the cron must also retry events stuck in status='qualified' with creditedAt=null.
+  // The WHERE clause must include `OR (status='qualified' AND creditedAt IS NULL)` after the fix.
+  // Unit mocks cannot enforce WHERE-clause coverage; add an integration test when fixing ORC-194
+  // that seeds a row with status='qualified'/creditedAt=null, runs the cron, and asserts creditedAt is set.
+  it.todo('ORC-194: retries Stripe credit for events stuck in qualified status (creditedAt IS NULL)');
 });
