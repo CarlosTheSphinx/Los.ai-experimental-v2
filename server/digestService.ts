@@ -364,7 +364,7 @@ function generateDigestSmsText(content: DigestContent, portalLink: string): stri
   return text;
 }
 
-function escapeHtml(str: string): string {
+export function escapeHtml(str: string): string {
   return str
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
