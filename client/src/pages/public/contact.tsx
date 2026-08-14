@@ -35,6 +35,8 @@ export default function PublicContactPage() {
   });
 
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -47,22 +49,37 @@ export default function PublicContactPage() {
     setFormData((prev) => ({ ...prev, interest: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Connect to backend API to send contact form
-    console.log("Form submitted:", formData);
-    setSubmitted(true);
-    setTimeout(() => {
-      setFormData({
-        name: "",
-        email: "",
-        company: "",
-        phone: "",
-        interest: "professional",
-        message: "",
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const res = await fetch("/api/public/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
       });
-      setSubmitted(false);
-    }, 3000);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to send message");
+      }
+      setSubmitted(true);
+      setTimeout(() => {
+        setFormData({
+          name: "",
+          email: "",
+          company: "",
+          phone: "",
+          interest: "professional",
+          message: "",
+        });
+        setSubmitted(false);
+      }, 3000);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const contactInfo = [
@@ -253,13 +270,17 @@ export default function PublicContactPage() {
                       />
                     </div>
 
+                    {submitError && (
+                      <p className="text-sm text-destructive">{submitError}</p>
+                    )}
                     <Button
                       type="submit"
                       className="w-full bg-primary hover:bg-primary/90"
                       size="lg"
+                      disabled={submitting}
                     >
-                      Send Message
-                      <ArrowRight className="w-4 h-4 ml-2" />
+                      {submitting ? "Sending..." : "Send Message"}
+                      {!submitting && <ArrowRight className="w-4 h-4 ml-2" />}
                     </Button>
                   </form>
                 )}
