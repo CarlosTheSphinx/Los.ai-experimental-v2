@@ -351,7 +351,50 @@ describe('POST /api/cron/pilot-conversion — email send path', () => {
     expect(res.body.sent).toBe(1);
     const callArgs = emailSend.mock.calls[0][0];
     expect(callArgs.subject).toContain('Founding Broker');
-    expect(callArgs.html).toContain('Founding Broker discount');
+    expect(callArgs.html).toContain('Founding Broker');
+    // founding broker callout shows both monthly and annual founding rates
+    expect(callArgs.html).toContain('$79/mo');   // founding monthly starter
+    expect(callArgs.html).toContain('$63/mo');   // founding annual starter
+    expect(callArgs.html).toContain('$127/mo');  // founding annual pro
+    expect(callArgs.html).toContain('$255/mo');  // founding annual team
+  });
+
+  it('shows annual pricing table with Save 20% callout for non-founding brokers', async () => {
+    const emailSend = vi.fn().mockResolvedValue({ id: 'email-id-789' });
+    vi.mocked(getResendClient).mockResolvedValue({
+      client: { emails: { send: emailSend } } as any,
+      fromEmail: 'noreply@brokr.ai',
+    });
+
+    const { app, db } = buildApp();
+    db.select.mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([{
+          id: 103,
+          email: 'regular@brokerage.com',
+          fullName: 'Regular Rita',
+          foundingBroker: false,
+          subscriptionStatus: 'trialing',
+          pilotActivatedAt: EIGHTY_DAYS_AGO,
+        }]),
+      }),
+    });
+
+    const res = await request(app)
+      .post('/api/cron/pilot-conversion')
+      .set('x-cron-key', 'test-cron-secret');
+
+    expect(res.status).toBe(200);
+    expect(res.body.sent).toBe(1);
+    const callArgs = emailSend.mock.calls[0][0];
+    // standard pricing table includes both monthly and annual columns
+    expect(callArgs.html).toContain('$99/mo');   // standard monthly starter
+    expect(callArgs.html).toContain('$79/mo');   // standard annual starter
+    expect(callArgs.html).toContain('$199/mo');  // standard monthly pro
+    expect(callArgs.html).toContain('$159/mo');  // standard annual pro
+    expect(callArgs.html).toContain('$399/mo');  // standard monthly team
+    expect(callArgs.html).toContain('$319/mo');  // standard annual team
+    expect(callArgs.html).toContain('Save 20%');
   });
 
   it('skips already-active broker and returns skipped: 1 without sending email', async () => {

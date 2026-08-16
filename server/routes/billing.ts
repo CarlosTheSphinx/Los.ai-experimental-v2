@@ -291,10 +291,32 @@ async function sendDay75ConversionEmail(user: {
   const name = user.fullName?.split(' ')[0] || 'there';
 
   const foundingCallout = user.foundingBroker
-    ? `<p style="background:#fef3c7;border:1px solid #fde68a;padding:12px 16px;border-radius:6px;margin:16px 0;">
-        ⭐ <strong>Your Founding Broker discount is still reserved.</strong>
-        Subscribe before Day 104 to lock in 20% off — permanently.
-      </p>`
+    ? `<div style="background:#fef3c7;border:1px solid #fde68a;padding:12px 16px;border-radius:6px;margin:16px 0;">
+        <p style="margin:0 0 8px;"><strong>⭐ Your Founding Broker rates (20% off — locked in permanently):</strong></p>
+        <table style="border-collapse:collapse;width:100%;font-size:14px;">
+          <tr style="background:#fde68a;">
+            <th style="text-align:left;padding:6px 8px;">Plan</th>
+            <th style="text-align:right;padding:6px 8px;">Monthly</th>
+            <th style="text-align:right;padding:6px 8px;">Annual <span style="font-weight:normal;">(save 20%)</span></th>
+          </tr>
+          <tr>
+            <td style="padding:6px 8px;">Starter</td>
+            <td style="text-align:right;padding:6px 8px;">$79/mo</td>
+            <td style="text-align:right;padding:6px 8px;">$63/mo</td>
+          </tr>
+          <tr style="background:#fffbeb;">
+            <td style="padding:6px 8px;">Pro</td>
+            <td style="text-align:right;padding:6px 8px;">$159/mo</td>
+            <td style="text-align:right;padding:6px 8px;">$127/mo</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 8px;">Team</td>
+            <td style="text-align:right;padding:6px 8px;">$319/mo</td>
+            <td style="text-align:right;padding:6px 8px;">$255/mo</td>
+          </tr>
+        </table>
+        <p style="margin:8px 0 0;font-size:12px;color:#92400e;">Annual plans billed once per year. Subscribe before Day 104 to lock in your discount permanently.</p>
+      </div>`
     : '';
 
   const html = `<!DOCTYPE html>
@@ -304,6 +326,13 @@ async function sendDay75ConversionEmail(user: {
   h1{color:#1a1a1a;font-size:22px}
   .cta{display:inline-block;background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;margin:16px 0}
   .footer{margin-top:32px;font-size:12px;color:#888}
+  .pricing-table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px;}
+  .pricing-table th{background:#f1f5f9;text-align:left;padding:8px 10px;border-bottom:2px solid #e2e8f0;}
+  .pricing-table th:not(:first-child){text-align:right;}
+  .pricing-table td{padding:8px 10px;border-bottom:1px solid #e2e8f0;}
+  .pricing-table td:not(:first-child){text-align:right;}
+  .pricing-table tr:nth-child(even){background:#f8fafc;}
+  .annual-badge{display:inline-block;background:#dcfce7;color:#166534;font-size:11px;padding:1px 6px;border-radius:10px;margin-left:4px;}
 </style></head>
 <body>
   <h1>Your Brokr.AI pilot is at Day 75 🎉</h1>
@@ -311,12 +340,29 @@ async function sendDay75ConversionEmail(user: {
   <p>You've hit <strong>Day 75</strong> of your Brokr.AI pilot — congratulations on making it this far! Your free trial window is coming to a close, and we'd love to keep you on board.</p>
   ${foundingCallout}
   <p>Choose a plan that fits how you work:</p>
-  <ul>
-    <li><strong>Starter</strong> — $99/mo · Solo brokers</li>
-    <li><strong>Pro</strong> — $199/mo · Growing teams</li>
-    <li><strong>Team</strong> — $399/mo · Full organizations</li>
-  </ul>
-  <p>Annual billing saves an additional 20%.</p>
+  <table class="pricing-table">
+    <tr>
+      <th>Plan</th>
+      <th>Monthly</th>
+      <th>Annual <span class="annual-badge">Save 20%</span></th>
+    </tr>
+    <tr>
+      <td><strong>Starter</strong> · Solo brokers</td>
+      <td>$99/mo</td>
+      <td>$79/mo</td>
+    </tr>
+    <tr>
+      <td><strong>Pro</strong> · Growing teams</td>
+      <td>$199/mo</td>
+      <td>$159/mo</td>
+    </tr>
+    <tr>
+      <td><strong>Team</strong> · Full organizations</td>
+      <td>$399/mo</td>
+      <td>$319/mo</td>
+    </tr>
+  </table>
+  <p style="font-size:13px;color:#555;">Annual plans are billed once per year. Save 20% compared to monthly.</p>
   <a href="${billingUrl}" class="cta">Subscribe Now →</a>
   <p>You have until <strong>Day 104</strong> to subscribe before your account enters read-only mode.</p>
   <div class="footer">
