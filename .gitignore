@@ -6,3 +6,8 @@ vite.config.ts.*
 *.tar.gz
 uploads/
 test-results/
+# Roast Room councils stay local; the shipped example is kept
+sessions/*
+!sessions/.gitkeep
+!sessions/*example*/
+build/
